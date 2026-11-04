@@ -1,0 +1,68 @@
+<script>
+  /** google.script.run을 Promise로 감싼다 */
+  function call(fn) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    return new Promise(function (resolve, reject) {
+      var runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+      runner[fn].apply(runner, args);
+    });
+  }
+
+  /** 요소 만들기. 글자는 항상 textContent로 넣는다(XSS 방지). */
+  function el(tag, attrs, children) {
+    var node = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (k === 'text') node.textContent = attrs[k];
+      else if (k === 'class') node.className = attrs[k];
+      else if (k.indexOf('on') === 0) node.addEventListener(k.slice(2), attrs[k]);
+      else node.setAttribute(k, attrs[k]);
+    });
+    (children || []).forEach(function (c) {
+      if (c === null || c === undefined) return;
+      node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    });
+    return node;
+  }
+
+  function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); return node; }
+
+  function showError(root, err) {
+    root.appendChild(el('div', { class: 'error', text: (err && err.message) || String(err) }));
+  }
+
+  function statBox(n, label) {
+    return el('div', { class: 'stat' }, [el('div', { class: 'n', text: String(n) }), el('div', { class: 'l', text: label })]);
+  }
+
+  function soonCard(title, note) {
+    return el('div', { class: 'card soon' }, [el('h2', { text: title }), el('div', { class: 'muted', text: note })]);
+  }
+
+  function kv(pairs) {
+    var dl = el('dl', { class: 'kv' });
+    pairs.forEach(function (p) { dl.appendChild(el('dt', { text: p[0] })); dl.appendChild(el('dd', { text: p[1] })); });
+    return dl;
+  }
+
+  function studentList(items, emptyText) {
+    if (!items || !items.length) return el('div', { class: 'muted', text: emptyText });
+    var ul = el('ul', { class: 'list' });
+    items.forEach(function (s) {
+      ul.appendChild(el('li', {}, [
+        el('span', { text: s.name }),
+        el('span', { class: 'muted', text: s.grade + '-' + s.classNo + ' ' + s.number + '번 · ' + s.gender })
+      ]));
+    });
+    return ul;
+  }
+
+  function studentCard(s) {
+    return el('div', { class: 'card' }, [
+      el('h2', { text: s.name }),
+      kv([
+        ['학번', s.studentNo], ['학년·반', s.grade + '학년 ' + s.classNo + '반 ' + s.number + '번'],
+        ['계열', s.track], ['담당교사', s.teacherName], ['베리타스', s.veritas], ['평일 종료', s.endType]
+      ])
+    ]);
+  }
+</script>

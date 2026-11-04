@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <?!= include('ui/Styles') ?>
+</head>
+<body data-role="<?= role ?>">
+  <header class="top">
+    <h1>신한1학사 · <?= roleLabel ?></h1>
+    <div class="who"><?= userName ?></div>
+  </header>
+  <main>
+    <? if (roleTabs.length > 1) { ?>
+      <nav class="tabs" aria-label="역할 전환">
+        <? for (var i = 0; i < roleTabs.length; i++) { ?>
+          <a class="tab <?= roleTabs[i].code === role ? 'on' : '' ?>"
+             href="<?= appUrl ?>?role=<?= roleTabs[i].code ?>"><?= roleTabs[i].label ?></a>
+        <? } ?>
+      </nav>
+    <? } ?>
+    <div id="home"><div class="loading">불러오는 중…</div></div>
+  </main>
+  <footer>
+    <a href="<?= appUrl ?>">처음으로</a>
+    <? if (diagEnabled) { ?> · <a href="<?= appUrl ?>?page=diag">접속 진단</a><? } ?>
+  </footer>
+
+  <?!= include('ui/Client') ?>
+  <?!= include(homeFileFor_(role)) ?>
+  <script>
+    (function () {
+      var root = document.getElementById('home');
+      var role = document.body.getAttribute('data-role');
+      call('getHomeData', role)
+        .then(function (data) { clear(root); renderHome(data, root); })
+        .catch(function (err) { clear(root); showError(root, err); });
+    })();
+  </script>
+</body>
+</html>

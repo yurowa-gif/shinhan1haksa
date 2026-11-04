@@ -1,0 +1,10 @@
+<script>
+  /** 근무표 담당자 홈: 이번 달 근무표 (PRD 8절, F3) */
+  function renderHome(d, root) {
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: d.month + ' 근무표' }),
+      el('div', { class: 'muted', text: d.termName })
+    ]));
+    root.appendChild(soonCard('근무 편성 · 교대 이력', '2단계(F3)에서 만듭니다.'));
+  }
+</script>

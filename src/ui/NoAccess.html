@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><base target="_top"><meta charset="utf-8"><?!= include('ui/Styles') ?></head>
+<body>
+  <header class="top"><h1>신한1학사</h1></header>
+  <main>
+    <div class="card">
+      <h2>권한이 없습니다</h2>
+      <? if (email) { ?>
+        <p>접속한 계정: <b><?= email ?></b></p>
+        <p class="muted">이 계정은 등록되어 있지 않습니다. 학사 담당 선생님께 계정 등록을 요청해 주세요.</p>
+      <? } else { ?>
+        <p class="muted">접속한 계정의 이메일을 확인할 수 없습니다. 구글 계정에 로그인했는지 확인해 주세요.</p>
+      <? } ?>
+    </div>
+  </main>
+</body>
+</html>
