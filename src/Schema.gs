@@ -60,8 +60,9 @@ var DEFAULT_SETTINGS = [
   ['study.sat.end', '17:00', '토요일 자습 종료'],
   ['study.sun.start', '14:00', '일요일 자습 시작'],
   ['study.sun.end', '22:00', '일요일 자습 종료'],
-  // ASSUMPTION: 급식 "실시" 오전 마감 시각은 12:00으로 가정 (PRD 13절 열린 질문)
-  ['meal.morning_cutoff', '12:00', '급식 실시 신청 당일 적용 마감 시각(열린 질문: 가정값)'],
+  // ASSUMPTION: 급식 "실시" 오전 마감 시각은 PRD 13절 열린 질문이라 비워 둔다.
+  // 2단계(F7) 전에 선생님께 확인받아 채운다. 0단계에서는 쓰지 않는다.
+  ['meal.morning_cutoff', '', '급식 실시 신청 당일 적용 마감 시각(미정: 13절 열린 질문)'],
   ['timetable.submit_start_day', '25', '시간표 제출 시작일(매월)'],
   ['timetable.submit_end_day', 'last', '시간표 제출 마감(말일)'],
   ['attendance.legend', '○ 출석, × 결석, △ 지각, 조 조퇴, 학 학원, 가 가정', '출석부 범례']
