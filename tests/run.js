@@ -77,6 +77,60 @@ test('hasAnyAllowedRole_', () => {
   assert.ok(!ctx.hasAnyAllowedRole_(['student'], ['admin']));
 });
 
+test('sameClass_: 학급 표기 정규화', () => {
+  assert.ok(ctx.sameClass_('1-3', '1', '3'));
+  assert.ok(ctx.sameClass_('1-03', '1', '3'));
+  assert.ok(ctx.sameClass_(' 1 - 3 ', 1, 3));
+  assert.ok(!ctx.sameClass_('1-3', '1', '13'));
+  assert.ok(!ctx.sameClass_('', '1', '3'));
+});
+
+console.log('배포 안전');
+const SRC_FILES = [];
+(function walk(dir) {
+  for (const f of fs.readdirSync(dir)) {
+    const p = path.join(dir, f);
+    if (fs.statSync(p).isDirectory()) walk(p); else if (f.endsWith('.gs')) SRC_FILES.push(p);
+  }
+})(path.join(__dirname, '..', 'src'));
+
+test('각 .gs 파일의 전역 코드가 다른 파일 없이도 실행된다(파일 로드 순서 무관)', () => {
+  for (const f of SRC_FILES) {
+    const solo = vm.createContext({ console });
+    vm.runInContext(fs.readFileSync(f, 'utf8'), solo, { filename: f });
+  }
+});
+
+// 이름 끝에 _ 가 없는 전역 함수는 브라우저에서 google.script.run으로 누구나 호출할 수 있다.
+// 새 공개 함수를 추가할 때는 첫 줄에 requirePermission_ 또는 assertOwnerRun_ 을 넣고 여기에 등록한다.
+const PUBLIC_ALLOWED = new Set([
+  'doGet', 'include', 'getHomeData', 'getStudentSummary', 'diagPing', // 화면용
+  'setup', 'addUser', 'seedFakeData' // 편집기용(assertOwnerRun_)
+]);
+test('공개 함수(이름 끝 _ 없음)는 허용 목록에 있는 것만', () => {
+  for (const f of SRC_FILES) {
+    const src = fs.readFileSync(f, 'utf8');
+    for (const m of src.matchAll(/^function\s+([A-Za-z0-9_$]+)\s*\(/gm)) {
+      const name = m[1];
+      if (name.endsWith('_')) continue;
+      assert.ok(PUBLIC_ALLOWED.has(name), path.basename(f) + ': ' + name + ' 이(가) 공개 함수입니다');
+    }
+  }
+});
+test('허용된 공개 함수는 첫 문장에서 권한·소유자를 확인한다', () => {
+  const guard = {
+    getHomeData: 'requirePermission_', getStudentSummary: 'requirePermission_',
+    setup: 'assertOwnerRun_', addUser: 'assertOwnerRun_', seedFakeData: 'assertOwnerRun_', diagPing: 'isDiagEnabled_'
+  };
+  for (const f of SRC_FILES) {
+    const src = fs.readFileSync(f, 'utf8');
+    for (const [fn, g] of Object.entries(guard)) {
+      const m = src.match(new RegExp('^function ' + fn + '\\([^)]*\\)\\s*\\{\\s*\\n([^\\n]*)', 'm'));
+      if (m) assert.ok(m[1].includes(g), fn + ' 첫 줄에 ' + g + ' 없음: ' + m[1]);
+    }
+  }
+});
+
 console.log('FakeData');
 const opts = {
   ownerEmail: 'owner@test.invalid', studentEmail: 'stu@test.invalid', parentEmail: 'par@test.invalid',

@@ -66,7 +66,7 @@ function homeFileFor_(role) {
  * @param {string} role 보고 싶은 홈의 역할(접속자가 가진 역할이어야 함)
  */
 function getHomeData(role) {
-  var user = requirePermission('home.view', { role: role });
+  var user = requirePermission_('home.view', { role: role });
   var term = getCurrentTerm_();
   var base = {
     role: role,
@@ -77,8 +77,8 @@ function getHomeData(role) {
 
   switch (role) {
     case 'admin':
-      requirePermission('admin.users.view');
-      var users = readAll('users').filter(function (u) { return isTruthy_(u.active); });
+      requirePermission_('admin.users.view');
+      var users = readAll_('users').filter(function (u) { return isTruthy_(u.active); });
       var roleCounts = {};
       ROLES.forEach(function (r) { roleCounts[ROLE_LABELS[r]] = 0; });
       users.forEach(function (u) {
@@ -86,8 +86,8 @@ function getHomeData(role) {
       });
       base.counts = {
         students: termStudentIds_(term).length,
-        allStudents: readAll('students').length,
-        guardianLinks: readAll('guardian_links').length
+        allStudents: readAll_('students').length,
+        guardianLinks: readAll_('guardian_links').length
       };
       base.roleCounts = roleCounts;
       return base;
@@ -97,7 +97,7 @@ function getHomeData(role) {
       return base;
 
     case 'hall_teacher':
-      var mine = readAll('enrollments').filter(function (en) {
+      var mine = readAll_('enrollments').filter(function (en) {
         return term && en.term_id === term.id && normalizeEmail_(en.teacher_email) === user.email;
       }).map(function (en) { return en.student_id; });
       base.students = studentsByIds_(mine).map(listItem_);
@@ -106,19 +106,18 @@ function getHomeData(role) {
     case 'homeroom':
       base.homeroomClass = user.homeroomClass || '(담당 학급 미지정)';
       var ids = termStudentIds_(term);
-      base.students = readAll('students').filter(function (s) {
-        return ids.indexOf(s.id) >= 0 && user.homeroomClass &&
-          String(s.grade) + '-' + String(s.class_no) === user.homeroomClass;
+      base.students = readAll_('students').filter(function (s) {
+        return ids.indexOf(s.id) >= 0 && sameClass_(user.homeroomClass, s.grade, s.class_no);
       }).sort(byClassNumber_).map(listItem_);
       return base;
 
     case 'student':
-      var me = readAll('students').filter(function (s) { return normalizeEmail_(s.email) === user.email; })[0];
+      var me = readAll_('students').filter(function (s) { return normalizeEmail_(s.email) === user.email; })[0];
       base.me = me ? studentSummary_(me, term) : null;
       return base;
 
     case 'parent':
-      var childIds = readAll('guardian_links').filter(function (g) {
+      var childIds = readAll_('guardian_links').filter(function (g) {
         return normalizeEmail_(g.parent_email) === user.email;
       }).map(function (g) { return g.student_id; });
       base.children = studentsByIds_(childIds).map(function (s) {
@@ -131,8 +130,8 @@ function getHomeData(role) {
 
 /** 학생 한 명 요약(학부모의 자녀 전환 탭, 담임·학사 교사 목록에서 사용) */
 function getStudentSummary(studentId) {
-  requirePermission('student.view', { studentId: studentId });
-  var s = findById('students', studentId);
+  requirePermission_('student.view', { studentId: studentId });
+  var s = findById_('students', studentId);
   return studentSummary_(s, getCurrentTerm_());
 }
 
@@ -140,13 +139,13 @@ function getStudentSummary(studentId) {
 
 function termStudentIds_(term) {
   if (!term) return [];
-  return readAll('enrollments')
+  return readAll_('enrollments')
     .filter(function (en) { return en.term_id === term.id; })
     .map(function (en) { return en.student_id; });
 }
 
 function studentsByIds_(ids) {
-  return readAll('students').filter(function (s) { return ids.indexOf(s.id) >= 0; }).sort(byClassNumber_);
+  return readAll_('students').filter(function (s) { return ids.indexOf(s.id) >= 0; }).sort(byClassNumber_);
 }
 
 function byClassNumber_(a, b) {
@@ -159,10 +158,10 @@ function listItem_(s) {
 
 /** 화면에 내보내는 학생 요약. 이메일 같은 개인 연락처는 넣지 않는다. */
 function studentSummary_(s, term) {
-  var en = term ? readAll('enrollments').filter(function (x) {
+  var en = term ? readAll_('enrollments').filter(function (x) {
     return x.term_id === term.id && x.student_id === s.id;
   })[0] : null;
-  var teacher = en ? readAll('users').filter(function (u) {
+  var teacher = en ? readAll_('users').filter(function (u) {
     return normalizeEmail_(u.email) === normalizeEmail_(en.teacher_email);
   })[0] : null;
   return {
@@ -185,11 +184,12 @@ function studentSummary_(s, term) {
 
 /**
  * 진단 화면은 등록 여부와 관계없이 열 수 있다(미등록 시험 계정의 이메일 확인용).
- * 대신 "접속자 본인"의 정보만 돌려준다. 실사용 전에는 Script Properties에서
- * DIAG_ENABLED=false 로 끈다.
+ * 대신 "접속자 본인"의 정보만 돌려준다. Script Properties DIAG_ENABLED=true 일 때만 열리고,
+ * 실사용 전에는 false 로 끈다.
  */
 function isDiagEnabled_() {
-  return props_().getProperty('DIAG_ENABLED') !== 'false';
+  // 기본은 꺼짐. setup()이 0단계 검증용으로 true를 넣는다.
+  return props_().getProperty('DIAG_ENABLED') === 'true';
 }
 
 function maskEmail_(email) {

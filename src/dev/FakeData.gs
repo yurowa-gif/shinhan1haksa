@@ -48,7 +48,7 @@ function buildFakeData_(opts) {
   var fakeTeachers = ['fake.teacher1@example.com', 'fake.teacher2@example.com', 'fake.teacher3@example.com'];
   var teacherPool = fakeTeachers.slice();
   if (opts.teacherEmail) teacherPool.unshift(opts.teacherEmail);
-  if (opts.ownerEmail) teacherPool.push(opts.ownerEmail);
+  if (opts.ownerEmail && teacherPool.indexOf(opts.ownerEmail) < 0) teacherPool.push(opts.ownerEmail);
 
   var users = [
     { email: fakeTeachers[0], name: '가짜교사1', roles: 'hall_teacher', homeroom_class: '', active: 'TRUE', memo: '가짜 데이터' },
@@ -139,7 +139,7 @@ function buildFakeData_(opts) {
 /** 편집기에서 실행. 학생 탭이 비어 있을 때만 동작한다. */
 function seedFakeData() {
   var owner = assertOwnerRun_();
-  if (readAll('students').length) {
+  if (readAll_('students').length) {
     throw new Error('students 탭에 이미 데이터가 있습니다. 가짜 데이터는 빈 DB에서만 만듭니다.');
   }
   var p = props_();
@@ -151,7 +151,7 @@ function seedFakeData() {
     homeroomEmail: normalizeEmail_(p.getProperty('TEST_HOMEROOM_EMAIL'))
   });
 
-  var existingUsers = readAll('users').map(function (u) { return normalizeEmail_(u.email); });
+  var existingUsers = readAll_('users').map(function (u) { return normalizeEmail_(u.email); });
   bulkAppend_('terms', data.terms, owner);
   bulkAppend_('students', data.students, owner);
   bulkAppend_('enrollments', data.enrollments, owner);
@@ -179,7 +179,9 @@ function bulkAppend_(sheetName, rows, actorEmail) {
       rec.created_by = rec.updated_by = actorEmail;
       return toRowArray_(headers, rec);
     });
-    var range = sh.getRange(sh.getLastRow() + 1, 1, values.length, headers.length);
+    var firstRow = sh.getLastRow() + 1;
+    ensureRows_(sh, firstRow, values.length);
+    var range = sh.getRange(firstRow, 1, values.length, headers.length);
     range.setNumberFormat('@');
     range.setValues(values);
     invalidate_('db', sheetName);

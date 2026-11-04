@@ -1,6 +1,7 @@
 /**
  * 처음 한 번(그리고 탭이 추가될 때마다) Apps Script 편집기에서 직접 실행한다.
- * 웹앱 화면에서는 부를 수 없다(이름 끝 _ 이 아닌 공개 함수지만 첫 줄에서 소유자 확인).
+ * 편집기 실행 목록에 보이도록 이름 끝에 _ 를 붙이지 않았다. 그래서 웹앱 화면에서도 호출될 수
+ * 있지만, 첫 줄 assertOwnerRun_이 소유자 본인이 아니면 거부한다.
  *
  * setup()
  *  1. 데이터 스프레드시트 3개(운영 DB, 상담일지, 설정)를 만들고 ID를 Script Properties에 저장
@@ -46,9 +47,9 @@ function setup() {
 
   seedSettings_(owner, report);
 
-  var users = readAll('users');
+  var users = readAll_('users');
   if (!users.length) {
-    appendRecord('users', {
+    appendRecord_('users', {
       email: owner, name: '관리자(소유자)', roles: 'admin,hall_teacher', homeroom_class: '', active: 'TRUE',
       memo: 'setup()이 자동 등록'
     }, owner);
@@ -94,11 +95,11 @@ function removeDefaultSheet_(ss) {
 }
 
 function seedSettings_(owner, report) {
-  var existing = readAll('settings', 'config').map(function (r) { return r.key; });
+  var existing = readAll_('settings', 'config').map(function (r) { return r.key; });
   var added = 0;
   DEFAULT_SETTINGS.forEach(function (s) {
     if (existing.indexOf(s[0]) >= 0) return;
-    appendRecord('settings', { key: s[0], value: s[1], description: s[2] }, owner, 'config');
+    appendRecord_('settings', { key: s[0], value: s[1], description: s[2] }, owner, 'config');
     added++;
   });
   report.push('[설정] 기본값 ' + added + '개 추가');
@@ -115,13 +116,13 @@ function addUser(email, name, roles, homeroomClass) {
   var bad = String(roles || '').split(',').map(function (r) { return r.trim(); })
     .filter(function (r) { return r && ROLES.indexOf(r) < 0; });
   if (bad.length) throw new Error('알 수 없는 역할: ' + bad.join(', '));
-  var dup = readAll('users').filter(function (u) { return normalizeEmail_(u.email) === email; })[0];
+  var dup = readAll_('users').filter(function (u) { return normalizeEmail_(u.email) === email; })[0];
   if (dup) {
-    return updateRecord('users', dup.id, {
+    return updateRecord_('users', dup.id, {
       name: name, roles: roles, homeroom_class: homeroomClass || '', active: 'TRUE'
     }, owner);
   }
-  return appendRecord('users', {
+  return appendRecord_('users', {
     email: email, name: name, roles: roles, homeroom_class: homeroomClass || '', active: 'TRUE', memo: ''
   }, owner);
 }

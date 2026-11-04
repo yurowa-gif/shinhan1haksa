@@ -10,7 +10,7 @@
 
 ## 폴더 구조
 - `src/Code.gs` 라우팅(doGet, 역할별 화면 분기)
-- `src/Auth.gs` `requirePermission(action, context)` — 모든 서버 함수 첫 줄에서 호출
+- `src/Auth.gs` `requirePermission_(action, context)` — 모든 서버 함수 첫 줄에서 호출. 이름 끝 `_` 없는 함수는 브라우저에서 누구나 부를 수 있으므로 내부 함수는 반드시 `_`로 끝낸다(`npm test`가 검사)
 - `src/Db.gs` 시트 읽기·쓰기 공통 함수, 쓰기는 반드시 `LockService`
 - `src/features/*.gs` 기능별 서버 로직(F1~F14)
 - `src/ui/*.html` 화면(휴대폰 세로 우선, 한국어)

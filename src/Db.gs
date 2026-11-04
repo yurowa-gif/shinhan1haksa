@@ -54,7 +54,7 @@ function cellToString_(v) {
  * 탭 전체를 객체 배열로 읽는다. 키는 1행 헤더.
  * 각 객체에 _row(시트 행 번호)를 붙인다.
  */
-function readAll(sheetName, kind) {
+function readAll_(sheetName, kind) {
   kind = kind || 'db';
   var key = kind + '/' + sheetName;
   if (_dbMemo.rows[key]) return _dbMemo.rows[key];
@@ -76,8 +76,8 @@ function readAll(sheetName, kind) {
   return out;
 }
 
-function findById(sheetName, id, kind) {
-  var rows = readAll(sheetName, kind);
+function findById_(sheetName, id, kind) {
+  var rows = readAll_(sheetName, kind);
   for (var i = 0; i < rows.length; i++) if (rows[i].id === id) return rows[i];
   return null;
 }
@@ -86,17 +86,29 @@ function invalidate_(kind, sheetName) {
   delete _dbMemo.rows[(kind || 'db') + '/' + sheetName];
 }
 
-/** LockService로 감싼다. 락을 못 얻으면 사용자에게 보일 문구로 실패한다. */
-function withLock_(fn) {
+/** 이 실행이 지금 스크립트 락을 갖고 있는지(중첩 호출 시 다시 잡거나 먼저 풀지 않도록) */
+var _lockDepth = 0;
+
+/** LockService로 감싼다. 락을 못 얻으면 사용자에게 보일 문구로 실패한다. 중첩 호출은 바깥 락을 그대로 쓴다. */
+function withLock_(fn, waitMs) {
+  if (_lockDepth > 0) return fn();
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(LOCK_WAIT_MS)) {
+  if (!lock.tryLock(waitMs || LOCK_WAIT_MS)) {
     throw new Error('다른 사람이 저장 중입니다. 잠시 후 다시 저장해 주세요.');
   }
+  _lockDepth++;
   try {
     return fn();
   } finally {
+    _lockDepth--;
     lock.releaseLock();
   }
+}
+
+/** 시트 끝에 n행을 쓸 자리가 없으면 늘린다(새 시트는 1000행). 락 안에서 부른다. */
+function ensureRows_(sh, firstRow, n) {
+  var need = firstRow + n - 1 - sh.getMaxRows();
+  if (need > 0) sh.insertRowsAfter(sh.getMaxRows(), Math.max(need, 500));
 }
 
 /** 헤더 순서대로 객체를 한 행 배열로 바꾼다 */
@@ -112,7 +124,7 @@ function toRowArray_(headers, obj) {
  * @param {string} actorEmail 기록자(서버에서 확인한 접속자 이메일)
  * @return {Object} 저장된 객체
  */
-function appendRecord(sheetName, data, actorEmail, kind, opts) {
+function appendRecord_(sheetName, data, actorEmail, kind, opts) {
   kind = kind || 'db';
   opts = opts || {};
   var run = function () {
@@ -127,6 +139,7 @@ function appendRecord(sheetName, data, actorEmail, kind, opts) {
     rec.updated_at = now;
     rec.updated_by = actorEmail || '';
     var rowNo = sh.getLastRow() + 1;
+    ensureRows_(sh, rowNo, 1);
     var range = sh.getRange(rowNo, 1, 1, headers.length);
     range.setNumberFormat('@');
     range.setValues([toRowArray_(headers, rec)]);
@@ -136,17 +149,17 @@ function appendRecord(sheetName, data, actorEmail, kind, opts) {
     }
     return rec;
   };
-  return opts.alreadyLocked ? run() : withLock_(run);
+  return withLock_(run);
 }
 
 /**
  * 행 수정(부분 갱신). 변경 전·후를 audit_log에 남긴다.
  */
-function updateRecord(sheetName, id, patch, actorEmail, kind) {
+function updateRecord_(sheetName, id, patch, actorEmail, kind) {
   kind = kind || 'db';
   return withLock_(function () {
     invalidate_(kind, sheetName);
-    var before = findById(sheetName, id, kind);
+    var before = findById_(sheetName, id, kind);
     if (!before) throw new Error('기록을 찾을 수 없습니다: ' + id);
     var sh = getSheet_(kind, sheetName);
     var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(cellToString_);
@@ -169,35 +182,35 @@ function updateRecord(sheetName, id, patch, actorEmail, kind) {
   });
 }
 
-/** audit_log 기록. 호출하는 쪽이 이미 락을 갖고 있다고 본다. */
+/** audit_log 기록. 락 안에서 부른다(appendRecord_가 바깥 락을 그대로 쓴다). */
 function writeAudit_(sheetName, rowId, action, before, after, actorEmail, kind, detail) {
-  appendRecord('audit_log', {
+  appendRecord_('audit_log', {
     sheet: (kind && kind !== 'db' ? kind + '/' : '') + sheetName,
     row_id: rowId || '',
     action: action,
     before: before ? JSON.stringify(before) : '',
     after: after ? JSON.stringify(after) : '',
     detail: detail || ''
-  }, actorEmail, 'db', { alreadyLocked: true, skipAudit: true });
+  }, actorEmail, 'db', { skipAudit: true });
 }
 
 /**
- * 권한 거부 기록. 락을 짧게 시도하고, 못 얻으면 로그만 남기고 넘어간다
+ * 권한 거부 기록. 아무 구글 계정이나 접속할 수 있으므로 같은 계정·같은 기능의 거부는
+ * 10분에 한 번만 남긴다(audit_log 도배 방지). 락을 짧게 시도하고, 못 얻으면 넘어간다
  * (거부 기록 때문에 화면이 멈추면 안 되므로).
  */
+var DENY_LOG_INTERVAL_SEC = 600;
+
 function logDenied_(actorEmail, action, detail) {
   try {
-    var lock = LockService.getScriptLock();
-    if (!lock.tryLock(2000)) {
-      console.warn('audit_log 락 실패(거부 기록 생략): ' + action);
-      return;
-    }
-    try {
+    var cache = CacheService.getScriptCache();
+    var key = 'deny:' + Utilities.base64EncodeWebSafe(String(actorEmail || '-') + '|' + action).slice(0, 200);
+    if (cache.get(key)) return;
+    cache.put(key, '1', DENY_LOG_INTERVAL_SEC);
+    withLock_(function () {
       writeAudit_('-', '', 'denied:' + action, null, null, actorEmail || '(이메일 없음)', 'db', detail);
-    } finally {
-      lock.releaseLock();
-    }
+    }, 2000);
   } catch (e) {
-    console.warn('거부 기록 실패: ' + e.message);
+    console.warn('거부 기록 생략: ' + e.message);
   }
 }
