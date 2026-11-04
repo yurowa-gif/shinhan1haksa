@@ -10,7 +10,7 @@ Google Apps Script 웹앱 + Google Sheets. 요구사항은 [`PRD.md`](PRD.md), �
 src/                 clasp로 올라가는 코드(rootDir)
   appsscript.json    웹앱 설정: 나로 실행, Google 계정이 있는 모든 사용자
   Code.gs            doGet 라우팅, 역할별 홈 데이터, 접속 진단
-  Auth.gs            requirePermission(action, context), 역할·범위 판정
+  Auth.gs            requirePermission_(action, context), 역할·범위 판정
   Db.gs              시트 읽기·쓰기, LockService, audit_log
   Schema.gs          탭·열 정의, 역할 코드, 설정 기본값
   Setup.gs           setup(), addUser() — 편집기에서 소유자만 실행
@@ -62,17 +62,17 @@ clasp(코드를 Apps Script로 올려 주는 도구)는 Node.js 위에서 돌아
 1. Git 설치
    - **Windows**: <https://git-scm.com> → "Download for Windows" → 설치 파일 실행 → 모두 기본값으로 "Next".
    - **Mac**: 터미널에 `git --version` 입력. 설치 안내 창이 뜨면 **설치**(Install)를 누릅니다(명령어 라인 개발자 도구, Command Line Developer Tools).
-2. 터미널을 새로 열고, 내려받을 곳(문서 폴더)으로 이동한 뒤 받습니다. `<저장소 주소>`는 GitHub 저장소 페이지의 초록색 **Code** 버튼을 누르면 나오는 주소(`https://github.com/...git`)로 바꿉니다.
+2. 터미널을 새로 열고, 내려받을 곳(문서 폴더)으로 이동한 뒤 받습니다. `https://github.com/yurowa-gif/shinhan1haksa.git`는 GitHub 저장소 페이지의 초록색 **Code** 버튼을 누르면 나오는 주소(`https://github.com/...git`)로 바꿉니다.
    - **Windows**
      ```
      cd Documents
-     git clone <저장소 주소>
+     git clone https://github.com/yurowa-gif/shinhan1haksa.git
      cd shinhan1haksa
      ```
    - **Mac**
      ```
      cd ~/Documents
-     git clone <저장소 주소>
+     git clone https://github.com/yurowa-gif/shinhan1haksa.git
      cd shinhan1haksa
      ```
 
@@ -83,7 +83,7 @@ clasp(코드를 Apps Script로 올려 주는 도구)는 Node.js 위에서 돌아
 3. **ZIP 파일은 지우지 말고 둡니다.** ⑤에서 파일 하나를 다시 꺼내야 합니다.
 4. 터미널에서 그 폴더로 이동합니다(아래 "폴더로 이동하는 법").
 
-> 작업이 아직 `main`이 아닌 다른 브랜치에 있다면: Git은 `git clone -b <브랜치이름> <저장소 주소>`, ZIP은 GitHub에서 왼쪽 위 브랜치 목록에서 브랜치를 먼저 고른 뒤 Download ZIP을 누릅니다.
+> 작업이 아직 `main`이 아닌 다른 브랜치에 있다면: Git은 `git clone -b <브랜치이름> https://github.com/yurowa-gif/shinhan1haksa.git`, ZIP은 GitHub에서 왼쪽 위 브랜치 목록에서 브랜치를 먼저 고른 뒤 Download ZIP을 누릅니다.
 
 **폴더로 이동하는 법(`cd`)**
 
