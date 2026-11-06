@@ -87,6 +87,9 @@ function mealEffectiveDate_(kind, requestedAt, opts)
         // kind 'start'|'to_general'|'stop'|'with_dorm_entry'|'on_leave'
         // opts = {cutoff:'11:30', entryDate, leaveDate} → {date, rule}
 function mealChangeKind_(item, fromValue, toValue)
+        // → 'none'|'initial'|'start'|'to_general'|'stop'. fromValue = mealLatestValue_ (R6)
+function mealLatestValue_(changes, studentId, item)                     // 미래 적용일 행까지 누적한 마지막 값(R6 추가)
+function mealPendingToCancel_(changes, studentId, item, effectiveDate)  // 새 행이 덮어야 할 대기 행 [{id,effective_date,value}](R6 추가)
 ```
 
 ## 동작 메모(R1, 2026-11-06)
@@ -154,15 +157,21 @@ function mealChangeKind_(item, fromValue, toValue)
   - END: `endType`(`'23:00:00'`도 읽음) `=== opts.endTime`(기본 `'23:00'`), `dayType`이 `opts.endTypeDayTypes`(기본 `['mon_thu']`, 항목 앞뒤 공백 무시)에 있음, 마지막 블록, **그 블록과 그날 종료(`dayEnd`)가 모두 종료 시각보다 늦게 끝남**. ASSUMPTION: 날짜별 종료를 23:00 이하로 당긴 날(22:00·22:30·23:00)은 모두 그 시각에 귀가하므로 표시하지 않는다. ASSUMPTION: 특별 요일 유형(`exam` 등)으로 바꾼 날은 실제 달력 요일의 기본 유형으로 판정한다(목요일 exam → 표시, 금요일 exam → 표시 안 함).
 - `resolveStudentDay_`: 운영 안 하는 날은 `[]`. `exceptions`는 `date === plan.date`인 행만 쓴다(**날짜가 빈 행은 쓰지 않는다** — 빈 날짜 하나가 모든 날에 찍히지 않게). `plan.end`를 `dayEnd`로 넘긴다. `fixedRows`는 `effectiveFixedRows_` 결과를 넘긴다. 고정 일정 요일은 요일 유형이 아니라 **실제 달력 요일**(`ymdWeekdayKo_`). C7은 결과에서 `seq·code·text`만 sheet-model `marks`로 옮긴다.
 
-## 동작 메모(R6, 2026-11-06)
+## 동작 메모(R6, 2026-11-06, 총괄 검토 반영)
 
-**MealRules** — 값 글자는 `docs/contracts/vocabulary.md`.
-- `mealEffectiveDate_(kind, requestedAt, opts)` → `{date, rule}`. `rule`: `same_day`·`next_day`·`next_monday`·`monday_after_next`·`entry_date`·`leave_date`(화면에 이유를 보여 줄 때 쓴다).
-  - `start`·`to_general`: 신청 일시(KST, `isoLocalSplit_` 형식)가 마감(`opts.cutoff`, 기본 `'11:30'`, 설정 `meal.morning_cutoff` — `9:30`·`11:30:00` 표기도 읽음) **전**이면 당일, 마감 **정각부터** 다음 날. 초까지 비교: 11:29:59 당일, 11:30:00 다음 날(ASSUMPTION 4절 f).
-  - `stop`: 신청일이 월·화면 다음 주 월요일, 수~일이면 다다음 주 월요일(월~일을 한 주로, 시각 무관). 2026-12-30(수) → 2027-01-11.
+**MealRules** — 값 글자는 `docs/contracts/vocabulary.md`. StatusRules의 `statusOn_`를 부른다.
+- `mealEffectiveDate_(kind, requestedAt, opts)` → `{date, rule}`. `rule`: `same_day`·`next_day`·`next_monday`·`monday_after_next`·`entry_date`·`leave_date`·`initial`(화면에 이유를 보여 줄 때 쓴다).
+  - `start`·`to_general`: 신청 일시(KST, `isoLocalSplit_` 형식)가 마감(`opts.cutoff`, 기본 `'11:30'`, 설정 `meal.morning_cutoff` — `9:30`·`11:30:00` 표기도 읽음) **전**이면 당일, 마감 **정각부터** 다음 날(결정 23 ④). 초까지 비교: 11:29:59 당일, 11:30:00 다음 날.
+  - `stop`: 신청일이 월·화면 다음 주 월요일, 수~일이면 다다음 주 월요일(월~일을 한 주로, 시각 무관). 2026-12-30(수) → 2027-01-11. 일반 석식 → 미실시도 이 규칙(결정 23 ⑤).
   - `with_dorm_entry`: `opts.entryDate`, `on_leave`: `opts.leaveDate`(신청 시각 무관, 없으면 Error).
-  - `start`·`to_general`·`stop`에 `opts.leaveDate`를 함께 주면(학사 퇴실과 함께 만드는 석식 변경) 적용일이 퇴실일보다 이르면 퇴실일로 미룬다(`rule:'leave_date'`). ASSUMPTION: 퇴실을 미리 입력해도 퇴실 전에는 학사 석식이 이어진다. 퇴실일보다 늦은 적용일(석식 "중단"의 미실시 규칙)은 그대로 — PRD F6은 조식만 "즉시 중단"이라, 학사 석식은 퇴실 뒤 최대 2주 이어질 수 있다(**총괄 확인 필요**).
-  - 잘못된 kind·일시·마감은 Error. 공휴일·운영 안 하는 날은 보지 않는다(적용일은 달력 날짜).
-- `mealChangeKind_(item, from, to)`: 조식 `실시`로 → `start`, `미실시`로 → `stop`. 석식 `학사 석식`으로 → `start`, `일반 석식`으로 → `to_general`(결정 1), `미실시`로 → `stop`(일반 석식 → 미실시 포함, ASSUMPTION 4절 g). 같으면 `''`. `from`이 `''`(기록 없음)도 받는다: 기록 없음 → `미실시`는 그만둘 급식이 없으므로 `''`(부르는 쪽은 처음 값으로 바로 기록), 기록 없음 → 실시·학사 석식은 `start`, → 일반 석식은 `to_general`. 모르는 값은 Error.
-- F6 학사 퇴실: 조식은 `on_leave`(퇴실일 즉시), 석식은 선택에 따라 `stop` 또는 `to_general`로 F7 변경을 함께 만든다. 서류 미제출이어도 적용한다(결정 3) — 이 함수는 서류를 보지 않는다.
+  - `initial`: 신청일(그 항목 기록이 없는 학생의 첫 미실시 — 그만둘 급식이 없으므로 바로 기록).
+  - `start`·`to_general`·`stop`에 `opts.leaveDate`를 함께 주면(학사 퇴실과 함께 만드는 석식 변경) 적용일이 퇴실일보다 이르면 퇴실일로 미룬다(`rule:'leave_date'`, ASSUMPTION: 퇴실 전에는 학사 석식이 이어진다). 퇴실일보다 늦은 적용일은 그대로 — **결정 35**: 학사 퇴실 시 조식만 퇴실일에 끝나고, 학사 석식 중단은 미실시 적용일을 따른다(예: 3/3 수 신청·3/5 퇴실 → 석식 3/15 중단).
+  - 잘못된 kind(`none` 포함)·일시·마감은 Error. 공휴일·운영 안 하는 날은 보지 않는다(적용일은 달력 날짜).
+- `mealChangeKind_(item, from, to)` → `'none'`(바뀐 것 없음) | `'initial'` | `'start'` | `'to_general'` | `'stop'`.
+  - **`from`은 `mealLatestValue_`** = 그 학생·항목의 취소가 아닌 행을 모두 누적한 마지막 값(**미래 적용일 행 포함**). 신청일 기준 `statusOn_`이 아니다.
+  - 조식 `실시`로 → `start`, `미실시`로 → `stop`. 석식 `학사 석식`으로 → `start`, `일반 석식`으로 → `to_general`(결정 1), `미실시`로 → `stop`.
+  - `from`이 `''`(기록 없음): → `미실시`는 `initial`, → 실시·학사 석식은 `start`, → 일반 석식은 `to_general`. 같으면 `none`(저장하지 않는다). 모르는 값은 Error.
+- `mealLatestValue_(changes, studentId, item)`: `statusOn_(…, '9999-12-31')`과 같다(같은 적용일이면 requested_at → created_at → 아래 행).
+- **대기 행 정리:** 새 급식 변경 행(적용일 E)을 저장할 때, 같은 학생·같은 항목의 유효한 행 중 **적용일이 E보다 늦은 행**은 새 행을 덮으므로 `mealPendingToCancel_(changes, studentId, item, E)`가 돌려준 행들의 status를 `'취소'`로 바꾼다(같은 락 안, audit_log에 남김). 예: 수요일 미실시 신청(다다음 주 월요일 대기) 뒤 목요일에 학사 석식으로 되돌리기, 퇴실일 즉시 조식 중단 뒤에 남은 대기 '실시' 행. 적용일이 같은 행은 requested_at 순으로 새 행이 이기므로 대상이 아니다.
+- F6 학사 퇴실: 조식은 `on_leave`(퇴실일 즉시), 석식은 선택에 따라 `stop` 또는 `to_general`(+ `leaveDate`)로 F7 변경을 함께 만든다. 서류 미제출이어도 적용한다(결정 3) — 이 함수는 서류를 보지 않는다.
 - F7은 계산값을 `effective_date_auto`에, 교사가 고친 값을 `effective_date`에 저장한다(plan 5절).
