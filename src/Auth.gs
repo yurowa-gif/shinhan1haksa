@@ -30,7 +30,12 @@ function permissions_() {
     'roster.edit': { roles: ['admin'] },
     // 자습 일정·블록: 교사 역할은 보기, 수정은 관리자만
     'schedule.view': { roles: ['admin', 'attendance', 'hall_teacher', 'duty_manager', 'homeroom'] },
-    'schedule.edit': { roles: ['admin'] }
+    'schedule.edit': { roles: ['admin'] },
+    // 사전 특이사항(F1): 출결 담당·관리자는 입력(바로 확정)·확정, 담임(자기 반)·학사 교사(담당 학생)는 요청만, 취소는 출결 담당·관리자 또는 본인 요청
+    'exception.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] },
+    'exception.save': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'], scope: 'student' },
+    'exception.confirm': { roles: ['admin', 'attendance'] },
+    'exception.cancel': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] }
   };
 }
 
