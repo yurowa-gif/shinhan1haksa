@@ -15,6 +15,11 @@
     root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '계정(활성)' }), roleStats]));
     root.appendChild(soonCard('학사·기숙·조식·석식 인원, 공석', '2단계(F6·F7)에서 채웁니다.'));
     root.appendChild(soonCard('2OUT 대상', '2단계(F4)에서 채웁니다.'));
-    root.appendChild(soonCard('명단·계정, 운영 기간, 자습 일정, 설정', '1단계부터 차례로 추가합니다.'));
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '운영 기간' }),
+      el('div', { class: 'muted', text: '학기·방학 기간을 추가하고 고칩니다.' }),
+      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=terms', text: '운영 기간 열기' })
+    ]));
+    root.appendChild(soonCard('명단·계정, 자습 일정, 설정', '1단계부터 차례로 추가합니다.'));
   }
 </script>
