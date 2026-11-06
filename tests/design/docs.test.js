@@ -53,7 +53,7 @@ test('디자인 문서가 가리키는 파일(`docs/…` `src/…` `design/…` 
 
 test('screens.md 가 한 화면씩 다룬다: F1·F2·F5 절과 "버튼 두 번"·"30초" 경로가 있다', () => {
   const doc = css.readFile('docs/design/screens.md');
-  ['## 1. 홈 카드 배치', '## 2. C5', '## 3. C7', '## 4. C6', '## 5. 이미 만든 화면'].forEach((h) => assert.ok(doc.indexOf(h) >= 0, h));
+  ['## 1. 홈 카드 배치', '## 2. C5', '## 3. C7', '## 4. C6', '## 5. 이미 만든 화면', '## 5-2. 2단계 대비'].forEach((h) => assert.ok(doc.indexOf(h) >= 0, h));
   assert.ok(doc.indexOf('버튼 두 번') > 0 && doc.indexOf('홈 → 오늘 출석부(탭 1) → PDF 열기(탭 2)') > 0);
   assert.ok(doc.indexOf('30초') > 0 && /탭 \d회/.test(doc));
 });
