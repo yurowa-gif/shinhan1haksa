@@ -9,7 +9,8 @@
  *   spaces: [{key, name, gender:'혼성'|'남'|'여', rows, cols}]   배열 순서 = 화면·인쇄 순서
  *   seats:  [{spaceKey, row, col, label, kind:'좌석'|'기둥'|'비상문'|'창문'}]
  *     row·col은 1부터. seats에 없는 칸은 빈칸(통로).
- *     label은 좌석만 공간 안 번호('1'부터, 행 우선), 좌석이 아닌 칸은 ''.
+ *     label은 좌석만. 1층은 "줄-순번"(좌석이 있는 열을 왼쪽부터 센 줄 번호 + 앞(1행 쪽)부터 순번, 예 '3-7'),
+ *     SA실은 방 안 순번('1'부터, 행 우선)(결정 37). 좌석이 아닌 칸은 ''.
  */
 
 /**
@@ -45,9 +46,9 @@ function buildFakeSeatLayout_() {
   var seats = [];
 
   /** cellKind(r, c) → '좌석'|'기둥'|'비상문'|'창문'|'' (''이면 빈칸, seats에 넣지 않음) */
-  var addSpace = function (key, name, gender, rows, cols, cellKind) {
+  var addSpace = function (key, name, gender, rows, cols, cellKind, lineStyle) {
     spaces.push({ key: key, name: name, gender: gender, rows: rows, cols: cols });
-    var n = 0;
+    var n = 0, first = seats.length;
     for (var r = 1; r <= rows; r++) {
       for (var c = 1; c <= cols; c++) {
         var kind = cellKind(r, c);
@@ -59,6 +60,20 @@ function buildFakeSeatLayout_() {
         });
       }
     }
+    if (!lineStyle) return;
+    // 줄-순번: 좌석이 있는 열마다 줄 번호, 그 줄 안에서 앞(1행)부터 순번(seats는 행 우선이라 열별로 세면 행 순서가 된다)
+    var lineNo = {}, count = {}, lines = 0;
+    for (var c2 = 1; c2 <= cols; c2++) {
+      for (var i = first; i < seats.length; i++) {
+        if (seats[i].col === c2 && seats[i].kind === '좌석') { if (!lineNo[c2]) lineNo[c2] = ++lines; break; }
+      }
+    }
+    for (var i2 = first; i2 < seats.length; i2++) {
+      var st = seats[i2];
+      if (st.kind !== '좌석') continue;
+      count[st.col] = (count[st.col] || 0) + 1;
+      st.label = lineNo[st.col] + '-' + count[st.col];
+    }
   };
 
   var f = FAKE_SEAT_FLOOR1;
@@ -69,7 +84,7 @@ function buildFakeSeatLayout_() {
       if (f.lines[i].col === c) return r <= f.lines[i].len ? '좌석' : '';
     }
     return ''; // 통로 열
-  });
+  }, true);
 
   for (var j = 0; j < FAKE_SEAT_SA_ROOMS.length; j++) {
     var room = FAKE_SEAT_SA_ROOMS[j];

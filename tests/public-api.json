@@ -25,6 +25,7 @@
     "getSeatData":       { "use": "화면",   "guard": "requirePermission_" },
     "saveSpace":         { "use": "화면",   "guard": "requirePermission_" },
     "saveSpaceGrid":     { "use": "화면",   "guard": "requirePermission_" },
+    "previewSpaceGrid":  { "use": "화면",   "guard": "requirePermission_" },
     "previewSeatGrid":   { "use": "화면",   "guard": "requirePermission_" },
     "importSeatGrid":    { "use": "화면",   "guard": "requirePermission_" },
     "assignSeat":        { "use": "화면",   "guard": "requirePermission_" },

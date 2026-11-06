@@ -31,20 +31,66 @@ test('parseSeatGridTsv_: 알 수 없는 칸은 행·열 위치로, 빈 표·너�
   assert.strictEqual(parse('\t\t\n\t').errors.length, 1, '칸이 하나도 없음');
   const tall = Array.from({ length: 41 }, () => '공석').join('\n');
   assert.ok(parse(tall).errors.some((e) => e.message.includes('행이')));
-  const wide = Array.from({ length: 31 }, () => '공석').join('\t');
-  assert.ok(parse(wide).errors.some((e) => e.message.includes('열이')));
+  assert.strictEqual(parse(Array.from({ length: 40 }, () => '공석').join('\t')).errors.length, 0, '열 40개까지 허용');
+  assert.ok(parse(Array.from({ length: 41 }, () => '공석').join('\t')).errors.some((e) => e.message.includes('열이')));
   assert.ok(parse('공석,1. 가').errors.length === 0, 'CSV도 받는다');
 });
 
-test('seatLabelsFor_: 좌석만 행 우선으로 1부터, 기둥 등은 번호 없음', () => {
-  const l = plain(pure.seatLabelsFor_([{ row: 2, col: 1, kind: '좌석' }, { row: 1, col: 3, kind: '기둥' }, { row: 1, col: 2, kind: '좌석' }, { row: 1, col: 1, kind: '좌석' }]));
-  assert.deepStrictEqual(l, { '1,1': '1', '1,2': '2', '2,1': '3' });
+test('parseSeatGridTsv_: 칸 이름이 "constructor"·"toString" 같은 객체 속성이어도 좌석 종류로 통과하지 않는다(나쁜 입력)', () => {
+  for (const word of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+    const g = parse('공석\t' + word);
+    assert.strictEqual(g.errors.length, 1, word); assert.ok(g.errors[0].message.includes('2열'), word);
+  }
+  assert.strictEqual(pure.seatKindEn_('constructor'), 'seat', '모르는 종류는 seat로(시트 값이 이상해도 함수가 새지 않는다)');
+  assert.strictEqual(pure.seatKindEn_('기둥'), 'pillar');
+});
+
+test('parseSeatGridTsv_: 줄 머리 칸(숫자만 있는 첫 칸 "5", "5/19")은 건너뛰고 열을 한 칸 당긴다', () => {
+  const g = parse('5/19\t공석\t공석\n6\t공석\t기둥\n7\t\t공석');
+  assert.deepStrictEqual(g.errors, []);
+  assert.strictEqual(g.skippedHeads, 3);
+  assert.strictEqual(g.cols, 2);
+  assert.deepStrictEqual(g.cells.map((c) => c.row + ',' + c.col + ':' + c.kind), ['1,1:좌석', '1,2:좌석', '2,1:좌석', '2,2:기둥', '3,2:좌석']);
+  const keep = parse('공석\t공석\n3\t공석');   // 첫 열에 진짜 칸이 있으면 당기지 않는다
+  assert.deepStrictEqual(keep.cells.map((c) => c.col), [1, 2, 2]);
+  assert.strictEqual(parse('공석\t5\t공석').errors.length, 1, '첫 칸이 아닌 숫자 칸은 여전히 오류');
+});
+
+/* ───── 번호 ───── */
+
+const lab = (cells, style) => plain(pure.seatLabelsFor_(cells, style));
+
+test('seatLabelsFor_(room): SA실은 방 안 순번 — 좌석만 행 우선으로 1부터, 기둥 등은 번호 없음', () => {
+  assert.deepStrictEqual(lab([{ row: 2, col: 1, kind: '좌석' }, { row: 1, col: 3, kind: '기둥' }, { row: 1, col: 2, kind: '좌석' }, { row: 1, col: 1, kind: '좌석' }], 'room'),
+    { '1,1': '1', '1,2': '2', '2,1': '3' });
+});
+
+test('seatLabelsFor_(line): 1층은 줄-순번 — 좌석이 있는 열을 왼쪽부터 센 줄 번호, 앞(1행)부터 순번, 통로·기둥은 건너뜀', () => {
+  // 열 1(줄1) | 열 2 통로(좌석 없음) | 열 3(줄2): 3행이 기둥, 열 4는 기둥뿐(줄이 아님)
+  const cells = [{ row: 1, col: 1, kind: '좌석' }, { row: 2, col: 1, kind: '좌석' }, { row: 1, col: 3, kind: '좌석' }, { row: 2, col: 3, kind: '기둥' },
+    { row: 3, col: 3, kind: '좌석' }, { row: 1, col: 4, kind: '기둥' }, { row: 4, col: 5, kind: '좌석' }];
+  assert.deepStrictEqual(lab(cells, 'line'), { '1,1': '1-1', '2,1': '1-2', '1,3': '2-1', '3,3': '2-2', '4,5': '3-1' });
+  assert.deepStrictEqual(lab(cells.slice().reverse(), 'line'), lab(cells, 'line'), '입력 순서와 무관');
+});
+
+test('seatLabelStyle_: SA로 시작하는 방은 순번, 그 밖(1층 등)은 줄-순번', () => {
+  assert.strictEqual(pure.seatLabelStyle_('SA3실'), 'room'); assert.strictEqual(pure.seatLabelStyle_(' sa1실'), 'room');
+  assert.strictEqual(pure.seatLabelStyle_('1층 자습실'), 'line'); assert.strictEqual(pure.seatLabelStyle_(''), 'line');
+});
+
+test('가짜 좌석표의 번호가 결정 37 규칙과 같다(1층 줄-순번 3-7, SA 순번)', () => {
+  const lay = plain(pure.buildFakeSeatLayout_());
+  const floor = lay.seats.filter((x) => x.spaceKey === '1F' && x.kind === '좌석');
+  assert.deepStrictEqual(lab(floor, 'line'), Object.fromEntries(floor.map((x) => [x.row + ',' + x.col, x.label])));
+  assert.ok(floor.some((x) => x.label === '3-7'));
+  const sa = lay.seats.filter((x) => x.spaceKey === 'SA1' && x.kind === '좌석');
+  assert.deepStrictEqual(lab(sa, 'room'), Object.fromEntries(sa.map((x) => [x.row + ',' + x.col, x.label])));
 });
 
 /* ───── 격자 저장 계획 ───── */
 
 const ex = (id, row, col, kind, label) => ({ id, row, col, kind, label });
-const gp = (existing, desired, assigned, rows, cols) => plain(pure.seatGridPlan_(existing, desired, assigned || [], rows || 3, cols || 3));
+const gp = (existing, desired, assigned, rows, cols, style, past) => plain(pure.seatGridPlan_(existing, desired, assigned || [], rows || 3, cols || 3, style || 'room', past || []));
 
 test('seatGridPlan_: 새 칸·바뀐 종류·없앤 칸을 만들고 번호를 다시 매긴다', () => {
   const existing = [ex('a', 1, 1, '좌석', '1'), ex('b', 1, 2, '좌석', '2'), ex('c', 1, 3, '기둥', '')];
@@ -59,12 +105,12 @@ test('seatGridPlan_: 새 칸·바뀐 종류·없앤 칸을 만들고 번호를 �
 });
 
 test('seatGridPlan_: 같은 모양이면 바뀐 것 0건(멱등)', () => {
-  const existing = [ex('a', 1, 1, '좌석', '1'), ex('b', 1, 2, '기둥', '')];
-  const p = gp(existing, [{ row: 1, col: 1, kind: '좌석' }, { row: 1, col: 2, kind: '기둥' }]);
-  assert.deepStrictEqual([p.create.length, p.update.length, p.cancel.length], [0, 0, 0]);
+  const existing = [ex('a', 1, 1, '좌석', '1-1'), ex('b', 1, 2, '기둥', '')];
+  const p = gp(existing, [{ row: 1, col: 1, kind: '좌석' }, { row: 1, col: 2, kind: '기둥' }], [], 3, 3, 'line');
+  assert.deepStrictEqual([p.create.length, p.update.length, p.cancel.length, p.relabelAssigned], [0, 0, 0, 0]);
 });
 
-test('seatGridPlan_: 학생이 앉은 좌석을 바꾸거나 없애면 거부하고, 앞 번호가 밀리면 번호만 고친다(나쁜 입력)', () => {
+test('seatGridPlan_: 앉은 좌석을 바꾸거나 없애면 거부하고, 번호가 밀리는 것만으로는 거부하지 않는다(나쁜 입력)', () => {
   const existing = [ex('a', 1, 1, '좌석', '1'), ex('b', 1, 2, '좌석', '2')];
   const noSeat = gp(existing, [{ row: 1, col: 1, kind: '기둥' }, { row: 1, col: 2, kind: '좌석' }], ['a']);
   assert.strictEqual(noSeat.ok, false); assert.ok(noSeat.errors[0].includes('1행 1열') && noSeat.errors[0].includes('배정을 풀어'));
@@ -77,36 +123,72 @@ test('seatGridPlan_: 학생이 앉은 좌석을 바꾸거나 없애면 거부하
   assert.strictEqual(out.ok, false); assert.strictEqual(out.errors.length, 2);
 });
 
+test('seatGridPlan_: 번호가 바뀌는 배정 좌석 수를 센다(배정 안 된 좌석은 세지 않는다)', () => {
+  // 줄 1(열 1)에 좌석 3개. 맨 앞을 창문으로 바꾸면 뒤 두 좌석의 번호가 1-1·1-2로 당겨진다
+  const existing = [ex('a', 1, 1, '좌석', '1-1'), ex('b', 2, 1, '좌석', '1-2'), ex('c', 3, 1, '좌석', '1-3')];
+  const want = [{ row: 1, col: 1, kind: '창문' }, { row: 2, col: 1, kind: '좌석' }, { row: 3, col: 1, kind: '좌석' }];
+  const p = gp(existing, want, ['b'], 3, 3, 'line');
+  assert.strictEqual(p.ok, true); assert.strictEqual(p.relabelAssigned, 1, 'b만 배정됐고 번호가 바뀜');
+  assert.deepStrictEqual(p.update, [{ id: 'a', patch: { kind: '창문', label: '' } }, { id: 'b', patch: { label: '1-1' } }, { id: 'c', patch: { label: '1-2' } }]);
+  assert.strictEqual(gp(existing, want, [], 3, 3, 'line').relabelAssigned, 0);
+});
+
+test('seatGridPlan_: 지난 기간 배정만 있는 좌석은 경고 후 허용, 지금·앞으로 배정이 있으면 거부', () => {
+  const existing = [ex('a', 1, 1, '좌석', '1'), ex('b', 1, 2, '좌석', '2')];
+  const p = gp(existing, [{ row: 1, col: 2, kind: '좌석' }], [], 3, 3, 'room', ['a']);
+  assert.strictEqual(p.ok, true); assert.strictEqual(p.cancel.length, 1);
+  assert.ok(p.warnings.length === 1 && p.warnings[0].includes('지난 기간') && p.warnings[0].includes('1행 1열'));
+  const labelOnly = gp(existing, [{ row: 1, col: 1, kind: '창문' }, { row: 1, col: 2, kind: '좌석' }], [], 3, 3, 'room', ['b']);
+  assert.ok(labelOnly.warnings.some((w) => w.includes('번호가 바뀝니다')));
+  assert.strictEqual(gp(existing, [{ row: 1, col: 2, kind: '좌석' }], ['a'], 3, 3, 'room', []).ok, false);
+});
+
 /* ───── 배정·맞바꾸기 계획 ───── */
 
 const kinds = { s1: '좌석', s2: '좌석', s3: '좌석', p: '기둥' };
+const Y = '2027-03-20';
 const A = (id, seat, stu, extra) => Object.assign({ id, seat_id: seat, student_id: stu, term_id: 'T', status: '배정', valid_from: '', valid_to: '' }, extra || {});
-const asg = (live, seat, stu, enrolled, stale) => plain(pure.planSeatAssign_(live, 'T', seat, stu, kinds, enrolled || ['x', 'y', 'z'], stale || []));
-const swp = (live, a, b, stale) => plain(pure.planSeatSwap_(live, a, b, kinds, stale || []));
+const NEW = (seat, stu, from) => ({ op: 'create', row: { term_id: 'T', seat_id: seat, student_id: stu, valid_from: from || '', valid_to: '', status: '배정', memo: '' } });
+const asg = (live, seat, stu, enrolled, stale, ymd) => plain(pure.planSeatAssign_(live, 'T', seat, stu, kinds, enrolled || ['x', 'y', 'z'], stale || [], ymd || Y));
+const swp = (live, a, b, stale, ymd) => plain(pure.planSeatSwap_(live, a, b, kinds, stale || [], ymd || Y, 'T'));
 
-test('planSeatAssign_: 빈 자리에 새로 배정, 이미 다른 자리면 그 행을 옮긴다', () => {
-  assert.deepStrictEqual(asg([], 's1', 'x').ops, [{ op: 'create', row: { term_id: 'T', seat_id: 's1', student_id: 'x', valid_from: '', valid_to: '', status: '배정', memo: '' } }]);
-  assert.deepStrictEqual(asg([A('r1', 's2', 'x')], 's1', 'x').ops, [{ op: 'update', id: 'r1', patch: { seat_id: 's1' } }]);
+test('planSeatAssign_: 빈 자리에 새로 배정(기간 전체), 같은 자리면 할 일 없음', () => {
+  assert.deepStrictEqual(asg([], 's1', 'x').ops, [NEW('s1', 'x')]);
   assert.strictEqual(asg([A('r1', 's1', 'x')], 's1', 'x').noop, true);
+});
+
+test('planSeatAssign_: 이미 다른 자리에 배정된 학생은 옮기지 않고 거부한다(이동은 맞바꾸기로만)', () => {
+  const r = asg([A('r1', 's2', 'x')], 's1', 'x');
+  assert.strictEqual(r.ok, false); assert.ok(r.error.includes('이미 다른 자리에 배정'));
+  assert.deepStrictEqual(r.ops, []);
 });
 
 test('planSeatAssign_: 앉은 자리·좌석 아닌 칸·미등록 학생·날짜 좁힌 배정은 거부(나쁜 입력)', () => {
   assert.ok(asg([A('r1', 's1', 'y')], 's1', 'x').error.includes('이미 학생이 배정'));
   assert.ok(asg([], 'p', 'x').error.includes('좌석이 아닌'));
   assert.ok(asg([], 's1', 'nobody').error.includes('등록된 학생이 아닙니다'));
-  assert.ok(asg([A('r1', 's1', 'y', { valid_from: '2027-07-20' })], 's1', 'x').error.includes('날짜를 좁힌'));
-  assert.ok(asg([A('r1', 's2', 'x', { valid_to: '2027-07-20' })], 's1', 'x').error.includes('날짜를 좁힌'));
+  assert.ok(asg([A('r1', 's1', 'y', { valid_from: '2027-07-20' })], 's1', 'x').error.includes('날짜를 좁힌'), '앞으로 시작하는 배정');
+  assert.ok(asg([A('r1', 's1', 'y', { valid_to: '2027-07-20' })], 's1', 'x').error.includes('날짜를 좁힌'), '앞으로 끝나는 배정');
 });
 
-test('planSeatAssign_: 퇴실한 학생의 배정만 남은 자리(stale)에는 이전 배정을 취소하고 앉힌다', () => {
+test('planSeatAssign_: 기준일 전에 끝난 행은 지난 기록이라 새 배정을 막지 않는다', () => {
+  const ended = A('old', 's1', 'y', { valid_to: '2027-03-19' });
+  assert.deepStrictEqual(asg([ended], 's1', 'x').ops, [NEW('s1', 'x')]);
+  const mineEnded = A('m', 's2', 'x', { valid_to: '2027-03-19' });
+  assert.deepStrictEqual(asg([mineEnded], 's1', 'x').ops, [NEW('s1', 'x')], '학생 자신의 지난 행도 막지 않는다');
+});
+
+test('planSeatAssign_: 퇴실한 학생 자리(stale)에 앉히면 이전 행을 취소하지 않고 기준일 전날로 끝내고 새 행을 만든다', () => {
   const p = asg([A('old', 's1', 'y')], 's1', 'x', null, ['s1']);
-  assert.deepStrictEqual(p.ops, [{ op: 'cancel', id: 'old' }, { op: 'create', row: { term_id: 'T', seat_id: 's1', student_id: 'x', valid_from: '', valid_to: '', status: '배정', memo: '' } }]);
-  const mv = asg([A('old', 's1', 'y'), A('mine', 's2', 'x')], 's1', 'x', null, ['s1']);
-  assert.deepStrictEqual(mv.ops, [{ op: 'cancel', id: 'old' }, { op: 'update', id: 'mine', patch: { seat_id: 's1' } }]);
+  assert.deepStrictEqual(p.ops, [{ op: 'update', id: 'old', patch: { valid_to: '2027-03-19' } }, NEW('s1', 'x', Y)]);
+  assert.ok(!p.ops.some((o) => o.op === 'cancel'), '지난 기록을 취소로 지우지 않는다');
   assert.ok(asg([A('old', 's1', 'y')], 's1', 'x').error, 'stale가 아니면(입실 전 등) 거부');
+  // 같은 날 시작한 행이면 시작도 못 한 것이라 취소
+  const same = asg([A('old', 's1', 'y', { valid_from: Y })], 's1', 'x', null, ['s1']);
+  assert.deepStrictEqual(same.ops[0], { op: 'cancel', id: 'old' });
 });
 
-test('planSeatSwap_: 둘 다 앉음→학생 맞바꿈, 한쪽만→이동, 둘 다 빔→할 일 없음', () => {
+test('planSeatSwap_: 둘 다 앉음→학생 맞바꿈, 한쪽만→이동(빈 자리), 둘 다 빔→할 일 없음', () => {
   assert.deepStrictEqual(swp([A('r1', 's1', 'x'), A('r2', 's2', 'y')], 's1', 's2').ops,
     [{ op: 'update', id: 'r1', patch: { student_id: 'y' } }, { op: 'update', id: 'r2', patch: { student_id: 'x' } }]);
   assert.deepStrictEqual(swp([A('r1', 's1', 'x')], 's1', 's3').ops, [{ op: 'update', id: 'r1', patch: { seat_id: 's3' } }]);
@@ -114,12 +196,24 @@ test('planSeatSwap_: 둘 다 앉음→학생 맞바꿈, 한쪽만→이동, 둘 
   assert.strictEqual(swp([], 's1', 's2').noop, true);
 });
 
-test('planSeatSwap_: 같은 자리·기둥·날짜 좁힌 배정은 거부, 퇴실 자리(stale)는 빈 자리로 보고 이전 배정을 취소한다', () => {
+test('planSeatSwap_: 같은 자리·기둥·날짜 좁힌 배정은 거부', () => {
   assert.ok(swp([], 's1', 's1').error); assert.ok(swp([], 's1', 'p').error);
-  assert.ok(swp([A('r1', 's1', 'x', { valid_from: '2027-07-20' })], 's1', 's2').error.includes('날짜를 좁힌'));
+  assert.ok(swp([A('r1', 's1', 'x', { valid_to: '2027-07-20' })], 's1', 's2').error.includes('날짜를 좁힌'));
+});
+
+test('planSeatSwap_: 퇴실 자리(stale)로 옮기면 이전 기록은 끝내기만 하고(취소 없음) 학생은 기준일부터 새 행', () => {
   const p = swp([A('r1', 's1', 'x'), A('gone', 's2', 'y')], 's1', 's2', ['s2']);
-  assert.deepStrictEqual(p.ops, [{ op: 'cancel', id: 'gone' }, { op: 'update', id: 'r1', patch: { seat_id: 's2' } }]);
+  assert.deepStrictEqual(p.ops, [{ op: 'update', id: 'gone', patch: { valid_to: '2027-03-19' } }, { op: 'update', id: 'r1', patch: { valid_to: '2027-03-19' } }, NEW('s2', 'x', Y)]);
+  assert.ok(!p.ops.some((o) => o.op === 'cancel'));
   assert.strictEqual(swp([A('gone', 's2', 'y')], 's1', 's2', ['s2']).noop, true, '앉은 사람이 없으면 할 일 없음');
+});
+
+test('seatToken_: 자리의 배정이 바뀌면 달라지고, 빈 자리는 빈 문자열, 날짜 좁힌 배정은 bounded', () => {
+  const t = (live, seat) => pure.seatToken_(live, seat, Y);
+  assert.strictEqual(t([], 's1'), '');
+  assert.notStrictEqual(t([A('r1', 's1', 'x')], 's1'), t([A('r1', 's1', 'y')], 's1'), '같은 행이라도 학생이 바뀌면 다르다');
+  assert.strictEqual(t([A('r1', 's1', 'x', { valid_to: '2027-03-01' })], 's1'), '', '기준일 전에 끝난 행은 빈 자리로 본다');
+  assert.strictEqual(t([A('r1', 's1', 'x', { valid_to: '2027-09-01' })], 's1'), 'bounded');
 });
 
 test('seatGenderWarning_: 성별 구역이 어긋날 때만 경고, 혼성은 없음', () => {
@@ -139,6 +233,7 @@ function makeServer(email, roles, today) {
     users: [{ id: 'u0', email, active: 'TRUE', roles: roles.join(','), name: '가짜교사', homeroom_class: '' }]
   };
   const denied = [], writes = [];
+  const flags = { failUpdate: false };
   let uid = 0, depth = 0;
   const copy = (r) => Object.assign({}, r);
   const c = loadGs(FILES, {
@@ -149,12 +244,14 @@ function makeServer(email, roles, today) {
     appendRecord_: (sheet, rec) => { assert.ok(depth > 0, '쓰기는 락 안에서'); const r = Object.assign({ id: 'n' + (++uid) }, rec); db[sheet].push(r); writes.push('+' + sheet); return r; },
     updateRecord_: (sheet, id, patch) => { assert.ok(depth > 0, '쓰기는 락 안에서'); Object.assign(db[sheet].find((r) => r.id === id), patch); writes.push('~' + sheet); return {}; },
     bulkAppend_: (sheet, rows) => { assert.ok(depth > 0); rows.forEach((r) => db[sheet].push(Object.assign({ id: 'n' + (++uid) }, r))); if (rows.length) writes.push('+' + sheet + ':' + rows.length); },
-    bulkUpdateRecords_: (sheet, patches) => { assert.ok(depth > 0); patches.forEach((p) => Object.assign(db[sheet].find((r) => r.id === p.id), p.patch)); if (patches.length) writes.push('~' + sheet + ':' + patches.length); return patches.length; }
+    bulkUpdateRecords_: (sheet, patches) => { assert.ok(depth > 0); if (flags.failUpdate) throw new Error('시트 쓰기 실패(가짜)'); patches.forEach((p) => Object.assign(db[sheet].find((r) => r.id === p.id), p.patch)); if (patches.length) writes.push('~' + sheet + ':' + patches.length); return patches.length; }
   });
-  return { c, db, denied, writes };
+  return { c, db, denied, writes, flags };
 }
 const admin = (today) => makeServer('admin@example.com', ['admin'], today);
 const data = (s) => plain(s.c.getSeatData(TERM.id));
+const allCells = (d) => d.spaces.flatMap((sp) => sp.cells);
+const tokOf = (d, ...ids) => Object.fromEntries(ids.map((id) => [id, allCells(d).find((c) => c.id === id).token]));
 const cellsOf = (d, name) => d.spaces.find((x) => x.name === name).cells;
 const seatOfStudent = (d, sid) => { for (const sp of d.spaces) for (const c of sp.cells) if (c.studentId === sid) return c; return null; };
 
@@ -185,95 +282,225 @@ test('getSeatData: 앉은 학생은 "학년. 이름", 퇴실 학생 자리는 �
   assert.ok(!JSON.stringify(d).includes('example.com'), '이메일을 내보내지 않는다');
 });
 
-test('assignSeat: 중도 입실자를 빈 자리에 앉히면 미배정 목록에서 빠지고, 앉은 자리·퇴실 자리 규칙을 지킨다', () => {
+const emptySeat = (d, name) => (name ? cellsOf(d, name) : allCells(d)).find((c) => c.kind === 'seat' && c.vacant && !c.hold);
+const asgn = (s, seatId, stuId, d0) => plain(s.c.assignSeat(TERM.id, seatId, stuId, tokOf(d0 || data(s), seatId)));
+const swap = (s, a, b, d0) => plain(s.c.swapSeats(TERM.id, a, b, tokOf(d0 || data(s), a, b)));
+const unassign = (s, id, d0) => plain(s.c.unassignSeat(TERM.id, id, tokOf(d0 || data(s), id)));
+const mapOn = (s, ymd) => plain(s.c.seatMapOn_(s.db.seats, s.db.seat_assignments, s.db.enrollments, s.db.status_changes, TERM.id, ymd));
+
+test('assignSeat: 중도 입실자를 빈 자리에 앉히면 미배정 목록에서 빠지고, 앉은 자리에는 거부(쓰기 없음)', () => {
   const s = admin();
-  const d = data(s);
-  const sa = cellsOf(d, '1층 자습실').find((c) => c.kind === 'seat' && c.vacant && !c.hold);   // 가짜 30명으로는 1층 대부분이 비어 있다
-  const r = plain(s.c.assignSeat(TERM.id, sa.id, s1.lateEntrantId));
+  const sa = emptySeat(data(s), '1층 자습실');
+  const r = asgn(s, sa.id, s1.lateEntrantId);
   assert.strictEqual(r.ok, true);
   assert.strictEqual(s.db.seat_assignments.filter((a) => a.student_id === s1.lateEntrantId && a.status === '배정').length, 1);
   const d2 = data(s);
   assert.strictEqual(seatOfStudent(d2, s1.lateEntrantId).id, sa.id);
   assert.strictEqual(d2.unseated.length, 0);
-  // 앉은 자리에 또 앉히기 → 거부, 쓰기 없음
   const w = s.writes.length;
-  const sitting = d2.spaces.flatMap((sp) => sp.cells).find((c) => c.studentId && c.studentId !== s1.lateEntrantId);
-  const bad = plain(s.c.assignSeat(TERM.id, sitting.id, s1.lateEntrantId));
+  const sitting = allCells(d2).find((c) => c.studentId && c.studentId !== s1.lateEntrantId);
+  const bad = asgn(s, sitting.id, s1.lateEntrantId, d2);
   assert.strictEqual(bad.ok, false); assert.ok(bad.error.includes('이미'));
   assert.strictEqual(s.writes.length, w);
 });
 
-test('assignSeat: 퇴실한 학생 자리에 앉히면 이전 배정은 취소(행은 남음)하고 새로 배정한다', () => {
+test('assignSeat: 이미 배정된 학생은 옮기지 않고 거부(쓰기 없음), 이동은 맞바꾸기로', () => {
   const s = admin();
-  const held = data(s).spaces.flatMap((sp) => sp.cells).find((c) => c.reason === '퇴실');
+  const d = data(s);
+  const mover = allCells(d).find((c) => c.studentId);
+  const target = emptySeat(d, '1층 자습실');
+  const w = s.writes.length;
+  const r = plain(s.c.assignSeat(TERM.id, target.id, mover.studentId, tokOf(d, target.id)));
+  assert.strictEqual(r.ok, false); assert.ok(r.error.includes('이미 다른 자리에 배정'));
+  assert.strictEqual(s.writes.length, w);
+  assert.strictEqual(seatOfStudent(data(s), mover.studentId).id, mover.id, '원래 자리에 그대로');
+});
+
+test('assignSeat: 퇴실한 학생 자리에 앉혀도 그 학생의 지난 기록은 남는다(3/5 좌석표가 퇴실 전 학생을 그대로 보인다)', () => {
+  const s = admin();   // 오늘 3/20, 퇴실 3/10
+  const held = allCells(data(s)).find((c) => c.reason === '퇴실');
   const old = s.db.seat_assignments.find((a) => a.seat_id === held.id && a.status === '배정');
   const total = s.db.seat_assignments.length;
-  assert.strictEqual(plain(s.c.assignSeat(TERM.id, held.id, s1.lateEntrantId)).ok, true);
-  assert.strictEqual(s.db.seat_assignments.find((a) => a.id === old.id).status, '취소');
-  assert.strictEqual(s.db.seat_assignments.length, total + 1, '지우지 않고 한 행만 늘었다');
-  assert.strictEqual(seatOfStudent(data(s), s1.lateEntrantId).id, held.id);
+  assert.strictEqual(asgn(s, held.id, s1.lateEntrantId).ok, true);
+  const oldAfter = s.db.seat_assignments.find((a) => a.id === old.id);
+  assert.strictEqual(oldAfter.status, '배정', '취소하지 않는다');
+  assert.strictEqual(oldAfter.valid_to, '2027-03-19', '기준일 전날까지');
+  assert.strictEqual(s.db.seat_assignments.length, total + 1, '새 행 하나만 늘었다');
+  const nr = s.db.seat_assignments[s.db.seat_assignments.length - 1];
+  assert.deepStrictEqual([nr.student_id, nr.seat_id, nr.valid_from, nr.valid_to], [s1.lateEntrantId, held.id, '2027-03-20', '']);
+  assert.strictEqual(seatOfStudent(data(s), s1.lateEntrantId).id, held.id, '오늘은 새 학생');
+  const before = mapOn(s, '2027-03-05').bySeat[held.id];
+  assert.strictEqual(before.studentId, old.student_id, '3월 5일에는 원래 학생이 그 자리에 앉아 있다');
+  assert.strictEqual(old.student_id, s1.leaverId); assert.strictEqual(mapOn(s, '2027-03-12').bySeat[held.id].studentId, null, '퇴실 뒤 새 학생이 오기 전(3/12)은 빈 자리');
+  assert.strictEqual(mapOn(s, '2027-03-25').bySeat[held.id].studentId, s1.lateEntrantId, '3월 25일에는 새 학생');
 });
 
 test('assignSeat: 성별 구역이 어긋나면 배정은 되고 경고를 돌려준다', () => {
   const s = admin();
   s.db.students.find((x) => x.id === s1.lateEntrantId).gender = '여';
-  const saMale = data(s).spaces.find((sp) => sp.name === 'SA1실').cells.find((c) => c.kind === 'seat' && c.vacant && !c.hold);
-  const r = plain(s.c.assignSeat(TERM.id, saMale.id, s1.lateEntrantId));
+  const saMale = emptySeat(data(s), 'SA1실');
+  const r = asgn(s, saMale.id, s1.lateEntrantId);
   assert.strictEqual(r.ok, true); assert.strictEqual(r.warnings.length, 1); assert.ok(r.warnings[0].includes('SA1실'));
 });
 
-test('swapSeats: 두 학생을 맞바꾸고(배정 행 제자리 수정), 빈 자리로 옮기고, 둘 다 비면 아무것도 안 쓴다', () => {
+test('swapSeats: 두 학생 맞바꿈(행 제자리 수정, 쓰기는 한 번에), 빈 자리로 이동, 둘 다 비면 아무것도 안 씀', () => {
   const s = admin();
   const d = data(s);
   const [a, b] = d.spaces[0].cells.filter((c) => c.studentId).slice(0, 2);
   const total = s.db.seat_assignments.length;
-  const r = plain(s.c.swapSeats(TERM.id, a.id, b.id));
+  const r = swap(s, a.id, b.id, d);
   assert.strictEqual(r.ok, true);
   assert.strictEqual(s.db.seat_assignments.length, total, '행이 늘지 않는다');
   const d2 = data(s);
   assert.strictEqual(seatOfStudent(d2, a.studentId).id, b.id);
   assert.strictEqual(seatOfStudent(d2, b.studentId).id, a.id);
-  assert.strictEqual(s.writes.filter((w) => w === '~seat_assignments').length, 2, '두 행 수정이 한 락 안에서');
-  // 빈 자리로 이동: a 자리에는 지금 b의 학생이 앉아 있다 → 빈 자리로 옮긴다
-  const empty = d2.spaces.filter((sp) => sp.name.startsWith('SA')).flatMap((sp) => sp.cells).find((c) => c.kind === 'seat' && c.vacant && !c.hold);
-  const mv = plain(s.c.swapSeats(TERM.id, a.id, empty.id));
-  assert.strictEqual(mv.ok, true);
+  assert.deepStrictEqual(s.writes.filter((w) => w.includes('seat_assignments')), ['~seat_assignments:2'], '두 행 수정이 bulkUpdateRecords_ 한 번');
+  // 빈 자리로 이동
+  const empty = emptySeat(d2, 'SA1실');
+  assert.strictEqual(swap(s, a.id, empty.id, d2).ok, true);
   const d3 = data(s);
   assert.strictEqual(seatOfStudent(d3, b.studentId).id, empty.id, 'a 자리에 있던 학생이 빈 자리로 옮겨 감');
   assert.strictEqual(seatOfStudent(d3, a.studentId).id, b.id, '다른 학생은 그대로');
-  assert.strictEqual(data(s).spaces.flatMap((sp) => sp.cells).find((c) => c.id === a.id).vacant, true);
+  assert.strictEqual(allCells(d3).find((c) => c.id === a.id).vacant, true);
   const w = s.writes.length;
-  const e2 = data(s).spaces.filter((sp) => sp.name.startsWith('SA')).flatMap((sp) => sp.cells).filter((c) => c.kind === 'seat' && c.vacant && !c.hold).slice(0, 2);
-  assert.strictEqual(plain(s.c.swapSeats(TERM.id, e2[0].id, e2[1].id)).noop, true);
+  const e2 = allCells(d3).filter((c) => c.kind === 'seat' && c.vacant && !c.hold).slice(0, 2);
+  assert.strictEqual(swap(s, e2[0].id, e2[1].id, d3).noop, true);
   assert.strictEqual(s.writes.length, w);
-  assert.strictEqual(plain(s.c.swapSeats(TERM.id, a.id, a.id)).ok, false);
+  assert.strictEqual(plain(s.c.swapSeats(TERM.id, a.id, a.id, tokOf(d3, a.id))).ok, false);
 });
 
-test('swapSeats: 학생이 퇴실 자리로 옮겨 가면 이전 배정을 취소한다', () => {
+test('swapSeats: 학생이 퇴실 자리로 옮겨 가도 지난 기록은 남는다(취소 없음, 3/5 좌석표 그대로)', () => {
   const s = admin();
   const d = data(s);
-  const held = d.spaces.flatMap((sp) => sp.cells).find((c) => c.reason === '퇴실');
+  const held = allCells(d).find((c) => c.reason === '퇴실');
   const who = d.spaces[0].cells.find((c) => c.studentId);
   const oldRow = s.db.seat_assignments.find((a) => a.seat_id === held.id && a.status === '배정');
-  assert.strictEqual(plain(s.c.swapSeats(TERM.id, who.id, held.id)).ok, true);
-  assert.strictEqual(s.db.seat_assignments.find((a) => a.id === oldRow.id).status, '취소');
-  assert.strictEqual(seatOfStudent(data(s), who.studentId).id, held.id);
+  const whoRow = s.db.seat_assignments.find((a) => a.seat_id === who.id && a.status === '배정');
+  const mapBefore = mapOn(s, '2027-03-05');
+  assert.strictEqual(swap(s, who.id, held.id, d).ok, true);
+  assert.strictEqual(s.db.seat_assignments.find((a) => a.id === oldRow.id).status, '배정');
+  assert.strictEqual(s.db.seat_assignments.find((a) => a.id === oldRow.id).valid_to, '2027-03-19');
+  assert.strictEqual(s.db.seat_assignments.find((a) => a.id === whoRow.id).valid_to, '2027-03-19');
+  assert.strictEqual(seatOfStudent(data(s), who.studentId).id, held.id, '오늘은 퇴실 자리로 옮겨 감');
+  assert.deepStrictEqual(mapOn(s, '2027-03-05').bySeat, mapBefore.bySeat, '3월 5일 좌석표는 그대로');
+  assert.deepStrictEqual(s.writes.filter((w) => w.includes('seat_assignments')), ['~seat_assignments:2', '+seat_assignments:1']);
 });
 
 test('unassignSeat: 배정을 취소 상태로 바꾸고 미배정 목록으로 돌려보낸다. 빈 자리는 거부', () => {
   const s = admin();
-  const c = data(s).spaces[0].cells.find((x) => x.studentId);
-  assert.strictEqual(plain(s.c.unassignSeat(TERM.id, c.id)).ok, true);
+  const d = data(s);
+  const c = d.spaces[0].cells.find((x) => x.studentId);
+  assert.strictEqual(unassign(s, c.id, d).ok, true);
   assert.strictEqual(s.db.seat_assignments.filter((a) => a.student_id === c.studentId).every((a) => a.status === '취소'), true);
   assert.ok(data(s).unseated.some((u) => u.id === c.studentId));
-  assert.strictEqual(plain(s.c.unassignSeat(TERM.id, c.id)).ok, false, '이미 빈 자리');
+  assert.strictEqual(unassign(s, c.id).ok, false, '이미 빈 자리');
+});
+
+/* ───── 동시 편집·원자성·끝난 기간 ───── */
+
+test('동시 편집(a): 두 교사가 같은 미배정 학생을 서로 다른 자리에 앉히면 두 번째는 거부되고 학생은 한 자리에만 있다', () => {
+  const s = admin();
+  const snap = data(s);                              // 두 교사가 같은 화면을 보고 있다
+  const [x, y] = allCells(snap).filter((c) => c.kind === 'seat' && c.vacant && !c.hold);
+  assert.strictEqual(plain(s.c.assignSeat(TERM.id, x.id, s1.lateEntrantId, tokOf(snap, x.id))).ok, true);
+  const w = s.writes.length;
+  const b = plain(s.c.assignSeat(TERM.id, y.id, s1.lateEntrantId, tokOf(snap, y.id)));
+  assert.strictEqual(b.ok, false); assert.ok(b.error.includes('이미 다른 자리'));
+  assert.strictEqual(s.writes.length, w);
+  assert.strictEqual(s.db.seat_assignments.filter((a) => a.student_id === s1.lateEntrantId && a.status === '배정').length, 1);
+});
+
+test('동시 편집: 같은 자리에 두 교사가 서로 다른 학생을 앉히면 두 번째는 "다른 선생님이 바꿨습니다"로 거부', () => {
+  const s = admin();
+  s.db.enrollments.push(Object.assign({}, s.db.enrollments[0], { id: 'extra-enr', student_id: 'extra-stu' }));
+  s.db.students.push(Object.assign({}, s.db.students[0], { id: 'extra-stu', name: '가짜추가', gender: s.db.students.find((x) => x.id === s1.lateEntrantId).gender }));
+  const snap = data(s);
+  const seat = emptySeat(snap, '1층 자습실');
+  assert.strictEqual(plain(s.c.assignSeat(TERM.id, seat.id, s1.lateEntrantId, tokOf(snap, seat.id))).ok, true);
+  const w = s.writes.length;
+  const b = plain(s.c.assignSeat(TERM.id, seat.id, 'extra-stu', tokOf(snap, seat.id)));
+  assert.strictEqual(b.ok, false); assert.strictEqual(b.stale, true); assert.ok(b.error.includes('다른 선생님'));
+  assert.strictEqual(s.writes.length, w);
+});
+
+test('동시 편집(b): 같은 화면에서 맞바꾸기를 두 번 보내면 두 번째는 거부 — 원상복구되지 않는다', () => {
+  const s = admin();
+  const snap = data(s);
+  const [a, b] = snap.spaces[0].cells.filter((c) => c.studentId).slice(0, 2);
+  assert.strictEqual(plain(s.c.swapSeats(TERM.id, a.id, b.id, tokOf(snap, a.id, b.id))).ok, true);
+  const w = s.writes.length;
+  const again = plain(s.c.swapSeats(TERM.id, a.id, b.id, tokOf(snap, a.id, b.id)));
+  assert.strictEqual(again.ok, false); assert.strictEqual(again.stale, true);
+  assert.strictEqual(s.writes.length, w);
+  assert.strictEqual(seatOfStudent(data(s), a.studentId).id, b.id, '한 번 바뀐 상태 그대로');
+});
+
+test('동시 편집(c): 풀려는 사이 다른 학생이 옮겨 왔으면 풀지 않고 거부', () => {
+  const s = admin();
+  const snap = data(s);
+  const [a, b] = snap.spaces[0].cells.filter((c) => c.studentId).slice(0, 2);
+  assert.strictEqual(plain(s.c.swapSeats(TERM.id, a.id, b.id, tokOf(snap, a.id, b.id))).ok, true);   // 다른 교사가 먼저 맞바꿈
+  const w = s.writes.length;
+  const r = plain(s.c.unassignSeat(TERM.id, a.id, tokOf(snap, a.id)));
+  assert.strictEqual(r.ok, false); assert.strictEqual(r.stale, true);
+  assert.strictEqual(s.writes.length, w);
+  assert.ok(s.db.seat_assignments.filter((x) => x.student_id === b.studentId).every((x) => x.status !== '취소'), '옮겨 온 학생은 그대로');
+});
+
+test('expect가 없거나 자리 표가 빠졌으면 거부(화면이 본 상태를 보내야 한다)', () => {
+  const s = admin();
+  const d = data(s);
+  const [a, b] = d.spaces[0].cells.filter((c) => c.studentId).slice(0, 2);
+  const w = s.writes.length;
+  for (const bad of [undefined, null, {}, { [a.id]: a.token }, { [a.id]: 5, [b.id]: b.token }]) {
+    const r = plain(s.c.swapSeats(TERM.id, a.id, b.id, bad));
+    assert.strictEqual(r.ok, false); assert.strictEqual(r.stale, true);
+  }
+  assert.strictEqual(plain(s.c.unassignSeat(TERM.id, a.id)).ok, false);
+  assert.strictEqual(plain(s.c.assignSeat(TERM.id, a.id, s1.lateEntrantId)).ok, false);
+  assert.strictEqual(s.writes.length, w);
+});
+
+test('원자성: 맞바꾸기의 쓰기가 실패하면 아무 행도 바뀌지 않아 한 학생이 두 자리에 있지 않다', () => {
+  const s = admin();
+  const d = data(s);
+  const [a, b] = d.spaces[0].cells.filter((c) => c.studentId).slice(0, 2);
+  const before = JSON.stringify(s.db.seat_assignments);
+  s.flags.failUpdate = true;
+  assert.throws(() => s.c.swapSeats(TERM.id, a.id, b.id, tokOf(d, a.id, b.id)), /시트 쓰기 실패/);
+  assert.strictEqual(JSON.stringify(s.db.seat_assignments), before);
+  assert.deepStrictEqual(mapOn(s, '2027-03-20').warnings, []);
+});
+
+test('끝난 운영 기간은 보기만: canEdit=false·ended=true, 배정·맞바꾸기·풀기는 거부(쓰기 없음)', () => {
+  const s = admin('2027-08-01');
+  const d = data(s);
+  assert.strictEqual(d.ended, true); assert.strictEqual(d.canEdit, false); assert.strictEqual(d.canLayout, true, '격자 편집은 기간과 무관');
+  const sitting = allCells(d).find((c) => c.studentId);
+  const empty = allCells(d).find((c) => c.kind === 'seat' && c.vacant);
+  for (const r of [plain(s.c.assignSeat(TERM.id, empty.id, s1.lateEntrantId, tokOf(d, empty.id))),
+    plain(s.c.swapSeats(TERM.id, sitting.id, empty.id, tokOf(d, sitting.id, empty.id))), plain(s.c.unassignSeat(TERM.id, sitting.id, tokOf(d, sitting.id)))]) {
+    assert.strictEqual(r.ok, false); assert.ok(r.error.includes('끝난 운영 기간'));
+  }
+  assert.deepStrictEqual(s.writes, []);
+  assert.strictEqual(data(admin('2027-07-17')).canEdit, true, '종료일 당일은 아직 편집 가능');
+});
+
+test('보기 전용 역할에는 미배정 학생의 학번·반·번호·성별을 보내지 않는다(인원 수만)', () => {
+  for (const role of ['homeroom', 'attendance', 'duty_manager']) {
+    const d = plain(makeServer('v@example.com', [role]).c.getSeatData(TERM.id));
+    assert.strictEqual(d.canEdit, false, role); assert.deepStrictEqual(d.unseated, [], role); assert.strictEqual(d.unseatedCount, 1, role);
+    assert.ok(!JSON.stringify(d).includes(fake.students.find((x) => x.id === s1.lateEntrantId).student_no), role);
+  }
+  const ht = plain(makeServer('t@example.com', ['hall_teacher']).c.getSeatData(TERM.id));
+  assert.strictEqual(ht.unseated.length, 1); assert.ok(ht.unseated[0].studentNo);
 });
 
 test('권한: 배정은 관리자·학사 교사만, 격자 편집은 관리자만, 보기는 교사 역할(담임은 보기만), 학생·학부모는 모두 거부', () => {
   const run = (roles, fn) => { const s = makeServer('x@example.com', roles); return { s, out: (() => { try { return fn(s); } catch (e) { return e; } })() }; };
   const seatId = admin().db.seats.find((x) => x.kind === '좌석').id;
   const assignFns = [(s) => s.c.assignSeat(TERM.id, seatId, s1.lateEntrantId), (s) => s.c.swapSeats(TERM.id, seatId, seatId), (s) => s.c.unassignSeat(TERM.id, seatId)];
-  const layoutFns = [(s) => s.c.saveSpace({ name: 'x', gender: '혼성', rows: 2, cols: 2 }), (s) => s.c.saveSpaceGrid('x', []), (s) => s.c.previewSeatGrid('공석'), (s) => s.c.importSeatGrid('공석', { name: 'x', gender: '혼성' })];
+  const layoutFns = [(s) => s.c.saveSpace({ name: 'x', gender: '혼성', rows: 2, cols: 2 }), (s) => s.c.saveSpaceGrid('x', []), (s) => s.c.previewSpaceGrid('x', []), (s) => s.c.previewSeatGrid('공석'), (s) => s.c.importSeatGrid('공석', { name: 'x', gender: '혼성' })];
   for (const roles of [['homeroom'], ['attendance'], ['duty_manager'], ['student'], ['parent']]) {
     for (const fn of assignFns) { const { s, out } = run(roles, fn); assert.ok(out && /권한이 없습니다/.test(out.message), roles + ' 배정'); assert.deepStrictEqual(s.writes, []); assert.strictEqual(s.denied[0], 'seat.edit'); }
   }
@@ -289,7 +516,7 @@ test('권한: 배정은 관리자·학사 교사만, 격자 편집은 관리자�
   // 학사 교사는 실제로 배정할 수 있다
   const t = makeServer('t@example.com', ['hall_teacher']);
   const sa = data(t).spaces.find((sp) => sp.name === 'SA3실').cells.find((c) => c.kind === 'seat' && c.vacant && !c.hold);
-  assert.strictEqual(plain(t.c.assignSeat(TERM.id, sa.id, s1.lateEntrantId)).ok, true);
+  assert.strictEqual(plain(t.c.assignSeat(TERM.id, sa.id, s1.lateEntrantId, tokOf(data(t), sa.id))).ok, true);
 });
 
 test('saveSpace: 입력 검사, 새 공간은 마지막 순서, 크기를 줄일 때 밖에 칸이 있으면 거부', () => {
@@ -310,26 +537,95 @@ test('saveSpace: 입력 검사, 새 공간은 마지막 순서, 크기를 줄일
   assert.strictEqual(plain(s.c.saveSpace({ id: floor.id, name: '1층 자습실(새)', gender: '혼성', rows: 20, cols: 12 })).ok, true);
 });
 
-test('saveSpaceGrid: 같은 모양으로 다시 저장하면 바뀐 것 0건, 빈 좌석은 없앨 수 있고 번호가 다시 매겨진다, 앉은 좌석은 거부', () => {
+const toKo = { seat: '좌석', pillar: '기둥', door: '비상문', window: '창문' };
+const gridOf = (sp) => sp.cells.map((c) => ({ row: c.row, col: c.col, kind: toKo[c.kind] }));
+
+test('saveSpaceGrid: 같은 모양으로 다시 저장하면 바뀐 것 0건, 빈 좌석은 없앨 수 있고 번호(SA실 순번)가 다시 매겨진다, 앉은 좌석은 거부', () => {
   const s = admin();
   const d = data(s);
   const sp = d.spaces.find((x) => x.name === 'SA3실');
-  const toKo = { seat: '좌석', pillar: '기둥', door: '비상문', window: '창문' };
-  const same = sp.cells.map((c) => ({ row: c.row, col: c.col, kind: toKo[c.kind] }));
-  assert.deepStrictEqual(plain(s.c.saveSpaceGrid(sp.id, same)), { ok: true, created: 0, updated: 0, cancelled: 0 });
-  // 빈 좌석 하나를 없앤다
-  const emptySeat = sp.cells.filter((c) => c.kind === 'seat' && c.vacant && !c.hold)[0];
-  const less = same.filter((c) => !(c.row === emptySeat.row && c.col === emptySeat.col));
+  const same = gridOf(sp);
+  assert.deepStrictEqual(plain(s.c.saveSpaceGrid(sp.id, same)), { ok: true, created: 0, updated: 0, cancelled: 0, relabelAssigned: 0, warnings: [] });
+  const emptyS = sp.cells.filter((c) => c.kind === 'seat' && c.vacant && !c.hold)[0];
+  const less = same.filter((c) => !(c.row === emptyS.row && c.col === emptyS.col));
   const r = plain(s.c.saveSpaceGrid(sp.id, less));
   assert.strictEqual(r.ok, true); assert.strictEqual(r.cancelled, 1);
-  assert.strictEqual(s.db.seats.find((x) => x.id === emptySeat.id).status, '취소', '지우지 않고 취소');
+  assert.strictEqual(s.db.seats.find((x) => x.id === emptyS.id).status, '취소', '지우지 않고 취소');
   const labels = s.db.seats.filter((x) => x.space_id === sp.id && x.status === '유효' && x.kind === '좌석').map((x) => +x.label).sort((a, b) => a - b);
-  assert.deepStrictEqual(labels, labels.map((_, i) => i + 1), '번호는 1부터 빈틈없이');
-  // 앉은 좌석을 없애려 하면 거부(1층에서)
+  assert.deepStrictEqual(labels, labels.map((_, i) => i + 1), 'SA실은 방 안 순번 1부터 빈틈없이');
   const floor = d.spaces[0];
   const seated = floor.cells.find((c) => c.studentId);
-  const bad = plain(s.c.saveSpaceGrid(floor.id, floor.cells.filter((c) => c.id !== seated.id).map((c) => ({ row: c.row, col: c.col, kind: toKo[c.kind] }))));
+  const bad = plain(s.c.saveSpaceGrid(floor.id, gridOf(floor).filter((c) => !(c.row === seated.row && c.col === seated.col))));
   assert.strictEqual(bad.ok, false); assert.ok(bad.errors[0].includes('배정을 풀어'));
+});
+
+test('1층은 줄-순번(3-7): 격자를 저장하면 같은 모양이라도 0건이고, 앞 칸을 비우면 뒤 번호가 당겨지며 "번호가 바뀌는 배정 좌석 N개"를 미리 알려 준다', () => {
+  const s = admin();
+  const d = data(s);
+  const floor = d.spaces[0];
+  assert.ok(floor.cells.some((c) => c.seatLabel === '3-7'));
+  const same = plain(s.c.previewSpaceGrid(floor.id, gridOf(floor)));
+  assert.deepStrictEqual([same.ok, same.created, same.updated, same.cancelled, same.relabelAssigned], [true, 0, 0, 0, 0]);
+  // 앉은 학생이 둘 이상인 줄에서 앞 학생의 배정을 풀어 빈 좌석을 만든 뒤, 그 좌석을 창문으로 바꾸면 뒤 좌석의 번호가 하나씩 당겨진다
+  const colSeats = (c) => floor.cells.filter((x) => x.col === c && x.kind === 'seat').sort((p, q) => p.row - q.row);
+  const col = [...new Set(floor.cells.map((c) => c.col))].find((c) => colSeats(c).filter((x) => x.studentId).length >= 2);
+  const front = colSeats(col).find((x) => x.studentId);
+  assert.strictEqual(unassign(s, front.id).ok, true);
+  const floor2 = data(s).spaces[0];
+  const colOf = (c) => floor2.cells.filter((x) => x.col === c.col && x.kind === 'seat').sort((p, q) => p.row - q.row);
+  const head = floor2.cells.find((c) => c.id === front.id);
+  assert.ok(head.vacant && !head.hold);
+  s.writes.length = 0;
+  const after = colOf(head).slice(colOf(head).indexOf(head) + 1);
+  const want = gridOf(floor2).map((c) => (c.row === head.row && c.col === head.col ? { row: c.row, col: c.col, kind: '창문' } : c));
+  const expectRelabel = after.filter((c) => c.studentId || c.hold).length;
+  const pv = plain(s.c.previewSpaceGrid(floor.id, want));
+  assert.strictEqual(pv.ok, true); assert.strictEqual(pv.relabelAssigned, expectRelabel); assert.ok(expectRelabel > 0); assert.strictEqual(s.writes.length, 0, '미리보기는 쓰지 않는다');
+  const sv = plain(s.c.saveSpaceGrid(floor.id, want));
+  assert.strictEqual(sv.relabelAssigned, expectRelabel);
+  assert.strictEqual(s.db.seats.find((x) => x.id === after[0].id).label, head.seatLabel, '바로 뒤 좌석이 빠진 좌석의 번호를 이어받는다');
+  const col1 = after;
+  // 배정은 좌석 id로 이어지므로 앉은 학생은 그대로
+  const sitter = col1.find((c) => c.studentId);
+  assert.strictEqual(seatOfStudent(data(s), sitter.studentId).id, sitter.id);
+});
+
+test('격자 저장: 지난 기간 배정만 있는 좌석은 경고 후 허용, 지금 기간 배정이 있으면 거부(결정 37)', () => {
+  const s = admin();
+  const d = data(s);
+  const sp = d.spaces.find((x) => x.name === 'SA3실');
+  const old = s.db.terms.find((t) => t.end_date < '2027-03-20');
+  assert.ok(old, '가짜 데이터에 끝난 기간이 있다');
+  const seat = sp.cells.find((c) => c.kind === 'seat' && c.vacant && !c.hold);
+  s.db.seat_assignments.push({ id: 'past1', term_id: old.id, seat_id: seat.id, student_id: s1.leaverId, status: '배정', valid_from: '', valid_to: '' });
+  const want = gridOf(sp).filter((c) => !(c.row === seat.row && c.col === seat.col));
+  const pv = plain(s.c.previewSpaceGrid(sp.id, want));
+  assert.strictEqual(pv.ok, true); assert.ok(pv.warnings.length === 1 && pv.warnings[0].includes('지난 기간'));
+  assert.strictEqual(plain(s.c.saveSpaceGrid(sp.id, want)).ok, true);
+  // 지금 기간 배정이 있는 좌석은 거부
+  const seated = d.spaces[0].cells.find((c) => c.studentId);
+  const bad = plain(s.c.previewSpaceGrid(d.spaces[0].id, gridOf(d.spaces[0]).filter((c) => !(c.row === seated.row && c.col === seated.col))));
+  assert.strictEqual(bad.ok, false); assert.ok(bad.errors[0].includes('배정을 풀어'));
+  // 기준일 전에 끝난 행(end-date)만 남은 자리는 지난 기록이라 막지 않는다(경고)
+  const held = allCells(d).find((c) => c.reason === '퇴실');
+  assert.strictEqual(asgn(s, held.id, s1.lateEntrantId).ok, true);
+  s.db.seat_assignments.filter((a) => a.seat_id === held.id).forEach((a) => { if (a.student_id === s1.lateEntrantId) a.status = '취소'; });
+  const hr = s.db.seats.find((x) => x.id === held.id), hsp = d.spaces.find((x) => x.cells.some((c) => c.id === held.id));
+  const resp = plain(s.c.previewSpaceGrid(hsp.id, gridOf(hsp).filter((c) => !(c.row === +hr.row && c.col === +hr.col))));
+  assert.strictEqual(resp.ok, true, JSON.stringify(resp)); assert.ok(resp.warnings.some((w) => w.includes('지난 기간')), JSON.stringify(s.db.seat_assignments.filter((a) => a.seat_id === held.id)) + JSON.stringify(resp));
+});
+
+test('importSeatGrid: 좌석이 하나도 없는 같은 이름 공간(이전 가져오기가 도중에 멈춤)이 있으면 그 공간에 이어서 가져온다', () => {
+  const s = admin();
+  const text = '5/19\t공석\t공석\n6\t공석\t기둥';
+  const half = plain(s.c.saveSpace({ name: 'SA7실', gender: '여', rows: 2, cols: 2 }));   // 공간만 있고 좌석 0개
+  const spaces = s.db.spaces.length;
+  const r = plain(s.c.importSeatGrid(text, { name: 'SA7실', gender: '여' }));
+  assert.deepStrictEqual([r.ok, r.id, r.resumed, r.seats], [true, half.id, true, 3]);
+  assert.strictEqual(s.db.spaces.length, spaces, '공간이 하나 더 생기지 않는다');
+  assert.strictEqual(s.db.seats.filter((x) => x.space_id === half.id).length, 4);
+  assert.strictEqual(plain(s.c.importSeatGrid(text, { name: 'SA7실', gender: '여' })).ok, false, '좌석이 있으면 같은 이름 거부');
+  assert.strictEqual(plain(s.c.previewSeatGrid(text)).skippedHeads, 2);
 });
 
 test('importSeatGrid: 새 공간과 좌석을 만들고 이름은 버린다 / 오류·이름 중복은 쓰기 0건', () => {

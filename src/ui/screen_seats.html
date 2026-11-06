@@ -53,6 +53,7 @@
           options: [{ value: 'assign', label: '학생 배정' }, { value: 'layout', label: '격자 편집' }],
           onchange: function (v) { state.mode = v; state.student = null; state.layout = null; drawBody(); } }));
       }
+      if (state.data.ended) head.appendChild(el('div', { class: 'notice info', text: '끝난 운영 기간입니다. 좌석표는 볼 수만 있습니다.' }));
       state.data.warnings.forEach(function (w) { head.appendChild(el('div', { class: 'notice warn', text: w })); });
     }
 
@@ -132,32 +133,42 @@
       } });
       gridCard.appendChild(grid);
       gridCard.appendChild(info);
-      if (!canEdit) gridCard.appendChild(el('div', { class: 'muted', text: '좌석 배정은 관리자와 학사 교사만 할 수 있습니다.' }));
+      if (!canEdit) gridCard.appendChild(el('div', { class: 'muted', text: state.data.ended ? '끝난 기간이라 볼 수만 있습니다.' : '좌석 배정은 관리자와 학사 교사만 할 수 있습니다.' }));
+      if (!canEdit && state.data.unseatedCount) gridCard.appendChild(el('div', { class: 'muted', text: '미배정 학생 ' + state.data.unseatedCount + '명' }));
       body.appendChild(gridCard);
     }
 
     function done(r, okText) {
-      if (!r.ok) { UI.toast(r.error || '저장하지 못했습니다.', { kind: 'warn', ms: 5000 }); return; }
+      if (!r.ok) { UI.toast(r.error || '저장하지 못했습니다.', { kind: 'warn', ms: 5000 }); if (r.stale) load(); return; }
       if (r.warnings && r.warnings.length) UI.toast(r.warnings.join(' '), { kind: 'warn', ms: 6000 }); else UI.toast(okText, { kind: 'ok' });
       load();
     }
     function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
+    // 자리에 학생이 있는 것으로 치는 경우: 앉아 있거나, 입실 전 학생이 배정돼 있다(서버도 같은 기준으로 맞바꾼다). 퇴실한 학생의 자리는 빈 자리.
+    function occupied(c) { return !!c.studentId || (!!c.hold && c.reason !== '퇴실'); }
+    function label(c) {
+      var who = c.text || (c.hold ? c.hold + (c.reason === '퇴실' ? ' 퇴실 자리' : ' (' + c.reason + ')') : '공석');
+      return (c.seatLabel ? c.seatLabel + '번 ' : '') + who;
+    }
+    function expectOf(cells) { var e = {}; cells.forEach(function (c) { e[c.id] = c.token; }); return e; }
     function doAssign(cell) {
       if (!cell.vacant) { UI.toast('이미 앉은 학생이 있습니다. 두 자리를 차례로 눌러 맞바꿔 주세요.', { kind: 'warn', ms: 5000 }); return; }
       if (cell.hold && cell.reason !== '퇴실') { UI.toast(cell.hold + ' 학생이 배정된 자리입니다(' + cell.reason + '). 자리를 눌러 배정을 먼저 풀어 주세요.', { kind: 'warn', ms: 6000 }); return; }
-      call('assignSeat', state.termId, cell.id, state.student.id).then(function (r) { if (r.ok) state.student = null; done(r, '앉혔습니다.'); }).catch(fail);
+      call('assignSeat', state.termId, cell.id, state.student.id, expectOf([cell])).then(function (r) { if (r.ok) state.student = null; done(r, '앉혔습니다.'); }).catch(fail);
     }
     function confirmSwap(a, b) {
       if (!a || !b) return;
-      var label = function (c) { return (c.seatLabel ? c.seatLabel + '번 ' : '') + (c.text || '공석'); };
-      if (!a.studentId && !b.studentId) { UI.toast('두 자리 모두 비어 있어 바꿀 것이 없습니다.', { kind: 'info' }); return; }
-      UI.confirmSheet({ title: a.studentId && b.studentId ? '두 자리를 맞바꿀까요?' : '자리를 옮길까요?',
-        message: label(a) + '  ↔  ' + label(b), confirmText: a.studentId && b.studentId ? '맞바꾸기' : '옮기기', cancelText: '취소',
-        onconfirm: function () { call('swapSeats', state.termId, a.id, b.id).then(function (r) { done(r, '바꿨습니다.'); }).catch(fail); } });
+      var oa = occupied(a), ob = occupied(b);
+      if (!oa && !ob) { UI.toast('두 자리 모두 비어 있어 바꿀 것이 없습니다.', { kind: 'info' }); return; }
+      var both = oa && ob;
+      var note = !both && (a.reason === '퇴실' || b.reason === '퇴실') ? ' 퇴실한 학생의 지난 기록은 그대로 남습니다.' : '';
+      UI.confirmSheet({ title: both ? '두 자리를 맞바꿀까요?' : '자리를 옮길까요?',
+        message: label(a) + '  ↔  ' + label(b) + note, confirmText: both ? '맞바꾸기' : '옮기기', cancelText: '취소',
+        onconfirm: function () { call('swapSeats', state.termId, a.id, b.id, expectOf([a, b])).then(function (r) { done(r, '바꿨습니다.'); }).catch(fail); } });
     }
     function confirmUnassign(c) {
-      UI.confirmSheet({ title: '배정을 풀까요?', message: (c.seatLabel ? c.seatLabel + '번 ' : '') + (c.text || c.hold) + (c.studentId ? ' 학생이 미배정 목록으로 돌아갑니다.' : ' 학생의 배정을 풀어 이 자리를 비웁니다.'), confirmText: '배정 풀기', cancelText: '취소', danger: true,
-        onconfirm: function () { call('unassignSeat', state.termId, c.id).then(function (r) { done(r, '배정을 풀었습니다.'); }).catch(fail); } });
+      UI.confirmSheet({ title: '배정을 풀까요?', message: label(c) + (c.studentId ? ' 학생이 미배정 목록으로 돌아갑니다.' : ' 학생의 배정을 풀어 이 자리를 비웁니다.'), confirmText: '배정 풀기', cancelText: '취소', danger: true,
+        onconfirm: function () { call('unassignSeat', state.termId, c.id, expectOf([c])).then(function (r) { done(r, '배정을 풀었습니다.'); }).catch(fail); } });
     }
 
     /* ───────── 격자 편집(관리자) ───────── */
@@ -203,7 +214,7 @@
 
     function gridEditCard(sp) {
       var card = el('div', { class: 'card' }, [el('h2', { text: '격자 그리기 · ' + sp.name })]);
-      card.appendChild(el('div', { class: 'muted', text: '칸을 누를 때마다 좌석 → 기둥 → 비상문 → 창문 → 빈칸 순서로 바뀝니다. 학생이 앉은 좌석은 먼저 배정을 풀어야 바꿀 수 있습니다.' }));
+      card.appendChild(el('div', { class: 'muted', text: '칸을 누를 때마다 좌석 → 기둥 → 비상문 → 창문 → 빈칸 순서로 바뀝니다. 지금·앞으로의 기간에 학생이 앉은 좌석은 먼저 배정을 풀어야 바꿀 수 있습니다. 번호는 1층은 줄-순번(예 3-7), SA실은 방 안 순번으로 자동 매겨집니다.' }));
       var kinds = {};
       sp.cells.forEach(function (c) { kinds[c.row + ',' + c.col] = FROM_EN[c.kind]; });
       var table = el('table', { class: 'grid-edit' });
@@ -239,6 +250,20 @@
       var cells = Object.keys(L.kinds).map(function (k) { var p = k.split(','); return { row: +p[0], col: +p[1], kind: L.kinds[k] }; });
       if (btn) btn.disabled = true;
       clear(L.msg);
+      // 저장 전에 바뀌는 것을 보여 준다: 칸 수, 번호가 바뀌는 배정 좌석 수, 지난 기간 경고
+      call('previewSpaceGrid', L.sp.id, cells).then(function (p) {
+        if (btn) btn.disabled = false;
+        if (!p.ok) { p.errors.forEach(function (m) { L.msg.appendChild(el('div', { class: 'notice warn', text: m })); }); return; }
+        if (!p.created && !p.updated && !p.cancelled) { UI.toast('바뀐 것이 없습니다.', { kind: 'info' }); return; }
+        var lines = ['추가 ' + p.created + '칸, 변경 ' + p.updated + '칸, 삭제 ' + p.cancelled + '칸'];
+        lines.push('라벨이 바뀌는 배정 좌석 ' + p.relabelAssigned + '개' + (p.relabelAssigned ? '(배정은 그대로 이어집니다)' : ''));
+        (p.warnings || []).forEach(function (w) { lines.push(w); });
+        UI.confirmSheet({ title: '격자를 저장할까요?', message: lines.join(' · '), confirmText: '저장', cancelText: '취소', onconfirm: function () { reallySave(btn, cells); } });
+      }).catch(function (err) { if (btn) btn.disabled = false; fail(err); });
+    }
+    function reallySave(btn, cells) {
+      var L = state.layout; if (!L) return;
+      if (btn) btn.disabled = true;
       call('saveSpaceGrid', L.sp.id, cells).then(function (r) {
         if (btn) btn.disabled = false;
         if (!r.ok) { r.errors.forEach(function (m) { L.msg.appendChild(el('div', { class: 'notice warn', text: m })); }); return; }
