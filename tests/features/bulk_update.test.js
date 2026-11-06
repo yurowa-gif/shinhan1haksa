@@ -59,18 +59,35 @@ test('한 번 읽고 한 번 쓴다(행마다 읽지 않는다)', () => {
   assert.strictEqual(s.reads.setValues - before.s, 2, '학생 한 번 + 감사 로그 한 줄');
 });
 
-test('감사 로그는 일괄 1줄: 행 수·열 이름·id만 남기고 이름 같은 값은 넣지 않는다', () => {
+test('감사 로그: 바뀐 칸의 이전·이후 값을 행 id별로 남긴다(바뀌지 않은 칸은 없음)', () => {
   const s = setup();
   s.add('a', '가학생', '1'); s.add('b', '나학생', '1');
-  s.c.bulkUpdateRecords_('students', [{ id: 'a', patch: { name: '새이름', grade: '2' } }, { id: 'b', patch: { grade: '2' } }], 'admin@example.com');
+  s.c.bulkUpdateRecords_('students', [{ id: 'a', patch: { name: '새이름', grade: '2', class_no: '1' } }, { id: 'b', patch: { grade: '2' } }], 'admin@example.com');
   const log = s.sheets.audit_log.data.slice(1);
-  assert.strictEqual(log.length, 1);
+  assert.strictEqual(log.length, 1, '한 덩어리면 한 줄');
   const hh = s.sheets.audit_log.data[0];
   const row = Object.fromEntries(hh.map((k, i) => [k, log[0][i]]));
   assert.strictEqual(row.action, 'bulk_update');
-  assert.ok(row.detail.includes('2행') && row.detail.includes('name') && row.detail.includes('grade'));
-  assert.deepStrictEqual(JSON.parse(row.after), { ids: ['a', 'b'] });
-  assert.ok(!JSON.stringify(row).includes('새이름') && !JSON.stringify(row).includes('가학생'));
+  assert.deepStrictEqual(JSON.parse(row.before), { a: { name: '가학생', grade: '1' }, b: { grade: '1' } });
+  assert.deepStrictEqual(JSON.parse(row.after), { a: { name: '새이름', grade: '2' }, b: { grade: '2' } });
+  assert.ok(row.detail.includes('2행'));
+});
+
+test('감사 기록이 크면 칸 한도(5만 자)를 넘지 않게 여러 줄로 나눠 쓰고, 모든 행이 한 번씩만 들어간다', () => {
+  const s = setup();
+  const N = 120, long = 'ㄱ'.repeat(600);
+  for (let i = 0; i < N; i++) s.add('r' + i, '이름' + i, '1');
+  s.c.bulkUpdateRecords_('students', Array.from({ length: N }, (_, i) => ({ id: 'r' + i, patch: { name: long + i } })), 'a@example.com');
+  const hh = s.sheets.audit_log.data[0];
+  const rows = s.sheets.audit_log.data.slice(1).map((r) => Object.fromEntries(hh.map((k, i) => [k, r[i]])));
+  assert.ok(rows.length > 1, '여러 줄: ' + rows.length);
+  const ids = [];
+  for (const r of rows) {
+    assert.ok(r.before.length < 50000 && r.after.length < 50000, '칸 한도');
+    ids.push(...Object.keys(JSON.parse(r.after)));
+    assert.ok(r.detail.includes('(' + (rows.indexOf(r) + 1) + '/' + rows.length + ')'));
+  }
+  assert.strictEqual(ids.length, N); assert.strictEqual(new Set(ids).size, N);
 });
 
 test('바뀐 것이 없으면 0을 돌려주고 쓰지도 감사 로그를 남기지도 않는다', () => {

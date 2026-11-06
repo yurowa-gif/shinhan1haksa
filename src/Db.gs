@@ -242,10 +242,13 @@ function bulkAppend_(sheetName, rows, actorEmail) {
 
 /**
  * 여러 행을 한 번에 고친다(명단 업로드처럼 수십~수백 행). 시트를 한 번 읽고 한 번 쓴다.
- * audit_log에는 "일괄 1줄 + 바뀐 행 수·열 이름·id 목록"만 남긴다(행마다 전후 값을 쓰지 않는다 — 결정 26~29).
+ * audit_log에는 바뀐 칸의 이전·이후 값을 남긴다: before = {id: {열: 이전}}, after = {id: {열: 이후}}.
+ * 한 칸에 5만 자를 못 넣으므로 크면 여러 줄로 나눠 쓴다. 행마다 한 줄씩 쓰지 않는다(시간 한도).
  * @param {{id:string, patch:Object}[]} patches
  * @return {number} 실제로 바뀐 행 수
  */
+var AUDIT_CHUNK_CHARS = 20000;   // before·after 각각 이 글자 수 안(시트 칸 한도 5만자보다 넉넉히 작게)
+
 function bulkUpdateRecords_(sheetName, patches, actorEmail, kind) {
   kind = kind || 'db';
   if (!patches || !patches.length) return 0;
@@ -259,33 +262,43 @@ function bulkUpdateRecords_(sheetName, patches, actorEmail, kind) {
     var firstRow = 2;
     var values = rows.length ? sh.getRange(firstRow, 1, sh.getLastRow() - 1, headers.length).getValues() : [];
     var now = nowIso_();
-    var cols = {};
-    var changedIds = [];
+    var changed = [];   // [{id, before:{col:old}, after:{col:new}}]
     patches.forEach(function (p) {
       var row = byId[p.id];
       if (!row) throw new Error('기록을 찾을 수 없습니다: ' + p.id);
       var idx = row._row - firstRow;
-      var touched = false;
+      var before = {}, after = {};
       Object.keys(p.patch).forEach(function (k) {
         if (k === 'id' || k === 'created_at' || k === 'created_by') return;
         var c = headers.indexOf(k);
         if (c < 0) throw new Error('없는 열입니다: ' + sheetName + '.' + k);
         var v = p.patch[k] === undefined || p.patch[k] === null ? '' : String(p.patch[k]);
-        if (cellToString_(values[idx][c]) !== v) { values[idx][c] = v; cols[k] = true; touched = true; }
+        var old = cellToString_(values[idx][c]);
+        if (old !== v) { before[k] = old; after[k] = v; values[idx][c] = v; }
       });
-      if (touched) {
+      if (Object.keys(after).length) {
         values[idx][headers.indexOf('updated_at')] = now;
         values[idx][headers.indexOf('updated_by')] = actorEmail || '';
-        changedIds.push(p.id);
+        changed.push({ id: p.id, before: before, after: after });
       }
     });
-    if (!changedIds.length) return 0;
+    if (!changed.length) return 0;
     var range = sh.getRange(firstRow, 1, values.length, headers.length);
     range.setNumberFormat('@');
     range.setValues(values);
     invalidate_(kind, sheetName);
-    writeAudit_(sheetName, '', 'bulk_update', null, { ids: changedIds }, actorEmail, kind,
-      changedIds.length + '행 변경 (열: ' + Object.keys(cols).join(', ') + ')');
-    return changedIds.length;
+    // 감사 기록: 칸 한도를 넘지 않게 덩어리로 나눠 쓴다
+    var chunks = [], cur = { before: {}, after: {}, n: 0, size: 0 };
+    changed.forEach(function (c) {
+      var size = JSON.stringify(c.before).length + JSON.stringify(c.after).length + c.id.length + 10;
+      if (cur.n && cur.size + size > AUDIT_CHUNK_CHARS) { chunks.push(cur); cur = { before: {}, after: {}, n: 0, size: 0 }; }
+      cur.before[c.id] = c.before; cur.after[c.id] = c.after; cur.n++; cur.size += size;
+    });
+    chunks.push(cur);
+    chunks.forEach(function (ch, i) {
+      writeAudit_(sheetName, '', 'bulk_update', ch.before, ch.after, actorEmail, kind,
+        changed.length + '행 변경 중 ' + ch.n + '행' + (chunks.length > 1 ? ' (' + (i + 1) + '/' + chunks.length + ')' : ''));
+    });
+    return changed.length;
   });
 }

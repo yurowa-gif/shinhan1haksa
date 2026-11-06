@@ -96,24 +96,57 @@ function rosterResolveOpts_(opts, terms, today) {
   return { term: term, ymd: ymd };
 }
 
-/** 계정 만들기·역할 더하기 계획(순수). roleCode 'student'|'parent', people [{email, name}] */
-function rosterUserPlan_(people, users, roleCode, memo) {
+/** 이메일 일부 가림(미리보기·오류 문구용): ab***@도메인 */
+function rosterMask_(email) {
+  var p = String(email || '').split('@');
+  return (p[0] || '').slice(0, 2) + '***@' + (p[1] || '');
+}
+
+/**
+ * 로그인 계정 만들기·역할 더하기 계획(순수). roleCode 'student'|'parent', people [{email, name, line}].
+ * 다른 종류의 역할이 섞이면 만들지 않고 그 줄을 오류로 돌려준다(결정: 개인정보 — 학생·학부모·교사 범위가 조용히 겹치지 않게):
+ *  - 기존 계정이 roleCode 말고 다른 역할(학생↔학부모, 교사·관리자 등)을 이미 가졌으면 오류.
+ *  - 학생으로 올리는 이메일이 학부모 연결(guardian_links)에 있거나, 학부모로 올리는 이메일이 학생(students.email)이면 오류.
+ * ctx = {students, guardianLinks}
+ * @return {{create:Object[], update:{id,patch}[], errors:Object[], warnings:string[], changes:{email:string, before:string, add:string}[]}}
+ */
+function rosterUserPlan_(people, users, roleCode, memo, ctx) {
+  ctx = ctx || {};
+  var label = { student: '학생', parent: '학부모' };
   var byEmail = {};
   (users || []).forEach(function (u) { byEmail[normalizeEmail_(u.email)] = u; });
-  var out = { create: [], update: [], warnings: [] };
+  var studentEmails = {}, parentEmails = {};
+  (ctx.students || []).forEach(function (s) { var e = normalizeEmail_(s.email); if (e) studentEmails[e] = true; });
+  (ctx.guardianLinks || []).forEach(function (g) { var e = normalizeEmail_(g.parent_email); if (e) parentEmails[e] = true; });
+  var column = roleCode === 'student' ? '학생구글계정' : '학부모구글계정';
+  var out = { create: [], update: [], errors: [], warnings: [], changes: [] };
   var seen = {};
   (people || []).forEach(function (p) {
     var email = normalizeEmail_(p.email);
     if (!email || seen[email]) return;
     seen[email] = true;
+    var fail = function (why) {
+      out.errors.push({ line: p.line || 0, column: column, message: '계정 ' + rosterMask_(email) + '은(는) ' + why +
+        ' ' + label[roleCode] + ' 계정으로 올릴 수 없습니다. 이메일이 맞는지 확인해 주세요.' });
+    };
+    if (roleCode === 'student' && parentEmails[email]) { fail('이미 학부모 연결에 쓰이는 계정이라'); return; }
+    if (roleCode === 'parent' && studentEmails[email]) { fail('이미 학생 계정이라'); return; }
     var u = byEmail[email];
     if (!u) {
       out.create.push({ email: email, name: p.name, roles: roleCode, homeroom_class: '', active: 'TRUE', memo: memo });
       return;
     }
-    if (!isTruthy_(u.active)) out.warnings.push('계정 ' + email + '이(가) 비활성 상태입니다. 사용자 목록에서 활성으로 바꾸어 주세요.');
     var roles = parseRoles_(u.roles);
-    if (roles.indexOf(roleCode) < 0) out.update.push({ id: u.id, patch: { roles: roles.concat(roleCode).join(',') } });
+    var other = roles.filter(function (r) { return r !== roleCode; });
+    if (other.length) {
+      fail('이미 ' + other.map(function (r) { return ROLE_LABELS[r] || r; }).join('·') + ' 역할을 가진 계정이라');
+      return;
+    }
+    if (!isTruthy_(u.active)) out.warnings.push('계정 ' + rosterMask_(email) + '이(가) 비활성 상태입니다. 사용자 목록에서 활성으로 바꾸어 주세요.');
+    if (roles.indexOf(roleCode) < 0) {
+      out.update.push({ id: u.id, patch: { roles: roleCode } });
+      out.changes.push({ email: rosterMask_(email), before: roles.length ? roles.map(function (r) { return ROLE_LABELS[r] || r; }).join('·') : '(역할 없음)', add: label[roleCode] });
+    }
   });
   return out;
 }
@@ -133,8 +166,9 @@ function rosterPlan_(text, opts, ctx) {
   var table = parseRosterTable_(parsed.rows);
   if (table.errors.length) return fail(table.errors, table.warnings);
   var diff = diffRoster_(table.records, ctx.existing, r.term.id, r.ymd);
-  var userPlan = rosterUserPlan_(table.records.map(function (x) { return { email: x.email, name: x.name }; }),
-    ctx.existing.users, 'student', '명단 업로드');
+  var userPlan = rosterUserPlan_(table.records.map(function (x) { return { email: x.email, name: x.name, line: x.line }; }),
+    ctx.existing.users, 'student', '명단 업로드', { students: ctx.existing.students, guardianLinks: ctx.existing.guardianLinks });
+  if (userPlan.errors.length) return fail(userPlan.errors, diff.warnings.concat(table.warnings));
   var counts = {
     newStudents: diff.createStudents.length, updatedStudents: diff.updateStudents.length,
     newEnrollments: diff.createEnrollments.length, updatedEnrollments: diff.updateEnrollments.length,
@@ -151,7 +185,8 @@ function rosterPlan_(text, opts, ctx) {
         fields: Object.keys(u.patch).map(function (k) { return ROSTER_FIELD_LABELS[k] || k; }) };
     }),
     leaving: diff.leavingCandidates.map(function (c) { return { student_no: c.student_no, name: c.name }; }),
-    ambiguous: diff.ambiguous.map(function (a) { return { line: a.line, student_no: a.student_no, name: a.name, reason: a.reason }; })
+    ambiguous: diff.ambiguous.map(function (a) { return { line: a.line, student_no: a.student_no, name: a.name, reason: a.reason }; }),
+    roleChanges: userPlan.changes
   };
   return {
     ok: true, errors: [], warnings: diff.warnings.concat(table.warnings, userPlan.warnings), ambiguous: diff.ambiguous,
@@ -186,7 +221,11 @@ function rosterStudentRow_(c, id) {
     number: c.number, track: c.track, email: c.email, memo: c.memo || '' };
 }
 
-/** 학부모 연결 계획(순수). ctx = {students, enrollments, guardianLinks, users, terms, today} */
+/**
+ * 학부모 연결 계획(순수). ctx = {students, enrollments, guardianLinks, users, terms, today}
+ * 연결 대상은 **이 기간에 등록된 학생**뿐이다(학번은 학년도마다 다시 쓰이므로, 옛 학번을 가진 퇴실·졸업생에게 붙지 않게).
+ * 이미 연결된 줄도 계정 계획에는 넣는다(연결은 썼는데 계정 쓰기에서 멈췄을 때 다시 올리면 계정이 만들어지도록).
+ */
 function rosterGuardianPlan_(text, opts, ctx) {
   var fail = function (errors) { return { ok: false, errors: errors, warnings: [] }; };
   var r = rosterResolveOpts_(opts, ctx.terms, ctx.today);
@@ -202,26 +241,30 @@ function rosterGuardianPlan_(text, opts, ctx) {
   var haveLink = {};
   (ctx.guardianLinks || []).forEach(function (g) { haveLink[normalizeEmail_(g.parent_email) + '|' + g.student_id] = true; });
 
-  var errors = [], create = [], skipped = 0, people = [], seenPerson = {};
+  var errors = [], create = [], skipped = 0, people = [], seenPerson = {}, links = [];
   table.records.forEach(function (rec) {
-    var cands = byNo[rec.student_no] || [];
-    if (cands.length > 1) cands = cands.filter(function (s) { return enrolled[s.id]; });
+    var cands = (byNo[rec.student_no] || []).filter(function (s) { return enrolled[s.id]; });
     if (cands.length !== 1) {
-      errors.push({ line: rec.line, column: '학번', message: '학번 ' + rec.student_no + (cands.length ? ' 학생이 여럿입니다' : ' 학생이 없습니다') +
-        '. 학생 명단을 먼저 올렸는지, 학번이 맞는지 확인해 주세요.' });
+      errors.push({ line: rec.line, column: '학번', message: cands.length
+        ? '이 기간 학사생 중 학번 ' + rec.student_no + ' 학생이 여럿입니다. 학번을 확인해 주세요.'
+        : '이 기간 학사생 중 학번 ' + rec.student_no + ' 학생이 없습니다. 학생 명단을 먼저 올렸는지, 학번이 맞는지 확인해 주세요.' });
       return;
     }
     var st = cands[0];
     var key = rec.parent_email + '|' + st.id;
-    if (haveLink[key]) { skipped++; return; }
-    haveLink[key] = true;
-    create.push({ parent_email: rec.parent_email, student_id: st.id, relation: rec.relation, memo: '' });
-    if (!seenPerson[rec.parent_email]) { seenPerson[rec.parent_email] = true; people.push({ email: rec.parent_email, name: '학부모(' + st.name + ')' }); }
+    var isNew = !haveLink[key];
+    links.push({ line: rec.line, student_no: st.student_no, name: st.name, parent: rosterMask_(rec.parent_email), isNew: isNew });
+    if (isNew) { haveLink[key] = true; create.push({ parent_email: rec.parent_email, student_id: st.id, relation: rec.relation, memo: '' }); } else { skipped++; }
+    if (!seenPerson[rec.parent_email]) {
+      seenPerson[rec.parent_email] = true;
+      people.push({ email: rec.parent_email, name: '학부모(' + st.name + ')', line: rec.line });
+    }
   });
   if (errors.length) return fail(errors);
-  var userPlan = rosterUserPlan_(people, ctx.users, 'parent', '명단 업로드');
+  var userPlan = rosterUserPlan_(people, ctx.users, 'parent', '명단 업로드', { students: ctx.students, guardianLinks: ctx.guardianLinks });
+  if (userPlan.errors.length) return fail(userPlan.errors);
   return {
-    ok: true, errors: [], warnings: userPlan.warnings, term: r.term, createLinks: create, skipped: skipped, userPlan: userPlan,
+    ok: true, errors: [], warnings: userPlan.warnings, term: r.term, createLinks: create, skipped: skipped, userPlan: userPlan, links: links,
     counts: { newLinks: create.length, skipped: skipped, newUsers: userPlan.create.length, updatedUsers: userPlan.update.length },
     nothingToDo: !create.length && !userPlan.create.length && !userPlan.update.length
   };
@@ -231,7 +274,7 @@ function rosterGuardianPlan_(text, opts, ctx) {
 
 function rosterLoadExisting_() {
   return { students: readAll_('students'), enrollments: readAll_('enrollments'),
-    changes: readAll_('status_changes'), users: readAll_('users') };
+    changes: readAll_('status_changes'), users: readAll_('users'), guardianLinks: readAll_('guardian_links') };
 }
 
 function rosterFreshMemo_() {
@@ -241,6 +284,16 @@ function rosterFreshMemo_() {
 function rosterCountsEqual_(a, b) {
   return Object.keys(a || {}).length === Object.keys(b || {}).length &&
     Object.keys(a || {}).every(function (k) { return a[k] === (b || {})[k]; });
+}
+
+/**
+ * 저장 요청이 미리보기와 같은 것에 대한 것인지: 개수와 (학생 명단이면) 기간·적용일이 모두 같아야 한다.
+ * expect = {counts, termId, ymd}(미리보기 응답에서 가져온 값). 없거나 다르면 false.
+ */
+function rosterExpectOk_(expect, counts, termId, ymd) {
+  if (!expect || !rosterCountsEqual_(counts, expect.counts)) return false;
+  if (expect.termId !== termId) return false;
+  return ymd === undefined || expect.ymd === ymd;
 }
 
 /* ───────────── 화면에서 부르는 서버 함수 (모두 관리자만) ───────────── */
@@ -259,14 +312,14 @@ function getRosterContext() {
   };
 }
 
-/** 학생 명단 미리보기. 아무것도 저장하지 않는다. opts = {termId, ymd} */
+/** 학생 명단 미리보기. 아무것도 저장하지 않는다. opts = {termId, ymd}. 응답의 counts·term.id·ymd가 저장 때 expect로 돌아온다. */
 function previewRoster(text, opts) {
   requirePermission_('roster.edit');
   return rosterPreviewView_(rosterPlan_(text, opts, { terms: readAll_('terms'), today: today_(), existing: rosterLoadExisting_() }));
 }
 
 /**
- * 학생 명단 저장. expect = 미리보기가 돌려준 counts. 락 안에서 다시 계산해 다르면 거부한다.
+ * 학생 명단 저장. expect = {counts, termId, ymd}(미리보기 응답 값). 락 안에서 다시 계산해 다르면 거부한다.
  */
 function commitRoster(text, opts, expect) {
   var user = requirePermission_('roster.edit');
@@ -275,8 +328,8 @@ function commitRoster(text, opts, expect) {
     var plan = rosterPlan_(text, opts, { terms: readAll_('terms'), today: today_(), existing: rosterLoadExisting_() });
     if (!plan.ok) return rosterPreviewView_(plan);
     if (plan.blocked) return { ok: false, errors: [{ line: 0, column: '', message: '같은 사람인지 알 수 없는 줄이 있어 저장하지 않았습니다. 미리보기의 "확인이 필요한 줄"을 고친 뒤 다시 올려 주세요.' }] };
-    if (!rosterCountsEqual_(plan.counts, expect)) {
-      return { ok: false, stale: true, errors: [{ line: 0, column: '', message: '미리보기 이후 데이터가 바뀌었습니다. [확인]을 다시 눌러 결과를 보고 저장해 주세요.' }] };
+    if (!rosterExpectOk_(expect, plan.counts, plan.term.id, plan.ymd)) {
+      return { ok: false, stale: true, errors: [{ line: 0, column: '', message: '미리보기 이후 입력이나 데이터가 바뀌었습니다. [확인]을 다시 눌러 결과를 보고 저장해 주세요.' }] };
     }
     if (plan.nothingToDo) return { ok: true, nothingToDo: true, counts: plan.counts };
     var d = plan.diff;
@@ -307,7 +360,8 @@ function previewGuardians(text, opts) {
   requirePermission_('roster.edit');
   var plan = rosterGuardianPlan_(text, opts, rosterGuardianCtx_());
   if (!plan.ok) return { ok: false, errors: plan.errors.slice(0, 50), errorCount: plan.errors.length, warnings: [] };
-  return { ok: true, nothingToDo: plan.nothingToDo, counts: plan.counts, warnings: plan.warnings.slice(0, 50) };
+  return { ok: true, nothingToDo: plan.nothingToDo, counts: plan.counts, termId: plan.term.id, warnings: plan.warnings.slice(0, 50),
+    links: plan.links.slice(0, 200), linkCount: plan.links.length, roleChanges: plan.userPlan.changes.slice(0, 50) };
 }
 
 function commitGuardians(text, opts, expect) {
@@ -316,8 +370,8 @@ function commitGuardians(text, opts, expect) {
     rosterFreshMemo_();
     var plan = rosterGuardianPlan_(text, opts, rosterGuardianCtx_());
     if (!plan.ok) return { ok: false, errors: plan.errors.slice(0, 50), errorCount: plan.errors.length, warnings: [] };
-    if (!rosterCountsEqual_(plan.counts, expect)) {
-      return { ok: false, stale: true, errors: [{ line: 0, column: '', message: '미리보기 이후 데이터가 바뀌었습니다. [확인]을 다시 눌러 결과를 보고 저장해 주세요.' }] };
+    if (!rosterExpectOk_(expect, plan.counts, plan.term.id)) {
+      return { ok: false, stale: true, errors: [{ line: 0, column: '', message: '미리보기 이후 입력이나 데이터가 바뀌었습니다. [확인]을 다시 눌러 결과를 보고 저장해 주세요.' }] };
     }
     if (plan.nothingToDo) return { ok: true, nothingToDo: true, counts: plan.counts };
     bulkAppend_('guardian_links', plan.createLinks, user.email);

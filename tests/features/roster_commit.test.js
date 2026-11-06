@@ -56,9 +56,10 @@ function makeServer(email, roles, seedDb) {
 }
 const admin = () => makeServer(ADMIN, ['admin']);
 const prev = (s, text, opts) => plain(s.c.previewRoster(text, opts || OPTS));
+const exp = (p) => ({ counts: p.counts, termId: p.term.id, ymd: p.ymd });
 const commit = (s, text, opts) => {
   const p = prev(s, text, opts);
-  return plain(s.c.commitRoster(text, opts || OPTS, p.counts));
+  return plain(s.c.commitRoster(text, opts || OPTS, exp(p)));
 };
 
 test('처음 올리기: 미리보기는 아무것도 쓰지 않고, 개수와 새 계정 수를 보여 준다', () => {
@@ -103,7 +104,7 @@ test('같은 파일을 다시 올리면 "변경 없음"이고 쓰기 0건(상태
   const p = prev(s, FULL);
   assert.strictEqual(p.nothingToDo, true);
   for (const k of ['newStudents', 'updatedStudents', 'newEnrollments', 'updatedEnrollments', 'newChanges', 'newUsers', 'updatedUsers']) assert.strictEqual(p.counts[k], 0, k);
-  assert.deepStrictEqual(plain(s.c.commitRoster(FULL, OPTS, p.counts)), { ok: true, nothingToDo: true, counts: p.counts });
+  assert.deepStrictEqual(plain(s.c.commitRoster(FULL, OPTS, exp(p))), { ok: true, nothingToDo: true, counts: p.counts });
   assert.strictEqual(s.writes.length, before);
 });
 
@@ -133,20 +134,25 @@ test('모호한 줄(같은 학번·이름인데 학년이 다름)이 있으면 �
   assert.strictEqual(p.blocked, true);
   assert.strictEqual(p.counts.ambiguous, 1);
   assert.strictEqual(p.lists.ambiguous[0].line, 2);
-  const r = plain(s.c.commitRoster(FULL, OPTS, p.counts));
+  const r = plain(s.c.commitRoster(FULL, OPTS, exp(p)));
   assert.strictEqual(r.ok, false);
   assert.ok(r.errors[0].message.includes('같은 사람인지'));
   assert.deepStrictEqual(s.writes, []);
 });
 
-test('미리보기 이후 데이터가 바뀌었으면(counts 불일치) 저장을 거부한다', () => {
+test('미리보기와 다르면(개수·기간·적용일이 달라졌거나 expect가 없으면) 저장을 거부한다', () => {
   const s = admin();
   const p = prev(s, FULL);
-  const stale = Object.assign({}, p.counts, { newStudents: 29 });
-  const r = plain(s.c.commitRoster(FULL, OPTS, stale));
-  assert.strictEqual(r.ok, false); assert.strictEqual(r.stale, true);
+  const stale = (e) => plain(s.c.commitRoster(FULL, OPTS, e));
+  assert.strictEqual(stale({ counts: Object.assign({}, p.counts, { newStudents: 29 }), termId: p.term.id, ymd: p.ymd }).stale, true, '개수');
+  assert.strictEqual(stale({ counts: p.counts, termId: 'other', ymd: p.ymd }).stale, true, '기간');
+  assert.strictEqual(stale({ counts: p.counts, termId: p.term.id, ymd: '2027-03-10' }).stale, true, '미리보기 후 적용일을 바꿈');
+  assert.strictEqual(stale(undefined).stale, true, 'expect 없음');
+  assert.strictEqual(stale(p.counts).stale, true, '옛 모양(counts만)');
   assert.deepStrictEqual(s.writes, []);
-  assert.strictEqual(plain(s.c.commitRoster(FULL, OPTS, undefined)).stale, true, 'expect 없이 부르면 거부');
+  // 적용일을 바꿔서 보내도 서버는 그 적용일로 다시 계산해 미리보기(2027-03-02)와 다르면 거부한다
+  const moved = plain(s.c.commitRoster(FULL, { termId: TERM2.id, ymd: '2027-03-10' }, exp(p)));
+  assert.strictEqual(moved.stale, true); assert.deepStrictEqual(s.writes, []);
 });
 
 test('이미 기록이 있는 상태가 명단과 달라도 바꾸지 않고 경고를 미리보기에 싣는다', () => {
@@ -195,31 +201,56 @@ test('중간에 실패해도 다시 올리면 남은 것만 쓰이고 학생이 
   const s = admin();
   s.failNext('enrollments');
   const p = prev(s, FULL);
-  assert.throws(() => s.c.commitRoster(FULL, OPTS, p.counts), /시험/);
+  assert.throws(() => s.c.commitRoster(FULL, OPTS, exp(p)), /시험/);
   assert.strictEqual(s.db.students.length, 30);
   assert.strictEqual(s.db.enrollments.length, 0);
   const again = prev(s, FULL);
   assert.strictEqual(again.counts.newStudents, 0, '이미 쓴 학생은 다시 만들지 않는다');
   assert.strictEqual(again.counts.newEnrollments, 30);
-  assert.strictEqual(plain(s.c.commitRoster(FULL, OPTS, again.counts)).ok, true);
+  assert.strictEqual(plain(s.c.commitRoster(FULL, OPTS, exp(again))).ok, true);
   assert.strictEqual(s.db.students.length, 30);
   assert.strictEqual(s.db.enrollments.length, 30);
   assert.strictEqual(new Set(s.db.status_changes.map((c) => c.student_id + c.item)).size, s.db.status_changes.length, '상태 중복 없음');
   assert.strictEqual(prev(s, FULL).nothingToDo, true);
 });
 
-test('이미 있는 계정은 역할만 더하고(기존 역할 유지), 비활성이면 경고한다', () => {
-  const st = fake.students[0], st2 = fake.students[1];
-  const s = makeServer(ADMIN, ['admin'], {});
-  s.db.users.push({ id: 'p1', email: st.email, active: 'TRUE', roles: 'parent', name: '이미 있음' });
-  s.db.users.push({ id: 'p2', email: st2.email, active: 'FALSE', roles: 'student', name: '비활성' });
+test('역할이 섞이면 줄 오류: 학생 칸에 학부모·교사 계정이 들어가면 막는다(이메일은 일부만 보임)', () => {
+  const st = fake.students[2];
+  for (const roles of ['parent', 'hall_teacher', 'admin', 'homeroom', 'student,parent']) {
+    const s = makeServer(ADMIN, ['admin'], {});
+    s.db.users.push({ id: 'x', email: st.email, active: 'TRUE', roles, name: '기존' });
+    const p = prev(s, FULL);
+    assert.strictEqual(p.ok, false, roles);
+    assert.strictEqual(p.errors.length, 1);
+    assert.strictEqual(p.errors[0].line, 4); assert.strictEqual(p.errors[0].column, '학생구글계정');
+    assert.ok(p.errors[0].message.includes('fa***@example.com') && !p.errors[0].message.includes(st.email), p.errors[0].message);
+    assert.strictEqual(plain(s.c.commitRoster(FULL, OPTS, {})).ok, false);
+    assert.deepStrictEqual(s.writes, [], roles);
+  }
+});
+
+test('학생 칸의 이메일이 이미 학부모 연결(guardian_links)에 있으면 막는다', () => {
+  const st = fake.students[0];
+  const s = makeServer(ADMIN, ['admin'], { guardian_links: [{ id: 'g1', parent_email: st.email, student_id: 'whoever' }] });
   const p = prev(s, FULL);
-  assert.strictEqual(p.counts.updatedUsers, 1);
-  assert.strictEqual(p.counts.newUsers, 28);
-  assert.ok(p.warnings.some((w) => w.includes('비활성')));
+  assert.strictEqual(p.ok, false); assert.ok(p.errors[0].message.includes('학부모 연결'));
+});
+
+test('같은 종류의 기존 계정은 그대로 두고(역할 중복 없음), 역할이 없던 계정에는 student를 더한다, 비활성이면 경고', () => {
+  const a = fake.students[0], b = fake.students[1], c = fake.students[2];
+  const s = makeServer(ADMIN, ['admin'], {});
+  s.db.users.push({ id: 'p1', email: a.email, active: 'TRUE', roles: 'student', name: '이미 학생' });
+  s.db.users.push({ id: 'p2', email: b.email, active: 'FALSE', roles: 'student', name: '비활성' });
+  s.db.users.push({ id: 'p3', email: c.email, active: 'TRUE', roles: '', name: '역할 없음' });
+  const p = prev(s, FULL);
+  assert.strictEqual(p.ok, true);
+  assert.strictEqual(p.counts.updatedUsers, 1); assert.strictEqual(p.counts.newUsers, 27);
+  assert.ok(p.warnings.some((w) => w.includes('비활성') && w.includes('***@')), '경고에도 이메일은 가려서');
+  assert.deepStrictEqual(p.lists.roleChanges, [{ email: 'fa***@example.com', before: '(역할 없음)', add: '학생' }]);
   commit(s, FULL);
-  assert.strictEqual(s.db.users.find((u) => u.id === 'p1').roles, 'parent,student');
-  assert.strictEqual(s.db.users.find((u) => u.id === 'p1').name, '이미 있음', '이름은 바꾸지 않는다');
+  assert.strictEqual(s.db.users.find((u) => u.id === 'p3').roles, 'student');
+  assert.strictEqual(s.db.users.find((u) => u.id === 'p1').roles, 'student');
+  assert.strictEqual(s.db.users.find((u) => u.id === 'p3').name, '역할 없음', '이름은 바꾸지 않는다');
 });
 
 test('관리자가 아니면 모든 명단 함수를 거부하고 denied:roster.edit를 남기며 쓰기 0건', () => {
@@ -248,6 +279,7 @@ test('getRosterContext: 기본 기간은 현재 기간, 적용일 기본값 = ma
 
 const GHEAD = '학부모구글계정,학번,관계';
 function studentsDone() { const s = admin(); commit(s, FULL); return s; }
+const gexp = (p) => ({ counts: p.counts, termId: p.termId });
 
 test('학부모 연결: 형제는 같은 계정 여러 줄, 새 계정은 "학부모(자녀 이름)"·parent 역할, 다시 올리면 건너뜀', () => {
   const s = studentsDone();
@@ -255,7 +287,7 @@ test('학부모 연결: 형제는 같은 계정 여러 줄, 새 계정은 "학�
   const text = [GHEAD, 'par1@example.com,' + a.student_no + ',모', 'par1@example.com,' + b.student_no + ',모'].join('\n');
   const p = plain(s.c.previewGuardians(text, OPTS));
   assert.deepStrictEqual(p.counts, { newLinks: 2, skipped: 0, newUsers: 1, updatedUsers: 0 });
-  assert.strictEqual(plain(s.c.commitGuardians(text, OPTS, p.counts)).ok, true);
+  assert.strictEqual(plain(s.c.commitGuardians(text, OPTS, gexp(p))).ok, true);
   assert.strictEqual(s.db.guardian_links.length, 2);
   const parent = s.db.users.find((u) => u.email === 'par1@example.com');
   assert.strictEqual(parent.roles, 'parent'); assert.strictEqual(parent.name, '학부모(' + a.name + ')');
@@ -265,31 +297,97 @@ test('학부모 연결: 형제는 같은 계정 여러 줄, 새 계정은 "학�
   assert.strictEqual(again.nothingToDo, true); assert.strictEqual(again.counts.skipped, 2);
 });
 
+test('학부모 미리보기: 줄마다 "학번·이름 ← 학부모(가림)"을 보여 주고 이메일 전체는 내보내지 않는다', () => {
+  const s = studentsDone();
+  const a = fake.students[0];
+  const p = plain(s.c.previewGuardians([GHEAD, 'parent.one@example.com,' + a.student_no + ',모'].join('\n'), OPTS));
+  assert.deepStrictEqual(p.links, [{ line: 2, student_no: a.student_no, name: a.name, parent: 'pa***@example.com', isNew: true }]);
+  assert.ok(!JSON.stringify(p).includes('parent.one'));
+  assert.strictEqual(p.termId, TERM2.id);
+});
+
 test('학부모 연결: 없는 학번·잘못된 이메일은 줄 번호로 알리고 아무것도 쓰지 않는다(나쁜 입력)', () => {
   const s = studentsDone();
   const writes = s.writes.length;
-  const text = [GHEAD, 'par1@example.com,99999,모', 'not-an-email,' + fake.students[0].student_no + ',부'].join('\n');
-  const p = plain(s.c.previewGuardians(text, OPTS));
-  assert.strictEqual(p.ok, false);
   const text2 = [GHEAD, 'par1@example.com,99999,모'].join('\n');
   const p2 = plain(s.c.previewGuardians(text2, OPTS));
   assert.strictEqual(p2.ok, false);
   assert.strictEqual(p2.errors[0].line, 2); assert.strictEqual(p2.errors[0].column, '학번');
+  assert.ok(p2.errors[0].message.includes('이 기간 학사생 중 학번 99999'));
+  assert.strictEqual(plain(s.c.previewGuardians([GHEAD, 'not-an-email,' + fake.students[0].student_no + ',부'].join('\n'), OPTS)).ok, false);
   assert.strictEqual(plain(s.c.commitGuardians(text2, OPTS, {})).ok, false);
   assert.strictEqual(s.writes.length, writes);
 });
 
-test('학부모 연결: 이미 있는 계정에는 parent 역할만 더하고, 같은 학번이 여러 학생이면 이 기간 등록 학생을 고른다', () => {
+test('이 기간에 등록되지 않은 학생(퇴실·졸업생의 옛 학번)에게는 후보가 하나뿐이어도 연결하지 않는다', () => {
+  const s = studentsDone();
+  s.db.students.push({ id: 'oldkid', student_no: '30999', name: '옛학생', grade: '3', email: 'old@example.com' });   // 이 기간 등록 없음
+  const p = plain(s.c.previewGuardians([GHEAD, 'par9@example.com,30999,모'].join('\n'), OPTS));
+  assert.strictEqual(p.ok, false);
+  assert.ok(p.errors[0].message.includes('이 기간 학사생 중 학번 30999 학생이 없습니다'));
+  // 같은 학번을 가진 퇴실 학생이 있어도 이 기간 등록 학생에게만 간다
+  const a = fake.students[0];
+  s.db.students.push({ id: 'dup', student_no: a.student_no, name: '옛학생2', grade: '3', email: 'old2@example.com' });
+  const ok = plain(s.c.previewGuardians([GHEAD, 'par9@example.com,' + a.student_no + ',모'].join('\n'), OPTS));
+  assert.strictEqual(ok.ok, true); assert.strictEqual(ok.links[0].name, a.name);
+});
+
+test('학부모 칸에 역할이 섞이면 막는다: 학생 계정·교사 계정·형제 학생의 계정', () => {
+  const a = fake.students[0], b = fake.students[1];
+  const text = (email) => [GHEAD, email + ',' + a.student_no + ',모'].join('\n');
+  const s = studentsDone();
+  const asStudent = plain(s.c.previewGuardians(text(b.email), OPTS));
+  assert.strictEqual(asStudent.ok, false); assert.ok(asStudent.errors[0].message.includes('이미 학생 계정'));
+  assert.strictEqual(asStudent.errors[0].line, 2);
+  for (const roles of ['hall_teacher', 'student', 'admin', 'homeroom', 'parent,student']) {
+    const t = studentsDone();
+    t.db.users.push({ id: 'z', email: 'par7@example.com', active: 'TRUE', roles, name: '기존' });
+    const p = plain(t.c.previewGuardians(text('par7@example.com'), OPTS));
+    assert.strictEqual(p.ok, false, roles); assert.ok(p.errors[0].message.includes('pa***@example.com'), '가린 이메일');
+    assert.ok(!p.errors[0].message.includes('par7@'), '전체 이메일은 보이지 않는다');
+    assert.deepStrictEqual(t.writes.filter((w) => w.startsWith('+guardian')), []);
+  }
+});
+
+test('이미 parent 역할이 있는 계정은 그대로 쓰고, 역할이 없는 계정에는 parent를 더한다(역할 변경 목록에 표시)', () => {
+  const a = fake.students[0];
+  const s = studentsDone();
+  s.db.users.push({ id: 'pp', email: 'par8@example.com', active: 'TRUE', roles: 'parent', name: '기존 학부모' });
+  s.db.users.push({ id: 'pn', email: 'par9@example.com', active: 'TRUE', roles: '', name: '역할 없음' });
+  const text = [GHEAD, 'par8@example.com,' + a.student_no + ',모', 'par9@example.com,' + a.student_no + ',부'].join('\n');
+  const p = plain(s.c.previewGuardians(text, OPTS));
+  assert.deepStrictEqual(p.counts, { newLinks: 2, skipped: 0, newUsers: 0, updatedUsers: 1 });
+  assert.deepStrictEqual(p.roleChanges, [{ email: 'pa***@example.com', before: '(역할 없음)', add: '학부모' }]);
+  s.c.commitGuardians(text, OPTS, gexp(p));
+  assert.strictEqual(s.db.users.find((u) => u.id === 'pn').roles, 'parent');
+  assert.strictEqual(s.db.users.find((u) => u.id === 'pp').roles, 'parent');
+});
+
+test('학부모 저장은 멱등: 연결은 있는데 계정이 없던(중간 실패) 줄도 다시 올리면 계정이 만들어진다', () => {
   const s = studentsDone();
   const a = fake.students[0];
-  s.db.students.push({ id: 'oldkid', student_no: a.student_no, name: '옛학생', grade: '3', email: 'old@example.com' });  // 옛 학년도에 같은 학번
-  s.db.users.push({ id: 'tp', email: 'par9@example.com', active: 'TRUE', roles: 'homeroom', name: '교사 겸 학부모' });
-  const text = [GHEAD, 'par9@example.com,' + a.student_no + ',모'].join('\n');
+  const text = [GHEAD, 'par5@example.com,' + a.student_no + ',모'].join('\n');
   const p = plain(s.c.previewGuardians(text, OPTS));
-  assert.strictEqual(p.ok, true);
-  assert.deepStrictEqual(p.counts, { newLinks: 1, skipped: 0, newUsers: 0, updatedUsers: 1 });
-  s.c.commitGuardians(text, OPTS, p.counts);
-  assert.strictEqual(s.db.users.find((u) => u.id === 'tp').roles, 'homeroom,parent');
-  const link = s.db.guardian_links[0];
-  assert.notStrictEqual(link.student_id, 'oldkid');
+  // 연결 쓰기는 끝났고 계정 쓰기 전에 멈춘 상태를 흉내 낸다
+  const sid = s.db.students.find((x) => x.student_no === a.student_no).id;
+  s.db.guardian_links.push({ id: 'half', parent_email: 'par5@example.com', student_id: sid, relation: '모', memo: '' });
+  const again = plain(s.c.previewGuardians(text, OPTS));
+  assert.deepStrictEqual(again.counts, { newLinks: 0, skipped: 1, newUsers: 1, updatedUsers: 0 });
+  assert.strictEqual(again.nothingToDo, false);
+  assert.strictEqual(plain(s.c.commitGuardians(text, OPTS, gexp(again))).ok, true);
+  assert.strictEqual(s.db.users.filter((u) => u.email === 'par5@example.com').length, 1);
+  assert.strictEqual(s.db.guardian_links.length, 1, '연결은 늘지 않는다');
+  assert.strictEqual(plain(s.c.previewGuardians(text, OPTS)).nothingToDo, true);
+  assert.ok(p.counts.newLinks === 1);
+});
+
+test('학부모 저장도 미리보기와 기간이 다르면 거부한다', () => {
+  const s = studentsDone();
+  const a = fake.students[0];
+  const text = [GHEAD, 'par6@example.com,' + a.student_no + ',모'].join('\n');
+  const p = plain(s.c.previewGuardians(text, OPTS));
+  const w = s.writes.length;
+  assert.strictEqual(plain(s.c.commitGuardians(text, OPTS, { counts: p.counts, termId: 'other' })).stale, true);
+  assert.strictEqual(plain(s.c.commitGuardians(text, OPTS, p.counts)).stale, true);
+  assert.strictEqual(s.writes.length, w);
 });
