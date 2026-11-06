@@ -14,6 +14,10 @@
     "diagPing":          { "use": "화면",   "guard": "isDiagEnabled_" },
     "setup":             { "use": "편집기", "guard": "assertOwnerRun_" },
     "addUser":           { "use": "편집기", "guard": "assertOwnerRun_" },
-    "seedFakeData":      { "use": "편집기", "guard": "assertOwnerRun_" }
+    "seedFakeData":      { "use": "편집기", "guard": "assertOwnerRun_" },
+    "spikeRunAll":       { "use": "편집기", "guard": "assertOwnerRun_" },
+    "spikeGetHtml":      { "use": "화면",   "guard": "assertOwnerRun_" },
+    "spikeGetPdfBase64": { "use": "화면",   "guard": "assertOwnerRun_" },
+    "spikeGetPdfLink":   { "use": "화면",   "guard": "assertOwnerRun_" }
   }
 }
