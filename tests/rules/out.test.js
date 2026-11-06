@@ -24,6 +24,7 @@ function save(vio, r) {
   const out = vio.map((v) => Object.assign({}, v));
   for (const c of r.toCancel) Object.assign(out.find((v) => v.id === c.violationId), { status: '취소', cancel_reason: c.reason });
   for (const c of r.toCreate) out.push(Object.assign({ id: 'v' + (++vseq) }, c));
+  for (const u of r.toUpdate || []) Object.assign(out.find((v) => v.id === u.violationId), u.patch);
   return out;
 }
 
@@ -48,7 +49,7 @@ test('두 번 실행해도 새로 만드는 것 0건(source_exception_id로 중�
   assert.strictEqual(r1.toCreate.length, 2);
   const v1 = save([], r1);
   const r2 = run(exc, v1);
-  assert.deepStrictEqual(r2, { toCreate: [], toCancel: [] });
+  assert.deepStrictEqual(r2, { toCreate: [], toCancel: [], toUpdate: [] });
 });
 
 table('특이사항이 취소되거나 유형이 바뀌거나 요청으로 돌아가면 연결된 OUT 취소(사유 [자동])', [
@@ -73,7 +74,7 @@ test('교사가 직접 입력한 OUT은 건드리지 않는다', () => {
   const manual = [{ id: 'm1', source: '직접', status: '유효', source_exception_id: '', student_id: 's1', term_id: 'T1' },
     { id: 'm2', source: '직접', status: '유효', source_exception_id: 'e1', student_id: 's1', term_id: 'T1' }];
   const r = run([EX('e1', { status: '취소' })], manual);
-  assert.deepStrictEqual(r, { toCreate: [], toCancel: [] });
+  assert.deepStrictEqual(r, { toCreate: [], toCancel: [], toUpdate: [] });
   // 직접 OUT이 같은 특이사항을 가리켜도 자동 OUT은 따로 만든다
   assert.strictEqual(run([EX('e1')], manual).toCreate.length, 1);
 });
@@ -100,7 +101,12 @@ test('묶음의 대표 행만 취소되고 나머지는 확정이면 OUT 유지(
   const exc = [EX('e2', { group_id: 'G', date: '2027-03-04' }), EX('e3', { group_id: 'G', date: '2027-03-05' })];
   const v1 = save([], run(exc));
   const r = run([EX('e2', { group_id: 'G', date: '2027-03-04', status: '취소' }), exc[1]], v1);
-  assert.deepStrictEqual(r, { toCreate: [], toCancel: [] });
+  assert.deepStrictEqual([r.toCreate, r.toCancel], [[], []]);
+  // 대표가 남은 날(e3)로 바뀐다: 날짜·근무교사·문구를 고친다
+  assert.deepStrictEqual(r.toUpdate, [{ violationId: v1[0].id, patch: {
+    source_exception_id: 'e3', occurred_at: '2027-03-05T00:00:00', memo: '사전 특이사항 자동: 미인정결석' } }]);
+  const v2 = save(v1, r);
+  assert.deepStrictEqual(run([EX('e2', { group_id: 'G', date: '2027-03-04', status: '취소' }), exc[1]], v2), { toCreate: [], toCancel: [], toUpdate: [] });
   // 묶음 전체가 취소되면 취소
   const all = exc.map((e) => Object.assign({}, e, { status: '취소' }));
   assert.strictEqual(run(all, v1).toCancel.length, 1);
@@ -112,29 +118,67 @@ test('같은 group_id라도 학생이 다르면 다른 단위', () => {
 });
 
 test('같은 단위에 살아 있는 자동 OUT이 둘이면 하나만 남기고 [자동] 중복 취소', () => {
-  const vio = [{ id: 'a', source: 'F1자동', status: '유효', source_exception_id: 'e1' },
-    { id: 'b', source: 'F1자동', status: '유효', source_exception_id: 'e1' }];
+  const base = Object.assign({}, run([EX('e1')]).toCreate[0]);
+  const vio = [Object.assign({}, base, { id: 'a' }), Object.assign({}, base, { id: 'b' })];
   const r = run([EX('e1')], vio);
   assert.deepStrictEqual(r.toCreate, []);
+  assert.deepStrictEqual(r.toUpdate, []);
   assert.deepStrictEqual(r.toCancel.map((c) => c.violationId), ['b']);
   assert.ok(r.toCancel[0].reason.indexOf('중복') >= 0);
 });
 
 test('관리자가 직접 취소한 자동 OUT은 다시 만들지 않고(가정), [자동]으로 취소된 뒤 다시 대상이 되면 새로 만든다', () => {
   const byAdmin = [{ id: 'a', source: 'F1자동', status: '취소', source_exception_id: 'e1', cancel_reason: '잘못 입력(관리자)' }];
-  assert.deepStrictEqual(run([EX('e1')], byAdmin), { toCreate: [], toCancel: [] });
+  assert.deepStrictEqual(run([EX('e1')], byAdmin), { toCreate: [], toCancel: [], toUpdate: [] });
   const byAuto = [{ id: 'a', source: 'F1자동', status: '취소', source_exception_id: 'e1', cancel_reason: '[자동] 특이사항 유형이 바뀌었습니다' }];
   assert.strictEqual(run([EX('e1')], byAuto).toCreate.length, 1);
 });
 
 test('흐름: 입력 → 자동 OUT → 유형 변경으로 취소 → 다시 미인정으로 → 새 OUT, 매번 두 번째 실행은 0건', () => {
   let vio = [];
-  const step = (exc) => { const r = run(exc, vio); vio = save(vio, r); assert.deepStrictEqual(run(exc, vio), { toCreate: [], toCancel: [] }); return r; };
+  const step = (exc) => { const r = run(exc, vio); vio = save(vio, r); assert.deepStrictEqual(run(exc, vio), { toCreate: [], toCancel: [], toUpdate: [] }); return r; };
   assert.strictEqual(step([EX('e1')]).toCreate.length, 1);
   assert.strictEqual(step([EX('e1', { type: '병결' })]).toCancel.length, 1);
   assert.strictEqual(step([EX('e1', { type: '미인정지각' })]).toCreate.length, 1);
   assert.strictEqual(vio.filter((v) => v.status === '유효').length, 1);
   assert.strictEqual(plain(ctx.outLevel_(vio, 's1', 'T1')).count, 1);
+});
+
+test('특이사항 행의 학생을 고쳐 쓰면 잘못된 학생의 OUT을 취소하고 바른 학생에게 새로 만든다', () => {
+  const v1 = save([], run([EX('e1')]));
+  const r = run([EX('e1', { student_id: 's2' })], v1);
+  assert.deepStrictEqual(r.toCancel.map((c) => c.violationId), [v1[0].id]);
+  assert.ok(r.toCancel[0].reason.indexOf('학생 또는 기간') >= 0);
+  assert.deepStrictEqual(r.toCreate.map((c) => c.student_id), ['s2']);
+  const v2 = save(v1, r);
+  assert.deepStrictEqual(run([EX('e1', { student_id: 's2' })], v2), { toCreate: [], toCancel: [], toUpdate: [] });
+  assert.strictEqual(plain(ctx.outLevel_(v2, 's1', 'T1')).count, 0);
+  assert.strictEqual(plain(ctx.outLevel_(v2, 's2', 'T1')).count, 1);
+});
+
+test('특이사항 날짜·블록을 고치면 OUT의 occurred_at을 고치고, 날짜가 바뀌면 그날 근무교사로', () => {
+  const v1 = save([], run([EX('e1')]));
+  const r = run([EX('e1', { date: '2027-03-04', blocks: '19:00-20:00' })], v1);
+  assert.deepStrictEqual(r.toUpdate, [{ violationId: v1[0].id, patch: { occurred_at: '2027-03-04T19:00:00', detected_by: 'duty2@example.com,duty3@example.com' } }]);
+  // 같은 날 블록만 바뀌면 근무교사는 그대로(교사가 고쳐 둔 값을 덮지 않음)
+  const r2 = run([EX('e1', { blocks: '21:00-22:00' })], v1);
+  assert.deepStrictEqual(r2.toUpdate, [{ violationId: v1[0].id, patch: { occurred_at: '2027-03-03T21:00:00' } }]);
+});
+
+test("per를 'group'↔'row'로 바꿔도 관리자가 취소한 묶음은 다시 만들지 않는다(가정)", () => {
+  const exc = [EX('e1', { group_id: 'G', date: '2027-03-03' }), EX('e2', { group_id: 'G', date: '2027-03-04' }), EX('e3', { group_id: 'G', date: '2027-03-05' })];
+  const vio = [{ id: 'm1', term_id: 'T1', student_id: 's1', source: 'F1자동', status: '취소', cancel_reason: '관리자 판단', source_exception_id: 'e1' }];
+  assert.deepStrictEqual(run(exc, vio, { per: 'row' }), { toCreate: [], toCancel: [], toUpdate: [] });
+  assert.deepStrictEqual(run(exc, vio, { per: 'group' }), { toCreate: [], toCancel: [], toUpdate: [] });
+});
+
+test('날짜가 빈 행은 대상이 아니다, 설정의 빈 유형 항목(끝 쉼표)은 무시', () => {
+  const r = run([EX('e1', { group_id: 'G', date: '' }), EX('e2', { group_id: 'G', date: '2027-03-04' })]);
+  assert.deepStrictEqual(r.toCreate.map((c) => [c.source_exception_id, c.occurred_at]), [['e2', '2027-03-04T00:00:00']]);
+  assert.strictEqual(run([EX('e1', { date: ' ' })]).toCreate.length, 0);
+  const opts = { autoTypes: '미인정지각,미인정조퇴,미인정결석,'.split(',') };
+  assert.strictEqual(run([EX('e1', { type: '' })], [], opts).toCreate.length, 0);
+  assert.strictEqual(run([EX('e1', { type: '미인정조퇴' })], [], opts).toCreate.length, 1);
 });
 
 table('occurred_at: 첫 블록 시작(정렬), ALL·잘못된 표기는 00:00', [
@@ -145,7 +189,7 @@ test('입력자: 확정자가 없으면 요청자, 기본 규칙 이름·유형 
   const r = plain(ctx.reconcileAutoOuts_([EX('e1', { confirmed_by: '', type: '미인정조퇴' })], [], {}));
   assert.strictEqual(r.toCreate[0].entered_by, 'att@example.com');
   assert.strictEqual(r.toCreate[0].rule_name, '무단 지각·결석·이탈');
-  assert.deepStrictEqual(plain(ctx.reconcileAutoOuts_(null, null, null)), { toCreate: [], toCancel: [] });
+  assert.deepStrictEqual(plain(ctx.reconcileAutoOuts_(null, null, null)), { toCreate: [], toCancel: [], toUpdate: [] });
 });
 
 /* ───── outLevel_ ───── */

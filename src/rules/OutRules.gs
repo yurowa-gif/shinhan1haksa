@@ -38,7 +38,8 @@ function outAutoCancelPrefix_() {
  * 확정된 미인정 특이사항 ↔ 자동 1OUT 맞추기(결정 10·22). 아무것도 쓰지 않고 할 일만 돌려준다.
  * opts = {autoTypes:['미인정지각','미인정조퇴','미인정결석'], ruleName:'무단 지각·결석·이탈', ruleId:'',
  *         per:'group'|'row', dutyByDate:{'yyyy-MM-dd': 이메일 또는 [이메일]}}
- * → {toCreate:[violations 행 초안(id·공통 열 없음)], toCancel:[{violationId, reason}]}
+ * → {toCreate:[violations 행 초안(id·공통 열 없음)], toCancel:[{violationId, reason}],
+ *    toUpdate:[{violationId, patch}](R5 추가: 살아 있는 자동 OUT의 source_exception_id·occurred_at·memo·detected_by 고침)}
  *
  * - 단위: per 'group'(기본, 결정 22 "입력 1건 = 1OUT")이면 같은 group_id의 행 묶음 하나, group_id가 비면 행 하나.
  *   per 'row'면 행마다. 단위 안에 status '확정'이고 유형이 autoTypes인 행이 하나라도 있으면 OUT 대상이다
@@ -50,15 +51,19 @@ function outAutoCancelPrefix_() {
  *   단위가 대상이고 살아 있는 OUT이 있으면 아무것도 안 함(두 번 실행해도 새로 만드는 것 0건).
  *   단위가 대상이 아니게 되면(특이사항 취소·유형 변경·확정 → 요청) 그 OUT을 취소한다. 같은 단위에 살아 있는 자동 OUT이
  *   둘 이상이면 하나만 남기고 취소한다. 연결된 특이사항을 찾을 수 없으면(행이 없음) 취소한다.
+ *   특이사항 행의 학생·기간을 고쳐 썼으면 그 OUT을 취소하고 새로 만든다(잘못된 학생에게 OUT이 남지 않게).
+ *   대표 행이 바뀌면(묶음의 첫날 취소, 날짜·블록 수정) toUpdate로 source_exception_id·occurred_at·memo를 고친다
+ *   (날짜가 바뀌고 그날 근무교사를 알면 detected_by도). 날짜가 'yyyy-MM-dd'가 아닌 행은 대상이 아니다.
  * - 교사가 직접 입력한 OUT(source가 'F1자동'이 아님)은 건드리지 않는다.
- * ASSUMPTION: 관리자가 직접 취소한 자동 OUT(cancel_reason이 '[자동] '으로 시작하지 않음)이 있는 단위는 다시 만들지 않는다
- *   (관리자의 판단을 맞추기 함수가 되돌리지 않게). 자동으로 취소된 뒤 단위가 다시 대상이 되면 새로 만든다.
+ * ASSUMPTION: 관리자가 직접 취소한 자동 OUT(cancel_reason이 '[자동] '으로 시작하지 않음)이 가리키던 특이사항 행, 또는
+ *   그 행과 같은 묶음(group_id)의 행이 들어 있는 단위는 다시 만들지 않는다(per를 바꿔도 같음 — 관리자의 판단을 되돌리지 않게).
+ *   자동으로 취소된 뒤 단위가 다시 대상이 되면 새로 만든다. autoTypes의 빈 항목은 무시한다.
  */
 function reconcileAutoOuts_(exceptions, violations, opts) {
   opts = opts || {};
-  var autoTypes = (opts.autoTypes || ['미인정지각', '미인정조퇴', '미인정결석']).map(outTypeBase_);
+  var autoTypes = (opts.autoTypes || ['미인정지각', '미인정조퇴', '미인정결석']).map(outTypeBase_)
+    .filter(function (t) { return t !== ''; });
   var per = opts.per === 'row' ? 'row' : 'group';
-  var duty = opts.dutyByDate || {};
   var prefix = outAutoCancelPrefix_();
 
   // 1) 단위 만들기: unitKey → {rows, targets}
@@ -70,7 +75,9 @@ function reconcileAutoOuts_(exceptions, violations, opts) {
     var u = units[key] = units[key] || { key: key, rows: [], targets: [] };
     u.rows.push(e);
     unitOfException[id] = key;
-    if (outStr_(e.status) === '확정' && autoTypes.indexOf(outTypeBase_(e.type)) >= 0) u.targets.push(e);
+    // 날짜가 형식에 맞지 않는 행은 대상에서 뺀다(출석부에도 찍히지 않는 행, AttendanceRules와 같게)
+    if (outStr_(e.status) === '확정' && autoTypes.indexOf(outTypeBase_(e.type)) >= 0 &&
+        /^\d{4}-\d{2}-\d{2}$/.test(outStr_(e.date))) u.targets.push(e);
   });
   Object.keys(units).forEach(function (k) {
     units[k].targets.sort(function (a, b) {
@@ -79,50 +86,85 @@ function reconcileAutoOuts_(exceptions, violations, opts) {
     });
   });
 
+  // 관리자가 직접 취소한 자동 OUT이 가리키던 특이사항 행과 그 묶음(per를 바꿔도 같은 묶음은 다시 만들지 않게)
+  var exById = {};
+  (exceptions || []).forEach(function (e) { if (e && outStr_(e.id)) exById[outStr_(e.id)] = e; });
+  var manualIds = {}, manualGroups = {};
+  (violations || []).forEach(function (v) {
+    if (!v || !outIsAuto_(v) || outIsLive_(v) || outStr_(v.cancel_reason).indexOf(prefix) === 0) return;
+    var sidEx = outStr_(v.source_exception_id);
+    manualIds[sidEx] = true;
+    var ex = exById[sidEx];
+    if (ex && outStr_(ex.group_id)) manualGroups[outStr_(ex.student_id) + '|' + outStr_(ex.group_id)] = true;
+  });
+  var isManualCancelled = function (u) {
+    return u.rows.some(function (e) {
+      return manualIds[outStr_(e.id)] || (outStr_(e.group_id) && manualGroups[outStr_(e.student_id) + '|' + outStr_(e.group_id)]);
+    });
+  };
+
   // 2) 이미 있는 자동 OUT을 단위에 연결
-  var live = {}, manualCancelled = {}, toCancel = [];
+  var live = {}, toCancel = [], toUpdate = [];
   (violations || []).forEach(function (v) {
     if (!v || !outIsAuto_(v)) return;
     var vid = outStr_(v.id);
     var key = unitOfException[outStr_(v.source_exception_id)];
-    if (!outIsLive_(v)) {
-      if (key && outStr_(v.cancel_reason).indexOf(prefix) !== 0) manualCancelled[key] = true;
-      return;
-    }
+    if (!outIsLive_(v)) return;
     if (!key) { toCancel.push({ violationId: vid, reason: prefix + '연결된 특이사항이 없습니다' }); return; }
     var u = units[key];
     if (!u.targets.length) {
       toCancel.push({ violationId: vid, reason: prefix + outWhyNotTarget_(u.rows, autoTypes) });
       return;
     }
+    var rep = u.targets[0];
+    if (outStr_(v.student_id) !== outStr_(rep.student_id) || outStr_(v.term_id) !== outStr_(rep.term_id)) {
+      // 특이사항 행의 학생·기간을 고쳐 쓴 경우: 잘못된 학생의 OUT을 취소하고 새로 만든다
+      toCancel.push({ violationId: vid, reason: prefix + '특이사항의 학생 또는 기간이 바뀌었습니다' });
+      return;
+    }
     if (live[key]) { toCancel.push({ violationId: vid, reason: prefix + '같은 특이사항의 자동 OUT이 이미 있습니다(중복)' }); return; }
     live[key] = vid;
+    // 대표 행이 바뀌었거나(대표가 취소됨·날짜·블록 수정) 문구가 달라졌으면 고칠 것을 알려 준다
+    var want = outDraft_(u, opts);
+    var patch = {};
+    ['source_exception_id', 'occurred_at', 'memo'].forEach(function (f) {
+      if (outStr_(v[f]) !== want[f]) patch[f] = want[f];
+    });
+    if (patch.occurred_at && outStr_(v.occurred_at).slice(0, 10) !== want.occurred_at.slice(0, 10) && want.detected_by) {
+      patch.detected_by = want.detected_by;   // 날짜가 바뀌면 그날 근무교사로(알 때만)
+    }
+    if (Object.keys(patch).length) toUpdate.push({ violationId: vid, patch: patch });
   });
 
   // 3) 대상인데 살아 있는 OUT이 없는 단위 → 만들기
   var toCreate = [];
   Object.keys(units).sort().forEach(function (k) {
     var u = units[k];
-    if (!u.targets.length || live[k] || manualCancelled[k]) return;
-    var e = u.targets[0];
-    var date = outStr_(e.date);
-    var d = duty[date];
-    toCreate.push({
-      term_id: outStr_(e.term_id),
-      student_id: outStr_(e.student_id),
-      occurred_at: date + 'T' + outFirstStart_(e.blocks) + ':00',
-      rule_id: outStr_(opts.ruleId),
-      rule_name: outStr_(opts.ruleName) || '무단 지각·결석·이탈',
-      memo: '사전 특이사항 자동: ' + outTypeBase_(e.type) + (u.targets.length > 1 ? ' 외 ' + (u.targets.length - 1) + '일' : ''),
-      detected_by: Array.isArray(d) ? d.map(outStr_).filter(Boolean).join(',') : outStr_(d),
-      entered_by: outStr_(e.confirmed_by) || outStr_(e.requested_by),
-      status: '유효',
-      source: 'F1자동',
-      source_exception_id: outStr_(e.id),
-      cancel_reason: ''
-    });
+    if (!u.targets.length || live[k] || isManualCancelled(u)) return;
+    toCreate.push(outDraft_(u, opts));
   });
-  return { toCreate: toCreate, toCancel: toCancel };
+  return { toCreate: toCreate, toCancel: toCancel, toUpdate: toUpdate };
+}
+
+/** 단위의 대표 행으로 만든 OUT 초안. */
+function outDraft_(u, opts) {
+  var e = u.targets[0];
+  var date = outStr_(e.date);
+  var d = (opts.dutyByDate || {})[date];
+  return {
+    term_id: outStr_(e.term_id),
+    student_id: outStr_(e.student_id),
+    occurred_at: date + 'T' + outFirstStart_(e.blocks) + ':00',
+    rule_id: outStr_(opts.ruleId),
+    rule_name: outStr_(opts.ruleName) || '무단 지각·결석·이탈',
+    memo: '사전 특이사항 자동: ' + outTypeBase_(e.type) + (u.targets.length > 1 ? ' 외 ' + (u.targets.length - 1) + '일' : ''),
+    detected_by: Array.isArray(d) ? d.map(outStr_).filter(Boolean).join(',') : outStr_(d),
+    entered_by: outStr_(e.confirmed_by) || outStr_(e.requested_by),
+    status: '유효',
+    source: 'F1자동',
+    source_exception_id: outStr_(e.id),
+    cancel_reason: ''
+  };
 }
 
 /** 단위가 왜 대상이 아닌지(취소 사유 문구). */

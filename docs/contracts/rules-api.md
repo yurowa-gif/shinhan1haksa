@@ -79,7 +79,7 @@ function diffRoster_(records, existing, termId, ymd)
 // src/rules/OutRules.gs
 function reconcileAutoOuts_(exceptions, violations, opts)
         // opts = {autoTypes, ruleName:'무단 지각·결석·이탈', ruleId(R5 추가), per:'group'|'row', dutyByDate:{}}
-        // → {toCreate, toCancel:[{violationId, reason}]}
+        // → {toCreate, toCancel:[{violationId, reason}], toUpdate:[{violationId, patch}](R5 추가)}
 function outLevel_(violations, studentId, termId)   // {count, level:0|1|2, label:''|'1OUT'|'퇴실 대상'}
 
 // src/rules/MealRules.gs
@@ -161,6 +161,9 @@ function mealChangeKind_(item, fromValue, toValue)
   - 만들 초안: `source:'F1자동'`, `status:'유효'`, `source_exception_id` = 단위 안 대상 행 중 날짜가 가장 이른 행, `occurred_at` = 그 날짜 + 첫 블록 시작(`ALL`이면 `00:00`) + `:00`, `entered_by` = 확정자(없으면 요청자), `detected_by` = `dutyByDate[날짜]`(배열이면 쉼표로 이음, 없으면 빈칸 — F3 전에는 빈칸), `memo` = `'사전 특이사항 자동: 유형'`(묶음이 여러 날이면 `' 외 N일'`). id·공통 열은 부르는 쪽이 붙인다.
   - 이미 있는 자동 OUT은 `source_exception_id`가 속한 단위에 연결된다(묶음의 대표가 아닌 행 id여도). 대상이고 살아 있는 OUT이 있으면 아무것도 안 함 → **두 번 실행해도 0건**.
   - 취소(`toCancel`, 사유는 `'[자동] '`으로 시작): 단위가 대상이 아니게 됨(특이사항 취소·유형 변경·요청으로 돌아감), 연결된 특이사항 행이 없음, 같은 단위의 두 번째 살아 있는 자동 OUT(중복). C5/F4는 취소할 때 `cancel_reason`에 이 사유를 그대로 쓰고 audit_log에 남긴다.
+  - 특이사항 행의 학생·기간을 고쳐 썼으면 그 OUT을 취소하고(`'[자동] 특이사항의 학생 또는 기간이 바뀌었습니다'`) 바른 학생에게 새로 만든다.
+  - `toUpdate`: 살아 있는 자동 OUT의 대표 행이 바뀌면(묶음의 첫날 취소, 날짜·블록 수정) `source_exception_id`·`occurred_at`·`memo`를 고친다. 날짜가 바뀌고 그날 근무교사를 알면 `detected_by`도. 부르는 쪽은 `updateRecord_`로 저장한다(audit_log에 전후 값).
+  - 날짜가 `yyyy-MM-dd`가 아닌 행은 대상이 아니다. `autoTypes`의 빈 항목(설정 끝 쉼표)은 무시한다.
   - 교사가 직접 입력한 OUT(`source`가 `F1자동`이 아님)은 건드리지 않는다.
-  - ASSUMPTION: 관리자가 직접 취소한 자동 OUT(`cancel_reason`이 `'[자동] '`으로 시작하지 않음)이 있는 단위는 다시 만들지 않는다. 자동으로 취소된 뒤 다시 대상이 되면 새로 만든다.
+  - ASSUMPTION: 관리자가 직접 취소한 자동 OUT(`cancel_reason`이 `'[자동] '`으로 시작하지 않음)이 가리키던 특이사항 행, 또는 그 행과 같은 묶음의 행이 들어 있는 단위는 다시 만들지 않는다(`per`를 바꿔도 같음). 자동으로 취소된 뒤 다시 대상이 되면 새로 만든다.
 - `outLevel_`: 같은 학생·같은 `term_id`(학기마다 초기화)에서 status 빈칸·`유효`인 OUT 수(직접·자동 모두). 2개 이상이면 `level:2`, `'퇴실 대상'`.
