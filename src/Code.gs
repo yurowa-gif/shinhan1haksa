@@ -65,7 +65,8 @@ function doGet(e) {
  * view: 화면을 열 수 있는 역할을 정하는 permissions_ 키
  */
 var SCREENS = {
-  terms: { file: 'ui/screen_terms', title: '운영 기간', view: 'term.view' }
+  terms: { file: 'ui/screen_terms', title: '운영 기간', view: 'term.view' },
+  roster: { file: 'ui/screen_roster', title: '명단 올리기', view: 'roster.edit' }
 };
 
 /** 순수 판정: 이 역할들이 이 화면을 열 수 있는가 → {ok, screen} 또는 {ok:false, why} */

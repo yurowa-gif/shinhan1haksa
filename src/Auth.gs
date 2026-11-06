@@ -25,7 +25,9 @@ function permissions_() {
     'admin.users.view': { roles: ['admin'] },
     // 운영 기간: 교사 계정은 보기, 추가·수정은 관리자만
     'term.view': { roles: ['admin', 'attendance', 'hall_teacher', 'duty_manager', 'homeroom'] },
-    'term.edit': { roles: ['admin'] }
+    'term.edit': { roles: ['admin'] },
+    // 명단 업로드: 관리자만
+    'roster.edit': { roles: ['admin'] }
   };
 }
 
