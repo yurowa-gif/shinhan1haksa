@@ -3,20 +3,37 @@
  *
  *   const { createGasEnv } = require('../helpers/gas-fakes');
  *   const env = createGasEnv({ owner: 'owner@example.com', now: '2027-03-02T17:00:00' });
- *   env.asOwner(() => env.ctx.setup());                 // 편집기에서 소유자가 실행한 것처럼
- *   env.seedFake();                                     // setup + seedFakeData (+ 선택: seedFakeStage1)
- *   env.as('fake.teacher1@example.com', () => env.ctx.getHomeData('hall_teacher'));   // 웹앱 접속자로 한 번 실행
- *   env.rows('audit_log')                               // 시트 행을 객체로(Db.gs readAll_과 같은 모양, _row 없음)
+ *   const acc = env.seedFake();                          // setup() + seedFakeData() (+ {stage1:true}면 seedFakeStage1())
  *
- * - src/**\/*.gs 를 vm 하나에 올린다(Apps Script처럼 전역 공간 하나). 서비스는 아래 가짜만 있다.
- * - env.as / env.asOwner 한 번 = 서버 실행 한 번. 실행마다 이름이 '_'로 시작하는 최상위 var(_dbMemo, _authMemo,
- *   _lockDepth …)를 처음 값으로 되돌린다(Apps Script는 google.script.run 호출마다 전역을 새로 만든다).
- * - 시계: 인자 없는 new Date()·Date.now()는 env.now(KST 'yyyy-MM-ddTHH:mm:ss')를 쓴다. env.setNow / env.advance(분)로 바꾼다.
- *   CacheService의 유효 시간도 이 시계로 계산한다.
- * - Utilities.formatDate는 'Asia/Seoul'(+09:00)과 'UTC'만 받는다. 실행 시간대(TZ)와 무관하다.
- * - Utilities.getUuid는 정해진 순서의 가짜 UUID(실행마다 같은 결과).
- * - 시트 값은 넣은 그대로 저장한다(자동 형 변환 없음). env.sheetValues(…)로 원래 2차원 배열도 볼 수 있다.
- * - 흉내 내지 않는 서비스(DriveApp, UrlFetchApp, ScriptApp.getOAuthToken 등)를 부르면 '[gas-fakes] …' 오류가 난다.
+ *   // 공개 함수 권한 테스트(CODING 공통 완료 기준: 허용 1건 이상 + 거부 1건 이상)
+ *   env.expectAllowed('fake.teacher1@example.com', 'getHomeData', 'hall_teacher');
+ *   env.expectDenied('test.parent@example.com', 'student.view', 'getStudentSummary', otherStudentId);
+ *
+ *   env.call(email, '공개함수', ...인자)   // 화면의 google.script.run과 같은 경계(인자·반환값 JSON, Date·함수 금지, _ 함수 금지)
+ *   env.as(email, (c) => c.내부함수_())   // 경계 없이 한 번 실행(내부 함수 확인용). c = 이번 실행의 전역
+ *   env.asOwner((c) => c.setup())        // 소유자가 편집기에서 실행
+ *   env.errorOf(email, fn)               // as()가 던진 오류(Node Error, 원래 것은 .original) 또는 null
+ *   env.rows('audit_log'), env.auditActions('denied:'), env.sheetValues('students')
+ *
+ * 시험 계정(seedFake): test.student / test.parent / test.teacher(hall_teacher) / test.homeroom(1번 학생 반 담임)
+ *   + 역할 하나씩만: test.admin / test.attendance / test.duty(duty_manager) (@example.com)
+ *   + 가짜 교사 fake.teacher1~3, 소유자 owner@example.com(admin,hall_teacher)
+ *   + 이번 기간 등록이 없는 학생 1명(acc.unenrolledStudentId) — 범위 밖 학생 거부 시험용
+ *
+ * 흉내의 규칙(실제 Apps Script와 맞춘 것)
+ * - 실행 한 번(as·asOwner·call) = 새 vm 컨텍스트. src/**\/*.gs 전체를 다시 올린다(Apps Script는 호출마다 전역을 새로 만든다).
+ *   let·const·RegExp·Map 전역도 처음 값이다. 시트·속성·캐시·시계·UUID 순번은 env에 있어 실행을 넘어 이어진다.
+ *   함수를 바꿔 끼우는 시험은 그 실행의 콜백 안에서 한다.
+ * - 시계: 인자 없는 new Date()·Date.now()는 env 시각(KST). env.setNow('yyyy-MM-ddTHH:mm:ss') / env.advance(분).
+ *   CacheService 유효 시간도 이 시계로 센다(거부 기록 10분 제한 시험 가능).
+ * - Utilities.formatDate는 'Asia/Seoul'·'UTC'만, 모르는 패턴은 오류. getUuid는 정해진 순서지만 앞 8자리가 서로 다르다.
+ * - 시트: 일반 텍스트('@') 서식이 아닌 칸에 문자열을 쓰면 실제 시트처럼 날짜·시각(Date)·숫자·참거짓으로 바뀐다.
+ *   Db.gs는 '@'를 먼저 걸어 문자열 그대로 남는다. 꺼낸 값은 복사본이다. 범위 밖·모양이 다른 setValues는 오류.
+ * - LockService는 늘 얻을 수 있다. env.lock.failNext = n이면 다음 n번 실패("다른 사람이 저장 중" 시험).
+ *   createGasEnv({strictLock:true}) 또는 env.strictLock = true면 락 없이 시트에 쓰는 순간 오류.
+ * - Session: env.as(email)의 접속자 = email, 실행 계정 = 소유자("나로 실행"). email ''은 접속자 이메일을 못 받은 경우(PRD 6.1).
+ * - 흉내 내지 않는 서비스(DriveApp, UrlFetchApp, Utilities.newBlob, ScriptApp.getOAuthToken 등)는 '[gas-fakes] …' 오류.
+ * - vm 안에서 만든 Date·배열은 Node 쪽과 다른 realm이다. assert.deepStrictEqual 전에 JSON 복사(plain)하거나 call()을 쓴다.
  */
 const fs = require('fs');
 const path = require('path');
@@ -55,7 +72,14 @@ function formatDate(date, tz, fmt) {
       i = j + 1;
       continue;
     }
-    const tok = ['yyyy', 'SSS', 'MM', 'dd', 'HH', 'mm', 'ss', 'E'].find((t) => fmt.startsWith(t, i));
+    if (fmt[i] === 'E') {
+      let n = 0;
+      while (fmt[i + n] === 'E') n++;
+      out += n >= 4 ? ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d.getUTCDay()] : parts.E;
+      i += n;
+      continue;
+    }
+    const tok = ['yyyy', 'SSS', 'MM', 'dd', 'HH', 'mm', 'ss'].find((t) => fmt.startsWith(t, i));
     if (tok) { out += parts[tok]; i += tok.length; continue; }
     if (/[A-Za-z]/.test(fmt[i])) throw new Error('[gas-fakes] formatDate가 모르는 패턴: ' + fmt[i] + ' in ' + fmt);
     out += fmt[i++];
@@ -69,14 +93,40 @@ function notFaked(name) {
 
 /* ───────── SpreadsheetApp ───────── */
 
-const FORMAT_NOOPS = ['setNumberFormat', 'setFontWeight', 'setFontSize', 'setFontFamily', 'setBorder',
+const FORMAT_NOOPS = ['setFontWeight', 'setFontSize', 'setFontFamily', 'setBorder',
   'setHorizontalAlignment', 'setVerticalAlignment', 'setWrap', 'setBackground', 'setFontColor', 'setNumberFormats',
   'setWraps', 'merge', 'setNote'];
+
+/**
+ * 일반 텍스트('@') 서식이 아닌 칸에 문자열을 쓰면 실제 시트처럼 바꾼다(손으로 친 것처럼 해석):
+ * 'yyyy-MM-dd' → 그날 KST 0시 Date, 'H:mm'·'HH:mm'(·':ss') → 1899-12-30 그 시각 Date, 숫자 모양 → Number,
+ * 'TRUE'/'FALSE' → boolean. '0101234' 같은 앞자리 0도 숫자가 된다(101234).
+ */
+function coerceLikeSheets(v) {
+  if (typeof v !== 'string') return v;
+  const s = v.trim();
+  let m;
+  if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s))) {
+    return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]) - KST_OFFSET_MS);
+  }
+  if ((m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(s)) && +m[1] < 24 && +m[2] < 60) {
+    return new Date(Date.UTC(1899, 11, 30, +m[1], +m[2], +(m[3] || 0)) - KST_OFFSET_MS);
+  }
+  if (/^-?\d+(\.\d+)?$/.test(s)) return Number(s);
+  if (/^(true|false)$/i.test(s)) return s.toUpperCase() === 'TRUE';
+  return v;
+}
+
+/** 실제 시트처럼 값 복사(Date는 새 객체로) */
+function copyCell(v) {
+  return v instanceof Date || Object.prototype.toString.call(v) === '[object Date]' ? new Date(v.getTime()) : v;
+}
 
 class FakeSheet {
   constructor(ss, name, id) {
     this._ss = ss; this._name = name; this._id = id;
     this._data = [];          // [row][col] 0부터
+    this._fmt = [];           // [row][col] 숫자 서식('@' = 일반 텍스트)
     this._maxRows = 1000; this._maxCols = 26;
     this._frozen = 0;
   }
@@ -100,6 +150,9 @@ class FakeSheet {
   insertRowsAfter(after, n) {
     if (after > this._maxRows) throw new Error('[gas-fakes] insertRowsAfter 범위 밖');
     this._data.splice(after, 0, ...Array.from({ length: n }, () => []));
+    // 새 행은 바로 위 행의 서식을 물려받는다(실제 시트와 같음)
+    const above = (this._fmt[after - 1] || []).slice();
+    this._fmt.splice(after, 0, ...Array.from({ length: n }, () => above.slice()));
     this._maxRows += n; return this;
   }
   insertColumnsAfter(after, n) { this._maxCols += n; return this; }
@@ -138,16 +191,30 @@ class FakeSheet {
     for (let i = 0; i < nr; i++) {
       const row = this._data[r - 1 + i] || [];
       const line = [];
-      for (let j = 0; j < nc; j++) { const v = row[c - 1 + j]; line.push(v === undefined || v === null ? '' : v); }
+      for (let j = 0; j < nc; j++) { const v = row[c - 1 + j]; line.push(v === undefined || v === null ? '' : copyCell(v)); }
       out.push(line);
     }
     return out;
   }
+  _formatAt(r, c) { return (this._fmt[r - 1] || [])[c - 1] || ''; }
+  _setFormat(r, c, nr, nc, f) {
+    for (let i = 0; i < nr; i++) {
+      const ri = r - 1 + i;
+      this._fmt[ri] = this._fmt[ri] || [];
+      for (let j = 0; j < nc; j++) this._fmt[ri][c - 1 + j] = f;
+    }
+  }
   _cellsSet(r, c, values) {
+    const env = this._ss._env;
+    if (env.strictLock && !env.lock.held) {
+      throw new Error('[gas-fakes] 락 없이 시트에 썼습니다(' + this._name + ' ' + r + '행). 쓰기는 withLock_ 안에서 합니다.');
+    }
     values.forEach((line, i) => {
       const ri = r - 1 + i;
       this._data[ri] = this._data[ri] || [];
-      line.forEach((v, j) => { this._data[ri][c - 1 + j] = v; });
+      line.forEach((v, j) => {
+        this._data[ri][c - 1 + j] = this._formatAt(r + i, c + j) === '@' ? (v instanceof Date ? copyCell(v) : v) : copyCell(coerceLikeSheets(v));
+      });
     });
     this._maxCols = Math.max(this._maxCols, c - 1 + Math.max(0, ...values.map((l) => l.length)));
   }
@@ -175,6 +242,8 @@ class FakeRange {
   clearContent() { return this.clear(); }
 }
 FORMAT_NOOPS.forEach((m) => { FakeRange.prototype[m] = function () { return this; }; });
+FakeRange.prototype.setNumberFormat = function (f) { this._sh._setFormat(this._r, this._c, this._nr, this._nc, String(f)); return this; };
+FakeRange.prototype.getNumberFormat = function () { return this._sh._formatAt(this._r, this._c); };
 
 class FakeSpreadsheet {
   constructor(env, id, title) {
@@ -218,7 +287,8 @@ function createGasEnv(opts) {
     _nowMs: kstToMs(opts.now || '2027-03-02T17:00:00'),
     _sheetSeq: 0, _uuidSeq: 0, _ssSeq: 0,
     spreadsheets: {},             // id → FakeSpreadsheet
-    scriptProps: Object.assign({}, opts.props || {}),
+    scriptProps: Object.keys(opts.props || {}).reduce((o, k) => { o[k] = String(opts.props[k]); return o; }, {}),
+    strictLock: !!opts.strictLock,   // true면 락 없이 시트에 쓰면 오류
     userProps: {},
     cache: {},                    // key → {value, expires}
     mail: [],                     // MailApp.sendEmail 기록
@@ -263,7 +333,7 @@ function createGasEnv(opts) {
     SpreadsheetApp: {
       openById: (id) => {
         const ss = env.spreadsheets[id];
-        if (!ss) throw new Error('ID가 ' + id + '인 문서가 없거나 액세스할 권한이 없습니다.');
+        if (!ss) throw new Error('[gas-fakes] 스프레드시트를 찾을 수 없습니다: ' + id);
         return ss;
       },
       create: (title) => {
@@ -295,19 +365,21 @@ function createGasEnv(opts) {
     },
     CacheService: {
       getScriptCache: () => cacheApi('script:'),
-      getUserCache: () => cacheApi('user:' + env.user.active + ':'),
+      getUserCache: () => cacheApi('user:' + (env.user.active || env.user.visitor || 'anonymous') + ':'),
       getDocumentCache: () => null
     },
     Session: {
       getActiveUser: () => ({ getEmail: () => env.user.active }),
       getEffectiveUser: () => ({ getEmail: () => env.user.effective }),
-      getTemporaryActiveUserKey: () => (env.user.active ? 'tmpkey-' + Buffer.from(env.user.active).toString('hex').slice(0, 16) : ''),
+      getTemporaryActiveUserKey: () => 'tmpkey-' + Buffer.from(env.user.active || env.user.visitor || 'anonymous').toString('hex').slice(0, 24),
       getScriptTimeZone: () => 'Asia/Seoul'
     },
     Utilities: {
       getUuid: () => {
+        // 앞 8자리가 실행마다 달라야 한다(기간별 탭 이름 exceptions_<id 앞 8자>가 겹치지 않게)
         const n = ++env._uuidSeq;
-        return '00000000-0000-4000-8000-' + pad(n.toString(16), 12);
+        const h = ((n * 2654435761) >>> 0).toString(16).padStart(8, '0');
+        return h + '-' + pad(n.toString(16), 4) + '-4000-8000-' + pad(n.toString(16), 12);
       },
       formatDate: (d, tz, fmt) => formatDate(d, tz, fmt),
       base64Encode: (s) => Buffer.from(typeof s === 'string' ? s : Buffer.from(s)).toString('base64'),
@@ -359,40 +431,119 @@ function createGasEnv(opts) {
     return out;
   }
 
-  const ctx = vm.createContext(Object.assign({ console: { log() {}, warn() {}, error() {}, info() {} } }, services));
-  ctx.__now = ctxTime;
-  vm.runInContext(
+  const files = opts.files || listFiles('src', ['.gs']);
+  const sources = files.map((f) => [f, fs.readFileSync(path.join(ROOT, f), 'utf8')]);
+  const clockSrc =
     '(function(){ var R = Date;' +
     ' function D(a,b,c,d,e,f,g){ if (!(this instanceof D)) return new R(__now()).toString();' +
     '   switch (arguments.length) { case 0: return new R(__now()); case 1: return new R(a); case 2: return new R(a,b);' +
     '   case 3: return new R(a,b,c); case 4: return new R(a,b,c,d); case 5: return new R(a,b,c,d,e);' +
     '   case 6: return new R(a,b,c,d,e,f); default: return new R(a,b,c,d,e,f,g); } }' +
-    ' D.prototype = R.prototype; D.UTC = R.UTC; D.parse = R.parse; D.now = function(){ return __now(); };' +
-    ' globalThis.Date = D; })();', ctx, { filename: 'gas-fakes-clock.js' });
+    ' D.prototype = R.prototype; R.prototype.constructor = D; Object.defineProperty(D, "name", { value: "Date" });' +
+    ' D.UTC = R.UTC; D.parse = R.parse; D.now = function(){ return __now(); };' +
+    ' globalThis.Date = D; })();';
 
-  const files = opts.files || listFiles('src', ['.gs']);
-  for (const f of files) vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
-
-  // 실행마다 되돌릴 전역: 이름이 '_'로 시작하는 최상위 var
-  const resettable = {};
-  for (const k of Object.keys(ctx)) {
-    if (k.charAt(0) === '_' && k !== '__now' && typeof ctx[k] !== 'function') resettable[k] = JSON.stringify(ctx[k]);
+  /**
+   * 실행 한 번 = 새 vm 컨텍스트(Apps Script는 google.script.run 호출마다 전역 전체를 새로 만든다).
+   * 시트·속성·캐시·시계·UUID 순번은 env에 있어 실행을 넘어 이어진다.
+   */
+  function makeContext() {
+    const c = vm.createContext(Object.assign({ console: { log() {}, warn() {}, error() {}, info() {} } }, services));
+    c.__now = ctxTime;
+    vm.runInContext(clockSrc, c, { filename: 'gas-fakes-clock.js' });
+    for (const [f, src] of sources) vm.runInContext(src, c, { filename: f });
+    return c;
   }
 
-  function newExecution(active, effective) {
-    Object.keys(resettable).forEach((k) => { ctx[k] = JSON.parse(resettable[k]); });
-    env.user = { active: (active || '').toLowerCase(), effective: (effective || '').toLowerCase() };
+  function newExecution(active, effective, visitor) {
+    env.user = { active: (active || '').toLowerCase(), effective: (effective || '').toLowerCase(), visitor: visitor || '' };
     env.lock.held = false;
+    env.ctx = makeContext();
+    return env.ctx;
   }
+
+  /** google.script.run 경계: 인자·반환값은 원시값·평범한 객체·배열만(Date·함수·undefined 배열 원소 금지). */
+  function assertWireSafe(v, where) {
+    const seen = new Set();
+    (function walk(x, p) {
+      if (x === null || ['string', 'number', 'boolean'].includes(typeof x)) return;
+      if (x === undefined) return;   // 객체 속성의 undefined는 빠진다(JSON과 같음)
+      const tag = Object.prototype.toString.call(x);
+      if (typeof x === 'function' || tag === '[object Date]' || tag === '[object RegExp]' || tag === '[object Map]' || tag === '[object Set]') {
+        throw new Error('[gas-fakes] google.script.run으로 보낼 수 없는 값(' + tag + '): ' + where + p);
+      }
+      if (seen.has(x)) throw new Error('[gas-fakes] 순환 참조: ' + where + p);
+      seen.add(x);
+      if (Array.isArray(x)) x.forEach((y, i) => { if (y === undefined) throw new Error('[gas-fakes] 배열 안 undefined: ' + where + p + '[' + i + ']'); walk(y, p + '[' + i + ']'); });
+      else Object.keys(x).forEach((k) => walk(x[k], p + '.' + k));
+      seen.delete(x);
+    })(v, '');
+  }
+
+  function hostError(e) {
+    if (!e || typeof e !== 'object') return new Error(String(e));
+    const h = new Error(e.message);
+    h.stack = e.stack; h.original = e;
+    return h;
+  }
+
+  env.ctx = makeContext();   // 파일을 한 번 올려 문법 오류를 먼저 드러낸다
 
   Object.assign(env, {
-    ctx,
-    /** 웹앱("나로 실행")으로 email이 접속해 서버 함수를 한 번 실행한다. 실행 계정(effective)은 소유자. */
-    as(email, fn) { newExecution(email, env.owner); try { return fn(ctx); } finally { env.lock.held = false; } },
+    /**
+     * 웹앱("나로 실행")으로 email이 접속해 한 번 실행한다(실행 계정 effective = 소유자). fn(ctx)의 ctx는 이 실행의 새 전역.
+     * 함수를 바꿔 끼우는 시험(몽키패치)은 fn 안에서 한다(다음 실행에는 남지 않는다).
+     * email ''는 접속자 이메일을 받지 못한 경우(개인 gmail 소유자 + 외부 계정, PRD 6.1)를 흉내 낸다.
+     */
+    as(email, fn) { const c = newExecution(email, env.owner, email ? '' : 'anon'); try { return fn(c); } finally { env.lock.held = false; } },
     /** 소유자가 편집기에서 실행(active = effective = 소유자). */
-    asOwner(fn) { newExecution(env.owner, env.owner); try { return fn(ctx); } finally { env.lock.held = false; } },
-    /** as()와 같지만 던진 오류를 돌려준다(없으면 null). */
-    errorOf(email, fn) { try { env.as(email, fn); return null; } catch (e) { return e; } },
+    asOwner(fn) { const c = newExecution(env.owner, env.owner); try { return fn(c); } finally { env.lock.held = false; } },
+    /** as()와 같지만 던진 오류를 이쪽(Node) Error로 돌려준다(없으면 null). 원래 오류는 .original. */
+    errorOf(email, fn) { try { env.as(email, fn); return null; } catch (e) { return hostError(e); } },
+    /**
+     * 화면이 google.script.run.fnName(...args)를 부른 것처럼: 인자·반환값을 경계 규칙으로 검사하고 JSON으로 복사한다.
+     * 공개 함수 테스트는 이것을 쓴다. 오류는 Node Error로 던진다.
+     */
+    call(email, fnName, ...args) {
+      assertWireSafe(args, fnName + '(인자)');
+      const wireArgs = JSON.parse(JSON.stringify(args));
+      let r;
+      try {
+        r = env.as(email, (c) => {
+          if (typeof c[fnName] !== 'function') throw new Error('[gas-fakes] 없는 함수: ' + fnName);
+          if (fnName.slice(-1) === '_') throw new Error('[gas-fakes] 이름이 _로 끝나는 함수는 화면에서 부를 수 없습니다: ' + fnName);
+          return c[fnName].apply(null, wireArgs);
+        });
+      } catch (e) { throw hostError(e); }
+      assertWireSafe(r, fnName + '(반환)');
+      return r === undefined ? null : JSON.parse(JSON.stringify(r));
+    },
+    /**
+     * 거부를 확인한다: 오류 문구가 정확히 '권한이 없습니다.'이고, 이번 호출로 audit_log에 그 사람의
+     * 'denied:<action>' 행이 새로 생겼다. (10분 거부 기록 제한에 걸리지 않게 거부 기록 캐시를 먼저 비운다.)
+     * 권한 검사 없이 다른 이유로 실패한 것을 거부로 잘못 세지 않게 한다. → 새로 생긴 audit 행
+     */
+    expectDenied(email, action, fnName, ...args) {
+      Object.keys(env.cache).filter((k) => k.indexOf('script:deny:') === 0).forEach((k) => delete env.cache[k]);
+      const before = env.rows('audit_log').length;
+      let err = null;
+      try { env.call(email, fnName, ...args); } catch (e) { err = e; }
+      if (!err) throw new Error('[gas-fakes] 거부되어야 하는데 허용됨: ' + email + ' ' + fnName);
+      if (err.message !== '권한이 없습니다.') throw new Error('[gas-fakes] 권한 거부가 아닌 오류: ' + err.message);
+      const added = env.rows('audit_log').slice(before).filter((r) => r.action === 'denied:' + action);
+      if (added.length !== 1 || added[0].created_by !== (email.toLowerCase() || '(이메일 없음)')) {
+        throw new Error('[gas-fakes] denied:' + action + ' 기록이 없음(새 행: ' + JSON.stringify(env.rows('audit_log').slice(before).map((r) => [r.action, r.created_by])) + ')');
+      }
+      return added[0];
+    },
+    /** 허용을 확인한다: 오류 없이 끝나고 denied 기록이 새로 생기지 않는다. → 반환값 */
+    expectAllowed(email, fnName, ...args) {
+      const before = env.rows('audit_log').length;
+      const r = env.call(email, fnName, ...args);
+      const denied = env.rows('audit_log').slice(before).filter((x) => String(x.action).indexOf('denied:') === 0);
+      if (denied.length) throw new Error('[gas-fakes] 허용됐지만 거부 기록이 생김: ' + denied.map((x) => x.action).join(','));
+      return r;
+    },
     setNow(iso) { env._nowMs = kstToMs(iso); },
     advance(minutes) { env._nowMs += minutes * 60000; },
     nowIso() { return formatDate(new Date(env._nowMs), 'Asia/Seoul', "yyyy-MM-dd'T'HH:mm:ss"); },
@@ -432,8 +583,15 @@ function createGasEnv(opts) {
       Object.keys(acc).forEach((k) => { if (acc[k]) env.scriptProps[k] = acc[k]; });
       env.asOwner((c) => c.setup());
       env.asOwner((c) => c.seedFakeData());
-      if (o.stage1 && typeof ctx.seedFakeStage1 === 'function') env.asOwner((c) => c.seedFakeStage1());
-      return acc;
+      if (o.stage1) env.asOwner((c) => { if (typeof c.seedFakeStage1 === 'function') c.seedFakeStage1(); });
+      // 역할을 하나씩만 가진 시험 계정과 이번 기간 등록이 없는 학생(범위 판정을 따로 시험하려고)
+      const solo = { admin: 'test.admin@example.com', attendance: 'test.attendance@example.com', duty_manager: 'test.duty@example.com' };
+      env.asOwner((c) => Object.keys(solo).forEach((role) => c.addUser(solo[role], '시험 ' + role, role)));
+      const unenrolled = env.asOwner((c) => c.appendRecord_('students', {
+        student_no: '39999', name: '가짜미등록', gender: '여', grade: '3', class_no: '9', number: '99', track: '',
+        email: 'fake.unenrolled@example.com', memo: '가짜 데이터(등록 없음)'
+      }, env.owner));
+      return Object.assign({}, acc, { soloAccounts: solo, unenrolledStudentId: unenrolled.id });
     }
   });
   return env;
