@@ -15,8 +15,10 @@ src/                 clasp로 올라가는 코드(rootDir)
   Schema.gs          탭·열 정의, 역할 코드, 설정 기본값
   Setup.gs           setup(), addUser() — 편집기에서 소유자만 실행
   dev/FakeData.gs    가짜 학생 30명 생성(seedFakeData)
-  ui/                화면(Index + 역할별 home_*.html, Diag, NoAccess)
-tests/run.js         순수 함수 단위 테스트 (npm test)
+  dev/FakeSeats.gs   가짜 좌석 배치(1층 146석, SA실 남 17·여 34석)
+  ui/                화면(Index + 역할별 home_*.html, Diag, NoAccess, 공통 컴포넌트 Components)
+tests/               단위 테스트(npm test가 tests/**/*.test.js를 찾아 실행)
+docs/contracts/      작업 세션 사이의 약속(규칙 함수 시그니처, 출석부 모델)
 .clasp.json          clasp create가 만드는 연결 정보(scriptId). Git에 올리지 않음
 .clasp.json.example  .clasp.json 모양 예시
 ```
@@ -223,6 +225,8 @@ clasp(코드를 Apps Script로 올려 주는 도구)는 Node.js 위에서 돌아
 ## 개발
 
 ```bash
-npm test      # 권한 판정·가짜 데이터·시트 구조 단위 테스트
-clasp push    # 코드 올리기 (/exec에 반영하려면 위 ⑨처럼 배포 관리에서 새 버전)
+npm test                  # 단위 테스트 전체를 TZ=Asia/Seoul, TZ=UTC에서 한 번씩(Windows 명령 프롬프트도 그대로)
+node tests/run.js --once  # 지금 컴퓨터의 시간대로 한 번만
+node tests/run.js rules   # 경로에 rules가 들어간 테스트 파일만
+clasp push                # 코드 올리기 (/exec에 반영하려면 위 ⑨처럼 배포 관리에서 새 버전)
 ```

@@ -13,9 +13,17 @@
 - `src/Auth.gs` `requirePermission_(action, context)` — 모든 서버 함수 첫 줄에서 호출. 이름 끝 `_` 없는 함수는 브라우저에서 누구나 부를 수 있으므로 내부 함수는 반드시 `_`로 끝낸다(`npm test`가 검사)
 - `src/Db.gs` 시트 읽기·쓰기 공통 함수, 쓰기는 반드시 `LockService`
 - `src/features/*.gs` 기능별 서버 로직(F1~F17)
+- `src/rules/*.gs` 규칙 순수 함수(날짜·일정·출석 칸·상태·명단·OUT·급식, RULES 세션). Apps Script 서비스·인자 없는 `new Date()` 금지(`npm test`가 검사)
+- `src/print/*.gs` 출석부 HTML 렌더러(DESIGN, `print…` 접두어). 순수 함수, Apps Script 서비스 금지
 - `src/ui/*.html` 화면(휴대폰 세로 우선, 한국어)
+- `src/ui/Components.html` 공통 화면 컴포넌트 `UI.*`(DESIGN). Index.html에서 Client 다음에 include
 - `src/dev/*.gs` 편집기에서만 실행하는 개발용 함수(가짜 데이터 시트 쓰기). 시트에 써야 해서 `src/` 안에 둔다
 - `tests/` 순수 함수 단위 테스트(`npm test`: 권한 판정, 가짜 데이터, 이후 급식 적용일·OUT 판정 등)
+- `tests/**/*.test.js` `npm test`가 자동으로 찾아 TZ=Asia/Seoul·UTC에서 한 번씩 실행. 도구는 `tests/helpers/`
+- `tests/public-api.json` 공개 함수(이름 끝 `_` 없음) 허용 목록과 첫 줄 권한 검사 표. 새 공개 함수는 여기에 등록
+- `docs/contracts/` 세션 간 약속: `rules-api.md`(규칙 함수 시그니처), `sheet-model.md`(출석부 모델)
+- `design/`, `docs/design/` 디자인 규칙·미리보기(DESIGN). `design/preview/out/`은 Git에 올리지 않는다
+- `data/` 자료 파일(RESEARCH, 예: 권장 이수 과목 CSV)
 
 ## 반드시 지킬 것
 1. **실제 학생·학부모 정보를 코드, 커밋, 프롬프트에 넣지 않는다.** 테스트는 가짜 학생 30명으로만 한다.
