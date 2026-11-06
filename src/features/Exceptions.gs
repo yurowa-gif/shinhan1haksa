@@ -361,3 +361,28 @@ function cancelException(termId, groupId, reason) {
     return { ok: true, count: live.length };
   });
 }
+
+/**
+ * 홈 카드용 요약(getHomeData가 부른다). 출결 담당·관리자: 확정할 요청 수와 오늘·내일 특이사항 학생 수,
+ * 학사 교사·담임: 내가 보낸 요청의 처리 상태 수. 기간·탭이 없으면 0.
+ */
+function excHomeInfo_(user) {
+  var term = getCurrentTerm_();
+  var out = { pending: 0, today: 0, tomorrow: 0, mine: { requested: 0, confirmed: 0, canceled: 0 }, canConfirm: excCanConfirm_(user) };
+  if (!term) return out;
+  var rows = excRows_(term).rows;
+  var today = today_(), tomorrow = ymdAddDays_(today, 1);
+  if (out.canConfirm) {
+    out.pending = excGroups_(rows.filter(function (r) { return r.status === '요청'; })).length;
+    var day = function (ymd) {
+      var seen = {};
+      rows.forEach(function (r) { if (r.date === ymd && EXC_LIVE.indexOf(String(r.status).trim()) >= 0) seen[r.student_id] = true; });
+      return Object.keys(seen).length;
+    };
+    out.today = day(today); out.tomorrow = day(tomorrow);
+  }
+  excGroups_(rows.filter(function (r) { return r.requested_by === user.email; })).forEach(function (g) {
+    if (g.status === '요청') out.mine.requested++; else if (g.status === '확정') out.mine.confirmed++; else out.mine.canceled++;
+  });
+  return out;
+}

@@ -43,7 +43,8 @@ function doGet(e) {
     return renderPage_('ui/screen_shell', {
       screenFile: sc.screen.file,
       screenTitle: sc.screen.title,
-      appUrl: ScriptApp.getService().getUrl()
+      appUrl: ScriptApp.getService().getUrl(),
+      screenParams: screenParams_(p)
     }, sc.screen.title);
   }
 
@@ -70,6 +71,17 @@ var SCREENS = {
   schedule: { file: 'ui/screen_schedule', title: '자습 일정·블록', view: 'schedule.view' },
   exceptions: { file: 'ui/screen_exceptions', title: '특이사항', view: 'exception.view' }
 };
+
+/**
+ * 화면 조각에 넘기는 주소 값(?tab=, ?date=). 주소창 값은 믿을 수 없으므로 허용 목록·날짜 형식만 통과시킨다.
+ * (HtmlService 화면은 iframe 안이라 실제 주소를 읽을 수 없어서 서버가 대신 넘긴다.) 결과는 JSON 문자열.
+ */
+function screenParams_(p) {
+  var out = {};
+  if (['requests', 'list', 'mine'].indexOf(String(p.tab)) >= 0) out.tab = String(p.tab);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(p.date || ''))) out.date = String(p.date);
+  return JSON.stringify(out).replace(/</g, '\\u003c');
+}
 
 /** 순수 판정: 이 역할들이 이 화면을 열 수 있는가 → {ok, screen} 또는 {ok:false, why} */
 function screenResolve_(page, roles) {
@@ -135,6 +147,7 @@ function getHomeData(role) {
 
     case 'attendance':
       base.studentCount = termStudentIds_(term).length;
+      base.exc = excHomeInfo_(user);
       return base;
 
     case 'duty_manager':
@@ -146,6 +159,7 @@ function getHomeData(role) {
         return term && en.term_id === term.id && normalizeEmail_(en.teacher_email) === user.email;
       }).map(function (en) { return en.student_id; });
       base.students = studentsByIds_(mine).map(listItem_);
+      base.exc = excHomeInfo_(user);
       return base;
 
     case 'homeroom':
@@ -154,6 +168,7 @@ function getHomeData(role) {
       base.students = readAll_('students').filter(function (s) {
         return ids.indexOf(s.id) >= 0 && sameClass_(user.homeroomClass, s.grade, s.class_no);
       }).sort(byClassNumber_).map(listItem_);
+      base.exc = excHomeInfo_(user);
       return base;
 
     case 'student':

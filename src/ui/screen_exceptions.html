@@ -1,1 +1,311 @@
-<script>function renderScreen(root){}</script>
+<style>
+  .exc-types { display: flex; flex-wrap: wrap; gap: 8px; }
+  .exc-item { border-bottom: 1px solid var(--line); padding: 12px 0; }
+  .exc-item:last-child { border-bottom: 0; }
+  .exc-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .exc-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .exc-time { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+  .exc-time input { width: 8em; min-height: var(--tap); padding: 8px 12px; font: inherit; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); color: var(--text); }
+  .exc-cancelled { text-decoration: line-through; color: var(--muted); }
+</style>
+<script>
+  /**
+   * 사전 특이사항 화면(C5, F1): 입력(또는 요청) · 요청 처리 · 내 요청 · 목록. docs/design/screens.md 2절.
+   * 출결 담당·관리자는 저장하면 바로 확정, 담임·학사 교사는 요청만 남긴다(서버가 판정).
+   */
+  function renderScreen(root) {
+    var U = UI.util;
+    var state = { ctx: null, tab: 'input', student: null, mode: 'day', range: null, from: '', to: '', blocks: null, retTime: '', type: '', reason: '',
+      preview: null, last: '', dayInfo: null, listMode: 'today', listStudent: null };
+    var tabsBox = el('div', { class: 'card' });
+    var body = el('div');
+    root.appendChild(tabsBox); root.appendChild(body);
+    var bar = null, timer = null, busy = false;
+
+    function removeBar() {
+      if (bar) { bar.remove(); bar = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); }
+    }
+    function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
+    function ymdKo(d) { return U.formatDateKo(d, false); }
+    function datesText(g) {
+      var a = g.dates[0], b = g.dates[g.dates.length - 1];
+      return a === b ? ymdKo(a) : U.formatRangeKo(a, b);
+    }
+
+    call('getExceptionContext', window.SCREEN_DATE || '').then(function (ctx) {
+      state.ctx = ctx; state.from = state.to = ctx.today;
+      var want = window.SCREEN_TAB;
+      state.tab = (want === 'requests' && ctx.canConfirm) || (want === 'list') ? want : 'input';
+      drawTabs(); drawTab();
+    }).catch(function (err) { clear(tabsBox); showError(tabsBox, err); });
+
+    /* ───────── 탭 ───────── */
+    function drawTabs() {
+      clear(tabsBox);
+      var c = state.ctx;
+      tabsBox.appendChild(el('h2', { text: c.term.name + ' · 특이사항' }));
+      var opts = c.canConfirm
+        ? [{ value: 'input', label: '입력' }, { value: 'requests', label: '요청 처리' }, { value: 'list', label: '목록' }]
+        : [{ value: 'input', label: '요청 보내기' }, { value: 'mine', label: '내 요청' }, { value: 'list', label: '목록' }];
+      tabsBox.appendChild(UI.segmented({ label: '화면', value: state.tab, options: opts, onchange: function (v) { state.tab = v; drawTab(); } }));
+    }
+    function drawTab() {
+      clear(body); removeBar();
+      if (state.tab === 'input') drawInput();
+      else if (state.tab === 'requests') drawRequests('pending', '처리할 요청이 없습니다.');
+      else if (state.tab === 'mine') drawRequests('mine', '아직 보낸 요청이 없습니다. "요청 보내기"에서 보낼 수 있습니다.');
+      else drawList();
+    }
+
+    /* ───────── 입력 ───────── */
+    function drawInput() {
+      var c = state.ctx, confirmMode = c.mode === 'confirm';
+      // UI.rangeField는 만들어지는 중에 onchange를 부르므로, 그때 쓰는 값들을 먼저 선언해 둔다
+      var saveBtn = null, previewBox = el('div'), why = el('div', { class: 'muted' });
+      if (!confirmMode) body.appendChild(el('div', { class: 'notice info', text: '출결 담당 선생님이 확인하면 출석부에 반영됩니다. ' + (c.students.length ? '' : '요청할 수 있는 학생이 없습니다.') }));
+      if (state.last) body.appendChild(el('div', { class: 'notice ok', text: state.last }));
+
+      var picker = UI.studentPicker({ students: c.students, label: '학생', placeholder: '이름·초성(ㄱㄱㅇ)·학번', onpick: function (s) { state.student = s; schedule(); } });
+      if (state.student && picker.setValue) { /* 선택 유지는 하지 않는다: 저장하면 비운다 */ }
+      body.appendChild(el('div', { class: 'card' }, [el('h2', { text: '학생' }), picker]));
+
+      // 언제
+      var whenCard = el('div', { class: 'card' }, [el('h2', { text: '언제' })]);
+      var seg = UI.segmented({ label: '기간', value: state.mode, options: [{ value: 'day', label: '하루' }, { value: 'range', label: '기간' }],
+        onchange: function (v) { state.mode = v; if (v === 'day') state.to = state.from; drawWhen(); schedule(); } });
+      var whenBody = el('div');
+      whenCard.appendChild(seg); whenCard.appendChild(whenBody);
+      body.appendChild(whenCard);
+      var shortcuts = [{ label: '오늘', value: c.today }, { label: '내일', value: c.tomorrow }];
+      function drawWhen() {
+        clear(whenBody);
+        if (state.mode === 'day') {
+          whenBody.appendChild(UI.dateField({ label: '날짜', value: state.from, shortcuts: shortcuts, name: 'from', onchange: function (v) { state.from = state.to = v; loadBlocks(); schedule(); } }));
+        } else {
+          whenBody.appendChild(UI.rangeField({ from: state.from, to: state.to, shortcuts: shortcuts, onchange: function (v) {
+            var firstChange = v.from !== state.from; state.from = v.from; state.to = v.to;
+            if (firstChange) loadBlocks();
+            schedule();
+          } }));
+        }
+      }
+      drawWhen();
+
+      // 어느 시간
+      var timeCard = el('div', { class: 'card' }, [el('h2', { text: '어느 시간' })]);
+      var chipsBox = el('div'), dayNote = el('div');
+      var ret = el('input', { type: 'text', inputmode: 'numeric', placeholder: '15:00', maxlength: '5', 'aria-label': '귀가 시각' });
+      ret.value = state.retTime;
+      ret.addEventListener('input', function () { state.retTime = ret.value.trim(); schedule(); });
+      timeCard.appendChild(dayNote); timeCard.appendChild(chipsBox);
+      timeCard.appendChild(el('div', { class: 'exc-time' }, [ret, el('span', { text: '부터 귀가' })]));
+      timeCard.appendChild(el('div', { class: 'muted', text: '시각을 적으면 그 시각부터 자정까지(15:00-24:00)로 저장되고, 위 시간대 선택은 무시됩니다.' }));
+      body.appendChild(timeCard);
+      function loadBlocks() {
+        if (!state.from) return;
+        call('getDayBlocks', state.from).then(function (d) {
+          state.dayInfo = d;
+          clear(dayNote);
+          if (!d.operating) dayNote.appendChild(el('div', { class: 'notice info', text: ymdKo(d.date) + '은(는) 운영하지 않는 날입니다. 그래도 저장할 수 있습니다.' }));
+          clear(chipsBox);
+          state.blocks = { all: true, spec: 'ALL', valid: true };
+          chipsBox.appendChild(UI.blockChips({ blocks: d.blocks, value: { all: true }, onchange: function (v) { state.blocks = v; schedule(); } }));
+          schedule();
+        }).catch(fail);
+      }
+      loadBlocks();
+
+      // 유형
+      var typeCard = el('div', { class: 'card' }, [el('h2', { text: '유형' })]);
+      var typeBox = el('div', { class: 'exc-types', role: 'group', 'aria-label': '유형' });
+      var typeNote = el('div', { style: 'margin-top:8px' });
+      typeCard.appendChild(typeBox); typeCard.appendChild(typeNote);
+      body.appendChild(typeCard);
+      body.appendChild(previewBox);   // 겹침 경고는 선택 바로 아래에서 보이게
+      function drawTypes() {
+        clear(typeBox); clear(typeNote);
+        c.types.forEach(function (t) {
+          var on = state.type === t.name;
+          typeBox.appendChild(el('button', { type: 'button', class: on ? 'chip on' : 'chip', 'aria-pressed': on ? 'true' : 'false', text: t.short, title: t.name,
+            onclick: function () { state.type = on ? '' : t.name; drawTypes(); schedule(); } }));
+        });
+        var sel = c.types.filter(function (t) { return t.name === state.type; })[0];
+        if (sel) typeNote.appendChild(el('div', { class: 'muted', text: '선택: ' + sel.name }));
+        if (sel && sel.auto) typeNote.appendChild(el('div', { class: 'notice warn', text: '미인정 유형입니다. 1OUT 예정으로 표시됩니다.' }));
+      }
+      drawTypes();
+
+      // 메모
+      var memo = el('input', { type: 'text', maxlength: '200', placeholder: '메모(선택)' });
+      memo.value = state.reason;
+      memo.addEventListener('input', function () { state.reason = memo.value; schedule(); });
+      body.appendChild(el('div', { class: 'card' }, [UI.field('메모(선택)', memo, { name: 'reason', hint: '건강 정보는 길게 적지 않아도 됩니다. 출석부 칸에는 유형 약어만 나가고 메모는 나가지 않습니다.' })]));
+
+      body.appendChild(why);
+
+      function inputValue() {
+        var spec = 'ALL';
+        if (/^\d{1,2}:\d{2}$/.test(state.retTime)) spec = state.retTime + '-24:00';
+        else if (state.blocks && state.blocks.valid) spec = state.blocks.spec;
+        return { studentId: state.student ? state.student.id : '', from: state.from, to: state.mode === 'day' ? state.from : state.to, blocks: spec,
+          type: state.type, reason: state.reason };
+      }
+      function canSave() {
+        if (!state.student || !state.type) return false;
+        if (state.retTime && !/^\d{1,2}:\d{2}$/.test(state.retTime)) return false;
+        if (!state.retTime && state.blocks && !state.blocks.valid) return false;
+        return !(state.preview && !state.preview.ok);
+      }
+      function refresh() {
+        var ok = canSave();
+        if (saveBtn) saveBtn.disabled = busy || !ok;
+        why.textContent = ok ? '' : (!state.student ? 'ⓘ 먼저 학생을 골라 주세요.' : (!state.type ? 'ⓘ 유형을 골라 주세요.' : (state.preview && !state.preview.ok ? 'ⓘ 위의 빨간 안내를 고쳐 주세요.' : 'ⓘ 시간을 하나 이상 골라 주세요(또는 귀가 시각을 24시간제 15:00처럼 적어 주세요).')));
+      }
+      function schedule() {
+        state.preview = null; refresh();
+        clearTimeout(timer);
+        timer = setTimeout(runPreview, 300);
+      }
+      function runPreview() {
+        clear(previewBox);
+        if (!state.student || !state.type) return;
+        var snap = JSON.stringify(inputValue());
+        call('previewException', inputValue()).then(function (p) {
+          if (JSON.stringify(inputValue()) !== snap) return;
+          state.preview = p; clear(previewBox);
+          if (!p.ok) {
+            p.errors.forEach(function (e) { previewBox.appendChild(el('div', { class: 'error', text: e.message })); });
+          } else {
+            if (state.mode === 'range') previewBox.appendChild(el('div', { class: 'notice info', text: p.dayCount + '일 · ' + U.formatRangeKo(state.from, state.to) + ' — 날짜마다 한 건씩 저장됩니다.' }));
+            p.warnings.forEach(function (w) { previewBox.appendChild(el('div', { class: 'notice warn', text: w })); });
+          }
+          refresh();
+        }).catch(fail);
+      }
+
+      bar = UI.actionBar([
+        { text: confirmMode ? '저장' : '요청 보내기', kind: 'primary', disabled: true, onclick: onSave },
+        { text: '비우기', kind: 'secondary', onclick: function () { state.student = null; state.type = ''; state.reason = ''; state.retTime = ''; state.preview = null; state.last = ''; drawTab(); } }
+      ], { mount: true });
+      saveBtn = bar.querySelectorAll('button')[0];
+      refresh();
+
+      function onSave() {
+        if (!canSave()) return;
+        busy = true; refresh();
+        var v = inputValue();
+        call('saveException', v).then(function (r) {
+          busy = false;
+          if (!r.ok) { clear(previewBox); r.errors.forEach(function (e) { previewBox.appendChild(el('div', { class: 'error', text: e.message })); }); state.preview = { ok: false }; refresh(); return; }
+          var when = r.from === r.to ? ymdKo(r.from) : U.formatRangeKo(r.from, r.to);
+          state.last = (r.status === '확정' ? '저장했습니다: ' : '요청을 보냈습니다: ') + r.display + ' · ' + r.type + ' · ' + when + (r.autoOut ? ' · 1OUT 예정' : '');
+          UI.toast(r.status === '확정' ? '저장했습니다.' : '요청을 보냈습니다.', { kind: 'ok' });
+          if (r.warnings && r.warnings.length) UI.toast(r.warnings[0], { kind: 'warn', ms: 6000 });
+          state.student = null; state.type = ''; state.reason = ''; state.retTime = ''; state.preview = null;
+          drawTab();
+        }).catch(function (err) { busy = false; refresh(); fail(err); });
+      }
+    }
+
+    /* ───────── 묶음 카드(요청 처리·내 요청·목록 공통) ───────── */
+    function pillFor(g) {
+      return UI.statusPill(g.status === '확정' ? 'confirmed' : (g.status === '요청' ? 'requested' : 'canceled'));
+    }
+    function groupCard(g, termId, reload, opts) {
+      opts = opts || {};
+      var cancelled = g.status === '취소';
+      var item = el('div', { class: 'exc-item' });
+      item.appendChild(el('div', { class: 'exc-line' }, [
+        el('b', { class: cancelled ? 'exc-cancelled' : '', text: g.display + ' · ' + g.short }),
+        el('span', {}, [pillFor(g), g.auto && !cancelled ? ' ' : null, g.auto && !cancelled ? UI.statusPill('out1', '1OUT 예정') : null])
+      ]));
+      item.appendChild(el('div', { class: cancelled ? 'muted exc-cancelled' : 'muted', text: datesText(g) + ' · ' + g.blocksText + (g.requestedByName ? ' · ' + g.requestedByName : '') }));
+      if (cancelled && g.cancelReason) item.appendChild(el('div', { class: 'muted', text: '취소 사유: ' + g.cancelReason }));
+      if (g.reason) {
+        var memo = el('div', { class: 'muted', text: '메모: ' + g.reason, style: 'display:none' });
+        var toggle = el('button', { type: 'button', class: 'btn secondary', text: '메모 보기', onclick: function () {
+          var open = memo.style.display === 'none'; memo.style.display = open ? 'block' : 'none'; toggle.textContent = open ? '메모 접기' : '메모 보기';
+        } });
+        item.appendChild(el('div', { class: 'exc-actions' }, [toggle]));
+        item.appendChild(memo);
+      }
+      var acts = el('div', { class: 'exc-actions' });
+      if (g.canCancel) acts.appendChild(el('button', { type: 'button', class: 'btn secondary', text: '취소 처리', onclick: function () {
+        UI.confirmWithReason({ title: '취소 처리할까요?', message: g.display + ' · ' + g.type + ' · ' + datesText(g) + (g.status === '확정' ? ' — 출석부에서 빠집니다.' : ''),
+          reasonLabel: '취소 사유', confirmText: '취소 처리', minLength: 2, danger: true,
+          onconfirm: function (reason) { call('cancelException', termId, g.groupId, reason).then(function (r) {
+            if (!r.ok) { UI.toast(r.error, { kind: 'warn', ms: 5000 }); } else { UI.toast('취소 처리했습니다.', { kind: 'ok' }); }
+            reload();
+          }).catch(fail); } });
+      } }));
+      if (g.canConfirm) acts.appendChild(el('button', { type: 'button', class: 'btn', text: '확정', onclick: function () {
+        call('confirmException', termId, g.groupId).then(function (r) {
+          if (!r.ok) UI.toast(r.error, { kind: 'warn', ms: 5000 }); else UI.toast('확정했습니다.', { kind: 'ok' });
+          reload();
+        }).catch(fail);
+      } }));
+      if (acts.firstChild) item.appendChild(acts);
+      return item;
+    }
+
+    function drawRequests(scope, emptyText) {
+      var card = el('div', { class: 'card' }, [el('div', { class: 'loading', text: '불러오는 중…' })]);
+      body.appendChild(card);
+      function load() {
+        call('listExceptions', { scope: scope }).then(function (r) {
+          clear(card);
+          card.appendChild(el('h2', { text: scope === 'pending' ? '처리할 요청 ' + r.groups.length + '건' : '내 요청·입력 ' + r.groups.length + '건' }));
+          if (!r.groups.length) { card.appendChild(UI.emptyState(emptyText)); return; }
+          r.groups.forEach(function (g) { card.appendChild(groupCard(g, r.term.id, load)); });
+        }).catch(function (err) { clear(card); showError(card, err); });
+      }
+      load();
+    }
+
+    /* ───────── 목록 ───────── */
+    function weekOf(ymd) {
+      var p = ymd.split('-'), d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])), wd = (d.getUTCDay() + 6) % 7;
+      var f = function (x) { return x.getUTCFullYear() + '-' + ('0' + (x.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + x.getUTCDate()).slice(-2); };
+      var a = new Date(d.getTime() - wd * 86400000), b = new Date(a.getTime() + 6 * 86400000);
+      return [f(a), f(b)];
+    }
+    function drawList() {
+      var c = state.ctx;
+      body.appendChild(el('div', { class: 'card' }, [UI.segmented({ label: '보기', value: state.listMode, options: [{ value: 'today', label: '오늘' }, { value: 'tomorrow', label: '내일' }, { value: 'week', label: '이번 주' }, { value: 'student', label: '학생별' }],
+        onchange: function (v) { state.listMode = v; drawTab(); } })]));
+      var card = el('div', { class: 'card' });
+      body.appendChild(card);
+      function show(filter, title) {
+        clear(card); card.appendChild(el('div', { class: 'loading', text: '불러오는 중…' }));
+        call('listExceptions', filter).then(function (r) {
+          clear(card);
+          var students = {};
+          r.groups.forEach(function (g) { students[g.studentId] = true; });
+          card.appendChild(el('h2', { text: title + ' · ' + (filter.scope === 'range' && filter.from === filter.to ? Object.keys(students).length + '명' : r.groups.length + '건') }));
+          if (!r.groups.length) { card.appendChild(UI.emptyState('이 조건에 해당하는 특이사항이 없습니다.', c.mode === 'confirm' || true ? { text: '특이사항 입력', onclick: function () { state.tab = 'input'; drawTabs(); drawTab(); } } : null)); return; }
+          r.groups.forEach(function (g) { card.appendChild(groupCard(g, r.term.id, function () { show(filter, title); })); });
+        }).catch(function (err) { clear(card); showError(card, err); });
+      }
+      if (state.listMode === 'today') show({ scope: 'range', from: c.today, to: c.today }, ymdKo(c.today));
+      else if (state.listMode === 'tomorrow') show({ scope: 'range', from: c.tomorrow, to: c.tomorrow }, ymdKo(c.tomorrow));
+      else if (state.listMode === 'week') { var w = weekOf(c.today); show({ scope: 'range', from: w[0], to: w[1] }, U.formatRangeKo(w[0], w[1])); }
+      else {
+        var holder = el('div');
+        card.appendChild(UI.studentPicker({ students: c.students, label: '학생', placeholder: '이름·초성·학번', onpick: function (s) {
+          clear(holder);
+          if (s) { var sub = el('div'); holder.appendChild(sub); var inner = card; show2(s); }
+        } }));
+        card.appendChild(holder);
+        function show2(s) {
+          clear(holder); holder.appendChild(el('div', { class: 'loading', text: '불러오는 중…' }));
+          call('listExceptions', { scope: 'student', studentId: s.id }).then(function (r) {
+            clear(holder);
+            holder.appendChild(el('h2', { style: 'margin-top:12px', text: s.grade + '. ' + s.name + ' · ' + r.groups.length + '건' }));
+            if (!r.groups.length) { holder.appendChild(UI.emptyState('이 학생의 특이사항이 없습니다.')); return; }
+            r.groups.forEach(function (g) { holder.appendChild(groupCard(g, r.term.id, function () { show2(s); })); });
+          }).catch(function (err) { clear(holder); showError(holder, err); });
+        }
+      }
+    }
+  }
+</script>
