@@ -3,9 +3,9 @@
 > **소유: 총괄.** 이 모양을 바꾸려면 CODING과 DESIGN이 둘 다 동의한 뒤 총괄이 PR을 연다(`docs/plan/stage1.md` 1절).
 >
 > - **만드는 쪽:** CODING `buildSheetModel_`(C7, `src/features/AttendanceSheet.gs`). 좌석 정보에 `resolveDayPlan_`·`seatMapOn_`·`resolveStudentDay_`(`docs/contracts/rules-api.md`)를 조합한다.
-> - **그리는 쪽:** DESIGN `printRenderSheet_(model, opts)`(D4, `src/print/AttendanceSheetHtml.gs`). 공간마다 A4 가로 한 장.
+> - **그리는 쪽:** DESIGN `printRenderSheet_(model, opts)`(D4, `src/print/AttendanceSheetHtml.gs`). 모든 공간을 A4 가로 한 장에(결정 34). 모델 모양은 그대로다.
 > - **검사:** `tests/features/sheet_model_contract.test.js`(C7)가 이 모양을 검사하고, DESIGN 픽스처 `design/fixtures/sheet-model.{mon_thu,fri,sat,sun}.json`도 같은 검사를 통과해야 한다.
-> - 근거: PRD 3.3~3.5절·F2, `docs/decisions.md` 20~23번, `docs/plan/stage1.md` 2절(S0)·4절.
+> - 근거: PRD 3.3~3.5절·F2, `docs/decisions.md` 20~23·32~34번, `docs/plan/stage1.md` 2절(S0)·4절.
 
 ## 모양
 
@@ -14,6 +14,7 @@
 ```
 { date:'2027-03-03', weekdayKo:'수', dayType:'mon_thu', operating:true, title:'신한학사 출석부',
   dutyNames:[],                                   // F3 전에는 빈 배열
+  standbyNames:[],                                // 금·토·일 예비 감독, F3 전에는 빈 배열
   blocks:[{seq:1,start:'18:00',end:'20:00',label:'18–20'}],
   legend:[{mark:'○',text:'출석'}, …],
   spaces:[{ id, name:'1층 자습실', gender:'혼성', rows:13, cols:12,
@@ -37,9 +38,10 @@
 | `operating` | boolean | `false`면 운영 안 하는 날. CODING은 렌더러를 부르지 않고 "운영 안 하는 날" 안내를 보여 준다(C7). 이때 `blocks`·`spaces`는 빈 배열이다 |
 | `title` | 문자열 | 머리말 제목. 설정 `print.title`(기본 `'신한학사 출석부'`) |
 | `dutyNames` | 문자열 배열 | 그날 근무교사 이름. **F3(2단계) 전에는 늘 빈 배열**이고, 머리말은 "근무: ____"로 비워 둔다. 인쇄 화면에서 손으로 넣을 수 있다(4절 l, ASSUMPTION) |
+| `standbyNames` | 문자열 배열 | 그날 예비 감독 이름(PRD F3, 금·토·일). **F3 전에는 늘 빈 배열**이고, 렌더러는 빈 배열이면 머리말에 "예비 ____"로 비워 두거나 생략한다(DESIGN이 정함). 2026-11-06 DESIGN 제안·총괄 승인 |
 | `blocks` | `[{seq, start, end, label}]` | 그날의 블록. `seq`는 1부터 순서대로, `start`·`end`는 `'HH:mm'`(`'24:00'` 허용), `label`은 머리말 표기(`'18–20'`, 줄표는 `–`). 블록 시간은 칸마다 쓰지 않고 머리말에 한 번만 쓴다(D4) |
 | `legend` | `[{mark, text}]` | 범례. 기본은 PRD F2 그대로(아래 "기본값") |
-| `spaces` | 아래 표 | 사용 중인 공간 전부(`spaces.status`가 '취소'가 아닌 것), `sort_order` 순. 인쇄는 공간마다 한 장 |
+| `spaces` | 아래 표 | 사용 중인 공간 전부(`spaces.status`가 '취소'가 아닌 것), `sort_order` 순. 인쇄는 모든 공간을 한 장에(결정 34) |
 | `unseated` | `[{display}]` | 그날 학사생인데(`isActiveOn_`) 자리가 없는 학생(중도 입실 등, `seatMapOn_`의 `unseated`). `display`는 `'학년. 이름'`. 정렬은 학년 → 이름 |
 | `warnings` | 문자열 배열 | 화면 미리보기에 띄울 문구(예: "이 기간 좌석 배치가 없습니다"). 인쇄물에 넣을지는 DESIGN이 정한다 |
 | `generatedAt` | `'yyyy-MM-ddTHH:mm:ss'`(KST) | 모델을 만든 시각(`nowIso_`). 렌더러는 시계를 읽지 않고 이 값을 쓴다 |
@@ -65,7 +67,7 @@
 | `vacant` | boolean | `kind === 'seat'`이고 `occupant === null`일 때만 `true`. 인쇄에는 "공석"으로 쓴다 |
 | `marks` | 아래 표 | 블록 칸. `kind === 'seat'`이면 길이가 `blocks.length`이고 `seq` 순서다. 공석 자리는 모두 `NONE`. 좌석이 아닌 칸은 `[]` |
 
-`occupant`에는 학년·이름만 넣는다. 학번·이메일·학생 id·성별·사유는 넣지 않는다(인쇄물이 밖에 놓여도 드러나는 정보를 줄인다).
+`occupant`에는 학년·이름만 넣는다(OUT 단계도 넣지 않는다 — 결정 36). 학번·이메일·학생 id·성별·사유는 넣지 않는다(인쇄물이 밖에 놓여도 드러나는 정보를 줄인다).
 
 ### `marks[]`
 
