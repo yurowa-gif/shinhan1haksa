@@ -176,18 +176,16 @@ test('오늘 특이사항 목록: 학생·블록·약어, 1쪽 아래에 들어�
   assert.strictEqual(count(ctx.printRenderSheet_(mon, { listPage: 'always' }), '<section class="page"'), 2);
 });
 
-test('1OUT·퇴실 대상: 기본은 아무것도 그리지 않고(선생님 결정 전), opts.showOut 을 켜면 이름 옆 ▲·▲▲와 범례가 나온다', () => {
+test('OUT 표시는 인쇄물에 없다(결정 36): outLevel 이 모델에 있어도 ▲·1OUT 을 그리지 않는다', () => {
   const m = fixture('mon_thu');
   const occ = m.spaces[0].cells.filter((c) => c.occupant);
   occ[0].occupant.outLevel = 1; occ[1].occupant.outLevel = 2;
-  const off = ctx.printRenderSheet_(m, {});
-  assert.ok(off.indexOf('▲') < 0 && off.indexOf('1OUT') < 0, '기본은 표시 없음');
-  const on = ctx.printRenderSheet_(m, { showOut: true });
-  assert.ok(on.indexOf(occ[0].occupant.display + ' ▲</td>') > 0);
-  assert.ok(on.indexOf(occ[1].occupant.display + ' ▲▲</td>') > 0);
-  assert.ok(on.indexOf('<b>▲</b>&nbsp;1OUT') > 0 && on.indexOf('퇴실 대상') > 0);
-  const clean = fixture('mon_thu');
-  assert.ok(ctx.printRenderSheet_(clean, { showOut: true }).indexOf('▲') < 0, 'outLevel 이 없으면 켜도 그리지 않는다');
+  [{}, { showOut: true }].forEach((o) => {
+    const html = ctx.printRenderSheet_(m, o);
+    assert.ok(html.indexOf('▲') < 0 && html.indexOf('1OUT') < 0 && html.indexOf('퇴실 대상') < 0);
+  });
+  assert.ok(ctx.printRenderSheet_(fixture('mon_thu'), {}).indexOf('▲') < 0);
+  assert.ok(ctx.printRenderSheet_(m, {}).indexOf(occ[0].occupant.display + '</td>') > 0, '이름 칸에는 학년·이름만');
 });
 
 test('특이사항 목록에는 사유 메모가 없다(유형 약어만, 결정 23)', () => {
