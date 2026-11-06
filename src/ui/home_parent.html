@@ -1,0 +1,33 @@
+<script>
+  /** 학부모 홈: 자녀 전환 탭 + 자녀 요약 (PRD 8절, F14) */
+  function renderHome(d, root) {
+    if (!d.children.length) {
+      root.appendChild(el('div', { class: 'error', text: '연결된 자녀가 없습니다. 학사 담당 선생님께 문의해 주세요.' }));
+      return;
+    }
+    var tabs = el('nav', { class: 'tabs', 'aria-label': '자녀 전환' });
+    var body = el('div');
+    root.appendChild(tabs);
+    root.appendChild(body);
+
+    function show(child, btn) {
+      Array.prototype.forEach.call(tabs.children, function (b) { b.classList.remove('on'); });
+      btn.classList.add('on');
+      clear(body).appendChild(el('div', { class: 'loading', text: '불러오는 중…' }));
+      // 서버가 이 자녀에 대한 권한을 다시 확인한다(student.view)
+      call('getStudentSummary', child.id)
+        .then(function (s) {
+          clear(body).appendChild(studentCard(s));
+          body.appendChild(soonCard('OUT · 출결 특이사항 · 급식·기숙사 상태 · 상담 여부', '1단계 이후 차례로 추가합니다.'));
+        })
+        .catch(function (err) { clear(body); showError(body, err); });
+    }
+
+    d.children.forEach(function (c, i) {
+      var b = el('button', { class: 'tab', type: 'button', text: c.name + ' (' + c.label + ')' });
+      b.addEventListener('click', function () { show(c, b); });
+      tabs.appendChild(b);
+      if (i === 0) setTimeout(function () { show(c, b); }, 0);
+    });
+  }
+</script>

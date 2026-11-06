@@ -1,0 +1,41 @@
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #1d2330; --muted: #5d6676;
+    --line: #dde1e7; --accent: #1f5fbf; --accent-weak: #e8f0fc;
+    --warn: #b3261e; --warn-weak: #fdecea; --ok: #1b7f3b;
+  }
+  * { box-sizing: border-box; }
+  html { font-size: 18px; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; line-height: 1.5; }
+  header.top { position: sticky; top: 0; z-index: 2; background: var(--card); border-bottom: 1px solid var(--line);
+    padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  header.top h1 { font-size: 1.1rem; margin: 0; }
+  header.top .who { font-size: .85rem; color: var(--muted); text-align: right; }
+  main { max-width: 720px; margin: 0 auto; padding: 16px; }
+  .tabs { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 12px; }
+  .tab { flex: 0 0 auto; padding: 10px 16px; border-radius: 999px; border: 1px solid var(--line);
+    background: var(--card); color: var(--text); text-decoration: none; font-size: .95rem; cursor: pointer; min-height: 44px; }
+  .tab.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .card h2 { font-size: 1rem; margin: 0 0 8px; }
+  .muted { color: var(--muted); font-size: .9rem; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+  .stat { background: var(--accent-weak); border-radius: 10px; padding: 12px; }
+  .stat .n { font-size: 1.5rem; font-weight: 700; }
+  .stat .l { font-size: .85rem; color: var(--muted); }
+  ul.list { list-style: none; margin: 0; padding: 0; }
+  ul.list li { padding: 12px 4px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 8px; }
+  ul.list li:last-child { border-bottom: 0; }
+  dl.kv { display: grid; grid-template-columns: 7em 1fr; gap: 6px 12px; margin: 0; }
+  dl.kv dt { color: var(--muted); }
+  dl.kv dd { margin: 0; }
+  .soon { border-style: dashed; color: var(--muted); }
+  .btn { display: inline-block; min-height: 48px; padding: 12px 18px; border-radius: 10px; border: 0;
+    background: var(--accent); color: #fff; font-size: 1rem; cursor: pointer; text-decoration: none; }
+  .btn.secondary { background: var(--card); color: var(--accent); border: 1px solid var(--accent); }
+  .error { background: var(--warn-weak); color: var(--warn); border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+  .loading { color: var(--muted); padding: 16px 0; }
+  footer { text-align: center; padding: 24px 16px; font-size: .8rem; color: var(--muted); }
+  footer a { color: var(--muted); }
+</style>

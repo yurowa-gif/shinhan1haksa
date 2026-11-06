@@ -1,0 +1,15 @@
+<script>
+  /** 학사 교사 홈: 오늘 (PRD 8절) */
+  function renderHome(d, root) {
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '오늘 ' + d.today }),
+      el('div', { class: 'muted', text: d.termName }),
+      el('div', { class: 'muted', text: '내 근무 여부·특이사항 수·담임 요청은 1~2단계에서 채웁니다.' })
+    ]));
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '내 담당 학생 (' + d.students.length + '명)' }),
+      studentList(d.students, '이번 기간 담당 학생이 없습니다.')
+    ]));
+    root.appendChild(soonCard('특이사항 보기·요청 · 출석부 인쇄', '1단계(F1·F2)에서 만듭니다.'));
+  }
+</script>

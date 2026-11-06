@@ -1,0 +1,12 @@
+<script>
+  /** 학생 홈: 내 정보 (PRD 8절) */
+  function renderHome(d, root) {
+    if (!d.me) {
+      root.appendChild(el('div', { class: 'error', text: '학생 명단에서 내 계정을 찾지 못했습니다. 담당 선생님께 알려 주세요.' }));
+      return;
+    }
+    root.appendChild(studentCard(d.me));
+    root.appendChild(soonCard('OUT · 이번 주 특이사항 · 내 자리·방', '1단계 이후 차례로 추가합니다.'));
+    root.appendChild(soonCard('시간표 제출 · 시설 일지 · 월별 일정', '3단계 이후에 추가합니다.'));
+  }
+</script>

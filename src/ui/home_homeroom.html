@@ -1,0 +1,11 @@
+<script>
+  /** 담임 홈: 우리 반 학사생 목록 (PRD 8절) */
+  function renderHome(d, root) {
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: d.homeroomClass + ' 학사생 (' + d.students.length + '명)' }),
+      el('div', { class: 'muted', text: d.termName }),
+      studentList(d.students, '이번 기간 우리 반 학사생이 없습니다.')
+    ]));
+    root.appendChild(soonCard('학생별 특이사항·OUT·급식·기숙사·상담 열람, 특이사항 요청', '1단계 이후 차례로 추가합니다.'));
+  }
+</script>
