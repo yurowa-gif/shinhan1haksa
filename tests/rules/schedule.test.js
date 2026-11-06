@@ -48,7 +48,7 @@ table('baseDayType_: 월~목 mon_thu, 금 fri, 토 sat, 일 sun', [
 table('resolveDayPlan_: 기본 요일별 블록 수 3/3/3/4, 시작·종료는 기본값', [
   ['2027-03-03', 'mon_thu', '18:30', '23:50', ['18:00-20:00', '20:00-22:00', '22:00-24:00'], ['18–20', '20–22', '22–24']],
   ['2027-03-05', 'fri', '18:30', '23:00', ['18:00-19:30', '19:30-22:00', '22:00-23:00'], ['18–19:30', '19:30–22', '22–23']],
-  ['2027-03-06', 'sat', '09:00', '17:00', ['09:00-12:00', '14:00-15:30', '15:30-17:00'], ['9–12', '14–15:30', '15:30–17']],
+  ['2027-03-06', 'sat', '09:00', '17:00', ['09:00-12:00', '14:00-15:30', '15:30-17:00'], ['09–12', '14–15:30', '15:30–17']],
   ['2027-03-07', 'sun', '14:00', '22:00', ['14:00-15:30', '15:30-17:00', '19:00-20:30', '20:30-22:00'],
     ['14–15:30', '15:30–17', '19–20:30', '20:30–22']]
 ], ([d, type, start, end, k, labels]) => {
@@ -78,18 +78,37 @@ test('resolveDayPlan_: 블록 행의 label이 있으면 그대로 쓴다', () =>
 });
 
 table('운영 안 하는 날: operating=false, blocks 없음, 메모 유지(가정: 여러 표기)', [
-  'FALSE', 'false', 'N', 'n', 'no', 'X', '0', '아니오', '미운영', '운영 안 함', '운영안함', '휴무', false, 0
+  'FALSE', 'false', 'N', 'n', 'no', 'X', 'x', '×', '0', 'OFF', '아니오', '아니요', '미운영', '운영 안 함', '운영안함',
+  '운영X', '휴무', '휴일', false, 0
 ], (v) => {
   const p = plan('2027-11-17', { daySchedule: ds('2027-11-17', { operating: v, memo: '수능 전일' }) });
   assert.strictEqual(p.operating, false);
   assert.deepStrictEqual(p.blocks, []);
   assert.strictEqual(p.memo, '수능 전일');
+  assert.deepStrictEqual(p.warnings, []);
 });
 
-table('운영하는 날로 읽는 값: 빈칸·TRUE·Y·O·운영', ['', 'TRUE', 'Y', 'O', '운영', true, undefined, null], (v) => {
+table('알 수 없는 운영 값(오타)은 운영 안 함 + 경고(가정: 잘못된 출석부가 조용히 나오지 않게)', [
+  '운영함?', 'ㅌ', 'maybe', '2'
+], (v) => {
+  const p = plan('2027-03-03', { daySchedule: ds('2027-03-03', { operating: v }) });
+  assert.strictEqual(p.operating, false);
+  assert.deepStrictEqual(p.blocks, []);
+  assert.ok(p.warnings.some((w) => w.indexOf('운영 여부 값을 알 수 없어') >= 0), p.warnings.join('/'));
+  assert.strictEqual(ctx.schedOperatingValue_(v), false);
+});
+
+test('운영 안 하는 특별 유형 날에는 시작·종료 경고를 내지 않는다', () => {
+  const p = plan('2027-11-17', { daySchedule: ds('2027-11-17', { operating: 'FALSE', day_type: '수능전일' }) });
+  assert.strictEqual(p.operating, false);
+  assert.deepStrictEqual(p.warnings, []);
+});
+
+table('운영하는 날로 읽는 값: 빈칸·TRUE·Y·YES·O·1·예·운영', ['', 'TRUE', 'true', 'Y', 'yes', 'O', '1', '예', '운영', ' 운영 ', true, undefined, null], (v) => {
   const p = plan('2027-03-03', { daySchedule: ds('2027-03-03', { operating: v }) });
   assert.strictEqual(p.operating, true);
   assert.strictEqual(p.blocks.length, 3);
+  assert.deepStrictEqual(p.warnings, []);
 });
 
 table('날짜별 종료를 당기면 그 시각 이후에 시작하는 블록이 빠진다(가정 d)', [
@@ -106,6 +125,64 @@ table('날짜별 종료를 당기면 그 시각 이후에 시작하는 블록이
   assert.strictEqual(p.end, end);
   assert.deepStrictEqual(keys(p), want);
   assert.deepStrictEqual(p.blocks.map((b) => b.seq), want.map((_, i) => i + 1), 'seq는 1부터 다시');
+});
+
+table('시트에서 흔한 시각 표기(초 00, 한 자리 시)도 읽는다', [
+  [{ end: '22:00:00' }, '22:00', 2], [{ end: '21:30:00' }, '21:30', 2], [{ end: ' 22:00 ' }, '22:00', 2],
+  [{ start: '9:00', day_type: 'sat' }, '17:00', 3]
+], ([over, end, n]) => {
+  const p = plan('2027-03-03', { daySchedule: ds('2027-03-03', over) });
+  assert.strictEqual(p.end, end);
+  assert.strictEqual(p.blocks.length, n);
+  assert.deepStrictEqual(p.warnings, []);
+  if (over.start) assert.strictEqual(p.start, '09:00');
+});
+
+test('초가 00이 아닌 값·날짜로 바뀐 시각(1899-12-30)은 무시하고 경고', () => {
+  for (const v of ['21:30:15', '1899-12-30', '24:00:00x']) {
+    const p = plan('2027-03-03', { daySchedule: ds('2027-03-03', { end: v }) });
+    assert.strictEqual(p.end, '23:50', v);
+    assert.strictEqual(p.warnings.length, 1, v);
+  }
+});
+
+test('날짜별 시작 24:00은 잘못된 값(블록 시작과 같은 규칙)', () => {
+  const p = plan('2027-03-03', { daySchedule: ds('2027-03-03', { start: '24:00' }) });
+  assert.strictEqual(p.start, '18:30');
+  assert.strictEqual(p.warnings.length, 1);
+  const q = plan('2027-03-03', { daySchedule: ds('2027-03-03', { end: '24:00' }) });
+  assert.strictEqual(q.end, '24:00');
+  assert.deepStrictEqual(q.warnings, []);
+});
+
+test('다른 날짜의 일정 행이 넘어오면 무시하고 경고', () => {
+  const p = plan('2027-03-03', { daySchedule: ds('2027-03-04', { operating: 'FALSE' }) });
+  assert.strictEqual(p.operating, true);
+  assert.strictEqual(p.blocks.length, 3);
+  assert.ok(p.warnings.some((w) => w.indexOf('다른 날짜') >= 0));
+});
+
+test('기본 요일 유형인데 기본 시각이 없으면 블록 시각을 쓰고 경고', () => {
+  const p = plan('2027-03-05', { defaults: { mon_thu: DEFAULTS.mon_thu } });
+  assert.strictEqual(p.start, '18:00');
+  assert.strictEqual(p.end, '23:00');
+  assert.ok(p.warnings.some((w) => w.indexOf('기본 자습 시각이 없어') >= 0));
+  assert.strictEqual(plan('2027-03-05', { defaults: undefined }).blocks.length, 3);
+});
+
+test('겹치는 블록 행이 시트에 있으면 출석부에는 나오되 경고', () => {
+  const rows = BLOCKS.concat([blk('학기', 'mon_thu', 4, '21:00', '23:00')]);
+  const p = plan('2027-03-03', { blocks: rows });
+  assert.strictEqual(p.blocks.length, 4);
+  assert.ok(p.warnings.some((w) => w.indexOf('겹칩니다') >= 0), p.warnings.join('/'));
+});
+
+test('방학 블록 행이 모두 잘못되어 학기 블록을 쓰면 그 사실을 경고', () => {
+  const rows = BLOCKS.concat([blk('방학', 'mon_thu', 1, '1899-12-30', '1899-12-30')]);
+  const p = plan('2027-07-26', { termType: '방학', blocks: rows });
+  assert.deepStrictEqual(keys(p), ['18:00-20:00', '20:00-22:00', '22:00-24:00']);
+  assert.ok(p.warnings.some((w) => w.indexOf('학기 블록을 썼습니다') >= 0), p.warnings.join('/'));
+  assert.deepStrictEqual(plan('2027-07-26', { termType: '방학' }).warnings, []);
 });
 
 test('시작 시각만 바꾸면 블록은 그대로(가정 d)', () => {
@@ -186,7 +263,7 @@ test('블록 행 순서가 뒤섞여 있어도 시작 시각 순으로 나온다
 });
 
 test('잘못된 블록 행은 건너뛰고 경고', () => {
-  const rows = BLOCKS.concat([blk('학기', 'mon_thu', 4, '24:00', '24:00'), blk('학기', 'mon_thu', 5, '9:00', '10:00'),
+  const rows = BLOCKS.concat([blk('학기', 'mon_thu', 4, '24:00', '24:00'), blk('학기', 'mon_thu', 5, '9:0', '10:00'),
     blk('학기', 'mon_thu', 0, '08:00', '09:00'), blk('학기', 'mon_thu', 6, '17:00', '16:00')]);
   const p = plan('2027-03-03', { blocks: rows });
   assert.strictEqual(p.blocks.length, 3);
@@ -194,7 +271,7 @@ test('잘못된 블록 행은 건너뛰고 경고', () => {
 });
 
 test('날짜별 일정의 잘못된 시각은 무시하고 기본값 + 경고', () => {
-  const p = plan('2027-03-03', { daySchedule: ds('2027-03-03', { end: '25:00', start: '6:00' }) });
+  const p = plan('2027-03-03', { daySchedule: ds('2027-03-03', { end: '25:00', start: '6시' }) });
   assert.strictEqual(p.end, '23:50');
   assert.strictEqual(p.start, '18:30');
   assert.strictEqual(p.warnings.length, 2);
@@ -255,7 +332,13 @@ table('validateBlocks_: 형식 오류와 겹침을 행 위치와 함께 찾는�
   [[blk('학기', 'mon_thu', 1, '18:00', '20:00'), blk('학기', 'mon_thu', 1, '20:00', '22:00')], [1], '순서 1'],
   [[blk('학기', 'mon_thu', 1, '20:00', '18:00')], [0], '앞이어야'],
   [[blk('학기', 'mon_thu', 1, '20:00', '20:00')], [0], '앞이어야'],
-  [[blk('학기', 'mon_thu', 1, '8:00', '10:00')], [0], '시작 시각'],
+  [[blk('학기', 'mon_thu', 1, '8:0', '10:00')], [0], '시작 시각'],
+  [[blk('학기', 'mon_thu', 1, '1899-12-30', '1899-12-30')], [0], '시작 시각'],
+  [[blk('', 'mon_thu', 1, '18:00', '20:00')], [0], '기간 유형'],
+  [[blk('여름방학', 'mon_thu', 1, '18:00', '20:00')], [0], '기간 유형'],
+  [[blk('학기', '', 1, '18:00', '20:00')], [0], '요일 유형'],
+  // 순서가 잘못된 행도 시각이 맞으면 겹침을 함께 알려 준다
+  [[blk('학기', 'mon_thu', 1, '18:00', '20:00'), blk('학기', 'mon_thu', '', '19:00', '21:00')], [1], '겹칩니다'],
   [[blk('학기', 'mon_thu', 1, '24:00', '24:00')], [0], '시작 시각'],
   [[blk('학기', 'mon_thu', 1, '22:00', '24:30')], [0], '끝 시각'],
   [[blk('학기', 'mon_thu', 0, '18:00', '20:00')], [0], '순서는'],

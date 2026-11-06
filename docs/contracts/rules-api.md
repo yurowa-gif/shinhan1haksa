@@ -89,23 +89,28 @@ function mealChangeKind_(item, fromValue, toValue)
 ## 동작 메모(R1, 2026-11-06)
 
 **DateRules**
-- 잘못된 날짜·시각을 받으면 조용히 넘기지 않고 `Error`를 던진다. 화면 입력 검사는 `ymdIsValid_`·`hmIsValid_`로 먼저 한다.
-- `ymdRange_(from, to)`: from이 to보다 늦으면 빈 배열, 날 수가 `maxDays`(기본 366)를 넘으면 Error.
+- 잘못된 날짜·시각을 받거나 결과가 `yyyy-MM-dd` 범위를 벗어나면 조용히 넘기지 않고 `Error`를 던진다. 화면 입력 검사는 `ymdIsValid_`·`hmIsValid_`로 먼저 한다.
+- `ymdRange_(from, to, maxDays)`: from이 to보다 늦으면 빈 배열, 날 수가 `maxDays`(기본 366)를 넘으면 Error. `maxDays`는 1 이상의 정수만(NaN·문자열이면 Error — 설정값이 비어 검사가 꺼지지 않게).
 - `isoLocalSplit_`: `'yyyy-MM-ddTHH:mm:ss'`, `'yyyy-MM-ddTHH:mm'`, `'yyyy-MM-dd HH:mm:ss'`를 받는다. `Z`·`+09:00`이 붙은 값은 거부한다(KST 벽시계 값만). `min`은 초를 버린 분이라 11:29:59 → 689, 11:30:00 → 690. 마감 비교는 `min >= hmToMin_('11:30')`.
+- `hmIsValid_`·`hmToMin_`은 엄격한 `'HH:mm'`만 받는다. 시트 값을 읽을 때의 너그러운 해석은 ScheduleRules가 한다(아래).
 
 **ScheduleRules**
 - 시트 행은 `readAll_`이 돌려주는 문자열 그대로 받는다. `status`가 `'취소'`(앞뒤 공백 무시)인 행은 모두 무시한다.
+- **CODING(C2) 주의:** `blocks.start/end`, `day_schedules.start/end/date` 열은 시트에서 **일반 텍스트(@) 서식**이어야 한다. 시각 서식이면 `getValues()`가 Date를 주고 `cellToString_`이 `'1899-12-30'`으로 바꿔 시각을 잃는다(규칙 함수는 그 행을 건너뛰고 경고한다).
+- 시각 열은 `'HH:mm'`과 함께 `'H:mm'`(`9:00`), 초가 00인 `'HH:mm:ss'`(`21:30:00`)도 읽는다. 결과는 늘 `'HH:mm'`.
 - `pickDaySchedule_`: 같은 날짜가 여럿이면 `updated_at`이 가장 늦은 행, 같으면 시트에서 더 아래 행.
 - `resolveDayPlan_(ymd, src)`:
+  - `daySchedule`이 취소 행이면 무시, 다른 날짜 행이면 무시하고 경고.
   - `dayType` = 날짜별 일정의 `day_type` → 없으면 `baseDayType_`.
-  - `start`·`end` = 날짜별 일정 값 → `defaults[dayType]` → (특별 유형이라 기본값이 없으면) 블록의 처음 시작·가장 늦은 끝.
-  - 블록 = `term_type`·`day_type`이 맞고 취소되지 않은 행을 **시작 시각 순**으로. 같은 `seq`가 둘 이상이면 `updated_at` 최신 1행(경고). `seq`는 1부터 다시 매긴다.
+  - `start`·`end` = 날짜별 일정 값 → `defaults[dayType]` → 블록의 처음 시작·가장 늦은 끝. 기본 유형(mon_thu·fri·sat·sun)인데 `defaults`가 없어 블록 시각을 쓰면 경고. **C7은 `defaults`에 네 유형을 모두 넣는다**(금요일은 `study.fri.*`, 결정 23 ⑦ 18:30).
+  - 시작 `'24:00'`은 잘못된 값(블록 시작과 같은 규칙), 종료 `'24:00'`은 허용.
+  - 블록 = `term_type`·`day_type`이 맞고 취소되지 않은 행을 **시작 시각 순**으로. 같은 `seq`가 둘 이상이면 `updated_at` 최신 1행(경고). `seq`는 1부터 다시 매긴다. 남은 블록끼리 시간이 겹치면 그대로 내보내되 경고.
   - **종료 시각 이후에 시작하는 블록(시작 ≥ 종료)은 뺀다**(stage1 4절 d). 22–24 블록은 종료 22:00이면 빠지고, 22:01·23:00이면 남는다. 블록 시각 자체는 자르지 않는다(`key`는 원래 `'HH:mm-HH:mm'`).
   - 시작 시각 변경은 블록에 영향이 없다.
-  - ASSUMPTION: `termType === '방학'`인데 그 요일 유형의 방학 블록(취소 제외)이 없으면 같은 요일 유형의 학기 블록을 쓴다.
-  - 운영 안 하는 날: `operating:false`, `blocks:[]`, `memo`는 그대로.
-  - 잘못된 블록 행·시각은 건너뛰고 `warnings`에 적는다(출석부 생성이 멈추지 않게). 잘못된 날짜(`ymd`)만 Error.
-  - `label` = 블록 행의 `label`, 비어 있으면 정각은 분을 뺀 표기(`'18–20'`, `'14–15:30'`, 줄표 `–`).
-- `schedOperatingValue_`: 빈칸은 운영. ASSUMPTION: `FALSE`·`N`·`NO`·`X`·`0`·`아니오`·`미운영`·`운영 안 함`·`휴무`(대소문자·공백 무시)와 `false`·`0`은 운영 안 함. C4 화면은 `FALSE`/빈칸으로 쓰면 된다.
-- `validateBlocks_`: 취소 행은 건너뛰고 `(term_type, day_type)` 묶음 안에서 검사. 순서(1 이상 정수)·시각 형식(시작은 24:00 불가, 끝은 24:00 허용)·시작<끝·같은 순서 중복·시간 겹침(맞닿음은 허용)·순서 번호와 시각 순서 불일치.
+  - ASSUMPTION: `termType === '방학'`인데 그 요일 유형의 방학 블록(취소 제외)이 없으면 같은 요일 유형의 학기 블록을 쓴다. 방학 행이 있었는데 모두 잘못된 행이라 학기 블록을 쓴 경우에만 경고한다.
+  - 운영 안 하는 날: `operating:false`, `blocks:[]`, `memo`는 그대로, 시작·종료 경고는 내지 않는다.
+  - 잘못된 블록 행·시각은 건너뛰고 `warnings`에 적는다(출석부 생성이 멈추지 않게). 잘못된 날짜(`ymd`)만 Error. 운영하는 날인데 `blocks`가 비면 `'블록이 없습니다'` 경고가 있다 — C7은 이때 렌더러를 부르지 말고 경고를 보여 준다.
+  - `label` = 블록 행의 `label`, 비어 있으면 정각은 분을 뺀 두 자리 표기(`'18–20'`, `'09–12'`, `'14–15:30'`, 줄표 `–`).
+- `schedOperatingValue_`: 운영 = 빈칸·`TRUE`·`Y`·`YES`·`O`·`1`·`예`·`운영`. 운영 안 함 = `FALSE`·`N`·`NO`·`X`·`×`·`0`·`OFF`·`아니오`·`아니요`·`미운영`·`운영 안 함`·`운영X`·`휴무`·`휴일`(대소문자·공백 무시). ASSUMPTION: 둘 다 아닌 값(오타)은 **운영 안 함**으로 보고 `resolveDayPlan_`이 경고한다(잘못된 출석부가 조용히 인쇄되는 것보다 눈에 띄게). C4 화면은 `FALSE`/빈칸으로 쓰면 된다.
+- `validateBlocks_`: 취소 행은 건너뛴다. 행마다 `term_type`(학기·방학)·`day_type`(빈칸 불가)·순서(1 이상 정수)·시각 형식(시작은 24:00 불가, 끝은 24:00 허용)·시작<끝. `(term_type, day_type)` 묶음 안에서 같은 순서 중복·시간 겹침(맞닿음은 허용)·순서 번호와 시각 순서 불일치. 순서가 잘못된 행도 시각이 맞으면 겹침 검사에 넣는다.
 - 규칙 파일끼리는 함수만 부른다(ScheduleRules → DateRules). 전역 값은 공유하지 않는다. 테스트는 `loadGs(['src/rules/DateRules.gs', 'src/rules/ScheduleRules.gs'])`처럼 함께 올린다.

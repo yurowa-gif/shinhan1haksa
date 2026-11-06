@@ -37,6 +37,10 @@ test('ymdAddDays_: 잘못된 입력은 Error', () => {
   assert.throws(() => ctx.ymdAddDays_('2027-03-01', 1.5));
   assert.throws(() => ctx.ymdAddDays_('2027-03-01', '1'));
   assert.throws(() => ctx.ymdAddDays_('2027-03-01', NaN));
+  // 결과가 yyyy-MM-dd 범위를 벗어나면 Error(자기 검사기를 통과하지 못하는 값을 돌려주지 않음)
+  assert.throws(() => ctx.ymdAddDays_('1000-01-01', -1));
+  assert.throws(() => ctx.ymdAddDays_('9999-12-31', 1));
+  assert.throws(() => ctx.ymdAddDays_('2026-03-01', 1e9));
 });
 
 // 2027-03-01 월, 2026-12-31 목, 2028-02-29 화, 2027-01-03 일
@@ -71,6 +75,8 @@ test('ymdRange_: 기본 최대 366일, maxDays로 바꿈, 넘으면 Error', () =
   assert.strictEqual(ctx.ymdRange_('2027-03-01', '2027-03-07', 7).length, 7);
   assert.throws(() => ctx.ymdRange_('2027-03-01', '2027-03-08', 7));
   assert.throws(() => ctx.ymdRange_('2027-02-30', '2027-03-08'));
+  for (const bad of [NaN, '5', 0, -1, 2.5]) assert.throws(() => ctx.ymdRange_('2027-03-01', '2027-03-02', bad), String(bad));
+  assert.strictEqual(ctx.ymdRange_('2027-03-01', '2027-03-02', null).length, 2);
 });
 
 table('ymdDiffDays_', [

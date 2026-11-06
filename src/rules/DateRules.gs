@@ -44,7 +44,9 @@ function ymdAddDays_(ymd, n) {
   if (typeof n !== 'number' || !isFinite(n) || Math.floor(n) !== n) {
     throw new Error('더할 날 수는 정수여야 합니다: ' + n);
   }
-  return ymdFromUtcMs_(ymdToUtcMs_(ymd) + n * 86400000);
+  var out = ymdFromUtcMs_(ymdToUtcMs_(ymd) + n * 86400000);
+  if (!ymdIsValid_(out)) throw new Error('날짜 범위를 벗어났습니다: ' + ymd + ' + ' + n + '일');
+  return out;
 }
 
 /** 요일 번호: 0=일, 1=월 … 6=토. */
@@ -71,9 +73,13 @@ function ymdDiffDays_(a, b) {
 /**
  * from부터 to까지 양 끝을 포함한 날짜 배열. from이 to보다 늦으면 빈 배열.
  * 날 수가 maxDays(기본 366)를 넘으면 Error(잘못된 입력으로 수천 행을 만들지 않게).
+ * maxDays는 1 이상의 정수만(NaN·'5'·0은 Error — 설정값이 비어 검사가 꺼지는 일이 없게).
  */
 function ymdRange_(from, to, maxDays) {
   var max = maxDays === undefined || maxDays === null ? 366 : maxDays;
+  if (typeof max !== 'number' || Math.floor(max) !== max || max < 1) {
+    throw new Error('최대 날 수는 1 이상의 정수여야 합니다: ' + maxDays);
+  }
   var n = ymdDiffDays_(from, to) + 1;
   if (n <= 0) return [];
   if (n > max) throw new Error('기간이 너무 깁니다(' + n + '일, 최대 ' + max + '일): ' + from + ' ~ ' + to);
