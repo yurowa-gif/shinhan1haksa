@@ -153,3 +153,15 @@ function mealChangeKind_(item, fromValue, toValue)
   - FIXED가 여럿이면 `teacher_confirmed_at` → `updated_at` 최신.
   - END: `endType`(`'23:00:00'`도 읽음) `=== opts.endTime`(기본 `'23:00'`), `dayType`이 `opts.endTypeDayTypes`(기본 `['mon_thu']`, 항목 앞뒤 공백 무시)에 있음, 마지막 블록, **그 블록과 그날 종료(`dayEnd`)가 모두 종료 시각보다 늦게 끝남**. ASSUMPTION: 날짜별 종료를 23:00 이하로 당긴 날(22:00·22:30·23:00)은 모두 그 시각에 귀가하므로 표시하지 않는다. ASSUMPTION: 특별 요일 유형(`exam` 등)으로 바꾼 날은 실제 달력 요일의 기본 유형으로 판정한다(목요일 exam → 표시, 금요일 exam → 표시 안 함).
 - `resolveStudentDay_`: 운영 안 하는 날은 `[]`. `exceptions`는 `date === plan.date`인 행만 쓴다(**날짜가 빈 행은 쓰지 않는다** — 빈 날짜 하나가 모든 날에 찍히지 않게). `plan.end`를 `dayEnd`로 넘긴다. `fixedRows`는 `effectiveFixedRows_` 결과를 넘긴다. 고정 일정 요일은 요일 유형이 아니라 **실제 달력 요일**(`ymdWeekdayKo_`). C7은 결과에서 `seq·code·text`만 sheet-model `marks`로 옮긴다.
+
+## 동작 메모(R6, 2026-11-06)
+
+**MealRules** — 값 글자는 `docs/contracts/vocabulary.md`.
+- `mealEffectiveDate_(kind, requestedAt, opts)` → `{date, rule}`. `rule`: `same_day`·`next_day`·`next_monday`·`monday_after_next`·`entry_date`·`leave_date`(화면에 이유를 보여 줄 때 쓴다).
+  - `start`·`to_general`: 신청 일시(KST, `isoLocalSplit_` 형식)가 마감(`opts.cutoff`, 기본 `'11:30'`, 설정 `meal.morning_cutoff`) **전**이면 당일, 마감 **정각부터** 다음 날. 초까지 비교: 11:29:59 당일, 11:30:00 다음 날(ASSUMPTION 4절 f).
+  - `stop`: 신청일이 월·화면 다음 주 월요일, 수~일이면 다다음 주 월요일(월~일을 한 주로, 시각 무관). 2026-12-30(수) → 2027-01-11.
+  - `with_dorm_entry`: `opts.entryDate`, `on_leave`: `opts.leaveDate`(신청 시각 무관, 없으면 Error).
+  - 잘못된 kind·일시·마감은 Error. 공휴일·운영 안 하는 날은 보지 않는다(적용일은 달력 날짜).
+- `mealChangeKind_(item, from, to)`: 조식 `실시`로 → `start`, `미실시`로 → `stop`. 석식 `학사 석식`으로 → `start`, `일반 석식`으로 → `to_general`(결정 1), `미실시`로 → `stop`(일반 석식 → 미실시 포함, ASSUMPTION 4절 g). 같으면 `''`. `from`이 `''`(기록 없음)도 받는다. 모르는 값은 Error.
+- F6 학사 퇴실: 조식은 `on_leave`(퇴실일 즉시), 석식은 선택에 따라 `stop` 또는 `to_general`로 F7 변경을 함께 만든다. 서류 미제출이어도 적용한다(결정 3) — 이 함수는 서류를 보지 않는다.
+- F7은 계산값을 `effective_date_auto`에, 교사가 고친 값을 `effective_date`에 저장한다(plan 5절).
