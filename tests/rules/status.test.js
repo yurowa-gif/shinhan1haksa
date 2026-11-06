@@ -106,6 +106,32 @@ table('assignmentOn_: 기간·좌석·날짜 범위(양 끝 포함), 취소 제�
   assert.strictEqual(a ? a.id : null, want);
 });
 
+test('statusOn_: requested_at을 공백으로 쓴 값도 T 형식과 같은 순서', () => {
+  const rows = [ch('x', '석식', '일반 석식', '2027-04-01', { requested_at: '2027-03-31T09:00:00' }),
+    ch('x', '석식', '미실시', '2027-04-01', { requested_at: '2027-03-31 10:00:00' })];
+  assert.strictEqual(ctx.statusOn_(rows, 'x', '석식', '2027-04-01'), '미실시');
+});
+
+test('assignmentOn_·seatMapOn_: 방학 날짜별 배정이 기간 전체 배정보다 먼저(updated_at과 무관)', () => {
+  const asg = [
+    { id: 'w1', term_id: 'V', seat_id: 'A', student_id: 'y', valid_from: '', valid_to: '', status: '배정', updated_at: '2027-07-26T09:00:00' },
+    { id: 'w2', term_id: 'V', seat_id: 'A', student_id: 'x', valid_from: '2027-07-25', valid_to: '2027-07-25', status: '배정', updated_at: '2027-07-20T09:00:00' },
+    { id: 'w3', term_id: 'V', seat_id: 'B', student_id: 'z', valid_from: '', valid_to: '', status: '배정', updated_at: '2027-07-26T09:00:00' },
+    { id: 'w4', term_id: 'V', seat_id: 'C', student_id: 'z', valid_from: '2027-07-24', valid_to: '2027-07-25', status: '배정', updated_at: '2027-07-01T09:00:00' }
+  ];
+  assert.strictEqual(ctx.assignmentOn_(asg, 'A', 'V', '2027-07-25').id, 'w2');
+  assert.strictEqual(ctx.assignmentOn_(asg, 'A', 'V', '2027-07-26').id, 'w1');
+  const seats = ['A', 'B', 'C'].map((id) => ({ id, kind: '좌석', status: '유효' }));
+  const enr = ['x', 'y', 'z'].map((sid) => ({ term_id: 'V', student_id: sid }));
+  const chs = ['x', 'y', 'z'].map((sid) => ch(sid, '학사', '입실', '2027-07-19'));
+  const m = plain(ctx.seatMapOn_(seats, asg, enr, chs, 'V', '2027-07-25'));
+  assert.strictEqual(m.bySeat.A.studentId, 'x');
+  assert.strictEqual(m.bySeat.C.studentId, 'z');           // 그날만 자리 C
+  assert.strictEqual(m.bySeat.B.reason, '미배정');
+  assert.deepStrictEqual(m.unseated, ['y']);
+  assert.strictEqual(m.warnings.length, 1);
+});
+
 /* ───── seatMapOn_ ───── */
 // 1층 일부 + 기둥, s1 퇴실(06-01)·재입실(06-15), s2 정상, s3 중도 입실(04-01, 자리 없음), s4 등록 없음, s5 입실 전
 const SEATS = [

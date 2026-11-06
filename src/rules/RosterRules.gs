@@ -25,11 +25,14 @@ function rosterEmailOk_(s) {
   return /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(s);
 }
 
-/** O/X 값 → true/false, 알 수 없으면 null. O·○·Y·YES·TRUE·1 / X·×·N·NO·FALSE·0(대소문자 무시). */
+/**
+ * O/X 값 → true/false, 알 수 없으면 null. O·○·〇·◯·Ｏ·Y·YES·TRUE / X·×·Ｘ·✕·N·NO·FALSE(대소문자 무시).
+ * 숫자 0·1은 받지 않는다(글자 O 대신 숫자 0을 잘못 친 것이 X로 읽히지 않게).
+ */
 function rosterOx_(v) {
   var s = rosterStr_(v).toUpperCase();
-  if (['O', '○', 'Y', 'YES', 'TRUE', '1'].indexOf(s) >= 0) return true;
-  if (['X', '×', 'N', 'NO', 'FALSE', '0'].indexOf(s) >= 0) return false;
+  if (['O', '○', '〇', '◯', 'Ｏ', 'Y', 'YES', 'TRUE'].indexOf(s) >= 0) return true;
+  if (['X', '×', 'Ｘ', '✕', 'N', 'NO', 'FALSE'].indexOf(s) >= 0) return false;
   return null;
 }
 
@@ -203,12 +206,18 @@ function parseGuardianTable_(rows) {
  *   저장하는 쪽(C3)이 새 id를 만들고 ref를 바꿔 넣는다.
  * - 학생 찾기: ① 학생 구글 계정이 같은 학생(학년이 올라 학번이 바뀌어도 이어진다) ② 계정으로 못 찾으면 학번이 같은 학생
  *   (이번 명단의 다른 줄이 계정으로 이미 잡은 학생은 빼고 — 옛 학번을 올해 새 학생이 쓰는 경우).
- *   학번으로 찾았는데 계정이 서로 다르거나(둘 다 있을 때), 이름이나 학년이 다르면 같은 사람인지 알 수 없어 ambiguous.
- *   명단의 두 줄이 같은 학생을 가리켜도 ambiguous. ambiguous 줄은 아무것도 만들지 않는다.
+ *   학번은 학년도마다 새 학생에게 다시 쓰이므로, 학번이 같아도 계정이 서로 다르거나(둘 다 있을 때) 이름이 다르면
+ *   다른 사람으로 보고 새 학생을 만든다(경고). 학번·이름이 같은데 학년이 다르거나, 같은 학번·이름이 여럿이거나,
+ *   다른 줄이 계정으로 잡은 학생과 학번·이름이 같거나, 명단의 두 줄이 같은 학생을 가리키면 ambiguous.
+ *   ambiguous 줄은 아무것도 만들지 않는다(관리자가 고쳐서 다시 올린다).
+ *   새 학생이 계정 없는 기존 학생과 이름·성별이 같으면 경고(계정이 없어 학년이 올라간 학생을 잇지 못했을 수 있다).
  * - 학생 정보가 다르면 updateStudents(바뀐 열만). memo는 학생이 아니라 이 기간 등록의 memo로 간다.
  * - 이 기간 등록이 없으면 createEnrollments, 있으면 담당교사·베리타스·통학구분·비고가 다를 때 updateEnrollments.
  *   ASSUMPTION: 이미 있는 등록의 end_type은 명단에 열이 없으므로 바꾸지 않는다.
- * - 상태(학사·기숙사·조식·석식): ymd 기준 statusOn_과 다를 때만 createChanges(적용일 = ymd).
+ * - 상태(학사·기숙사·조식·석식): ymd 기준 그 항목 기록이 아직 없을 때만 createChanges(적용일 = ymd, 초기값).
+ *   ASSUMPTION: 기록이 이미 있고 명단과 다르면 바꾸지 않고 경고만 한다. 명단은 초기값용이고, 학기 중 변경은
+ *   F6·F7(급식 적용일 규칙)로 한다. 그래서 같은 파일을 언제 다시 올려도 상태 변경은 0건이다.
+ *   ymd는 보통 기간 시작일(학기 중에 올리면 그날)을 넘긴다.
  * - leavingCandidates: 이 기간 등록이 있고 ymd에 학사생인데 명단에 없는 학생. 표시만 한다(자동 퇴실 없음).
  * - warnings: 담당교사 이메일이 users에 없음 등.
  */
@@ -255,16 +264,20 @@ function diffRoster_(records, existing, termId, ymd) {
       return { rec: rec, amb: { candidates: sameName, reason: '다른 줄이 학생 계정으로 이미 가리킨 학생과 학번·이름이 같습니다' } };
     }
     if (!byN.length) return { rec: rec, student: null };
-    if (byN.length > 1) return { rec: rec, amb: { candidates: byN, reason: '같은 학번의 학생이 여럿입니다' } };
-    var s = byN[0];
-    var sEmail = rosterStr_(s.email).toLowerCase();
-    if (rec.email && sEmail && sEmail !== rec.email) {
-      return { rec: rec, amb: { candidates: byN, reason: '학번은 같지만 학생 계정이 다릅니다(다른 학생이 같은 학번을 쓰는지 확인)' } };
+    // 학번은 해마다 새 학생에게 다시 쓰인다. 계정이 서로 다르거나 이름이 다르면 다른 사람으로 보고 새 학생을 만든다.
+    var same = byN.filter(function (x) {
+      var e = rosterStr_(x.email).toLowerCase();
+      return rosterStr_(x.name) === rec.name && !(rec.email && e && e !== rec.email);
+    });
+    if (!same.length) {
+      return { rec: rec, student: null, note: '학번 ' + rec.student_no + '을(를) 쓰던 다른 학생 기록이 있어 새 학생으로 만듭니다(' +
+        byN.map(function (x) { return rosterStr_(x.name); }).join('·') + ')' };
     }
-    if (rosterStr_(s.name) !== rec.name || rosterStr_(s.grade) !== rec.grade) {
-      return { rec: rec, amb: { candidates: byN, reason: '학번은 같지만 이름이나 학년이 다릅니다' } };
+    if (same.length > 1) return { rec: rec, amb: { candidates: same, reason: '같은 학번·이름의 학생이 여럿입니다' } };
+    if (rosterStr_(same[0].grade) !== rec.grade) {
+      return { rec: rec, amb: { candidates: same, reason: '학번·이름은 같지만 학년이 다릅니다' } };
     }
-    return { rec: rec, student: s };
+    return { rec: rec, student: same[0] };
   });
 
   // 2) 두 줄이 같은 학생을 가리키면 둘 다 ambiguous
@@ -296,12 +309,20 @@ function diffRoster_(records, existing, termId, ymd) {
     if (rec.teacher_email && !teacherEmails[rec.teacher_email]) {
       out.warnings.push(rec.line + '줄: 담당교사 ' + rec.teacher_email + '이(가) 사용자 목록에 없습니다.');
     }
+    if (m.note) out.warnings.push(rec.line + '줄: ' + m.note);
     var sid;
     var fields = { student_no: rec.student_no, name: rec.name, gender: rec.gender, grade: rec.grade,
       class_no: rec.class_no, number: rec.number, track: rec.track, email: rec.email };
     if (!m.student) {
       sid = 'new:' + rec.student_no;
       out.createStudents.push(Object.assign({ ref: sid }, fields, { memo: '' }));
+      var twins = students.filter(function (x) {
+        return !rosterStr_(x.email) && rosterStr_(x.name) === rec.name && rosterStr_(x.gender) === rec.gender;
+      });
+      if (twins.length) {
+        out.warnings.push(rec.line + '줄: 계정이 비어 있는 기존 학생 ' + twins.map(function (x) { return rosterStr_(x.student_no) + ' ' + rosterStr_(x.name); }).join('·') +
+          '과(와) 이름·성별이 같습니다. 같은 학생이면 그 학생에게 계정을 먼저 넣고 다시 올려 주세요.');
+      }
     } else {
       sid = rosterStr_(m.student.id);
       inRoster[sid] = true;
@@ -313,6 +334,13 @@ function diffRoster_(records, existing, termId, ymd) {
         if (before !== fields[k]) patch[k] = fields[k];
       });
       if (Object.keys(patch).length) out.updateStudents.push({ id: sid, patch: patch });
+      if (patch.student_no) {
+        var holders = (byNo[patch.student_no] || []).filter(function (x) { return rosterStr_(x.id) !== sid; });
+        if (holders.length) {
+          out.warnings.push(rec.line + '줄: 새 학번 ' + patch.student_no + '을(를) 다른 학생 기록(' +
+            holders.map(function (x) { return rosterStr_(x.name); }).join('·') + ')도 가지고 있습니다(학번은 학년도마다 다시 쓰임).');
+        }
+      }
     }
 
     var enr = m.student ? enrByStudent[sid] : null;
@@ -334,6 +362,12 @@ function diffRoster_(records, existing, termId, ymd) {
     [['학사', rec.hall], ['기숙사', rec.dorm], ['조식', rec.breakfast], ['석식', rec.dinner]].forEach(function (p) {
       var now = m.student ? statusOn_(changes, sid, p[0], ymd) : '';
       if (now === p[1]) return;
+      if (now !== '') {
+        // ASSUMPTION: 이미 상태 기록이 있는 항목은 명단으로 바꾸지 않는다(F6·F7 기록과 급식 적용일 규칙을 덮지 않게).
+        out.warnings.push(rec.line + '줄: ' + rec.name + ' ' + p[0] + '이(가) 기록(' + now + ')과 명단(' + p[1] +
+          ')이 다릅니다. 바꾸려면 입퇴실·급식 변경으로 처리해 주세요.');
+        return;
+      }
       out.createChanges.push({ student_id: sid, item: p[0], value: p[1], effective_date: ymd, effective_date_auto: ymd,
         requested_at: '', reason: '명단 업로드', doc_submitted: '', linked_change_id: '', source: '명단업로드',
         status: '유효', memo: '' });

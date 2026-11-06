@@ -14,6 +14,11 @@ function statStr_(v) {
   return String(v === undefined || v === null ? '' : v).trim();
 }
 
+/** 일시 비교용: 'yyyy-MM-dd HH:mm:ss'처럼 공백으로 쓴 값도 'T' 형식과 같은 순서가 되게. */
+function statIso_(v) {
+  return statStr_(v).replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T');
+}
+
 function statIsYmd_(s) {
   return /^\d{4}-\d{2}-\d{2}$/.test(s);
 }
@@ -39,7 +44,7 @@ function statusOn_(changes, studentId, item, ymd) {
     if (statStr_(c.student_id) !== sid || statStr_(c.item) !== it) return;
     var eff = statStr_(c.effective_date);
     if (!statIsYmd_(eff) || eff > ymd) return;
-    var cand = { eff: eff, req: statStr_(c.requested_at), created: statStr_(c.created_at), value: statStr_(c.value) };
+    var cand = { eff: eff, req: statIso_(c.requested_at), created: statIso_(c.created_at), value: statStr_(c.value) };
     if (!best || cand.eff > best.eff || (cand.eff === best.eff &&
         (cand.req > best.req || (cand.req === best.req && cand.created >= best.created)))) best = cand;
   });
@@ -59,16 +64,26 @@ function isActiveOn_(changes, enrollment, ymd) {
 /**
  * 그날 그 좌석의 배정 행 하나(없으면 null).
  * 같은 기간·좌석, status가 '취소'가 아니고, valid_from <= ymd <= valid_to(빈칸이면 기간 전체).
- * 여럿이면 updated_at이 가장 늦은 행(같으면 시트에서 아래 행).
+ * 여럿이면 statAssignmentWins_ 순서: 날짜를 좁힌 배정(방학 날짜별 자리표)이 기간 전체 배정보다 먼저,
+ * 그다음 valid_from이 늦은 것, 그다음 updated_at이 늦은 것(같으면 시트에서 아래 행).
  */
 function assignmentOn_(assignments, seatId, termId, ymd) {
   var best = null;
   (assignments || []).forEach(function (a) {
     if (!statAssignmentLive_(a, termId, ymd)) return;
     if (statStr_(a.seat_id) !== statStr_(seatId)) return;
-    if (!best || statStr_(a.updated_at) >= statStr_(best.updated_at)) best = a;
+    if (!best || statAssignmentWins_(a, best)) best = a;
   });
   return best;
+}
+
+/** 배정 a가 b보다 우선인지(같으면 true = 나중 행이 이김). */
+function statAssignmentWins_(a, b) {
+  var bounds = function (x) { return (statStr_(x.valid_from) ? 1 : 0) + (statStr_(x.valid_to) ? 1 : 0); };
+  if (bounds(a) !== bounds(b)) return bounds(a) > bounds(b);
+  var fa = statStr_(a.valid_from), fb = statStr_(b.valid_from);
+  if (fa !== fb) return fa > fb;
+  return statIso_(a.updated_at) >= statIso_(b.updated_at);
 }
 
 /** 배정 행이 그 기간·날짜에 살아 있는지. */
@@ -88,7 +103,8 @@ function statAssignmentLive_(a, termId, ymd) {
  * - bySeat에는 kind '좌석'이고 취소되지 않은 좌석만 들어간다.
  * - 배정이 없으면 '미배정', 배정된 학생이 그날 학사 '퇴실'이면 '퇴실'(공석),
  *   이 기간 등록이 없거나 아직 입실 전이면 '미입실'(공석). 모두 vacant true.
- * - 한 학생이 그날 두 자리에 배정되어 있으면 최근 수정한 배정 하나만 쓰고 나머지는 '미배정' + 경고.
+ * - 한 학생이 그날 두 자리에 배정되어 있으면 statAssignmentWins_로 하나만 쓰고 나머지는 '미배정' + 경고
+ *   (방학에 기간 전체 자리 A와 그날만 자리 B가 있으면 B).
  * - unseated: 이 기간 등록이 있고 그날 학사생인데 앉은 자리가 없는 학생(중도 입실 등). 등록 행 순서.
  */
 function seatMapOn_(seats, assignments, enrollments, changes, termId, ymd) {
@@ -118,8 +134,8 @@ function seatMapOn_(seats, assignments, enrollments, changes, termId, ymd) {
     var sid = statStr_(a.student_id);
     var prev = seatOfStudent[sid];
     if (!prev) { seatOfStudent[sid] = id; return; }
-    warnings.push('한 학생이 같은 날 두 자리에 배정되어 있습니다(최근 배정만 씀): ' + sid);
-    if (statStr_(a.updated_at) >= statStr_(pick[prev].updated_at)) {
+    warnings.push('한 학생이 같은 날 두 자리에 배정되어 있습니다(날짜를 좁힌 배정·최근 배정을 씀): ' + sid);
+    if (statAssignmentWins_(a, pick[prev])) {
       pick[prev] = null;
       seatOfStudent[sid] = id;
     } else {

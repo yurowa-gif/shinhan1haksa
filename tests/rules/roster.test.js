@@ -31,9 +31,9 @@ test('parseRosterTable_: PRD 10.2 예시 두 줄', () => {
     commute_type: '원거리(관내)', teacher_email: 'teacher2@example.com', email: 'student2@example.com', end_type: '23:50', memo: '' });
 });
 
-table('parseRosterTable_: O/X 정규화(O·o·○·Y·TRUE·1 / X·x·×·N·FALSE·0)', [
-  ['O', '입실'], ['o', '입실'], ['○', '입실'], ['Y', '입실'], ['TRUE', '입실'], ['1', '입실'], [' O ', '입실'],
-  ['X', '퇴실'], ['x', '퇴실'], ['×', '퇴실'], ['N', '퇴실'], ['false', '퇴실'], ['0', '퇴실']
+table('parseRosterTable_: O/X 정규화(O·o·○·〇·Ｏ·Y·TRUE / X·x·×·Ｘ·N·FALSE)', [
+  ['O', '입실'], ['o', '입실'], ['○', '입실'], ['〇', '입실'], ['Ｏ', '입실'], ['Y', '입실'], ['TRUE', '입실'], [' O ', '입실'],
+  ['X', '퇴실'], ['x', '퇴실'], ['×', '퇴실'], ['Ｘ', '퇴실'], ['N', '퇴실'], ['false', '퇴실']
 ], ([v, want]) => {
   const r = parse([HEAD, withCell(ROW1, '학사', v)]);
   assert.deepStrictEqual(r.errors, []);
@@ -47,7 +47,7 @@ table('parseRosterTable_: 석식 표기', [
 table('parseRosterTable_: 칸 오류는 줄 번호·열 이름과 함께', [
   ['학번', '1010', '학번'], ['학번', '1010a', '학번'], ['학년', '4', '학년'], ['학년', '0', '학년'], ['반', '', '반'],
   ['번호', '1.5', '번호'], ['이름', '', '이름'], ['성별', '남자', '성별'], ['계열', '자연', '계열'],
-  ['학사', '', '학사'], ['기숙사', '예', '기숙사'], ['베리타스', '?', '베리타스'], ['조식', '', '조식'],
+  ['학사', '', '학사'], ['학사', '0', '학사'], ['조식', '1', '조식'], ['기숙사', '예', '기숙사'], ['베리타스', '?', '베리타스'], ['조식', '', '조식'],
   ['석식', '', '석식'], ['석식', '학사식', '석식'], ['통학구분', '원거리', '통학구분'],
   ['담당교사이메일', 'teacher1', '담당교사이메일'], ['학생구글계정', 'a@b', '학생구글계정']
 ], ([col, v, wantCol]) => {
@@ -162,13 +162,14 @@ test('diffRoster_: 같은 파일 재업로드는 변경 0건', () => {
   assert.strictEqual(count(plain(ctx.diffRoster_(recs2, after, 'T1', '2027-03-02'))), 0);
 });
 
-test('diffRoster_: 바뀐 칸만 update, 상태가 바뀐 항목만 change', () => {
+test('diffRoster_: 바뀐 칸만 update, 이미 기록이 있는 상태는 바꾸지 않고 경고(가정)', () => {
   const recs = parse([HEAD, ROW1, ROW2]).records;
   const after = apply(EMPTY, plain(ctx.diffRoster_(recs, EMPTY, 'T1', '2027-03-02')));
   const recs2 = parse([HEAD, withCell(withCell(ROW1, '석식', '일반'), '담당교사이메일', 'teacher2@example.com'),
     withCell(ROW2, '이름', '나학생2')]).records;
   const d = plain(ctx.diffRoster_(recs2, after, 'T1', '2027-04-01'));
-  assert.deepStrictEqual(d.createChanges.map((c) => [c.item, c.value, c.effective_date]), [['석식', '일반 석식', '2027-04-01']]);
+  assert.deepStrictEqual(d.createChanges, []);
+  assert.strictEqual(d.warnings.filter((w) => w.indexOf('석식') >= 0 && w.indexOf('급식 변경') >= 0).length, 1, d.warnings.join('/'));
   assert.deepStrictEqual(d.updateEnrollments.map((u) => u.patch), [{ teacher_email: 'teacher2@example.com' }]);
   assert.deepStrictEqual(d.updateStudents.map((u) => u.patch), [{ name: '나학생2' }]);
   assert.deepStrictEqual([d.createStudents.length, d.createEnrollments.length], [0, 0]);
@@ -202,15 +203,87 @@ test('diffRoster_: 학년이 올라간 학생은 이메일로 이어서 학번·
   assert.deepStrictEqual(d.leavingCandidates, []);   // 새 기간에는 등록이 아직 없다
 });
 
+table('diffRoster_: 학번이 같아도 계정이 다르거나 이름이 다르면 다른 사람 → 새 학생 + 경고(학번 재사용)', [
+  [{ id: 'X', student_no: '10101', name: '가학생', grade: '1', email: 'other@example.com' }, ROW1],
+  [{ id: 'X', student_no: '10101', name: '딴학생', grade: '1', email: '' }, withCell(ROW1, '학생구글계정', '')],
+  [{ id: 'X', student_no: '10101', name: '딴학생', grade: '3', email: 'other@example.com' }, ROW1]
+], ([s, row]) => {
+  const ex = Object.assign({}, EMPTY, { students: [Object.assign({ class_no: '1', number: '1', gender: '남', track: '' }, s)] });
+  const d = plain(ctx.diffRoster_(parse([HEAD, row]).records, ex, 'T1', '2027-03-02'));
+  assert.deepStrictEqual(d.ambiguous, []);
+  assert.deepStrictEqual(d.createStudents.map((x) => x.ref), ['new:10101']);
+  assert.deepStrictEqual(d.updateStudents, []);
+  assert.ok(d.warnings.some((w) => w.indexOf('다른 학생 기록') >= 0), d.warnings.join('/'));
+});
+
+test('diffRoster_: 다음 해 새 1학년이 떠난 학생의 옛 학번을 쓰면 새로 만들고, 떠난 학생은 퇴실 후보로 남는다', () => {
+  const y1rows = [HEAD, ROW1, withCell(withCell(withCell(ROW2, '학번', '10102'), '학년', '1'), '학생구글계정', 'y@example.com')];
+  const y1 = apply(EMPTY, plain(ctx.diffRoster_(parse(y1rows).records, EMPTY, 'T26', '2026-03-02')));
+  // 이어받기로 T27 등록을 만든 상태
+  const ex = JSON.parse(JSON.stringify(y1));
+  for (const s of ex.students) ex.enrollments.push({ id: 'E27-' + s.id, term_id: 'T27', student_id: s.id });
+  const up = withCell(withCell(withCell(withCell(ROW1, '학번', '20305'), '학년', '2'), '반', '3'), '번호', '5');
+  const z = withCell(withCell(withCell(ROW1, '학번', '10102'), '이름', '다학생'), '학생구글계정', 'z@example.com');
+  const d = plain(ctx.diffRoster_(parse([HEAD, up, z]).records, ex, 'T27', '2027-03-02'));
+  assert.deepStrictEqual(d.ambiguous, []);
+  assert.deepStrictEqual(d.createStudents.map((x) => x.name), ['다학생']);
+  assert.deepStrictEqual(d.leavingCandidates.map((x) => x.name), ['나학생']);
+  // 계정 없이 올려도 이름이 다르면 같은 결과
+  const z2 = withCell(z, '학생구글계정', '');
+  assert.deepStrictEqual(plain(ctx.diffRoster_(parse([HEAD, up, z2]).records, ex, 'T27', '2027-03-02')).createStudents.map((x) => x.name), ['다학생']);
+});
+
+test('diffRoster_: 새 학번이 다른 학생 기록과 겹치면 경고', () => {
+  const ex = Object.assign({}, EMPTY, { students: [
+    { id: 'X', student_no: '10101', name: '가학생', grade: '1', class_no: '1', number: '1', gender: '여', track: '', email: 'student1@example.com' },
+    { id: 'Y', student_no: '20305', name: '와학생', grade: '2', class_no: '3', number: '5', gender: '남', track: '', email: 'y@example.com' }] });
+  const up = withCell(withCell(withCell(withCell(ROW1, '학번', '20305'), '학년', '2'), '반', '3'), '번호', '5');
+  const d = plain(ctx.diffRoster_(parse([HEAD, up]).records, ex, 'T27', '2027-03-02'));
+  assert.strictEqual(d.updateStudents[0].patch.student_no, '20305');
+  assert.ok(d.warnings.some((w) => w.indexOf('와학생') >= 0), d.warnings.join('/'));
+});
+
+test('diffRoster_: 계정 없던 학생이 학년이 올라 계정과 함께 오면 새 학생 + "같은 학생일 수 있음" 경고', () => {
+  const ex = Object.assign({}, EMPTY, { students: [
+    { id: 'X', student_no: '10101', name: '가학생', grade: '1', class_no: '1', number: '1', gender: '여', track: '', email: '' }] });
+  const up = withCell(withCell(withCell(withCell(ROW1, '학번', '20305'), '학년', '2'), '반', '3'), '번호', '5');
+  const d = plain(ctx.diffRoster_(parse([HEAD, up]).records, ex, 'T27', '2027-03-02'));
+  assert.strictEqual(d.createStudents.length, 1);
+  assert.ok(d.warnings.some((w) => w.indexOf('계정이 비어 있는 기존 학생') >= 0), d.warnings.join('/'));
+});
+
+test('diffRoster_: 학기 중 F6·F7 변경 뒤에 같은 파일을 다시 올려도(어느 날짜든) 변경 0건, 기록을 덮지 않는다', () => {
+  const recs = parse([HEAD, ROW1, ROW2]).records;
+  const after = apply(EMPTY, plain(ctx.diffRoster_(recs, EMPTY, 'T1', '2027-03-02')));
+  const s1 = after.students.find((s) => s.student_no === '10101').id;
+  const s2 = after.students.find((s) => s.student_no === '20612').id;
+  after.changes.push({ student_id: s2, item: '석식', value: '미실시', effective_date: '2027-03-15', status: '유효', source: 'F7', requested_at: '2027-03-03T10:00:00' });
+  after.changes.push({ student_id: s1, item: '학사', value: '퇴실', effective_date: '2027-03-20', status: '유효', source: 'F6', requested_at: '2027-03-19T10:00:00' });
+  for (const d of ['2027-03-02', '2027-03-15', '2027-04-01']) {
+    const r = plain(ctx.diffRoster_(recs, after, 'T1', d));
+    assert.deepStrictEqual(r.createChanges, [], d);
+  }
+  // 같은 적용일에 명단 업로드와 F7 기록이 함께 있어도 명단 쪽이 다시 만들어지지 않는다
+  const r2 = plain(ctx.diffRoster_(recs, after, 'T1', '2027-03-15'));
+  assert.ok(r2.warnings.some((w) => w.indexOf('석식') >= 0));
+});
+
+test('diffRoster_: 기록이 없던 항목만 초기값을 만든다(기존 학생에게 기숙사 기록이 없을 때)', () => {
+  const ex = Object.assign({}, EMPTY, {
+    students: [{ id: 'X', student_no: '10101', name: '가학생', grade: '1', class_no: '1', number: '1', gender: '여', track: '', email: 'student1@example.com' }],
+    changes: [{ student_id: 'X', item: '학사', value: '입실', effective_date: '2027-03-02', status: '유효' }] });
+  const d = plain(ctx.diffRoster_(parse([HEAD, ROW1]).records, ex, 'T1', '2027-03-02'));
+  assert.deepStrictEqual(d.createChanges.map((c) => c.item), ['기숙사', '조식', '석식']);
+});
+
 table('diffRoster_: 같은 사람인지 모르면 ambiguous(아무것도 만들지 않음)', [
   // [기존 학생, 명단 줄, 이유에 들어갈 낱말]
-  [{ id: 'X', student_no: '10101', name: '가학생', grade: '1', email: 'other@example.com' }, ROW1, '계정이 다릅니다'],
-  [{ id: 'X', student_no: '10101', name: '딴학생', grade: '1', email: '' }, withCell(ROW1, '학생구글계정', ''), '이름이나 학년'],
-  [{ id: 'X', student_no: '10101', name: '가학생', grade: '2', email: '' }, ROW1, '이름이나 학년'],
+  [{ id: 'X', student_no: '10101', name: '가학생', grade: '2', email: '' }, ROW1, '학년이 다릅니다'],
+  [{ id: 'X', student_no: '10101', name: '가학생', grade: '2', email: 'student1@example.com' }, withCell(ROW1, '학생구글계정', ''), '학년이 다릅니다'],
 ], ([s, row, word]) => {
   const ex = Object.assign({}, EMPTY, { students: [Object.assign({ class_no: '1', number: '1', gender: '여', track: '' }, s)] });
   const d = plain(ctx.diffRoster_(parse([HEAD, row]).records, ex, 'T1', '2027-03-02'));
-  assert.strictEqual(d.ambiguous.length, 1);
+  assert.strictEqual(d.ambiguous.length, 1, JSON.stringify(d));
   assert.deepStrictEqual(d.ambiguous[0].candidates, ['X']);
   assert.strictEqual(d.ambiguous[0].line, 2);
   assert.ok(d.ambiguous[0].reason.indexOf(word) >= 0, d.ambiguous[0].reason);
