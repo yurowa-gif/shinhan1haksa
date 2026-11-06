@@ -1,7 +1,7 @@
 /**
  * D4 미리보기: 픽스처 4종 → HTML(design/preview/out/sheet-*.html) → 크로미움 인쇄(A4 가로, 배율 100%) → PDF 쪽 수 확인 + PNG.
  * 실행: node design/preview/sheet.js [--png]   (out/은 Git에 올리지 않는다)
- * 쪽 수가 공간 수와 다르면(= 한 장에 안 들어가면) 오류로 끝난다.
+ * 쪽 수가 기대(보통 1쪽, 특이사항 목록이 넘치면 뒷면 포함 2쪽)와 다르면 오류로 끝난다.
  */
 const fs = require('fs');
 const path = require('path');
@@ -33,13 +33,14 @@ async function main() {
     const overflow = await page.evaluate(() => Array.from(document.querySelectorAll('section.page')).map((s, i) => ({
       i, over: s.scrollHeight > s.clientHeight + 1 || s.scrollWidth > s.clientWidth + 1
     })).filter((x) => x.over));
-    const ok = pages === model.spaces.length && !overflow.length;
+    const want = loadGs(['src/print/AttendanceSheetHtml.gs']).printSheetPlan_(model, {}).pages;
+    const ok = pages === want && !overflow.length;
     if (!ok) bad++;
-    console.log(day + ': PDF ' + pages + '쪽(공간 ' + model.spaces.length + '개)' + (overflow.length ? ', 넘침 ' + JSON.stringify(overflow) : '') + (ok ? ' ✓' : ' ✗'));
+    console.log(day + ': PDF ' + pages + '쪽(기대 ' + want + '쪽, 공간 ' + model.spaces.length + '개를 한 장에)' + (overflow.length ? ', 넘침 ' + JSON.stringify(overflow) : '') + (ok ? ' ✓' : ' ✗'));
     if (process.argv.includes('--png') || day === 'mon_thu' || day === 'sun') {
       const secs = page.locator('section.page');
-      await secs.nth(0).screenshot({ path: path.join(OUT, 'sheet-' + day + '-1F.png') });
-      await secs.nth(1).screenshot({ path: path.join(OUT, 'sheet-' + day + '-SA1.png') });
+      await secs.nth(0).screenshot({ path: path.join(OUT, 'sheet-' + day + '.png') });
+      if (await secs.count() > 1) await secs.nth(1).screenshot({ path: path.join(OUT, 'sheet-' + day + '-back.png') });
     }
     await page.close();
   }
