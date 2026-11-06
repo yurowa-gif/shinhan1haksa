@@ -1,6 +1,7 @@
 /**
  * D4 미리보기: 픽스처 4종 → HTML(design/preview/out/sheet-*.html) → 크로미움 인쇄(A4 가로, 배율 100%) → PDF 쪽 수 확인 + PNG.
  * 실행: node design/preview/sheet.js [--png]   (out/은 Git에 올리지 않는다)
+ * 끝에서 적대적 입력(긴 이름·미배정 180명·블록 5개·행 21개·특이사항 120명 등, design/preview/stress.js)도 점검한다. 어느 쪽이든 내용이 잘리면 실패.
  * 쪽 수가 기대(보통 1쪽, 특이사항 목록이 넘치면 뒷면 포함 2쪽)와 다르면 오류로 끝난다.
  */
 const fs = require('fs');
@@ -44,8 +45,9 @@ async function main() {
     }
     await page.close();
   }
+  const stressBad = await require('./stress').runAll(browser);
   await browser.close();
-  if (bad) process.exit(1);
+  if (bad || stressBad) process.exit(1);
 }
 
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
