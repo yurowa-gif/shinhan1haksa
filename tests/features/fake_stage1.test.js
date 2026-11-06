@@ -60,6 +60,8 @@ test('초기 상태: 학생 전원 학사 입실, 중도 퇴실 1명(적용일 �
   for (const c of d.statusChanges) {
     assert.ok(['학사', '기숙사', '조식', '석식'].includes(c.item), c.item);
     assert.strictEqual(c.status, '유효');
+    assert.ok(['TRUE', 'FALSE'].includes(c.doc_submitted), 'vocabulary.md: doc_submitted');
+    assert.ok(['명단업로드', 'F6', 'F7'].includes(c.source), c.source);
     assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(c.effective_date) && c.requested_at.startsWith(c.effective_date));
     assert.strictEqual(c.effective_date_auto, c.effective_date);
   }

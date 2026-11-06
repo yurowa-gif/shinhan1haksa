@@ -6,9 +6,8 @@
  *                           언제 실행해도 같은 결과(id도 고정).
  * seedFakeStage1()        : 편집기에서 실행. 두 번 실행해도 중복이 생기지 않는다(id가 이미 있으면 건너뜀).
  *
- * 규칙 세션(R2·R3)의 값 어휘를 아직 모르므로 아래 값은 ASSUMPTION이다:
- *   status_changes.value: 학사 입실/퇴실, 기숙사 입실, 조식 실시, 석식 학사 석식(CLAUDE.md 석식 값)
- *   status 값: 특이사항 요청/확정/취소, 고정 일정 확정, 그 밖에 유효/배정
+ * 시트에 쓰는 글자 값은 docs/contracts/vocabulary.md(총괄 확정)를 따른다.
+ * ASSUMPTION(vocabulary.md 기준 밖): 기숙사 입실·조식 실시는 원거리 통학생에게만 넣는다(가짜 데이터 모양일 뿐).
  */
 
 var FAKE1_TERM_INDEX = 1;                 // 두 번째 기간(2027 1학기)에 시드한다
@@ -72,7 +71,7 @@ function buildFakeStage1_(fake) {
   var addChange = function (st, item, value, effective, source, reason) {
     statusChanges.push({ id: fake1Id_('f4000000', statusChanges.length + 1), student_id: st.id, item: item, value: value,
       requested_at: effective + 'T09:00:00', effective_date: effective, effective_date_auto: effective,
-      reason: reason || '', doc_submitted: '', linked_change_id: '', source: source, status: '유효', memo: FAKE1_MEMO });
+      reason: reason || '', doc_submitted: 'FALSE', linked_change_id: '', source: source, status: '유효', memo: FAKE1_MEMO });
   };
   students.forEach(function (st) {
     var en = enrollByStudent[st.id];
