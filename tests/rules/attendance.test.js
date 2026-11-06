@@ -89,7 +89,26 @@ table('effectiveFixedRows_: 확정된 것 중 가장 최근 적용월(확정 전
   ['2027-04-15', ['s1/2027-03/월/학/확정']],               // 4월은 '동의'뿐 → 3월 유지
   ['2027-05-03', ['s1/2027-05/화/가/확정']],
   ['2028-01-01', ['s1/2027-05/화/가/확정']]
-], ([d, want]) => assert.deepStrictEqual(ctx.effectiveFixedRows_(FIXED, 's1', d).map((r) => r.id), want));
+], ([d, want]) => assert.deepStrictEqual(plain(ctx.effectiveFixedRows_(FIXED, 's1', d)).map((r) => r.id), want));
+
+test('effectiveFixedRows_: 한 달의 일부 행만 확정되었으면(나머지 제출·동의) 앞 달을 유지, 반려·취소만 남으면 바꾼다', () => {
+  const rows = [
+    FX('s1', '2027-03', '월', '18:00-20:00', '학', '확정'), FX('s1', '2027-03', '수', '18:00-20:00', '학', '확정'),
+    FX('s1', '2027-04', '월', '18:00-20:00', '학', '확정'), FX('s1', '2027-04', '수', '18:00-22:00', '학', '동의')
+  ];
+  const ids = (d, r) => plain(ctx.effectiveFixedRows_(r || rows, 's1', d)).map((x) => x.id);
+  assert.deepStrictEqual(ids('2027-04-07'), ['s1/2027-03/월/학/확정', 's1/2027-03/수/학/확정']);
+  const done = rows.map((r) => r.status === '동의' ? Object.assign({}, r, { status: '확정', id: 'w' }) : r);
+  assert.deepStrictEqual(ids('2027-04-07', done), ['s1/2027-04/월/학/확정', 'w']);
+  const rejected = rows.map((r) => r.status === '동의' ? Object.assign({}, r, { status: '반려' }) : r);
+  assert.deepStrictEqual(ids('2027-04-07', rejected), ['s1/2027-04/월/학/확정']);
+});
+
+test('effectiveFixedRows_: 연말을 넘어 앞 달 유지(2026-12 → 2027-01), 다른 학생 행은 안 섞임(가정: 행 없는 달은 앞 달 유지)', () => {
+  const rows = [FX('s1', '2026-12', '월', 'ALL', '가', '확정'), FX('s2', '2027-01', '월', 'ALL', '학', '확정')];
+  assert.deepStrictEqual(plain(ctx.effectiveFixedRows_(rows, 's1', '2027-01-04')).map((x) => x.id), ['s1/2026-12/월/가/확정']);
+  assert.deepStrictEqual(plain(ctx.effectiveFixedRows_(rows, 's2', '2026-12-28')), []);
+});
 
 /* ───── resolveCell_ 우선순위 ───── */
 const EX = (id, blocks, type, status, extra) => Object.assign({ id, student_id: 's1', date: '2027-03-01', blocks, type, status,
@@ -146,6 +165,15 @@ table('resolveCell_: 유형 약어(설정의 괄호 설명 포함 이름도), �
   ['새 유형(설명)', '새 유형'], ['봉사활동', '봉사활동']
 ], ([type, want]) => assert.strictEqual(cell({ exceptions: [EX('e', 'ALL', type, '확정')] }).text, want));
 
+test('resolveCell_: 실제 설정처럼 약어표 키에 괄호 설명이 있어도, 괄호가 다른 옛 행·괄호 없는 행이 약어로 나온다', () => {
+  const settingMap = { '병결': '병결', '가정사유(가족여행 포함)': '가정', '학원(보강 포함)': '학원',
+    '학사 내 프로그램(파워클래스·면접특강 등)': '내부', '미인정결석': '무결' };
+  for (const [type, want] of [['가정사유', '가정'], ['가정사유(가족·여행 포함)', '가정'], ['학사 내 프로그램(면접특강)', '내부'],
+    ['학원(보강 포함)', '학원'], ['미인정결석', '무결'], ['없는 유형(설명)', '없는 유형']]) {
+    assert.strictEqual(cell({ exceptions: [EX('e', 'ALL', type, '확정')], opts: { typeShort: settingMap } }).text, want, type);
+  }
+});
+
 test('resolveCell_: opts.typeShort를 주면 그것을 쓴다(관리자가 바꾼 약어)', () => {
   const opts = { typeShort: { '병결': '病', '학원(보강 포함)': '학' } };
   assert.strictEqual(cell({ exceptions: [EX('e', 'ALL', '병결', '확정')], opts }).text, '病');
@@ -181,11 +209,24 @@ table('resolveCell_: 23:00 종료 "정상 종료"는 월~목 마지막 블록만
   ['mon_thu', true, LAST, ' 23:00 ', 'END'],
   // 날짜별 종료를 22:00으로 당겨 마지막 블록이 20–22이면 23:00 종료 학생도 끝까지 하므로 표시 안 함(가정)
   ['mon_thu', true, B('20:00', '22:00'), '23:00', 'NONE'],
-  ['exam', true, LAST, '23:00', 'NONE']
+  // 특별 요일 유형은 실제 요일로 판정(가정): 월요일 exam → 표시, 금요일 exam → 표시 안 함
+  ['exam', true, LAST, '23:00', 'END'],
+  ['exam@금', true, LAST, '23:00', 'NONE'],
+  ['mon_thu', true, LAST, '23:00:00', 'END']
 ], ([dayType, isLast, block, endType, code]) => {
-  const r = cell({ dayType, isLastBlock: isLast, block, endType });
+  const [dt, wk] = dayType.split('@');
+  const r = cell({ dayType: dt, weekdayKo: wk || '월', isLastBlock: isLast, block, endType });
   assert.strictEqual(r.code, code);
   if (code === 'END') assert.deepStrictEqual(r, { code: 'END', text: '정상 종료', exceptionId: '', more: 0 });
+});
+
+table('resolveCell_: 그날 종료(dayEnd)가 23:00 이하이면 23:00 종료 학생도 표시 안 함(가정)', [
+  ['23:50', 'END'], ['23:01', 'END'], ['23:00', 'NONE'], ['22:30', 'NONE'], ['', 'END'], [undefined, 'END']
+], ([dayEnd, code]) => assert.strictEqual(cell({ isLastBlock: true, block: LAST, endType: '23:00', dayEnd }).code, code));
+
+test('resolveCell_: 설정에서 쪼갠 요일 목록의 공백은 무시', () => {
+  const opts = { endTypeDayTypes: 'mon_thu, fri'.split(',') };
+  assert.strictEqual(cell({ dayType: 'fri', weekdayKo: '금', isLastBlock: true, block: B('22:00', '23:30'), endType: '23:00', opts }).code, 'END');
 });
 
 test('resolveCell_: opts로 종료 요일·시각·문구를 바꿀 수 있다', () => {
@@ -225,6 +266,18 @@ test('resolveStudentDay_: 특이사항은 그날 것만, 15:00부터 귀가는 �
     ['EXC:학원', 'EXC:학원', 'EXC:학원']);
   assert.deepStrictEqual(marks(plan('2027-03-02'), { exceptions: exc, fixedRows: [], endType: '23:50' }),
     ['EXC:병결', 'EXC:병결', 'EXC:병결']);
+});
+
+test('resolveStudentDay_: 날짜가 빈 특이사항은 어느 날에도 찍히지 않는다', () => {
+  const exc = [EX('e1', 'ALL', '미인정결석', '확정', { date: '' }), EX('e2', 'ALL', '미인정결석', '확정', { date: ' ' })];
+  assert.deepStrictEqual(marks(plan('2027-03-03'), { exceptions: exc, endType: '23:50' }), ['NONE:', 'NONE:', 'NONE:']);
+  const exc2 = [EX('e3', 'ALL', '병결', '확정', { date: ' 2027-03-03 ' })];
+  assert.deepStrictEqual(marks(plan('2027-03-03'), { exceptions: exc2, endType: '23:50' }), ['EXC:병결', 'EXC:병결', 'EXC:병결']);
+});
+
+test('resolveStudentDay_: 종료를 22:30으로 당긴 날은 22–24 블록이 남아도 정상 종료 표시 안 함', () => {
+  assert.deepStrictEqual(marks(plan('2027-03-17', { date: '2027-03-17', end: '22:30' }), { endType: '23:00' }), ['NONE:', 'NONE:', 'NONE:']);
+  assert.deepStrictEqual(marks(plan('2027-03-17', { date: '2027-03-17', end: '23:30' }), { endType: '23:00' }), ['NONE:', 'NONE:', 'END:정상 종료']);
 });
 
 test('resolveStudentDay_: 금요일은 23:00 종료 학생도 표시 없음, 일요일 블록 4개', () => {
