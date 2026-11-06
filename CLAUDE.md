@@ -22,7 +22,7 @@
 - `tests/**/*.test.js` `npm test`가 자동으로 찾아 TZ=Asia/Seoul·UTC에서 한 번씩 실행. 도구는 `tests/helpers/`
 - `tests/public-api.json` 공개 함수(이름 끝 `_` 없음) 허용 목록과 첫 줄 권한 검사 표. 새 공개 함수는 여기에 등록
 - `docs/reference/` 실제 운영 자료에서 이름을 지우고 뽑은 구조(좌석·기숙사·현황표). 원본 파일은 넣지 않는다
-- `docs/contracts/` 세션 간 약속: `rules-api.md`(규칙 함수 시그니처), `sheet-model.md`(출석부 모델)
+- `docs/contracts/` 세션 간 약속: `rules-api.md`(규칙 함수 시그니처), `sheet-model.md`(출석부 모델), `vocabulary.md`(시트에 저장하는 값 어휘, 총괄 소유)
 - `design/`, `docs/design/` 디자인 규칙·미리보기(DESIGN). `design/preview/out/`은 Git에 올리지 않는다
 - `data/` 자료 파일(RESEARCH, 예: 권장 이수 과목 CSV)
 
