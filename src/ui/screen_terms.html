@@ -5,11 +5,6 @@
   .term-row:last-child { border-bottom: 0; }
   .term-tag { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .8rem;
     background: var(--accent-weak); color: var(--accent); border: 1px solid var(--accent); }
-  .term-field { margin-bottom: 14px; }
-  .term-field label { display: block; margin-bottom: 4px; color: var(--muted); font-size: .9rem; }
-  .term-field input, .term-field select { width: 100%; min-height: 48px; padding: 8px 12px; font: inherit;
-    border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--text); }
-  .term-field .fix { color: var(--warn); font-size: .9rem; margin-top: 4px; }
   .term-warn { background: var(--warn-weak); color: var(--warn); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
   .term-ok { color: var(--ok); margin-bottom: 12px; }
   .term-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -17,9 +12,9 @@
 <script>
   /** 운영 기간 화면(관리자는 추가·수정, 그 밖의 교사는 보기). C1. */
   function renderScreen(root) {
-    // DESIGN 이관 후보: localField(라벨 + 입력 + 오류 문구)
+    // 공통 .field(디자인 D1) 한 칸을 만든다
     function localField(label, input, name) {
-      return el('div', { class: 'term-field' }, [
+      return el('div', { class: 'field' }, [
         el('label', { text: label }), input, el('div', { class: 'fix', 'data-for': name })
       ]);
     }
