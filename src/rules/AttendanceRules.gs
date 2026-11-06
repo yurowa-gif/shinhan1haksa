@@ -85,12 +85,12 @@ function blockSpecCovers_(spec, block) {
 }
 
 /**
- * 그날 쓸 고정 일정 행(F9 "확정 전에는 기존 시간표 유지").
- * 그 학생의 적용월(month) <= ymd의 달 중, 확정 행이 있고 아직 확정 전인 행(제출·동의)이 없는 가장 최근 달을 고르고
- * 그 달의 확정 행을 모두 돌려준다(요일은 resolveCell_이 고른다). 없으면 []. 적용월이 'yyyy-MM'이 아닌 행은 무시.
- * - 한 달의 일부 행만 확정되었으면(교사가 행마다 확정하는 중) 그 달로 바꾸지 않고 앞 달을 유지한다.
- * ASSUMPTION: '학'·'가'가 하나도 없는 달은 행이 없어 나타낼 수 없으므로, 그런 달에도 앞 달 시간표가 이어진다.
- *   F9(3단계)에서 "이번 달 확정, 고정 일정 없음"을 저장하는 방법을 정해야 한다.
+ * 그날 쓸 고정 일정 행(F9 "확정 전에는 기존 시간표 유지", 결정 31, vocabulary.md fixed_schedules).
+ * 그 학생의 적용월(month) <= ymd의 달 중 확정 행이 있는 가장 최근 달을 고르고, 그 달의 확정 '학'·'가' 행을 돌려준다
+ * (요일은 resolveCell_이 고른다). 그 달이 code '없음' 행뿐이면 [] — 앞 달 시간표가 이어지지 않는다(결정 31).
+ * 확정 행이 있는 달이 없으면 []. 적용월이 'yyyy-MM'이 아닌 행은 무시.
+ * ASSUMPTION: 한 달의 일부 행만 확정되고 나머지가 아직 제출·동의 상태이면(교사가 행마다 확정하는 중)
+ *   그 달로 바꾸지 않고 앞 달을 유지한다(결정 31의 "확정 행이 있는 가장 최근 달"에 더한 조건, R3에서 총괄 승인).
  */
 function effectiveFixedRows_(rows, studentId, ymd) {
   var sid = attStr_(studentId), ym = attStr_(ymd).slice(0, 7);
@@ -107,7 +107,11 @@ function effectiveFixedRows_(rows, studentId, ymd) {
   var months = Object.keys(byMonth).filter(function (mo) {
     return byMonth[mo].confirmed.length && !byMonth[mo].pending;
   }).sort();
-  return months.length ? byMonth[months[months.length - 1]].confirmed : [];
+  if (!months.length) return [];
+  return byMonth[months[months.length - 1]].confirmed.filter(function (r) {
+    var code = attStr_(r.code);
+    return code === '학' || code === '가';
+  });
 }
 
 /** 유형 약어 기본값(sheet-model.md, 설정 exception.type_short). */

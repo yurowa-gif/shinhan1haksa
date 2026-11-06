@@ -104,6 +104,17 @@ test('effectiveFixedRows_: 한 달의 일부 행만 확정되었으면(나머지
   assert.deepStrictEqual(ids('2027-04-07', rejected), ['s1/2027-04/월/학/확정']);
 });
 
+table("effectiveFixedRows_: '없음' 행(결정 31) — 3월 학원 → 4월 없음 → 4월엔 표시 없음, 5월 다시 학원", [
+  ['2027-03-10', ['s1/2027-03/월/학/확정']],
+  ['2027-04-05', []],
+  ['2027-04-30', []],
+  ['2027-05-03', ['s1/2027-05/화/가/확정']]
+], ([d, want]) => {
+  const rows = [FX('s1', '2027-03', '월', '18:00-20:00', '학', '확정'), FX('s1', '2027-04', '', '', '없음', '확정'),
+    FX('s1', '2027-05', '화', 'ALL', '가', '확정')];
+  assert.deepStrictEqual(plain(ctx.effectiveFixedRows_(rows, 's1', d)).map((r) => r.id), want);
+});
+
 test('effectiveFixedRows_: 연말을 넘어 앞 달 유지(2026-12 → 2027-01), 다른 학생 행은 안 섞임(가정: 행 없는 달은 앞 달 유지)', () => {
   const rows = [FX('s1', '2026-12', '월', 'ALL', '가', '확정'), FX('s2', '2027-01', '월', 'ALL', '학', '확정')];
   assert.deepStrictEqual(plain(ctx.effectiveFixedRows_(rows, 's1', '2027-01-04')).map((x) => x.id), ['s1/2026-12/월/가/확정']);
@@ -303,4 +314,15 @@ test('resolveStudentDay_: 결과 모양 {seq, code, text, exceptionId, more}, se
     { seq: 1, code: 'NONE', text: '', exceptionId: '', more: 0 },
     { seq: 2, code: 'EXC', text: '병결', exceptionId: 'e1', more: 0 },
     { seq: 3, code: 'NONE', text: '', exceptionId: '', more: 0 }]);
+});
+
+test("resolveStudentDay_: 4월이 '없음'이면 3월 월요일 '학'이 4월 월요일 출석부에 남지 않는다", () => {
+  const rows = [FX('s1', '2027-03', '월', '20:00-22:00', '학', '확정'), FX('s1', '2027-04', '', '', '없음', '확정')];
+  assert.deepStrictEqual(marks(plan('2027-03-29'), { fixedRows: ctx.effectiveFixedRows_(rows, 's1', '2027-03-29'), endType: '23:50' }),
+    ['NONE:', 'FIXED:학', 'NONE:']);
+  assert.deepStrictEqual(marks(plan('2027-04-05'), { fixedRows: ctx.effectiveFixedRows_(rows, 's1', '2027-04-05'), endType: '23:50' }),
+    ['NONE:', 'NONE:', 'NONE:']);
+  // 4월 '없음'이 아직 동의 단계면 3월 유지(확정 전에는 기존 시간표)
+  const pending = [rows[0], FX('s1', '2027-04', '', '', '없음', '동의')];
+  assert.deepStrictEqual(plain(ctx.effectiveFixedRows_(pending, 's1', '2027-04-05')).map((r) => r.id), ['s1/2027-03/월/학/확정']);
 });
