@@ -27,7 +27,10 @@ function permissions_() {
     'term.view': { roles: ['admin', 'attendance', 'hall_teacher', 'duty_manager', 'homeroom'] },
     'term.edit': { roles: ['admin'] },
     // 명단 업로드: 관리자만
-    'roster.edit': { roles: ['admin'] }
+    'roster.edit': { roles: ['admin'] },
+    // 자습 일정·블록: 교사 역할은 보기, 수정은 관리자만
+    'schedule.view': { roles: ['admin', 'attendance', 'hall_teacher', 'duty_manager', 'homeroom'] },
+    'schedule.edit': { roles: ['admin'] }
   };
 }
 

@@ -149,11 +149,12 @@ var DEFAULT_BLOCKS = {
 };
 var DEFAULT_BLOCK_DAY_ORDER = ['mon_thu', 'fri', 'sat', 'sun'];
 
-/** '18:00'→'18', '19:30'→'19:30', '24:00'→'24' (머리말 표기) */
+/** '18:00'→'18', '09:00'→'09', '19:30'→'19:30', '24:00'→'24' (머리말 표기, R1 schedBlockLabel_과 같다) */
 function schemaHmShort_(hm) {
   var m = /^(\d{1,2}):(\d{2})$/.exec(String(hm));
   if (!m) return String(hm);
-  return m[2] === '00' ? String(parseInt(m[1], 10)) : parseInt(m[1], 10) + ':' + m[2];
+  var hh = (m[1].length === 1 ? '0' : '') + m[1];
+  return m[2] === '00' ? hh : hh + ':' + m[2];
 }
 
 /** blocks 탭에 넣을 기본 행(id·공통 꼬리 제외) */
