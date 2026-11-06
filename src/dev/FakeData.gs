@@ -41,8 +41,8 @@ function buildFakeData_(opts) {
   var pick = function (arr) { return arr[Math.floor(rand() * arr.length)]; };
 
   var terms = [
-    { id: fakeId_('aaaaaaaa', 1), name: '2026 2학기(테스트)', type: '학기', start_date: '2026-08-17', end_date: '2027-02-28', memo: '가짜 데이터' },
-    { id: fakeId_('aaaaaaaa', 2), name: '2027 1학기', type: '학기', start_date: '2027-03-02', end_date: '2027-07-17', memo: '가짜 데이터' }
+    { id: fakeId_('a1a1a1a1', 1), name: '2026 2학기(테스트)', type: '학기', start_date: '2026-08-17', end_date: '2027-02-28', memo: '가짜 데이터' },
+    { id: fakeId_('a2a2a2a2', 2), name: '2027 1학기', type: '학기', start_date: '2027-03-02', end_date: '2027-07-17', memo: '가짜 데이터' }
   ];
 
   var fakeTeachers = ['fake.teacher1@example.com', 'fake.teacher2@example.com', 'fake.teacher3@example.com'];
@@ -162,29 +162,4 @@ function seedFakeData() {
     ', 등록 ' + data.enrollments.length + ', 학부모 연결 ' + data.guardianLinks.length;
   console.log(msg);
   return msg;
-}
-
-/** 여러 행을 한 번에 쓴다(가짜 데이터용). audit_log에는 한 줄로 요약해 남긴다. */
-function bulkAppend_(sheetName, rows, actorEmail) {
-  if (!rows.length) return;
-  withLock_(function () {
-    var sh = getSheet_('db', sheetName);
-    var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(cellToString_);
-    var now = nowIso_();
-    var values = rows.map(function (r) {
-      var rec = {};
-      Object.keys(r).forEach(function (k) { rec[k] = r[k]; });
-      rec.id = rec.id || Utilities.getUuid();
-      rec.created_at = rec.updated_at = now;
-      rec.created_by = rec.updated_by = actorEmail;
-      return toRowArray_(headers, rec);
-    });
-    var firstRow = sh.getLastRow() + 1;
-    ensureRows_(sh, firstRow, values.length);
-    var range = sh.getRange(firstRow, 1, values.length, headers.length);
-    range.setNumberFormat('@');
-    range.setValues(values);
-    invalidate_('db', sheetName);
-    writeAudit_(sheetName, '', 'bulk_create', null, null, actorEmail, 'db', rows.length + '행 (가짜 데이터)');
-  });
 }

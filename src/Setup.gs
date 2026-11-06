@@ -45,6 +45,8 @@ function setup() {
     removeDefaultSheet_(ss);
   });
 
+  ensureTermSheets_(report);
+  seedDefaultBlocks_(report);
   seedSettings_(owner, report);
 
   var users = readAll_('users');
@@ -62,6 +64,38 @@ function setup() {
 
   console.log(report.join('\n'));
   return report;
+}
+
+/**
+ * 모든 운영 기간에 대해 기간별 탭(exceptions_<id 앞 8자>)을 만든다. 있으면 그대로 둔다.
+ * 두 기간의 id 앞 8자가 같으면 탭이 섞이므로 멈춘다.
+ */
+function ensureTermSheets_(report) {
+  var seen = {};
+  readAll_('terms').forEach(function (t) {
+    Object.keys(SCHEMA_TERM_TABS).forEach(function (base) {
+      var name = termSheetName_(base, t.id);
+      if (seen[name]) throw new Error('기간 "' + seen[name] + '"과 "' + t.name + '"의 id 앞 8자가 같아 탭 이름이 겹칩니다: ' + name);
+      seen[name] = t.name;
+      report.push('  ' + ensureSheet_(openFile_('db'), 'db', name));
+    });
+  });
+}
+
+/** 새 기간을 만들 때(C1 이후) 그 기간의 탭만 만든다. 락 안에서 부른다. */
+function ensureTermSheet_(base, termId) {
+  return ensureSheet_(openFile_('db'), 'db', termSheetName_(base, termId));
+}
+
+/** blocks 탭이 비어 있으면 PRD 3.3 기본 블록을 넣는다(학기용. 방학은 학기 블록을 같이 쓴다). */
+function seedDefaultBlocks_(report) {
+  if (readAll_('blocks').length) {
+    report.push('[블록] 이미 있어 기본 블록을 넣지 않음');
+    return;
+  }
+  var rows = defaultBlockRows_();
+  bulkAppend_('blocks', rows, assertOwnerRun_());
+  report.push('[블록] 기본 블록 ' + rows.length + '개 추가');
 }
 
 function ensureSheet_(ss, kind, sheetName) {

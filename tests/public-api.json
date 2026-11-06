@@ -15,6 +15,7 @@
     "setup":             { "use": "편집기", "guard": "assertOwnerRun_" },
     "addUser":           { "use": "편집기", "guard": "assertOwnerRun_" },
     "seedFakeData":      { "use": "편집기", "guard": "assertOwnerRun_" },
+    "seedFakeStage1":    { "use": "편집기", "guard": "assertOwnerRun_" },
     "listTerms":         { "use": "화면",   "guard": "requirePermission_" },
     "saveTerm":          { "use": "화면",   "guard": "requirePermission_" },
     "spikeRunAll":       { "use": "편집기", "guard": "assertOwnerRun_" },
