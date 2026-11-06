@@ -22,7 +22,10 @@ function permissions_() {
     // 학생 한 명의 기본 정보 보기
     'student.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom', 'student', 'parent'], scope: 'student' },
     // 계정 목록 보기(관리자 홈 요약)
-    'admin.users.view': { roles: ['admin'] }
+    'admin.users.view': { roles: ['admin'] },
+    // 운영 기간: 교사 계정은 보기, 추가·수정은 관리자만
+    'term.view': { roles: ['admin', 'attendance', 'hall_teacher', 'duty_manager', 'homeroom'] },
+    'term.edit': { roles: ['admin'] }
   };
 }
 

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <?!= include('ui/Styles') ?>
+  <style>
+    header.top { gap: 12px; justify-content: flex-start; }
+    header.top a.back { display: inline-flex; align-items: center; min-height: 48px; color: var(--accent); text-decoration: none; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <!-- 화면 틀: 뒤로 · 제목 · 본문. 화면 조각(screen_*.html)은 renderScreen(root)만 만든다. -->
+  <header class="top">
+    <a class="back" href="<?= appUrl ?>" aria-label="처음으로">← 처음으로</a>
+    <h1><?= screenTitle ?></h1>
+  </header>
+  <main><div id="screen"><div class="loading">불러오는 중…</div></div></main>
+
+  <?!= include('ui/Client') ?>
+  <?!= include('ui/Components') ?>
+  <?!= include(screenFile) ?>
+  <script>
+    (function () {
+      var root = document.getElementById('screen');
+      try { clear(root); renderScreen(root); } catch (err) { clear(root); showError(root, err); }
+    })();
+  </script>
+</body>
+</html>
