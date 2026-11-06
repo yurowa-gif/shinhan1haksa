@@ -42,6 +42,11 @@ test('픽스처 구성: 1층 146석 + SA 남 17·여 34, 같은 30명 이름 반
   const byName = {};
   m.spaces.forEach((sp) => { byName[sp.name] = sp.cells.filter((c) => c.kind === 'seat').length; });
   assert.deepStrictEqual(byName, { '1층 자습실': 146, SA1실: 8, SA2실: 9, SA3실: 8, SA4실: 8, SA5실: 9, SA6실: 9 });
+  const perLine = {};
+  m.spaces[0].cells.filter((c) => c.kind === 'seat').forEach((c) => { perLine[c.col] = (perLine[c.col] || 0) + 1; });
+  assert.deepStrictEqual(Object.keys(perLine).map(Number).sort((a, b) => a - b).map((c) => perLine[c]), [19, 17, 18, 19, 19, 20, 20, 14],
+    '1층 줄별 좌석 수(실제 출석부 4.1: 19·17·18·19·19·20·20·14)');
+  assert.deepStrictEqual(Object.keys(perLine).map(Number).sort((a, b) => a - b), [1, 3, 4, 6, 7, 9, 10, 12], '홑줄 | 짝줄×3 | 홑줄(통로 열 2·5·8·11)');
   const kinds = new Set(m.spaces[0].cells.map((c) => c.kind));
   ['seat', 'pillar', 'door', 'window'].forEach((k) => assert.ok(kinds.has(k), k));
   assert.ok(m.spaces.some((sp) => sp.cells.some((c) => c.vacant)));
@@ -66,15 +71,57 @@ test('쪽 나눔: 마지막 쪽만 page-break-after:auto, 나머지는 always', 
   assert.strictEqual(count(html, 'page-break-after:auto'), 1);
 });
 
-test('좌석 칸마다 블록 칸 수 = blocks.length, 이름 줄·사유 줄이 하나씩', () => {
+test('좌석 하나 = 이름 칸 1개 + 표시 칸 blocks.length개, 줄 머리는 줄마다 하나', () => {
   DAYS.forEach((d) => {
     const m = fixture(d);
     const html = ctx.printRenderSheet_(m, {});
     const n = seats(m);
-    assert.strictEqual(count(html, 'border-top:0.5pt solid #555'), n * m.blocks.length, d + ' 블록 칸');
-    assert.strictEqual(count(html, 'border-top:0.5pt dotted #777'), n, d + ' 사유 칸');
-    assert.strictEqual(count(html, '<table style="width:100%;height:'), n, d + ' 좌석 표');
+    const lines = m.spaces.reduce((k, sp) => k + new Set(sp.cells.filter((c) => c.kind === 'seat').map((c) => c.col)).size, 0);
+    assert.strictEqual(count(html, '<td class="n"'), n, d + ' 이름 칸');
+    assert.strictEqual(count(html, '<td class="m"'), n * m.blocks.length, d + ' 표시 칸');
+    assert.strictEqual(count(html, '<td class="h"'), lines, d + ' 줄 머리');
   });
+});
+
+/** 첫 쪽 격자 표의 n행째(0=줄 머리, 1=첫 좌석 행) HTML */
+const gridRows = (html) => {
+  const first = html.slice(html.indexOf('<section class="page"'), html.indexOf('</section>'));
+  return first.slice(first.indexOf('</colgroup>')).split('<tr ').slice(1);
+};
+const classSeq = (tr) => [...tr.matchAll(/<td class="(\w)"/g)].map((m) => m[1]).join('');
+
+test('실제 모양: 홑줄 | 짝줄×3 | 홑줄. 짝줄은 이름 칸이 등을 맞대고 표시 칸이 바깥쪽, 홑줄은 표시 칸이 가운데 쪽', () => {
+  const row1 = classSeq(gridRows(ctx.printRenderSheet_(fixture('mon_thu'), {}))[1]);
+  // n=이름 m=표시 g=통로. 3블록: 줄1 nmmm | 줄2 mmmn 줄3 nmmm | 줄4 mmmn 줄5 nmmm | 줄6 mmmn 줄7 nmmm | 줄8 mmmn
+  assert.strictEqual(row1, 'nmmm' + 'g' + 'mmmn' + 'nmmm' + 'g' + 'mmmn' + 'nmmm' + 'g' + 'mmmn' + 'nmmm' + 'g' + 'mmmn');
+  const sun = classSeq(gridRows(ctx.printRenderSheet_(fixture('sun'), {}))[1]);
+  assert.ok(sun.startsWith('nmmmm' + 'g' + 'mmmmn' + 'nmmmm'), '일요일은 표시 칸 4개: ' + sun);
+});
+
+test('표시 칸 순서는 어느 줄이든 왼쪽→오른쪽이 ①②③ (머리말에도 그렇게 적힌다)', () => {
+  const m = fixture('mon_thu');
+  const space = m.spaces[0];
+  const marks = (c) => c.marks.map((x) => x.text);
+  const left = space.cells.find((c) => c.row === 1 && c.col === 3);   // 짝줄 왼쪽(표시 칸이 왼쪽)
+  left.marks = [{ seq: 1, code: 'EXC', text: '가나' }, { seq: 2, code: 'NONE', text: '' }, { seq: 3, code: 'EXC', text: '다라' }];
+  const row1 = gridRows(ctx.printRenderSheet_(m, {}))[1];
+  const order = [...row1.matchAll(/<td class="m"[^>]*>([^<]*)<\/td>/g)].map((x) => x[1]);
+  assert.strictEqual(order.indexOf('가나') < order.indexOf('다라'), true, JSON.stringify(marks(left)));
+  assert.ok(ctx.printRenderSheet_(m, {}).indexOf('표시 칸(왼쪽→오른쪽)') > 0);
+});
+
+test('줄 머리 "공석 수/좌석 수"가 줄마다 맞다(1층: 줄별 좌석 수 19·17·18·19·19·20·20·14)', () => {
+  const m = fixture('mon_thu');
+  const space = m.spaces[0];
+  const want = [1, 3, 4, 6, 7, 9, 10, 12].map((col) => {
+    const cells = space.cells.filter((c) => c.kind === 'seat' && c.col === col);
+    return cells.filter((c) => c.vacant).length + '/' + cells.length;
+  });
+  assert.deepStrictEqual(want.map((x) => x.split('/')[1]), ['19', '17', '18', '19', '19', '20', '20', '14']);
+  assert.ok(want.some((x) => !x.startsWith('0/')), '공석이 있는 줄이 있다');
+  const head = gridRows(ctx.printRenderSheet_(m, {}))[0];
+  const got = [...head.matchAll(/<td class="h"[^>]*>([^<]*)<\/td>/g)].map((x) => x[1]);
+  assert.deepStrictEqual(got, want);
 });
 
 test('공석은 "공석"으로 적힌다(설정으로 바꿀 수 있다)', () => {
@@ -88,9 +135,9 @@ test('공석은 "공석"으로 적힌다(설정으로 바꿀 수 있다)', () =>
   assert.strictEqual(count(custom, '>공석</td>'), 0);
 });
 
-test('머리말에 제목·날짜·요일·공간 이름·근무 빈칸·칸 순서·범례가 들어간다', () => {
+test('머리말: 가운데 제목, 오른쪽 날짜·요일, 왼쪽 공간 이름·근무 빈칸, 표시 칸 순서·범례', () => {
   const html = ctx.printRenderSheet_(fixture('mon_thu'), {});
-  ['신한학사 출석부', '2027년 3월 3일(수)', '1층 자습실', 'SA6실', '근무: ________________', '①18–20', '②20–22', '③22–24',
+  ['신한학사 출석부', '2027년 3월 3일(수)', '1층 자습실', 'SA6실', '근무: ________________', '①18–20', '②20–22', '③22–24', '표시 칸(왼쪽→오른쪽)',
     '<b>○</b>&nbsp;출석', '<b>×</b>&nbsp;결석', '<b>△</b>&nbsp;지각', '조퇴(아래 칸에 질병·가정사유)', '<b>학</b>&nbsp;학원', '<b>가</b>&nbsp;가정'
   ].forEach((t) => assert.ok(html.indexOf(t) >= 0, t));
   const sun = ctx.printRenderSheet_(fixture('sun'), {});
@@ -160,17 +207,20 @@ test('SA실처럼 칸이 적으면 글자와 사유 칸이 커진다(최대 2.2�
   assert.ok(plan[1].nameFontPt > plan[0].nameFontPt);
 });
 
-test('블록 칸보다 긴 글자는 줄바꿈하고 그 행만 높아진다', () => {
+test('표시 칸보다 긴 글자는 줄바꿈하고, 3줄을 넘으면 그 행만 높아진다', () => {
   const m = fixture('sun');
-  const space = m.spaces[0];
-  const cell = space.cells.find((c) => c.kind === 'seat' && c.row === 1);
-  cell.marks[0] = { seq: 1, code: 'EXC', text: '병결 외 12' };
+  m.spaces[0].cells.find((c) => c.kind === 'seat' && c.row === 1).marks[0] = { seq: 1, code: 'EXC', text: '가정사유 외 12' };
   const pg = ctx.printPages_(m, {})[0].plan;
   assert.ok(pg.extraRows[1] > 0, '1행에 줄바꿈 여유');
   assert.ok(pg.rowH[0] > pg.rowH[1], '다른 행보다 높다');
-  const plain3 = fixture('mon_thu'); // 3블록 칸은 폭이 넉넉해서 같은 글자도 한 줄
-  plain3.spaces[0].cells.find((c) => c.kind === 'seat' && c.row === 1).marks[0] = { seq: 1, code: 'EXC', text: '병결 외 1' };
-  assert.strictEqual(ctx.printPages_(plain3, {})[0].plan.extraRows[1], 0);
+  const three = fixture('mon_thu'); // 3블록 칸은 폭이 넉넉해서 같은 글자도 늘리지 않는다
+  three.spaces[0].cells.find((c) => c.kind === 'seat' && c.row === 1).marks[0] = { seq: 1, code: 'EXC', text: '병결 외 1' };
+  assert.strictEqual(ctx.printPages_(three, {})[0].plan.extraRows[1], 0);
+  assert.strictEqual(ctx.printWrapLines_('정상 종료', 7, 17), 2);
+  assert.strictEqual(ctx.printWrapLines_('학', 7, 17), 1);
+  assert.strictEqual(ctx.printWrapLines_('병결 외 1', 7, 12.8), 4);
+  assert.strictEqual(ctx.printWrapLines_('병결 외 1', 7, 13), 3);
+  assert.strictEqual(ctx.printWrapLines_('', 7, 13), 1);
 });
 
 test('열이 너무 많아 블록 칸이 좁으면 좌우로 나눈다(1/4 … 4/4), 각 쪽은 넉넉하다', () => {
@@ -188,7 +238,7 @@ test('열이 너무 많아 블록 칸이 좁으면 좌우로 나눈다(1/4 … 4
   const html = ctx.printRenderSheet_(m, {});
   assert.strictEqual(count(html, '<section class="page"'), 4);
   assert.ok(html.indexOf('넓은방 (1/4)') > 0 && html.indexOf('넓은방 (4/4)') > 0);
-  assert.strictEqual(count(html, '<table style="width:100%;height:'), 120, '좌석이 빠지거나 겹치지 않는다');
+  assert.strictEqual(count(html, '<td class="n"'), 120, '좌석이 빠지거나 겹치지 않는다');
 });
 
 test('행이 너무 많으면 fits=false 로 알리고 그래도 그린다(던지지 않는다)', () => {
@@ -222,10 +272,16 @@ test('순수: 같은 입력은 같은 출력이고 모델을 바꾸지 않는다
   assert.strictEqual(ctx.printRenderSheet_(JSON.parse(before), {}), a);
 });
 
-test('기둥·비상문·창문: 기둥은 회색 바탕+글자, 비상문·창문은 점선 칸+글자', () => {
-  const html = ctx.printRenderSheet_(fixture('mon_thu'), {});
-  assert.ok(count(html, '>기둥</td>') === 2 && html.indexOf('background-color:#b5b5b5') > 0);
-  assert.ok(count(html, '>비상문</td>') >= 1 && count(html, '>창문</td>') >= 1);
+test('기둥·비상문·창문: 기둥은 회색 바탕+글자, 비상문·창문은 점선 칸+글자(통로 열은 비어 있다)', () => {
+  const m = fixture('mon_thu');
+  const html = ctx.printRenderSheet_(m, {});
+  const kinds = {};
+  m.spaces.forEach((sp) => sp.cells.forEach((c) => { kinds[c.kind] = (kinds[c.kind] || 0) + 1; }));
+  assert.strictEqual(count(html, '>기둥</td>'), kinds.pillar);
+  assert.strictEqual(count(html, '>비상문</td>'), kinds.door);
+  assert.strictEqual(count(html, '>창문</td>'), kinds.window);
+  assert.ok(html.indexOf('background-color:#b5b5b5') > 0);
+  assert.ok(count(html, 'class="g"') > 0);
 });
 
 test('모델 검사기: 계약을 어긴 입력을 잡는다(나쁜 입력)', () => {

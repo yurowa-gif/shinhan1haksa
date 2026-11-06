@@ -29,9 +29,34 @@ function defaultBlocks(dayType) {
     .map((r) => ({ seq: Number(r.seq), start: r.start, end: r.end, label: r.label }));
 }
 
+// 1층 자습실 줄별 좌석 수(왼쪽부터): 실제 출석부 docs/reference/real-layout-2025.md 4.1 = 19·17·18·19·19·20·20·14 = 146석.
+// 줄 배치 홑줄 | 짝줄 | 짝줄 | 짝줄 | 홑줄(통로 열은 사이에 하나씩). 기둥·비상문·창문은 줄이 끝난 뒤 빈 칸에 둔다.
+// FakeSeats.gs 의 1층은 아직 18·18·18·19·19·20·20·16 이라 픽스처는 이 값으로 1층을 다시 만든다(FakeSeats 가 맞춰지면 이 부분을 지운다).
+const REAL_FLOOR1 = { key: '1F', name: '1층 자습실', gender: '혼성', rows: 20, cols: 12,
+  lines: [[1, 19], [3, 17], [4, 18], [6, 19], [7, 19], [9, 20], [10, 20], [12, 14]],
+  special: { '20,1': '창문', '16,12': '기둥', '20,12': '비상문' } };
+
+function realFloor1Seats() {
+  const seats = [];
+  let label = 0;
+  for (let r = 1; r <= REAL_FLOOR1.rows; r++) {
+    for (let c = 1; c <= REAL_FLOOR1.cols; c++) {
+      const sp = REAL_FLOOR1.special[r + ',' + c];
+      const line = REAL_FLOOR1.lines.find((l) => l[0] === c);
+      if (sp) seats.push({ spaceKey: '1F', row: r, col: c, label: '', kind: sp });
+      else if (line && r <= line[1]) seats.push({ spaceKey: '1F', row: r, col: c, label: String(++label), kind: '좌석' });
+    }
+  }
+  return seats;
+}
+
 function buildModel(dayType) {
   const ctx = loadGs(['src/dev/FakeSeats.gs', 'src/dev/FakeData.gs']);
-  const layout = plain(ctx.buildFakeSeatLayout_());
+  const fake = plain(ctx.buildFakeSeatLayout_());
+  const layout = {
+    spaces: fake.spaces.map((sp) => (sp.key === '1F' ? { key: '1F', name: REAL_FLOOR1.name, gender: REAL_FLOOR1.gender, rows: REAL_FLOOR1.rows, cols: REAL_FLOOR1.cols } : sp)),
+    seats: realFloor1Seats().concat(fake.seats.filter((s) => s.spaceKey !== '1F'))
+  };
   const people = plain(ctx.buildFakeData_({}).students);
   const day = DAYS[dayType];
   const blocks = defaultBlocks(dayType);
@@ -76,4 +101,4 @@ function writeAll() {
 }
 
 if (require.main === module) { writeAll(); console.log('design/fixtures/sheet-model.{mon_thu,fri,sat,sun}.json 생성'); }
-module.exports = { buildModel, DAYS };
+module.exports = { buildModel, DAYS, REAL_FLOOR1 };
