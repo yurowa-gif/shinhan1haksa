@@ -17,8 +17,8 @@ test('공간 7개: 1층 자습실(혼성) + SA1·2(남) + SA3~6(여), key 중복
   }
 });
 
-test('좌석 수: 1층 146, 남 SA1 9·SA2 8(17), 여 SA3 9·SA4 9·SA5 8·SA6 8(34)', () => {
-  const want = { '1F': 146, SA1: 9, SA2: 8, SA3: 9, SA4: 9, SA5: 8, SA6: 8 };
+test('좌석 수: 1층 146, 남 SA1 8·SA2 9(17), 여 SA3 8·SA4 8·SA5 9·SA6 9(34)', () => {
+  const want = { '1F': 146, SA1: 8, SA2: 9, SA3: 8, SA4: 8, SA5: 9, SA6: 9 };
   for (const k of Object.keys(want)) assert.strictEqual(seatsOf(k, '좌석').length, want[k], k);
   const byGender = (g) => L.spaces.filter((s) => s.gender === g)
     .reduce((n, s) => n + seatsOf(s.key, '좌석').length, 0);
@@ -55,6 +55,13 @@ test('라벨: 좌석은 공간 안에서 비어 있지 않고 겹치지 않음, 
     assert.strictEqual(new Set(labels).size, labels.length, sp.key + ' 라벨 중복');
   }
   for (const c of L.seats.filter((x) => x.kind !== '좌석')) assert.strictEqual(c.label, '');
+});
+
+test('1층은 실제 자리배치도처럼 세로 줄 8개(줄 길이 18·18·18·19·19·20·20·14석)', () => {
+  const cols = {};
+  for (const c of seatsOf('1F', '좌석')) cols[c.col] = (cols[c.col] || 0) + 1;
+  assert.deepStrictEqual(Object.keys(cols).map(Number).sort((a, b) => a - b), [1, 3, 4, 6, 7, 9, 10, 12]);
+  assert.deepStrictEqual([1, 3, 4, 6, 7, 9, 10, 12].map((c) => cols[c]), [18, 18, 18, 19, 19, 20, 20, 14]);
 });
 
 test('언제 실행해도 같은 결과(새 vm에서 다시 만들어도 같음)', () => {
