@@ -14,7 +14,7 @@
 | value (석식) | `학사 석식` · `일반 석식` · `미실시` |
 | status | `유효` · `취소` |
 | source | `명단업로드` · `F6` · `F7` |
-| doc_submitted | `TRUE` · `FALSE` |
+| doc_submitted | `TRUE` · `FALSE` · `''`(해당 없음 — source가 `명단업로드`인 초기값만. 서류 미제출 표시 대상이 아니다) |
 
 상태 계산은 같은 학생·같은 item에서 status `유효`인 행을 effective_date 순으로 누적한다(같은 날이면 requested_at이 늦은 행). 행이 없으면 값은 `''`.
 
