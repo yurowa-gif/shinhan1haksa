@@ -137,4 +137,58 @@
   /* 알림 개수 배지(숫자는 글자로 함께 쓴다) */
   .count { display: inline-block; min-width: 1.6em; padding: 0 .45em; border-radius: var(--radius-pill);
     background: var(--warn); color: #fff; font-size: var(--font-sm); font-weight: 700; text-align: center; }
+
+  /* ───────── 공통 컴포넌트(UI.*, src/ui/Components.html) ───────── */
+  .chips { display: flex; flex-wrap: wrap; gap: var(--gap-sm); margin: 4px 0 8px; }
+  .chip { min-height: var(--tap); min-width: var(--tap); padding: 8px 16px; border-radius: var(--radius-pill); border: 1px solid var(--line);
+    background: var(--card); color: var(--text); font: inherit; font-size: 1rem; cursor: pointer; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+  .chip.on::before { content: "✓ "; }
+  .segmented { display: flex; border: 1px solid var(--accent); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 12px; }
+  .seg { flex: 1 1 0; min-height: var(--tap); padding: 8px 6px; border: 0; border-right: 1px solid var(--accent);
+    background: var(--card); color: var(--accent); font: inherit; font-size: 1rem; cursor: pointer; }
+  .seg:last-child { border-right: 0; }
+  .seg.on { background: var(--accent); color: #fff; font-weight: 700; }
+  .seg.on::before { content: "✓ "; }
+  .empty { text-align: center; color: var(--muted); padding: 24px 8px; }
+  .empty p { margin: 0 0 12px; }
+  .range { padding-bottom: 8px; }
+  .picker { margin-bottom: 12px; }
+  .seat-text { word-break: keep-all; }
+  .seat-fixed, .seat-gap { cursor: default; }
+  .range-summary { color: var(--accent-ink); font-weight: 700; min-height: 1.5em; }
+  .toast { position: fixed; left: 16px; right: 16px; bottom: calc(var(--bar-h) + 24px + env(safe-area-inset-bottom, 0px)); z-index: 20;
+    max-width: 480px; margin: 0 auto; padding: 12px 16px; border-radius: var(--radius-sm); font-size: 1rem; border: 1px solid transparent; box-shadow: var(--shadow); }
+  .toast::before { font-weight: 700; margin-right: .4em; }
+  .toast.ok { background: var(--ok-weak); color: var(--ok-ink); border-color: var(--ok); }
+  .toast.ok::before { content: "✓"; }
+  .toast.warn { background: var(--caution-weak); color: var(--caution-ink); border-color: var(--caution-line); }
+  .toast.warn::before { content: "⚠"; }
+  .toast.info { background: var(--accent-weak); color: var(--accent-ink); border-color: var(--accent); }
+  .toast.info::before { content: "ⓘ"; }
+  .sheet-scrim { position: fixed; inset: 0; z-index: 10; background: rgba(29, 35, 48, .5); display: flex; align-items: flex-end; justify-content: center; }
+  .sheet { width: 100%; max-width: 720px; max-height: 85vh; overflow-y: auto; background: var(--card); border-radius: var(--radius) var(--radius) 0 0;
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .sheet h2 { font-size: var(--font-lg); margin: 0 0 8px; }
+  .sheet-body p { margin: 0 0 12px; }
+  .sheet-actions { display: flex; gap: var(--gap-sm); margin-top: 8px; }
+  .sheet-actions .btn { flex: 1 1 0; }
+  .picker-list { list-style: none; margin: 0 0 8px; padding: 0; }
+  .picker-list li { margin-bottom: 4px; }
+  .picker-list li.muted { padding: 8px 4px; }
+  .picker-item { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 8px; min-height: var(--tap); padding: 8px 12px;
+    border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+  .picker-chosen { display: flex; align-items: center; gap: var(--gap-sm); flex-wrap: wrap; }
+  .picker-chosen .picker-name { font-weight: 700; }
+  .seatgrid-wrap { overflow-x: auto; max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); }
+  table.seatgrid { border-collapse: separate; border-spacing: 4px; }
+  .seatgrid td { padding: 0; height: var(--tap); min-width: 76px; text-align: center; vertical-align: middle; font-size: var(--font-xs); color: var(--muted-ink); }
+  .seatgrid td.pillar { background: var(--muted-weak); }
+  .seatgrid td.door, .seatgrid td.window { border: 1px dashed var(--muted-ink); }
+  .seat-cell { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-height: var(--tap); padding: 2px 4px;
+    border: 1px solid var(--muted-ink); border-radius: 8px; background: var(--card); color: var(--text); font: inherit; font-size: var(--font-xs); line-height: 1.2; cursor: pointer; }
+  .seat-cell .seat-no { color: var(--muted-ink); }
+  .seat-cell.vacant { border-style: dashed; color: var(--muted-ink); background: var(--muted-weak); }
+  .seat-cell.sel { border: 3px solid var(--accent); background: var(--accent-weak); font-weight: 700; }
+  .seat-cell.sel .seat-no::before { content: "✓ "; }
 </style>

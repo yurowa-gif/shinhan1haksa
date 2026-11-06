@@ -2,6 +2,465 @@
   공통 화면 컴포넌트(UI.*). 소유: DESIGN 세션(docs/plan/stage1.md 1절). 다른 세션은 리뷰 댓글로 요청한다.
   - 전역 이름은 UI 하나만 만든다. 컴포넌트는 UI.studentPicker처럼 UI 아래에 붙인다.
   - 서버를 부르지 않고 데이터와 콜백만 받는다. 글자는 모두 textContent로 넣는다.
-  - Index.html에서 Client 다음에 include되므로 Client의 el·clear를 쓸 수 있다.
+  - Index.html·screen_shell.html에서 Client 다음에 include되므로 Client의 el·clear를 쓴다.
+  - 시그니처·예시는 docs/design/components.md. 모양 규칙은 docs/design/rules.md.
 -->
-<script>var UI = {};</script>
+<script>
+var UI = {};
+(function () {
+  var WEEK = ['일', '월', '화', '수', '목', '금', '토'];
+  var CHO = ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
+  var BTN_CLASS = { primary: 'btn', secondary: 'btn secondary', danger: 'btn danger' };
+  var PILL = {
+    confirmed: ['s-confirmed', '확정'], requested: ['s-requested', '요청'], canceled: ['s-canceled', '취소'],
+    hak: ['c-hak', '학'], ga: ['c-ga', '가'], byung: ['c-byung', '병결'],
+    out1: ['out-1', '1OUT'], out2: ['out-2', '퇴실 대상'], todo: ['todo', '확인 필요'], mute: ['mute', '']
+  };
+
+  /* ───────── 순수 함수(UI.util): 브라우저 없이 테스트한다 ───────── */
+  var util = {};
+
+  /** 'yyyy-MM-dd' → {y, m, d, wd} 또는 null(형식·없는 날짜 거부) */
+  util.ymdParse = function (s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ''));
+    if (!m) return null;
+    var y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+    var t = new Date(Date.UTC(y, mo - 1, d));
+    if (t.getUTCFullYear() !== y || t.getUTCMonth() !== mo - 1 || t.getUTCDate() !== d) return null;
+    return { y: y, m: mo, d: d, wd: t.getUTCDay() };
+  };
+
+  /** '2027-03-03' → '3월 3일(수)', withYear면 '2027년 3월 3일(수)'. 잘못된 값은 '' */
+  util.formatDateKo = function (ymd, withYear) {
+    var p = util.ymdParse(ymd);
+    if (!p) return '';
+    return (withYear ? p.y + '년 ' : '') + p.m + '월 ' + p.d + '일(' + WEEK[p.wd] + ')';
+  };
+
+  /** 양 끝 포함 날 수. 형식이 틀리거나 from > to 면 0 */
+  util.daysBetween = function (from, to) {
+    var a = util.ymdParse(from), b = util.ymdParse(to);
+    if (!a || !b) return 0;
+    var n = Math.round((Date.UTC(b.y, b.m - 1, b.d) - Date.UTC(a.y, a.m - 1, a.d)) / 86400000) + 1;
+    return n > 0 ? n : 0;
+  };
+
+  /** '3월 3일(수)' 또는 '3월 3일(수)–3월 5일(금) · 3일' */
+  util.formatRangeKo = function (from, to) {
+    if (!util.ymdParse(from)) return '';
+    if (!to || to === from) return util.formatDateKo(from);
+    var n = util.daysBetween(from, to);
+    if (!n) return util.formatDateKo(from);
+    return util.formatDateKo(from) + '–' + util.formatDateKo(to) + ' · ' + n + '일';
+  };
+
+  /** '김가온' → 'ㄱㄱㅇ' (한글 음절만 초성으로, 나머지는 그대로) */
+  util.chosung = function (str) {
+    var out = '';
+    String(str || '').split('').forEach(function (ch) {
+      var c = ch.charCodeAt(0);
+      out += (c >= 0xAC00 && c <= 0xD7A3) ? CHO[Math.floor((c - 0xAC00) / 588)] : ch;
+    });
+    return out;
+  };
+
+  /** 학생 검색: 이름 일부 · 초성(ㄱㄱㅇ) · 학번 앞자리(숫자). s = {name, studentNo} */
+  util.matchStudent = function (query, s) {
+    var q = String(query || '').replace(/\s+/g, '');
+    if (!q) return false;
+    if (/^[ㄱ-ㅎ]+$/.test(q)) return util.chosung(s.name).indexOf(q) >= 0;
+    if (/^\d+$/.test(q)) return String(s.studentNo || '').indexOf(q) === 0;
+    return String(s.name || '').indexOf(q) >= 0;
+  };
+
+  /** 화면에 쓰는 학생 이름 "1. 김가온" */
+  util.studentLabel = function (s) { return s.grade + '. ' + s.name; };
+
+  /** 칸 선택 상태기계. state = {picked:[key…]}, mode 'single'|'swap'. → {picked, done} */
+  util.seatSelect = function (state, key, mode) {
+    var picked = (state && state.picked ? state.picked : []).slice();
+    var at = picked.indexOf(key);
+    if (at >= 0) { picked.splice(at, 1); return { picked: picked, done: false }; } // 같은 칸을 다시 누르면 선택 해제
+    var need = mode === 'swap' ? 2 : 1;
+    if (picked.length >= need) picked = [];
+    picked.push(key);
+    return { picked: picked, done: picked.length === need };
+  };
+
+  /** 선택한 블록 → 'ALL' 또는 'HH:mm-HH:mm;HH:mm-HH:mm'(docs/contracts/vocabulary.md). 선택이 없으면 '' */
+  util.blockSpec = function (blocks, value) {
+    if (value && value.all) return 'ALL';
+    var seqs = (value && value.seqs) || [];
+    var parts = (blocks || []).filter(function (b) { return seqs.indexOf(b.seq) >= 0; })
+      .map(function (b) { return b.start + '-' + b.end; });
+    return parts.join(';');
+  };
+  UI.util = util;
+
+  /* ───────── 작은 도우미(전역 아님) ───────── */
+  function makeBtn(spec) {
+    var b = el('button', { type: 'button', class: BTN_CLASS[spec.kind || 'primary'] || 'btn', text: spec.text });
+    if (spec.disabled) b.disabled = true;
+    if (spec.onclick) b.addEventListener('click', function (e) { spec.onclick(e, b); });
+    return b;
+  }
+
+  function newId(prefix) { return prefix + '-' + Math.floor(Math.random() * 1e9).toString(36); }
+
+  /* ───────── 상태·알림 ───────── */
+
+  /** UI.statusPill('confirmed'|'requested'|'canceled'|'hak'|'ga'|'byung'|'out1'|'out2'|'todo'|'mute', text?) */
+  UI.statusPill = function (kind, text) {
+    var spec = PILL[kind];
+    if (!spec) throw new Error('알 수 없는 상태 표시: ' + kind);
+    return el('span', { class: 'pill ' + spec[0], text: text || spec[1] });
+  };
+
+  /** UI.badge(n) — 개수 배지. 0이면 null(el이 건너뜀). 100 이상은 '99+' */
+  UI.badge = function (n) {
+    var count = Number(n) || 0;
+    if (count <= 0) return null;
+    return el('span', { class: 'count', 'aria-label': count + '건', text: count > 99 ? '99+' : String(count) });
+  };
+
+  /** UI.emptyState('오늘 특이사항이 없습니다.', {text:'특이사항 입력', onclick:fn}) */
+  UI.emptyState = function (message, action) {
+    var box = el('div', { class: 'empty' }, [el('p', { text: message })]);
+    if (action) box.appendChild(makeBtn({ text: action.text, kind: action.kind || 'secondary', onclick: action.onclick }));
+    return box;
+  };
+
+  /** UI.toast('저장했습니다.', {kind:'ok'|'warn'|'info', ms:3000}) — 아래에 잠깐 떴다 사라지는 한 줄 */
+  UI.toast = function (message, opts) {
+    opts = opts || {};
+    var node = el('div', { class: 'toast ' + (opts.kind || 'ok'), role: 'status', text: message });
+    document.body.appendChild(node);
+    setTimeout(function () { if (node.parentNode) node.parentNode.removeChild(node); }, opts.ms || 3000);
+    return node;
+  };
+
+  /** UI.actionBar([{text, onclick, kind:'primary'|'secondary'|'danger', disabled}], {mount:true}) — 아래 고정 바. mount면 body에 붙이고 main에 has-actionbar 표시 */
+  UI.actionBar = function (buttons, opts) {
+    var bar = el('div', { class: 'actionbar' }, (buttons || []).map(makeBtn));
+    if (opts && opts.mount) {
+      document.body.appendChild(bar);
+      var main = document.querySelector('main');
+      if (main) main.classList.add('has-actionbar');
+    }
+    return bar;
+  };
+
+  /* ───────── 입력 ───────── */
+
+  /** UI.field('기간 이름', controlNode, {hint, name}) → .field. 반환 노드: setError(msg|''), control */
+  UI.field = function (label, control, opts) {
+    opts = opts || {};
+    var id = control.id || newId('f');
+    control.id = id;
+    var fix = el('div', { class: 'fix', 'data-for': opts.name || '' });
+    var box = el('div', { class: 'field' }, [
+      el('label', { for: id, text: label }), control,
+      opts.hint ? el('div', { class: 'hint', text: opts.hint }) : null, fix
+    ]);
+    box.control = control;
+    box.setError = function (msg) {
+      fix.textContent = msg || '';
+      if (msg) box.classList.add('invalid'); else box.classList.remove('invalid');
+    };
+    return box;
+  };
+
+  /** UI.dateField({label, value, min, max, shortcuts:[{label:'오늘', value:'2027-03-03'}], onchange(value)}) → getValue·setValue·setError */
+  UI.dateField = function (opts) {
+    opts = opts || {};
+    var input = el('input', { type: 'date' });
+    if (opts.min) input.min = opts.min;
+    if (opts.max) input.max = opts.max;
+    var hint = el('div', { class: 'hint' });
+    var box = UI.field(opts.label || '날짜', input, { name: opts.name });
+    var chips = el('div', { class: 'chips' });
+    function show() { hint.textContent = util.formatDateKo(input.value, true); }
+    function set(v, fire) {
+      input.value = v || '';
+      show();
+      if (fire && opts.onchange) opts.onchange(input.value);
+    }
+    (opts.shortcuts || []).forEach(function (s) {
+      chips.appendChild(el('button', { type: 'button', class: 'chip', text: s.label, onclick: function () { set(s.value, true); } }));
+    });
+    if (opts.shortcuts && opts.shortcuts.length) box.appendChild(chips);
+    box.appendChild(hint);
+    input.addEventListener('change', function () { show(); if (opts.onchange) opts.onchange(input.value); });
+    box.getValue = function () { return input.value; };
+    box.setValue = function (v) { set(v, false); };
+    set(opts.value || '', false);
+    return box;
+  };
+
+  /** UI.rangeField({label, from, to, shortcuts, onchange({from,to,days,valid})}) — 시작일 고르면 종료일이 비었거나 앞서면 같은 날로 맞춘다 */
+  UI.rangeField = function (opts) {
+    opts = opts || {};
+    var summary = el('div', { class: 'range-summary' });
+    var box = el('div', { class: 'card range' });
+    var fromF, toF;
+    function value() {
+      var f = fromF.getValue(), t = toF.getValue();
+      var days = util.daysBetween(f, t);
+      return { from: f, to: t, days: days, valid: !!(f && t && days > 0) };
+    }
+    function refresh(changed) {
+      var f = fromF.getValue(), t = toF.getValue();
+      if (changed === 'from' && f && (!t || t < f)) { toF.setValue(f); t = f; }
+      var v = value();
+      toF.setError(f && t && !v.days ? '종료일이 시작일보다 빠릅니다. 종료일을 같은 날이나 뒤로 고쳐 주세요.' : '');
+      summary.textContent = v.valid ? util.formatRangeKo(f, t) : '';
+      if (opts.onchange) opts.onchange(v);
+    }
+    fromF = UI.dateField({ label: '시작일', value: opts.from, shortcuts: opts.shortcuts, name: 'from', onchange: function () { refresh('from'); } });
+    toF = UI.dateField({ label: '종료일', value: opts.to, name: 'to', onchange: function () { refresh('to'); } });
+    if (opts.label) box.appendChild(el('h2', { text: opts.label }));
+    box.appendChild(fromF); box.appendChild(toF); box.appendChild(summary);
+    box.getValue = value;
+    box.setValue = function (f, t) { fromF.setValue(f); toF.setValue(t); refresh('set'); };
+    refresh('init');
+    return box;
+  };
+
+  /**
+   * UI.blockChips({blocks:[{seq,start,end,label}], value:{all:true,seqs:[]}, onchange(value)})
+   * "전체" + 블록별 칩. 블록을 모두 고르면 "전체"로 바뀐다. getValue() → {all, seqs, spec, valid}
+   */
+  UI.blockChips = function (opts) {
+    opts = opts || {};
+    var blocks = opts.blocks || [];
+    var state = { all: !opts.value || opts.value.all !== false, seqs: ((opts.value && opts.value.seqs) || []).slice() };
+    var wrap = el('div', { class: 'chips', role: 'group', 'aria-label': '시간대' });
+    function current() {
+      var v = { all: state.all, seqs: state.seqs.slice() };
+      v.spec = util.blockSpec(blocks, v);
+      v.valid = v.all || v.seqs.length > 0;
+      return v;
+    }
+    function draw() {
+      while (wrap.firstChild) wrap.removeChild(wrap.firstChild);
+      wrap.appendChild(chip('전체', state.all, function () { state.all = true; state.seqs = []; fire(); }));
+      blocks.forEach(function (b) {
+        wrap.appendChild(chip(b.label, !state.all && state.seqs.indexOf(b.seq) >= 0, function () {
+          if (state.all) { state.all = false; state.seqs = []; }
+          var at = state.seqs.indexOf(b.seq);
+          if (at >= 0) state.seqs.splice(at, 1); else state.seqs.push(b.seq);
+          if (state.seqs.length === blocks.length) { state.all = true; state.seqs = []; }
+          fire();
+        }));
+      });
+    }
+    function chip(text, on, fn) {
+      return el('button', { type: 'button', class: on ? 'chip on' : 'chip', 'aria-pressed': on ? 'true' : 'false', text: text, onclick: fn });
+    }
+    function fire() { draw(); if (opts.onchange) opts.onchange(current()); }
+    wrap.getValue = current;
+    draw();
+    return wrap;
+  };
+
+  /** UI.segmented({options:[{value,label}], value, onchange(value), label}) — 2~4개 중 하나 고르기. getValue·setValue */
+  UI.segmented = function (opts) {
+    opts = opts || {};
+    var value = opts.value !== undefined ? opts.value : (opts.options && opts.options[0] ? opts.options[0].value : '');
+    var wrap = el('div', { class: 'segmented', role: 'radiogroup', 'aria-label': opts.label || '선택' });
+    function draw() {
+      while (wrap.firstChild) wrap.removeChild(wrap.firstChild);
+      (opts.options || []).forEach(function (o) {
+        var on = o.value === value;
+        wrap.appendChild(el('button', {
+          type: 'button', class: on ? 'seg on' : 'seg', role: 'radio', 'aria-checked': on ? 'true' : 'false', text: o.label,
+          onclick: function () { if (value === o.value) return; value = o.value; draw(); if (opts.onchange) opts.onchange(value); }
+        }));
+      });
+    }
+    wrap.getValue = function () { return value; };
+    wrap.setValue = function (v) { value = v; draw(); };
+    draw();
+    return wrap;
+  };
+
+  /**
+   * UI.studentPicker({students:[{id,name,grade,classNo,number,studentNo}], onpick(student), label, placeholder, maxResults:8})
+   * 이름·초성(ㄱㄱㅇ)·학번 앞자리로 찾는다. 고르면 한 줄 요약 + "변경". getValue()·clear()
+   */
+  UI.studentPicker = function (opts) {
+    opts = opts || {};
+    var max = opts.maxResults || 8;
+    var picked = null;
+    var input = el('input', { type: 'search', placeholder: opts.placeholder || '이름·초성(ㄱㄱㅇ)·학번', autocomplete: 'off' });
+    var field = UI.field(opts.label || '학생', input, { hint: '이름 일부, 초성, 학번 앞자리로 찾습니다.' });
+    var list = el('ul', { class: 'picker-list' });
+    var chosen = el('div', { class: 'picker-chosen' });
+    var box = el('div', { class: 'picker' }, [field, list, chosen]);
+    function drawList() {
+      while (list.firstChild) list.removeChild(list.firstChild);
+      var q = input.value;
+      if (!q.replace(/\s+/g, '')) return;
+      var hits = (opts.students || []).filter(function (s) { return util.matchStudent(q, s); });
+      if (!hits.length) { list.appendChild(el('li', { class: 'muted', text: '찾는 학생이 없습니다. 이름이나 학번을 다시 확인해 주세요.' })); return; }
+      hits.slice(0, max).forEach(function (s) {
+        list.appendChild(el('li', {}, [el('button', {
+          type: 'button', class: 'picker-item', onclick: function () { choose(s); }
+        }, [el('span', { text: util.studentLabel(s) }), el('span', { class: 'muted', text: s.grade + '-' + s.classNo + ' ' + s.number + '번' })])]));
+      });
+      if (hits.length > max) list.appendChild(el('li', { class: 'muted', text: '외 ' + (hits.length - max) + '명. 더 적어서 좁혀 주세요.' }));
+    }
+    function choose(s) {
+      picked = s;
+      input.value = '';
+      drawList();
+      field.style.display = 'none';
+      while (chosen.firstChild) chosen.removeChild(chosen.firstChild);
+      chosen.appendChild(el('span', { class: 'picker-name', text: util.studentLabel(s) }));
+      chosen.appendChild(el('span', { class: 'muted', text: s.grade + '-' + s.classNo + ' ' + s.number + '번' }));
+      chosen.appendChild(el('button', { type: 'button', class: 'btn secondary', text: '변경', onclick: function () { box.clear(); input.focus(); } }));
+      if (opts.onpick) opts.onpick(s);
+    }
+    input.addEventListener('input', drawList);
+    box.getValue = function () { return picked; };
+    box.clear = function () {
+      picked = null;
+      while (chosen.firstChild) chosen.removeChild(chosen.firstChild);
+      field.style.display = '';
+      if (opts.onpick) opts.onpick(null);
+    };
+    return box;
+  };
+
+  /* ───────── 아래에서 올라오는 시트 ───────── */
+
+  /**
+   * UI.bottomSheet({title, content:Node, actions:[{text,onclick,kind,disabled}], onclose}) → {open(), close(), el, buttons}
+   * Esc·바깥 누르기로 닫힌다. 열면 첫 버튼이 아니라 initialFocus(기본: 마지막이 아닌 첫 번째 버튼=취소)에 포커스.
+   */
+  UI.bottomSheet = function (opts) {
+    opts = opts || {};
+    var prev = null;
+    var buttons = (opts.actions || []).map(makeBtn);
+    var sheet = el('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': opts.title || '확인' }, [
+      el('h2', { text: opts.title || '' }),
+      el('div', { class: 'sheet-body' }, [opts.content || null]),
+      el('div', { class: 'sheet-actions' }, buttons)
+    ]);
+    var scrim = el('div', { class: 'sheet-scrim' }, [sheet]);
+    var api = { el: scrim, buttons: buttons };
+    function onKey(e) { if (e.key === 'Escape') api.close(); }
+    scrim.addEventListener('click', function (e) { if (e.target === scrim) api.close(); });
+    api.open = function () {
+      prev = document.activeElement;
+      document.body.appendChild(scrim);
+      document.addEventListener('keydown', onKey);
+      var first = buttons[opts.initialFocus || 0];
+      if (first) first.focus();
+      return api;
+    };
+    api.close = function () {
+      if (!scrim.parentNode) return;
+      scrim.parentNode.removeChild(scrim);
+      document.removeEventListener('keydown', onKey);
+      if (prev && prev.focus) prev.focus();
+      if (opts.onclose) opts.onclose();
+    };
+    return api;
+  };
+
+  /** UI.confirmSheet({title, message, confirmText:'저장', cancelText:'취소', danger, onconfirm, oncancel}) — 열린 시트를 돌려준다. 포커스는 취소 쪽 */
+  UI.confirmSheet = function (opts) {
+    opts = opts || {};
+    var sheet = UI.bottomSheet({
+      title: opts.title, content: el('p', { text: opts.message || '' }),
+      actions: [
+        { text: opts.cancelText || '취소', kind: 'secondary', onclick: function () { sheet.close(); if (opts.oncancel) opts.oncancel(); } },
+        { text: opts.confirmText || '확인', kind: opts.danger ? 'danger' : 'primary', onclick: function () { sheet.close(); if (opts.onconfirm) opts.onconfirm(); } }
+      ]
+    });
+    return sheet.open();
+  };
+
+  /** UI.confirmWithReason({title, message, reasonLabel:'사유', confirmText:'취소 처리', minLength:2, danger, onconfirm(reason)}) — 사유를 적어야 버튼이 켜진다 */
+  UI.confirmWithReason = function (opts) {
+    opts = opts || {};
+    var min = opts.minLength || 2;
+    var area = el('textarea', { maxlength: '200' });
+    var field = UI.field(opts.reasonLabel || '사유', area, { hint: min + '자 이상 적어 주세요. 사유는 기록에 남습니다.' });
+    var content = el('div', {}, [el('p', { text: opts.message || '' }), field]);
+    var sheet = UI.bottomSheet({
+      title: opts.title, content: content,
+      actions: [
+        { text: '닫기', kind: 'secondary', onclick: function () { sheet.close(); if (opts.oncancel) opts.oncancel(); } },
+        { text: opts.confirmText || '확인', kind: opts.danger === false ? 'primary' : 'danger', disabled: true,
+          onclick: function () { var r = area.value.trim(); if (r.length < min) return; sheet.close(); if (opts.onconfirm) opts.onconfirm(r); } }
+      ]
+    });
+    area.addEventListener('input', function () {
+      var ok = area.value.trim().length >= min;
+      sheet.buttons[1].disabled = !ok;
+      field.setError('');
+    });
+    return sheet.open();
+  };
+
+  /* ───────── 좌석 격자 ───────── */
+
+  /**
+   * UI.seatGrid({rows, cols, cells:[{row,col,kind:'seat'|'pillar'|'door'|'window', seatLabel, text, vacant}],
+   *              mode:'single'|'swap', onselect(picked:[{row,col}], done)}) → 노드. getSelection()·clearSelection()
+   * 좌석 칸만 누를 수 있다. 'swap'은 두 칸을 차례로 누르면 done=true. 칸 48px 이상, 격자가 넓으면 이 상자 안에서만 가로로 민다.
+   */
+  UI.seatGrid = function (opts) {
+    opts = opts || {};
+    var mode = opts.mode === 'swap' ? 'swap' : 'single';
+    var byPos = {};
+    (opts.cells || []).forEach(function (c) { byPos[c.row + ',' + c.col] = c; });
+    var state = { picked: [] };
+    var buttons = {};
+    var FIXED = { pillar: '기둥', door: '비상문', window: '창문' };
+    var table = el('table', { class: 'seatgrid' });
+    for (var r = 1; r <= opts.rows; r++) {
+      var tr = el('tr');
+      for (var c = 1; c <= opts.cols; c++) {
+        var key = r + ',' + c, cell = byPos[key], td = el('td');
+        if (cell && cell.kind === 'seat') {
+          var btn = el('button', {
+            type: 'button', class: cell.vacant ? 'seat-cell vacant' : 'seat-cell', 'aria-pressed': 'false',
+            'aria-label': (cell.seatLabel ? cell.seatLabel + '번 ' : '') + (cell.text || '공석')
+          }, [el('span', { class: 'seat-no', text: cell.seatLabel || '' }), el('span', { class: 'seat-text', text: cell.text || (cell.vacant ? '공석' : '') })]);
+          buttons[key] = btn;
+          btn.addEventListener('click', function (k) { return function () { pick(k); }; }(key));
+          td.appendChild(btn);
+        } else if (cell) {
+          td.className = 'seat-fixed ' + cell.kind;
+          td.textContent = FIXED[cell.kind] || '';
+        } else {
+          td.className = 'seat-gap';
+        }
+        tr.appendChild(td);
+      }
+      table.appendChild(tr);
+    }
+    var wrap = el('div', { class: 'seatgrid-wrap' }, [table]);
+    function keyToPos(k) { var p = k.split(','); return { row: Number(p[0]), col: Number(p[1]) }; }
+    function paint() {
+      Object.keys(buttons).forEach(function (k) {
+        var on = state.picked.indexOf(k) >= 0;
+        buttons[k].setAttribute('aria-pressed', on ? 'true' : 'false');
+        if (on) buttons[k].classList.add('sel'); else buttons[k].classList.remove('sel');
+      });
+    }
+    function pick(k) {
+      var res = util.seatSelect(state, k, mode);
+      state.picked = res.picked;
+      paint();
+      if (opts.onselect) opts.onselect(state.picked.map(keyToPos), res.done);
+    }
+    wrap.getSelection = function () { return state.picked.map(keyToPos); };
+    wrap.clearSelection = function () { state.picked = []; paint(); };
+    return wrap;
+  };
+})();
+</script>
