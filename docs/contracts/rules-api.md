@@ -62,12 +62,15 @@ function statusOn_(changes, studentId, item, ymd)   // item '학사'|'기숙사'
 function isActiveOn_(changes, enrollment, ymd)      // 등록 + 학사 '입실'
 function assignmentOn_(assignments, seatId, termId, ymd)
 function seatMapOn_(seats, assignments, enrollments, changes, termId, ymd)
-        // → {bySeat:{seatId:{studentId|null, vacant, reason:''|'퇴실'|'미배정'}}, unseated:[studentId]}
+        // → {bySeat:{seatId:{studentId|null, vacant, reason:''|'퇴실'|'미입실'|'미배정'}}, unseated:[studentId], warnings:[]}
+        //   ('미입실'·warnings는 R2 추가)
 function carryOverEnrollments_(terms, enrollments, changes, newTerm)  // 직전 '학기'의 재학생 → 새 등록 초안
 
 // src/rules/RosterRules.gs
 function parseRosterTable_(rows)            // 2차원 배열(10.2 열 순서) → {records, errors:[{line,column,message}]}
 function parseGuardianTable_(rows)
+function rosterColumns_()                   // 학생 명단 머리글 16열(PRD 10.2, R2 추가)
+function rosterGuardianColumns_()           // 학부모 연결 머리글 3열(R2 추가)
 function diffRoster_(records, existing, termId, ymd)
         // existing = {students, enrollments, changes, users}
         // → {createStudents, updateStudents:[{id,patch}], createEnrollments, updateEnrollments,
@@ -114,3 +117,26 @@ function mealChangeKind_(item, fromValue, toValue)
 - `schedOperatingValue_`: 운영 = 빈칸·`TRUE`·`Y`·`YES`·`O`·`1`·`예`·`운영`. 운영 안 함 = `FALSE`·`N`·`NO`·`X`·`×`·`0`·`OFF`·`아니오`·`아니요`·`미운영`·`운영 안 함`·`운영X`·`휴무`·`휴일`(대소문자·공백 무시). ASSUMPTION: 둘 다 아닌 값(오타)은 **운영 안 함**으로 보고 `resolveDayPlan_`이 경고한다(잘못된 출석부가 조용히 인쇄되는 것보다 눈에 띄게). C4 화면은 `FALSE`/빈칸으로 쓰면 된다.
 - `validateBlocks_`: 취소 행은 건너뛴다. 행마다 `term_type`(학기·방학)·`day_type`(빈칸 불가)·순서(1 이상 정수)·시각 형식(시작은 24:00 불가, 끝은 24:00 허용)·시작<끝. `(term_type, day_type)` 묶음 안에서 같은 순서 중복·시간 겹침(맞닿음은 허용)·순서 번호와 시각 순서 불일치. 순서가 잘못된 행도 시각이 맞으면 겹침 검사에 넣는다.
 - 규칙 파일끼리는 함수만 부른다(ScheduleRules → DateRules). 전역 값은 공유하지 않는다. 테스트는 `loadGs(['src/rules/DateRules.gs', 'src/rules/ScheduleRules.gs'])`처럼 함께 올린다.
+
+## 동작 메모(R2, 2026-11-06)
+
+값 글자는 `docs/contracts/vocabulary.md`를 따른다.
+
+**StatusRules**
+- `statusOn_`: 같은 학생·item에서 status `유효`(빈칸도 유효로 봄)인 행만, `effective_date <= ymd` 중 가장 늦은 적용일. 같은 적용일이면 `requested_at`이 늦은 행 → `created_at`이 늦은 행 → 시트에서 아래 행. 일시는 `'yyyy-MM-dd HH:mm:ss'`(공백)도 `T` 형식과 같은 순서로 비교한다. `취소`·`요청` 등 다른 status와 날짜 형식이 아닌 적용일은 무시.
+- `isActiveOn_`: 등록 행이 있고 학사 `입실`. 기간 날짜 범위 확인은 부르는 쪽이 한다. ASSUMPTION(결정 23 ①): 퇴실 적용일 당일부터 학사생이 아니다.
+- `assignmentOn_`: 기간·좌석이 같고 status가 `취소`가 아니며 `valid_from <= ymd <= valid_to`(빈칸 = 기간 전체). 여럿이면 날짜를 좁힌 배정(방학 날짜별 자리표) → `valid_from`이 늦은 것 → `updated_at`이 늦은 것.
+- `seatMapOn_`: `bySeat`에는 kind `좌석`이고 취소되지 않은 좌석만. 사유: 배정 없음 `미배정`, 그날 학사 `퇴실` `퇴실`, 이 기간 등록이 없거나 아직 입실 전 `미입실`. 셋 다 공석(`vacant:true`)이고 출석부에는 "공석"으로만 쓴다(sheet-model). 한 학생이 그날 두 자리면 위 우선순위로 하나만 쓰고 경고. `unseated`는 등록 행 순서(정렬은 C7이 학년 → 이름으로).
+- `carryOverEnrollments_`: 새 기간이 `학기`일 때만. 직전 학기 = 시작일이 새 기간보다 앞인 `학기` 중 가장 늦은 것(방학은 건너뜀). 새 기간 시작일에 학사 `입실`인 학생만, 이미 새 기간에 등록된 학생은 뺀다(두 번 눌러도 중복 없음). 결과에는 id가 없고 `from_enrollment_id`가 있다. ASSUMPTION: 학년도가 바뀌어도 학년으로 거르지 않는다(졸업생은 명단 업로드의 퇴실 후보로).
+
+**RosterRules**
+- 표 나누기(TSV·CSV, 따옴표)는 C3가 한다. 규칙 함수는 2차원 배열을 받는다. 첫 줄은 머리글(`rosterColumns_()` 순서 그대로, BOM·앞뒤 공백·끝 빈칸 허용). 빈 줄은 건너뛰고 `line`은 원래 줄 번호(머리글 = 1).
+- O/X: `O ○ 〇 ◯ Ｏ Y YES TRUE` / `X × Ｘ ✕ N NO FALSE`(대소문자 무시). **숫자 0·1은 오류**(글자 O 대신 숫자 0을 친 것을 X로 읽지 않게). 석식: `학사`·`학사 석식` / `일반`·`일반 석식` / `미실시`·`X`.
+- 오류(저장 안 함): 형식, 학번·학생 계정 중복(두 줄 모두). 경고: 학번과 학년·반·번호 불일치, 학생 계정·담당교사 빈칸. 통학구분 빈칸은 `일반`, end_type은 `23:50`(ASSUMPTION 4절 h).
+- `diffRoster_`:
+  - 새 학생은 `ref: 'new:학번'`. `createEnrollments`·`createChanges`의 `student_id`에도 같은 ref가 들어가므로 C3가 새 id로 바꿔 넣는다.
+  - 학생 찾기: ① 학생 계정 ② 학번(다른 줄이 계정으로 잡은 학생은 뺌). 학번은 학년도마다 다시 쓰이므로 **학번이 같아도 계정이 서로 다르거나 이름이 다르면 새 학생**(경고). ambiguous(아무것도 만들지 않음)는 학번·이름이 같은데 학년이 다를 때, 같은 학번·이름이 여럿일 때, 명단 두 줄이 같은 학생을 가리킬 때.
+  - ASSUMPTION: **상태는 그 항목 기록이 아직 없을 때만 만든다(초기값).** 이미 기록이 있고 명단과 다르면 바꾸지 않고 경고 — 학기 중 변경은 F6·F7(급식 적용일 규칙)로 한다. 그래서 같은 파일을 언제 다시 올려도 상태 변경 0건이다. `ymd`는 보통 기간 시작일, 학기 중 신규 학생을 올리면 그날.
+  - 기존 등록의 `end_type`은 바꾸지 않는다. 학생 계정이 비어 있는 명단 줄은 있는 계정을 지우지 않는다.
+  - 경고: 담당교사가 users에 없거나 비활성, 학번 재사용으로 새 학생을 만듦, 바뀐 학번이 다른 학생 기록과 겹침, 계정 없는 기존 학생과 이름·성별이 같은 새 학생(학년이 올라간 학생을 잇지 못했을 수 있음).
+  - `leavingCandidates`: 이 기간 등록이 있고 ymd에 학사생인데 명단에 없는 학생(ambiguous 후보는 뺌). 표시만 한다.
