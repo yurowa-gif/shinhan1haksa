@@ -53,7 +53,7 @@ function buildFakeData_(opts) {
   var users = [
     { email: fakeTeachers[0], name: '가짜교사1', roles: 'hall_teacher', homeroom_class: '', active: 'TRUE', memo: '가짜 데이터' },
     { email: fakeTeachers[1], name: '가짜교사2', roles: 'hall_teacher,duty_manager', homeroom_class: '', active: 'TRUE', memo: '가짜 데이터' },
-    { email: fakeTeachers[2], name: '가짜교사3', roles: 'hall_teacher', homeroom_class: '', active: 'TRUE', memo: '가짜 데이터' }
+    { email: fakeTeachers[2], name: '가짜교사3', roles: 'hall_teacher,attendance', homeroom_class: '', active: 'TRUE', memo: '가짜 데이터' }
   ];
 
   var students = [];

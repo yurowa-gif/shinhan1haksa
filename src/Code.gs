@@ -92,6 +92,10 @@ function getHomeData(role) {
       base.roleCounts = roleCounts;
       return base;
 
+    case 'attendance':
+      base.studentCount = termStudentIds_(term).length;
+      return base;
+
     case 'duty_manager':
       base.month = base.today.slice(0, 7);
       return base;

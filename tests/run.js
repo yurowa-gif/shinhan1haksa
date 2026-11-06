@@ -45,11 +45,16 @@ test('parseRoles_: 쉼표·공백 구분, 모르는 역할 무시, 우선순위 
   assert.deepStrictEqual(Array.from(ctx.parseRoles_('')), []);
 });
 
-const NONE = { isOwn: false, isGuardian: false, isAssigned: false, isOnDuty: false, inHomeroom: false };
-const VIEW = ['admin', 'hall_teacher', 'homeroom', 'student', 'parent'];
+const NONE = { isOwn: false, isGuardian: false, isAssigned: false, isOnDuty: false, inHomeroom: false, isEnrolled: false };
+const VIEW = ['admin', 'attendance', 'hall_teacher', 'homeroom', 'student', 'parent'];
 const can = (roles, facts, allowed = VIEW) => ctx.canAccessStudentByFacts_(roles, Object.assign({}, NONE, facts), allowed);
 
 test('관리자는 모든 학생', () => assert.ok(can(['admin'], {})));
+test('출결 담당: 이번 기간 학사생 전체, 미등록 학생은 제외', () => {
+  assert.ok(can(['attendance'], { isEnrolled: true }));
+  assert.ok(!can(['attendance'], {}));
+  assert.ok(!can(['attendance'], { isEnrolled: true }, ['admin', 'hall_teacher']));
+});
 test('학사 교사: 담당 학생 또는 근무일만', () => {
   assert.ok(can(['hall_teacher'], { isAssigned: true }));
   assert.ok(can(['hall_teacher'], { isOnDuty: true }));

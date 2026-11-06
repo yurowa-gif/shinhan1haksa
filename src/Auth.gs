@@ -20,7 +20,7 @@ function permissions_() {
     // 홈 화면: 요청한 역할(context.role)을 실제로 가진 사람만
     'home.view': { roles: ROLES, scope: 'ownRole' },
     // 학생 한 명의 기본 정보 보기
-    'student.view': { roles: ['admin', 'hall_teacher', 'homeroom', 'student', 'parent'], scope: 'student' },
+    'student.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom', 'student', 'parent'], scope: 'student' },
     // 계정 목록 보기(관리자 홈 요약)
     'admin.users.view': { roles: ['admin'] }
   };
@@ -105,7 +105,9 @@ function isOnDutyToday_(email) {
 function studentFacts_(user, student) {
   var term = getCurrentTerm_();
   var termId = term ? term.id : '';
+  var enrolled = readAll_('enrollments').some(function (en) { return en.term_id === termId && en.student_id === student.id; });
   var facts = {
+    isEnrolled: enrolled,
     isOwn: !!student.email && normalizeEmail_(student.email) === user.email,
     isGuardian: readAll_('guardian_links').some(function (g) {
       return normalizeEmail_(g.parent_email) === user.email && g.student_id === student.id;
@@ -116,8 +118,7 @@ function studentFacts_(user, student) {
     }),
     isOnDuty: hasRole_(user, 'hall_teacher') && isOnDutyToday_(user.email),
     // 담임은 "자기 반 학사생"만: 같은 반 + 이번 운영 기간 등록 학생
-    inHomeroom: sameClass_(user.homeroomClass, student.grade, student.class_no) &&
-      readAll_('enrollments').some(function (en) { return en.term_id === termId && en.student_id === student.id; })
+    inHomeroom: sameClass_(user.homeroomClass, student.grade, student.class_no) && enrolled
   };
   return facts;
 }
@@ -138,6 +139,8 @@ function sameClass_(homeroomClass, grade, classNo) {
 function canAccessStudentByFacts_(roles, facts, allowedRoles) {
   var allowed = function (r) { return roles.indexOf(r) >= 0 && allowedRoles.indexOf(r) >= 0; };
   if (allowed('admin')) return true;
+  // 출결 담당: 이번 기간 학사생 전체
+  if (allowed('attendance') && facts.isEnrolled) return true;
   if (allowed('hall_teacher') && (facts.isAssigned || facts.isOnDuty)) return true;
   if (allowed('homeroom') && facts.inHomeroom) return true;
   if (allowed('student') && facts.isOwn) return true;
