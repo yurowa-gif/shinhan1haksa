@@ -1,12 +1,33 @@
 <script>
-  /** 담임 홈: 우리 반 학사생 목록과 특이사항 요청 (PRD 8절) */
+  /** 담임 홈: 우리 반 학사생 목록(요청 상태 pill)과 특이사항 요청 (PRD 8절, docs/design/screens.md 1절) */
   function renderHome(d, root) {
     var m = (d.exc && d.exc.mine) || { requested: 0, confirmed: 0, canceled: 0 };
-    root.appendChild(el('div', { class: 'card' }, [
+    var per = (d.exc && d.exc.perStudent) || {};
+    var listCard = el('div', { class: 'card' }, [
       el('h2', { text: d.homeroomClass + ' 학사생 (' + d.students.length + '명)' }),
-      el('div', { class: 'muted', text: d.termName }),
-      studentList(d.students, '이번 기간 우리 반 학사생이 없습니다.')
-    ]));
+      el('div', { class: 'muted', text: d.termName })
+    ]);
+    var listBox = el('div');
+    var filter = 'all';
+    function drawList() {
+      clear(listBox);
+      var items = d.students.filter(function (s) { return filter === 'all' || per[s.id]; });
+      if (!items.length) { listBox.appendChild(el('div', { class: 'muted', text: filter === 'all' ? '이번 기간 우리 반 학사생이 없습니다.' : '요청 중인 학생이 없습니다.' })); return; }
+      var ul = el('ul', { class: 'list' });
+      items.forEach(function (s) {
+        // 이름을 누르면 그 학생의 특이사항 기록(학생별 목록)으로 간다
+        ul.appendChild(el('li', {}, [
+          el('a', { href: d.appUrl + '?page=exceptions&tab=list&student=' + encodeURIComponent(s.id), text: s.name }),
+          el('span', { class: 'muted' }, [s.number + '번 ', per[s.id] ? UI.statusPill('requested', '요청 ' + per[s.id]) : null])
+        ]));
+      });
+      listBox.appendChild(ul);
+    }
+    listCard.appendChild(UI.segmented({ label: '보기', value: filter, options: [{ value: 'all', label: '모두' }, { value: 'req', label: '요청 중' }],
+      onchange: function (v) { filter = v; drawList(); } }));
+    listCard.appendChild(listBox);
+    root.appendChild(listCard);
+    drawList();
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '특이사항 요청' }),
       el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin:8px 0' }, [

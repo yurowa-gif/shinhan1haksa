@@ -33,7 +33,8 @@ function permissions_() {
     'schedule.edit': { roles: ['admin'] },
     // 사전 특이사항(F1): 출결 담당·관리자는 입력(바로 확정)·확정, 담임(자기 반)·학사 교사(담당 학생)는 요청만, 취소는 출결 담당·관리자 또는 본인 요청
     'exception.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] },
-    'exception.save': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'], scope: 'student' },
+    // noDuty: 근무일(isOnDuty)은 범위에 넣지 않는다 — 저장은 담당·담임·출결·관리자만(ASSUMPTION: F3 이후에도 근무일 교사가 모든 학생에게 요청하지는 못하게)
+    'exception.save': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'], scope: 'student', noDuty: true },
     'exception.confirm': { roles: ['admin', 'attendance'] },
     'exception.cancel': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] }
   };
@@ -104,6 +105,16 @@ function getCurrentTerm_() {
   return inRange[0] || started[0] || null;
 }
 
+/** 날짜가 속한 운영 기간(겹치면 나중에 시작한 것). 없으면 null */
+function termOnDate_(ymd) {
+  var hit = null;
+  readAll_('terms').forEach(function (t) {
+    if (!t.start_date || !t.end_date || ymd < t.start_date || ymd > t.end_date) return;
+    if (!hit || t.start_date >= hit.start_date) hit = t;
+  });
+  return hit;
+}
+
 /**
  * 근무교사(오늘 근무자)인지. F3 근무표(duty_slots)가 생기면 채운다.
  * TODO(F3): duty_slots에서 오늘 날짜의 실제 근무자 이메일과 비교
@@ -115,8 +126,10 @@ function isOnDutyToday_(email) {
 /**
  * 학생 한 명에 대한 범위 판정에 필요한 사실을 모은다.
  */
-function studentFacts_(user, student) {
-  var term = getCurrentTerm_();
+function studentFacts_(user, student, ymd) {
+  // ymd(YYYY-MM-DD)를 주면 그 날짜가 속한 운영 기간으로 판정한다(다음 기간 신입생 입력 등). 없으면 오늘의 기간.
+  // 날짜가 형식에 맞지 않거나 어떤 기간에도 속하지 않으면 오늘의 기간으로 판정한다(그런 날짜는 저장 단계의 입력 검사가 안내한다).
+  var term = (ymd && ymdIsValid_(String(ymd)) ? termOnDate_(String(ymd)) : null) || getCurrentTerm_();
   var termId = term ? term.id : '';
   var enrolled = readAll_('enrollments').some(function (en) { return en.term_id === termId && en.student_id === student.id; });
   var facts = {
@@ -194,7 +207,9 @@ function requirePermission_(action, context) {
   } else if (rule.scope === 'student') {
     var student = context.studentId ? findById_('students', context.studentId) : null;
     if (!student) deny('학생 없음');
-    if (!canAccessStudentByFacts_(user.roles, studentFacts_(user, student), rule.roles)) deny('범위 밖 학생');
+    var facts = studentFacts_(user, student, context.ymd);
+    if (rule.noDuty) facts.isOnDuty = false;
+    if (!canAccessStudentByFacts_(user.roles, facts, rule.roles)) deny('범위 밖 학생');
   }
   return user;
 }

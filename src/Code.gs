@@ -80,6 +80,7 @@ function screenParams_(p) {
   var out = {};
   if (['requests', 'list', 'mine'].indexOf(String(p.tab)) >= 0) out.tab = String(p.tab);
   if (/^\d{4}-\d{2}-\d{2}$/.test(String(p.date || ''))) out.date = String(p.date);
+  if (/^[0-9a-fA-F-]{8,40}$/.test(String(p.student || ''))) out.student = String(p.student);   // 학생 id(UUID 모양만)
   return JSON.stringify(out).replace(/</g, '\\u003c');
 }
 
