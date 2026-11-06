@@ -1,0 +1,188 @@
+<style>
+  .cal-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .cal-nav .title { font-weight: 700; }
+  .cal-day { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; min-height: 56px;
+    padding: 8px 4px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--text);
+    font: inherit; text-align: left; cursor: pointer; }
+  .cal-day:last-child { border-bottom: 0; }
+  .cal-day.off { color: var(--muted); }
+  .cal-day.today { background: var(--accent-weak); }
+  .cal-tag { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .8rem; border: 1px solid var(--line); white-space: nowrap; }
+  .cal-tag.off { background: var(--warn-weak); color: var(--warn); border-color: var(--warn); }
+  .cal-tag.chg { background: var(--accent-weak); color: var(--accent); border-color: var(--accent); }
+  .cal-field { margin-bottom: 14px; }
+  .cal-field label { display: block; margin-bottom: 4px; color: var(--muted); font-size: .9rem; }
+  .cal-field input, .cal-field select { width: 100%; min-height: 48px; padding: 8px 12px; font: inherit;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--text); }
+  .cal-fix { color: var(--warn); font-size: .9rem; margin-top: 4px; }
+  .cal-warn { background: var(--warn-weak); color: var(--warn); border-radius: 10px; padding: 8px 12px; margin: 8px 0; }
+  .cal-ok { color: var(--ok); margin: 8px 0; }
+  .cal-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .blk-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .blk-row input { flex: 1; min-width: 0; min-height: 48px; padding: 8px 10px; font: inherit; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--card); color: var(--text); }
+</style>
+<script>
+  /** 자습 일정·블록 화면(C4): 달력 목록 + 날짜 수정 + 요일 유형별 블록 편집. */
+  function renderScreen(root) {
+    var state = { data: null, month: '', day: null };
+    var calBox = el('div', { class: 'card' });
+    var dayBox = el('div', { class: 'card' });
+    var blkBox = el('div', { class: 'card' });
+    root.appendChild(calBox); root.appendChild(dayBox); root.appendChild(blkBox);
+
+    function monthShift(m, n) {
+      var p = m.split('-'); var d = new Date(Date.UTC(+p[0], +p[1] - 1 + n, 1));
+      return d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2);
+    }
+    function mdKo(date, wk) { return (+date.slice(5, 7)) + '월 ' + (+date.slice(8, 10)) + '일(' + wk + ')'; }
+    // DESIGN 이관 후보: localField(라벨 + 입력 + 오류 문구)
+    function localField(label, input, name) {
+      return el('div', { class: 'cal-field' }, [el('label', { text: label }), input, el('div', { class: 'cal-fix', 'data-for': name })]);
+    }
+    function showFieldErrors(box, errors) {
+      errors.forEach(function (e) {
+        var slot = box.querySelector('.cal-fix[data-for="' + e.field + '"]');
+        if (slot) slot.textContent = e.message;
+      });
+    }
+
+    function load(month, note) {
+      call('getScheduleData', month || state.month || '').then(function (data) {
+        state.data = data; state.month = data.month;
+        if (state.day) {
+          var again = data.days.filter(function (d) { return d.date === state.day.date; })[0];
+          state.day = again || null;
+        }
+        drawCal(); drawDay(note); drawBlocks();
+      }).catch(function (err) { clear(calBox); showError(calBox, err); });
+    }
+
+    function drawCal() {
+      clear(calBox);
+      calBox.appendChild(el('h2', { text: '날짜별 일정' }));
+      calBox.appendChild(el('div', { class: 'cal-nav' }, [
+        el('button', { type: 'button', class: 'btn secondary', text: '◀ 이전 달', onclick: function () { state.day = null; load(monthShift(state.month, -1)); } }),
+        el('span', { class: 'title', text: state.month.replace('-', '년 ') + '월' }),
+        el('button', { type: 'button', class: 'btn secondary', text: '다음 달 ▶', onclick: function () { state.day = null; load(monthShift(state.month, 1)); } })
+      ]));
+      var list = el('div');
+      state.data.days.forEach(function (d) {
+        var summary = d.operating ? (d.start + '–' + d.end + (d.blockLabels.length ? ' · 블록 ' + d.blockLabels.length + '개' : ' · 블록 없음')) : '운영 안 함';
+        list.appendChild(el('button', {
+          type: 'button', class: 'cal-day' + (d.operating ? '' : ' off') + (d.date === state.data.today ? ' today' : ''),
+          onclick: function () { state.day = d; drawDay(); dayBox.scrollIntoView(); }
+        }, [
+          el('span', {}, [el('b', { text: mdKo(d.date, d.weekdayKo) }), el('div', { class: 'muted', text: summary + (d.memo ? ' · ' + d.memo : '') })]),
+          el('span', {}, [
+            d.operating ? null : el('span', { class: 'cal-tag off', text: '운영 안 함' }),
+            d.overridden && d.operating ? el('span', { class: 'cal-tag chg', text: '변경됨' }) : null
+          ])
+        ]));
+      });
+      calBox.appendChild(list);
+    }
+
+    function drawDay(note) {
+      clear(dayBox);
+      var d = state.day;
+      if (!d) { dayBox.appendChild(el('div', { class: 'muted', text: '위 달력에서 날짜를 누르면 미리보기와 수정 칸이 열립니다.' })); return; }
+      dayBox.appendChild(el('h2', { text: mdKo(d.date, d.weekdayKo) }));
+      dayBox.appendChild(kv([
+        ['운영', d.operating ? '운영' : '운영 안 함'], ['요일 유형', d.dayType + '(' + d.termType + ' 블록)'],
+        ['자습 시간', d.operating ? d.start + '–' + d.end : '-'],
+        ['출석 블록', d.operating ? (d.blockLabels.join(' · ') || '없음') : '-'], ['메모', d.memo || '-']
+      ]));
+      d.warnings.forEach(function (w) { dayBox.appendChild(el('div', { class: 'cal-warn', text: w })); });
+      if (note) dayBox.appendChild(el('div', { class: 'cal-ok', text: note }));
+      if (!state.data.canEdit) { dayBox.appendChild(el('div', { class: 'muted', text: '일정 수정은 관리자만 할 수 있습니다.' })); return; }
+
+      var operating = el('select', {}, [el('option', { value: 'TRUE', text: '운영' }), el('option', { value: 'FALSE', text: '운영 안 함' })]);
+      var start = el('input', { type: 'text', inputmode: 'numeric', placeholder: '비우면 기본 ' + (state.data.defaults[d.dayType] ? state.data.defaults[d.dayType].start : '') });
+      var end = el('input', { type: 'text', inputmode: 'numeric', placeholder: '비우면 기본 ' + (state.data.defaults[d.dayType] ? state.data.defaults[d.dayType].end : '') });
+      var dayType = el('select', {}, [el('option', { value: '', text: '자동(요일에 따라)' })].concat(
+        state.data.dayTypes.map(function (t) { return el('option', { value: t, text: t }); })));
+      var memo = el('input', { type: 'text', maxlength: '100', placeholder: '메모(선택)' });
+      var o = d.override;
+      if (o) {
+        operating.value = d.operating ? 'TRUE' : 'FALSE'; start.value = o.start; end.value = o.end; dayType.value = o.day_type; memo.value = d.memo;
+      } else { operating.value = 'TRUE'; }
+      dayBox.appendChild(el('h2', { style: 'margin-top:16px', text: '이 날 바꾸기' }));
+      dayBox.appendChild(localField('운영 여부', operating, 'operating'));
+      dayBox.appendChild(localField('시작 시각', start, 'start'));
+      dayBox.appendChild(localField('종료 시각', end, 'end'));
+      dayBox.appendChild(localField('요일 유형', dayType, 'day_type'));
+      dayBox.appendChild(localField('메모', memo, 'memo'));
+      var msg = el('div'); dayBox.appendChild(msg);
+      var save = el('button', { type: 'button', class: 'btn', text: '저장' });
+      var actions = el('div', { class: 'cal-actions' }, [save]);
+      if (d.overridden) actions.appendChild(el('button', { type: 'button', class: 'btn secondary', text: '기본으로 되돌리기', onclick: function () {
+        call('cancelDaySchedule', d.date).then(function () { load(state.month, '기본으로 되돌렸습니다.'); })
+          .catch(function (err) { clear(msg); showError(msg, err); });
+      } }));
+      dayBox.appendChild(actions);
+      save.addEventListener('click', function () {
+        save.disabled = true; clear(msg);
+        Array.prototype.forEach.call(dayBox.querySelectorAll('.cal-fix'), function (n) { n.textContent = ''; });
+        call('saveDaySchedule', { date: d.date, operating: operating.value === 'TRUE', start: start.value, end: end.value,
+          day_type: dayType.value, memo: memo.value }).then(function (r) {
+          save.disabled = false;
+          if (!r.ok) { showFieldErrors(dayBox, r.errors); msg.appendChild(el('div', { class: 'error', text: '저장하지 못했습니다. 빨간 글씨를 고쳐 주세요.' })); return; }
+          load(state.month, '저장했습니다.');
+        }).catch(function (err) { save.disabled = false; clear(msg); showError(msg, err); });
+      });
+    }
+
+    function drawBlocks(note) {
+      clear(blkBox);
+      blkBox.appendChild(el('h2', { text: '요일 유형별 출석 블록' }));
+      blkBox.appendChild(el('div', { class: 'muted', text: '출석부 칸의 시간대입니다. 방학 블록이 없으면 학기 블록을 같이 씁니다.' }));
+      var term = el('select', {}, [el('option', { value: '학기', text: '학기' }), el('option', { value: '방학', text: '방학' })]);
+      var dtype = el('select', {}, state.data.dayTypes.map(function (t) { return el('option', { value: t, text: t }); }));
+      blkBox.appendChild(el('div', { style: 'margin-top:12px' }, [localField('기간 유형', term, 'term'), localField('요일 유형', dtype, 'dtype')]));
+      var rowsBox = el('div'); var msg = el('div');
+      blkBox.appendChild(rowsBox); blkBox.appendChild(msg);
+      var rows = [];
+      function fill() {
+        var g = state.data.blockGroups[term.value + '|' + dtype.value] || [];
+        rows = g.map(function (b) { return { start: b.start, end: b.end }; });
+        redraw();
+      }
+      function redraw() {
+        clear(rowsBox);
+        if (!rows.length) rowsBox.appendChild(el('div', { class: 'muted', text: '이 유형에는 블록이 없습니다.' + (term.value === '방학' ? ' (학기 블록을 씁니다)' : '') }));
+        rows.forEach(function (r, i) {
+          var s = el('input', { type: 'text', inputmode: 'numeric', placeholder: '시작 18:00', 'aria-label': (i + 1) + '번 블록 시작' });
+          var e = el('input', { type: 'text', inputmode: 'numeric', placeholder: '끝 20:00', 'aria-label': (i + 1) + '번 블록 끝' });
+          s.value = r.start; e.value = r.end;
+          s.addEventListener('input', function () { r.start = s.value; }); e.addEventListener('input', function () { r.end = e.value; });
+          rowsBox.appendChild(el('div', { class: 'blk-row', 'data-row': String(i) }, [
+            el('span', { text: (i + 1) + '.' }), s, e,
+            el('button', { type: 'button', class: 'btn secondary', text: '빼기', onclick: function () { rows.splice(i, 1); redraw(); } })
+          ]));
+        });
+      }
+      term.addEventListener('change', fill); dtype.addEventListener('change', fill);
+      var add = el('button', { type: 'button', class: 'btn secondary', text: '블록 추가', onclick: function () { rows.push({ start: '', end: '' }); redraw(); } });
+      var save = el('button', { type: 'button', class: 'btn', text: '블록 저장' });
+      blkBox.appendChild(el('div', { class: 'cal-actions' }, state.data.canEdit ? [add, save] : []));
+      if (!state.data.canEdit) blkBox.appendChild(el('div', { class: 'muted', text: '블록 수정은 관리자만 할 수 있습니다.' }));
+      if (note) blkBox.appendChild(el('div', { class: 'cal-ok', text: note }));
+      save.addEventListener('click', function () {
+        save.disabled = true; clear(msg);
+        call('saveBlocks', term.value, dtype.value, rows).then(function (r) {
+          save.disabled = false;
+          if (!r.ok) {
+            msg.appendChild(el('div', { class: 'error', text: '저장하지 못했습니다.' }));
+            r.errors.forEach(function (er) { msg.appendChild(el('div', { class: 'cal-fix', text: (er.index + 1) + '번째 블록: ' + er.message })); });
+            return;
+          }
+          call('getScheduleData', state.month).then(function (data) { state.data = data; drawCal(); drawBlocks('저장했습니다.'); });
+        }).catch(function (err) { save.disabled = false; clear(msg); showError(msg, err); });
+      });
+      fill();
+    }
+
+    load();
+  }
+</script>
