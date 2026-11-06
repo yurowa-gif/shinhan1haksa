@@ -6,11 +6,12 @@
 <script>
   /** 출석부 화면(C7): 날짜를 고르면 미리보기, 아래 바에서 PDF 받기. */
   function renderScreen(root) {
-    var state = { date: '', data: null, busy: false };
+    var state = { date: '', data: null, busy: false, duty: '', standby: '' };
     var head = el('div', { class: 'card' });
     var info = el('div');
+    var namesCard = el('div', { class: 'card' });
     var preview = el('div', { class: 'card' });
-    root.appendChild(head); root.appendChild(info); root.appendChild(preview);
+    root.appendChild(head); root.appendChild(namesCard); root.appendChild(info); root.appendChild(preview);
 
     var dateField = null;
     var pdfBtn = null;
@@ -35,13 +36,33 @@
       head.appendChild(dateField);
     }
 
+    // 근무·예비 감독 이름: 인쇄할 때만 쓰고 저장하지 않는다(F3 근무표가 생기기 전까지 손으로 넣는다)
+    function names() { return { dutyNames: state.duty, standbyNames: state.standby }; }
+    function buildNames() {
+      clear(namesCard);
+      namesCard.appendChild(el('h2', { text: '인쇄할 이름(저장 안 함)' }));
+      var duty = el('input', { type: 'text', maxlength: '60', placeholder: '예: 김선생, 이선생' });
+      var standby = el('input', { type: 'text', maxlength: '30', placeholder: '금·토·일만, 예: 박선생' });
+      duty.value = state.duty; standby.value = state.standby;
+      namesCard.appendChild(UI.field('근무 교사', duty, { name: 'duty', hint: '쉼표로 나눕니다. 비워 두면 머리말에 빈칸이 나옵니다.' }));
+      namesCard.appendChild(UI.field('예비 감독', standby, { name: 'standby' }));
+      var timer = null;
+      function changed() {
+        state.duty = duty.value; state.standby = standby.value;
+        clearTimeout(timer);
+        timer = setTimeout(function () { if (state.date) load(state.date); }, 500);
+      }
+      duty.addEventListener('input', changed); standby.addEventListener('input', changed);
+    }
+
     function load(date) {
       state.busy = true; pdfBtn.disabled = true;
       clear(info); clear(preview);
       preview.appendChild(el('div', { class: 'muted', text: '불러오는 중…' }));
-      call('getAttendanceSheet', date || '').then(function (r) {
+      call('getAttendanceSheet', date || '', names()).then(function (r) {
         state.busy = false; state.data = r; clear(preview);
-        if (!dateField) buildHead(r.date);
+        if (!dateField) { buildHead(r.date); buildNames(); }
+        state.date = r.date;
         if (r.warnings && r.warnings.length) r.warnings.forEach(function (w) { info.appendChild(el('div', { class: 'sheet-warn', text: w })); });
         if (!r.ok) { preview.appendChild(el('div', { class: 'error', text: r.error })); return; }
         if (!r.operating) { preview.appendChild(el('div', { class: 'muted', text: r.message })); return; }
@@ -68,7 +89,7 @@
       if (state.busy || !state.data || !state.data.ok || !state.data.operating) return;
       pdfBtn.disabled = true;
       var old = pdfBtn.textContent; pdfBtn.textContent = 'PDF 만드는 중…';
-      call('getAttendanceSheetPdf', state.data.date).then(function (r) {
+      call('getAttendanceSheetPdf', state.data.date, names()).then(function (r) {
         pdfBtn.textContent = old; pdfBtn.disabled = false;
         if (!r.ok) { UI.toast(r.error || 'PDF를 만들지 못했습니다.', { kind: 'warn', ms: 5000 }); return; }
         var url = URL.createObjectURL(b64Blob(r.base64));
