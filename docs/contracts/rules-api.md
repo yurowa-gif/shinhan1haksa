@@ -47,15 +47,15 @@ function validateBlocks_(blocks)            // [{index, message}]
 function resolveDayPlan_(ymd, src)
 
 // src/rules/AttendanceRules.gs
-function parseBlockSpec_(spec)              // 'ALL' | 'HH:mm-HH:mm;…' → {all, ranges:[{start,end}]}
+function parseBlockSpec_(spec)              // 'ALL' | 'HH:mm-HH:mm;…' → {all, ranges:[{start,end}], errors:[]}(errors는 R3 추가)
 function formatBlockSpec_(parsed)
 function blockSpecCovers_(spec, block)      // 겹치면 true
 function effectiveFixedRows_(rows, studentId, ymd)
-/** c = {block:{seq,start,end}, isLastBlock, dayType, weekdayKo, exceptions:rows[], fixedRows:rows[], endType:'23:00'|'23:50'|'',
+/** c = {block:{seq,start,end}, isLastBlock, dayType, weekdayKo, exceptions:rows[], fixedRows:rows[], endType:'23:00'|'23:50'|'', dayEnd:'HH:mm'(R3 추가, 선택),
  *        opts:{endTypeDayTypes:['mon_thu'], endTime:'23:00', typeShort:{유형:약어}, endLabel:'정상 종료'}}
  *  → {code:'EXC'|'FIXED'|'END'|'NONE', text, exceptionId, more} */
 function resolveCell_(c)
-function resolveStudentDay_(plan, s, opts)  // s = {exceptions, fixedRows, endType} → 블록 순서대로 marks[]
+function resolveStudentDay_(plan, s, opts)  // s = {exceptions, fixedRows, endType} → 블록 순서대로 [{seq, code, text, exceptionId, more}]
 
 // src/rules/StatusRules.gs
 function statusOn_(changes, studentId, item, ymd)   // item '학사'|'기숙사'|'조식'|'석식' → 값 또는 ''
@@ -140,3 +140,16 @@ function mealChangeKind_(item, fromValue, toValue)
   - 기존 등록의 `end_type`은 바꾸지 않는다. 학생 계정이 비어 있는 명단 줄은 있는 계정을 지우지 않는다.
   - 경고: 담당교사가 users에 없거나 비활성, 학번 재사용으로 새 학생을 만듦, 바뀐 학번이 다른 학생 기록과 겹침, 계정 없는 기존 학생과 이름·성별이 같은 새 학생(학년이 올라간 학생을 잇지 못했을 수 있음).
   - `leavingCandidates`: 이 기간 등록이 있고 ymd에 학사생인데 명단에 없는 학생(ambiguous 후보는 뺌). 표시만 한다.
+
+## 동작 메모(R3, 2026-11-06)
+
+**AttendanceRules**
+- 블록 표기: `'ALL'`(대소문자·공백 무시) 또는 `'HH:mm-HH:mm;…'`. "15:00부터 귀가" = `'15:00-24:00'`. 한 자리 시(`9:00`)·`–`·`~`도 읽는다. `parseBlockSpec_`은 범위를 시작 순으로 정렬하고 겹치거나 맞닿은 범위를 합친다. 잘못된 조각은 `errors`에 적고 뺀다(C5 입력 화면은 `errors`가 있으면 저장을 막는다). 저장은 `formatBlockSpec_(parseBlockSpec_(입력))`으로 정규 표기를 쓴다.
+- `blockSpecCovers_`: 겹치면 true, 맞닿기만 하면(18:00-20:00 / 20:00-22:00) false. 잘못된 표기는 false.
+- `effectiveFixedRows_`: 적용월 ≤ 그날의 달 중 **확정 행이 있고 `제출`·`동의` 행이 남아 있지 않은 가장 최근 달**의 확정 행 전부(F9 "확정 전에는 기존 시간표 유지"). 한 달의 일부만 확정된 동안은 앞 달을 유지한다. 요일은 `resolveCell_`이 고른다. 4월이 다 확정되면 3월 행은 요일과 상관없이 모두 끝난다. ASSUMPTION: `학`·`가`가 하나도 없는 달은 행이 없어 나타낼 수 없으므로 앞 달이 이어진다 — F9(3단계)에서 "이번 달 확정, 고정 일정 없음"을 저장하는 방법이 필요하다.
+- `resolveCell_` 우선순위: 확정 특이사항(EXC) > 확정 고정 일정 `학`·`가`(FIXED) > 23:00 종료(END) > 빈칸(NONE). 특이사항 `요청`·`취소`, 고정 일정 `제출`·`동의`·`반려`·`취소`는 무시.
+  - EXC가 여럿이면 가장 최근 확정(`confirmed_at` → `updated_at` → 나중 행) 1건의 약어 + `' 외 N'`, `more = N`, `exceptionId` = 그 건(가정 c).
+  - 약어: `opts.typeShort`(설정 `exception.type_short`, 없으면 sheet-model 기본표). 행의 유형 그대로 찾고, 없으면 **양쪽(행의 유형과 약어표 키) 모두 끝의 괄호 설명을 뗀 이름끼리** 비교하고(관리자가 괄호 설명을 고쳐도 옛 행이 약어로 나오게), 그래도 없으면 괄호를 뗀 이름을 그대로 쓴다.
+  - FIXED가 여럿이면 `teacher_confirmed_at` → `updated_at` 최신.
+  - END: `endType`(`'23:00:00'`도 읽음) `=== opts.endTime`(기본 `'23:00'`), `dayType`이 `opts.endTypeDayTypes`(기본 `['mon_thu']`, 항목 앞뒤 공백 무시)에 있음, 마지막 블록, **그 블록과 그날 종료(`dayEnd`)가 모두 종료 시각보다 늦게 끝남**. ASSUMPTION: 날짜별 종료를 23:00 이하로 당긴 날(22:00·22:30·23:00)은 모두 그 시각에 귀가하므로 표시하지 않는다. ASSUMPTION: 특별 요일 유형(`exam` 등)으로 바꾼 날은 실제 달력 요일의 기본 유형으로 판정한다(목요일 exam → 표시, 금요일 exam → 표시 안 함).
+- `resolveStudentDay_`: 운영 안 하는 날은 `[]`. `exceptions`는 `date === plan.date`인 행만 쓴다(**날짜가 빈 행은 쓰지 않는다** — 빈 날짜 하나가 모든 날에 찍히지 않게). `plan.end`를 `dayEnd`로 넘긴다. `fixedRows`는 `effectiveFixedRows_` 결과를 넘긴다. 고정 일정 요일은 요일 유형이 아니라 **실제 달력 요일**(`ymdWeekdayKo_`). C7은 결과에서 `seq·code·text`만 sheet-model `marks`로 옮긴다.
