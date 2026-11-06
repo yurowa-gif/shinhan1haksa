@@ -15,19 +15,26 @@ const LEGEND = [
   { mark: '○', text: '출석' }, { mark: '×', text: '결석' }, { mark: '△', text: '지각' },
   { mark: '조', text: '조퇴(아래 칸에 질병·가정사유)' }, { mark: '학', text: '학원' }, { mark: '가', text: '가정' }
 ];
+// 블록은 기본값(Schema.gs DEFAULT_BLOCKS·defaultBlockRows_)을 그대로 쓴다. 날짜·요일만 여기서 정한다.
 const DAYS = {
-  mon_thu: { date: '2027-03-03', weekdayKo: '수', blocks: [['18:00', '20:00', '18–20'], ['20:00', '22:00', '20–22'], ['22:00', '24:00', '22–24']] },
-  fri: { date: '2027-03-05', weekdayKo: '금', blocks: [['18:30', '19:30', '18:30–19:30'], ['19:30', '22:00', '19:30–22'], ['22:00', '23:00', '22–23']] },
-  sat: { date: '2027-03-06', weekdayKo: '토', blocks: [['09:00', '12:00', '9–12'], ['14:00', '15:30', '14–15:30'], ['15:30', '17:00', '15:30–17']] },
-  sun: { date: '2027-03-07', weekdayKo: '일', blocks: [['14:00', '15:30', '14–15:30'], ['15:30', '17:00', '15:30–17'], ['19:00', '20:30', '19–20:30'], ['20:30', '22:00', '20:30–22']] }
+  mon_thu: { date: '2027-03-03', weekdayKo: '수' },
+  fri: { date: '2027-03-05', weekdayKo: '금' },
+  sat: { date: '2027-03-06', weekdayKo: '토' },
+  sun: { date: '2027-03-07', weekdayKo: '일' }
 };
+
+function defaultBlocks(dayType) {
+  const ctx = loadGs(['src/Schema.gs']);
+  return plain(ctx.defaultBlockRows_()).filter((r) => r.day_type === dayType)
+    .map((r) => ({ seq: Number(r.seq), start: r.start, end: r.end, label: r.label }));
+}
 
 function buildModel(dayType) {
   const ctx = loadGs(['src/dev/FakeSeats.gs', 'src/dev/FakeData.gs']);
   const layout = plain(ctx.buildFakeSeatLayout_());
   const people = plain(ctx.buildFakeData_({}).students);
   const day = DAYS[dayType];
-  const blocks = day.blocks.map((b, i) => ({ seq: i + 1, start: b[0], end: b[1], label: b[2] }));
+  const blocks = defaultBlocks(dayType);
   let n = 0; // 좌석 번호(공간을 넘어 이어짐: 무늬가 공간마다 다르게)
   const spaces = layout.spaces.map((sp) => {
     const cells = layout.seats.filter((s) => s.spaceKey === sp.key).map((s) => {
