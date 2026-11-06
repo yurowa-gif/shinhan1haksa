@@ -21,10 +21,15 @@
       el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=terms', text: '운영 기간 열기' })
     ]));
     root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '명단 올리기' }),
+      el('div', { class: 'muted', text: '시트에서 복사한 명단(또는 CSV)을 붙여넣어 형식을 확인합니다. 저장은 다음 단계에서 붙습니다.' }),
+      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=roster', text: '명단 올리기 열기' })
+    ]));
+    root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '자습 일정·블록' }),
       el('div', { class: 'muted', text: '날짜별 운영 여부·시작·종료와 요일 유형별 출석 블록을 정합니다.' }),
       el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=schedule', text: '자습 일정 열기' })
     ]));
-    root.appendChild(soonCard('명단·계정, 설정', '1단계부터 차례로 추가합니다.'));
+    root.appendChild(soonCard('계정, 설정', '1단계부터 차례로 추가합니다.'));
   }
 </script>
