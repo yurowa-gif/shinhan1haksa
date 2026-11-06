@@ -28,6 +28,8 @@ function permissions_() {
     'term.edit': { roles: ['admin'] },
     // 명단 업로드: 관리자만
     'roster.edit': { roles: ['admin'] },
+    // 출석부(F2): 관리자·출결 담당·학사 교사만(담임·학생·학부모는 거부)
+    'sheet.view': { roles: ['admin', 'attendance', 'hall_teacher'] },
     // 자습 일정·블록: 교사 역할은 보기, 수정은 관리자만
     'schedule.view': { roles: ['admin', 'attendance', 'hall_teacher', 'duty_manager', 'homeroom'] },
     'schedule.edit': { roles: ['admin'] }
