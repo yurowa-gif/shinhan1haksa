@@ -1,0 +1,5872 @@
+{
+ "date": "2027-03-06",
+ "weekdayKo": "토",
+ "dayType": "sat",
+ "operating": true,
+ "title": "신한학사 출석부",
+ "dutyNames": [],
+ "blocks": [
+  {
+   "seq": 1,
+   "start": "09:00",
+   "end": "12:00",
+   "label": "09–12"
+  },
+  {
+   "seq": 2,
+   "start": "14:00",
+   "end": "15:30",
+   "label": "14–15:30"
+  },
+  {
+   "seq": 3,
+   "start": "15:30",
+   "end": "17:00",
+   "label": "15:30–17"
+  }
+ ],
+ "legend": [
+  {
+   "mark": "○",
+   "text": "출석"
+  },
+  {
+   "mark": "×",
+   "text": "결석"
+  },
+  {
+   "mark": "△",
+   "text": "지각"
+  },
+  {
+   "mark": "조",
+   "text": "조퇴(아래 칸에 질병·가정사유)"
+  },
+  {
+   "mark": "학",
+   "text": "학원"
+  },
+  {
+   "mark": "가",
+   "text": "가정"
+  }
+ ],
+ "spaces": [
+  {
+   "id": "space-1F",
+   "name": "1층 자습실",
+   "gender": "혼성",
+   "rows": 20,
+   "cols": 12,
+   "cells": [
+    {
+     "row": 1,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "1",
+     "occupant": {
+      "grade": 2,
+      "name": "한라온",
+      "display": "2. 한라온"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 1,
+     "col": 3,
+     "kind": "seat",
+     "seatLabel": "2",
+     "occupant": {
+      "grade": 3,
+      "name": "윤자람",
+      "display": "3. 윤자람"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 1,
+     "col": 4,
+     "kind": "seat",
+     "seatLabel": "3",
+     "occupant": {
+      "grade": 1,
+      "name": "김단비",
+      "display": "1. 김단비"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 1,
+     "col": 6,
+     "kind": "seat",
+     "seatLabel": "4",
+     "occupant": {
+      "grade": 2,
+      "name": "박별하",
+      "display": "2. 박별하"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 1,
+     "col": 7,
+     "kind": "seat",
+     "seatLabel": "5",
+     "occupant": {
+      "grade": 3,
+      "name": "장보람",
+      "display": "3. 장보람"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 1,
+     "col": 9,
+     "kind": "seat",
+     "seatLabel": "6",
+     "occupant": {
+      "grade": 1,
+      "name": "권보람",
+      "display": "1. 권보람"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 1,
+     "col": 10,
+     "kind": "seat",
+     "seatLabel": "7",
+     "occupant": {
+      "grade": 2,
+      "name": "신구름",
+      "display": "2. 신구름"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 1,
+     "col": 12,
+     "kind": "seat",
+     "seatLabel": "8",
+     "occupant": {
+      "grade": 3,
+      "name": "신나래",
+      "display": "3. 신나래"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 2,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "9",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 2,
+     "col": 3,
+     "kind": "seat",
+     "seatLabel": "10",
+     "occupant": {
+      "grade": 2,
+      "name": "장해솔",
+      "display": "2. 장해솔"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 2,
+     "col": 4,
+     "kind": "seat",
+     "seatLabel": "11",
+     "occupant": {
+      "grade": 3,
+      "name": "임솔빛",
+      "display": "3. 임솔빛"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 3,
+       "code": "FIXED",
+       "text": "가"
+      }
+     ]
+    },
+    {
+     "row": 2,
+     "col": 6,
+     "kind": "seat",
+     "seatLabel": "12",
+     "occupant": {
+      "grade": 1,
+      "name": "조아라",
+      "display": "1. 조아라"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 2,
+     "col": 7,
+     "kind": "seat",
+     "seatLabel": "13",
+     "occupant": {
+      "grade": 2,
+      "name": "정가온",
+      "display": "2. 정가온"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "EXC",
+       "text": "무지"
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 2,
+     "col": 9,
+     "kind": "seat",
+     "seatLabel": "14",
+     "occupant": {
+      "grade": 3,
+      "name": "오하늘",
+      "display": "3. 오하늘"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 2,
+     "col": 10,
+     "kind": "seat",
+     "seatLabel": "15",
+     "occupant": {
+      "grade": 1,
+      "name": "임누리",
+      "display": "1. 임누리"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 2,
+     "col": 12,
+     "kind": "seat",
+     "seatLabel": "16",
+     "occupant": {
+      "grade": 2,
+      "name": "조이슬",
+      "display": "2. 조이슬"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 3,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "17",
+     "occupant": {
+      "grade": 3,
+      "name": "권해솔",
+      "display": "3. 권해솔"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 3,
+     "col": 3,
+     "kind": "seat",
+     "seatLabel": "18",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 3,
+     "col": 4,
+     "kind": "seat",
+     "seatLabel": "19",
+     "occupant": {
+      "grade": 2,
+      "name": "강라온",
+      "display": "2. 강라온"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 3,
+     "col": 6,
+     "kind": "seat",
+     "seatLabel": "20",
+     "occupant": {
+      "grade": 3,
+      "name": "임해솔",
+      "display": "3. 임해솔"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 3,
+     "col": 7,
+     "kind": "seat",
+     "seatLabel": "21",
+     "occupant": {
+      "grade": 1,
+      "name": "신한결",
+      "display": "1. 신한결"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 3,
+     "col": 9,
+     "kind": "seat",
+     "seatLabel": "22",
+     "occupant": {
+      "grade": 2,
+      "name": "이이슬",
+      "display": "2. 이이슬"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 3,
+       "code": "FIXED",
+       "text": "가"
+      }
+     ]
+    },
+    {
+     "row": 3,
+     "col": 10,
+     "kind": "seat",
+     "seatLabel": "23",
+     "occupant": {
+      "grade": 3,
+      "name": "권새봄",
+      "display": "3. 권새봄"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 3,
+     "col": 12,
+     "kind": "seat",
+     "seatLabel": "24",
+     "occupant": {
+      "grade": 1,
+      "name": "강하늘",
+      "display": "1. 강하늘"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 4,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "25",
+     "occupant": {
+      "grade": 2,
+      "name": "강다솜",
+      "display": "2. 강다솜"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 4,
+     "col": 3,
+     "kind": "seat",
+     "seatLabel": "26",
+     "occupant": {
+      "grade": 3,
+      "name": "한바다",
+      "display": "3. 한바다"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "EXC",
+       "text": "무지"
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 4,
+     "col": 4,
+     "kind": "seat",
+     "seatLabel": "27",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 4,
+     "col": 6,
+     "kind": "seat",
+     "seatLabel": "28",
+     "occupant": {
+      "grade": 2,
+      "name": "조하늘",
+      "display": "2. 조하늘"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 4,
+     "col": 7,
+     "kind": "seat",
+     "seatLabel": "29",
+     "occupant": {
+      "grade": 3,
+      "name": "강마루",
+      "display": "3. 강마루"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "EXC",
+       "text": "병결 외 1"
+      },
+      {
+       "seq": 2,
+       "code": "EXC",
+       "text": "병결"
+      },
+      {
+       "seq": 3,
+       "code": "EXC",
+       "text": "병결"
+      }
+     ]
+    },
+    {
+     "row": 4,
+     "col": 9,
+     "kind": "seat",
+     "seatLabel": "30",
+     "occupant": {
+      "grade": 1,
+      "name": "한새봄",
+      "display": "1. 한새봄"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 4,
+     "col": 10,
+     "kind": "seat",
+     "seatLabel": "31",
+     "occupant": {
+      "grade": 2,
+      "name": "한라온",
+      "display": "2. 한라온"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 4,
+     "col": 12,
+     "kind": "seat",
+     "seatLabel": "32",
+     "occupant": {
+      "grade": 3,
+      "name": "윤자람",
+      "display": "3. 윤자람"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 5,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "33",
+     "occupant": {
+      "grade": 1,
+      "name": "김단비",
+      "display": "1. 김단비"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 3,
+       "code": "FIXED",
+       "text": "가"
+      }
+     ]
+    },
+    {
+     "row": 5,
+     "col": 3,
+     "kind": "seat",
+     "seatLabel": "34",
+     "occupant": {
+      "grade": 2,
+      "name": "박별하",
+      "display": "2. 박별하"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 5,
+     "col": 4,
+     "kind": "seat",
+     "seatLabel": "35",
+     "occupant": {
+      "grade": 3,
+      "name": "장보람",
+      "display": "3. 장보람"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 5,
+     "col": 6,
+     "kind": "seat",
+     "seatLabel": "36",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 5,
+     "col": 7,
+     "kind": "seat",
+     "seatLabel": "37",
+     "occupant": {
+      "grade": 2,
+      "name": "신구름",
+      "display": "2. 신구름"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 5,
+     "col": 9,
+     "kind": "seat",
+     "seatLabel": "38",
+     "occupant": {
+      "grade": 3,
+      "name": "신나래",
+      "display": "3. 신나래"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 5,
+     "col": 10,
+     "kind": "seat",
+     "seatLabel": "39",
+     "occupant": {
+      "grade": 1,
+      "name": "윤이슬",
+      "display": "1. 윤이슬"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "EXC",
+       "text": "무지"
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 5,
+     "col": 12,
+     "kind": "seat",
+     "seatLabel": "40",
+     "occupant": {
+      "grade": 2,
+      "name": "장해솔",
+      "display": "2. 장해솔"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 6,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "41",
+     "occupant": {
+      "grade": 3,
+      "name": "임솔빛",
+      "display": "3. 임솔빛"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 6,
+     "col": 3,
+     "kind": "seat",
+     "seatLabel": "42",
+     "occupant": {
+      "grade": 1,
+      "name": "조아라",
+      "display": "1. 조아라"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 6,
+     "col": 4,
+     "kind": "seat",
+     "seatLabel": "43",
+     "occupant": {
+      "grade": 2,
+      "name": "정가온",
+      "display": "2. 정가온"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 6,
+     "col": 6,
+     "kind": "seat",
+     "seatLabel": "44",
+     "occupant": {
+      "grade": 3,
+      "name": "오하늘",
+      "display": "3. 오하늘"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 3,
+       "code": "FIXED",
+       "text": "가"
+      }
+     ]
+    },
+    {
+     "row": 6,
+     "col": 7,
+     "kind": "seat",
+     "seatLabel": "45",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 6,
+     "col": 9,
+     "kind": "seat",
+     "seatLabel": "46",
+     "occupant": {
+      "grade": 2,
+      "name": "조이슬",
+      "display": "2. 조이슬"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 6,
+     "col": 10,
+     "kind": "seat",
+     "seatLabel": "47",
+     "occupant": {
+      "grade": 3,
+      "name": "권해솔",
+      "display": "3. 권해솔"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 6,
+     "col": 12,
+     "kind": "pillar",
+     "seatLabel": "",
+     "occupant": null,
+     "vacant": false,
+     "marks": []
+    },
+    {
+     "row": 7,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "48",
+     "occupant": {
+      "grade": 1,
+      "name": "최구름",
+      "display": "1. 최구름"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 7,
+     "col": 3,
+     "kind": "seat",
+     "seatLabel": "49",
+     "occupant": {
+      "grade": 2,
+      "name": "강라온",
+      "display": "2. 강라온"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 7,
+     "col": 4,
+     "kind": "seat",
+     "seatLabel": "50",
+     "occupant": {
+      "grade": 3,
+      "name": "임해솔",
+      "display": "3. 임해솔"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 7,
+     "col": 6,
+     "kind": "seat",
+     "seatLabel": "51",
+     "occupant": {
+      "grade": 1,
+      "name": "신한결",
+      "display": "1. 신한결"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 7,
+     "col": 7,
+     "kind": "seat",
+     "seatLabel": "52",
+     "occupant": {
+      "grade": 2,
+      "name": "이이슬",
+      "display": "2. 이이슬"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "EXC",
+       "text": "무지"
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 7,
+     "col": 9,
+     "kind": "seat",
+     "seatLabel": "53",
+     "occupant": {
+      "grade": 3,
+      "name": "권새봄",
+      "display": "3. 권새봄"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 7,
+     "col": 10,
+     "kind": "seat",
+     "seatLabel": "54",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 7,
+     "col": 12,
+     "kind": "seat",
+     "seatLabel": "55",
+     "occupant": {
+      "grade": 2,
+      "name": "강다솜",
+      "display": "2. 강다솜"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 3,
+       "code": "FIXED",
+       "text": "가"
+      }
+     ]
+    },
+    {
+     "row": 8,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "56",
+     "occupant": {
+      "grade": 3,
+      "name": "한바다",
+      "display": "3. 한바다"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 8,
+     "col": 3,
+     "kind": "seat",
+     "seatLabel": "57",
+     "occupant": {
+      "grade": 1,
+      "name": "장구름",
+      "display": "1. 장구름"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 8,
+     "col": 4,
+     "kind": "seat",
+     "seatLabel": "58",
+     "occupant": {
+      "grade": 2,
+      "name": "조하늘",
+      "display": "2. 조하늘"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "EXC",
+       "text": "병결 외 1"
+      },
+      {
+       "seq": 2,
+       "code": "EXC",
+       "text": "병결"
+      },
+      {
+       "seq": 3,
+       "code": "EXC",
+       "text": "병결"
+      }
+     ]
+    },
+    {
+     "row": 8,
+     "col": 6,
+     "kind": "seat",
+     "seatLabel": "59",
+     "occupant": {
+      "grade": 3,
+      "name": "강마루",
+      "display": "3. 강마루"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 8,
+     "col": 7,
+     "kind": "seat",
+     "seatLabel": "60",
+     "occupant": {
+      "grade": 1,
+      "name": "한새봄",
+      "display": "1. 한새봄"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 8,
+     "col": 9,
+     "kind": "seat",
+     "seatLabel": "61",
+     "occupant": {
+      "grade": 2,
+      "name": "한라온",
+      "display": "2. 한라온"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 8,
+     "col": 10,
+     "kind": "seat",
+     "seatLabel": "62",
+     "occupant": {
+      "grade": 3,
+      "name": "윤자람",
+      "display": "3. 윤자람"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 8,
+     "col": 12,
+     "kind": "seat",
+     "seatLabel": "63",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 9,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "64",
+     "occupant": {
+      "grade": 2,
+      "name": "박별하",
+      "display": "2. 박별하"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 9,
+     "col": 3,
+     "kind": "seat",
+     "seatLabel": "65",
+     "occupant": {
+      "grade": 3,
+      "name": "장보람",
+      "display": "3. 장보람"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "EXC",
+       "text": "무지"
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 9,
+     "col": 4,
+     "kind": "seat",
+     "seatLabel": "66",
+     "occupant": {
+      "grade": 1,
+      "name": "권보람",
+      "display": "1. 권보람"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 3,
+       "code": "FIXED",
+       "text": "가"
+      }
+     ]
+    },
+    {
+     "row": 9,
+     "col": 6,
+     "kind": "seat",
+     "seatLabel": "67",
+     "occupant": {
+      "grade": 2,
+      "name": "신구름",
+      "display": "2. 신구름"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 9,
+     "col": 7,
+     "kind": "seat",
+     "seatLabel": "68",
+     "occupant": {
+      "grade": 3,
+      "name": "신나래",
+      "display": "3. 신나래"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 9,
+     "col": 9,
+     "kind": "seat",
+     "seatLabel": "69",
+     "occupant": {
+      "grade": 1,
+      "name": "윤이슬",
+      "display": "1. 윤이슬"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 9,
+     "col": 10,
+     "kind": "seat",
+     "seatLabel": "70",
+     "occupant": {
+      "grade": 2,
+      "name": "장해솔",
+      "display": "2. 장해솔"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 9,
+     "col": 12,
+     "kind": "seat",
+     "seatLabel": "71",
+     "occupant": {
+      "grade": 3,
+      "name": "임솔빛",
+      "display": "3. 임솔빛"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 10,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "72",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 10,
+     "col": 3,
+     "kind": "seat",
+     "seatLabel": "73",
+     "occupant": {
+      "grade": 2,
+      "name": "정가온",
+      "display": "2. 정가온"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 10,
+     "col": 4,
+     "kind": "seat",
+     "seatLabel": "74",
+     "occupant": {
+      "grade": 3,
+      "name": "오하늘",
+      "display": "3. 오하늘"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 10,
+     "col": 6,
+     "kind": "seat",
+     "seatLabel": "75",
+     "occupant": {
+      "grade": 1,
+      "name": "임누리",
+      "display": "1. 임누리"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 10,
+     "col": 7,
+     "kind": "seat",
+     "seatLabel": "76",
+     "occupant": {
+      "grade": 2,
+      "name": "조이슬",
+      "display": "2. 조이슬"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 10,
+     "col": 9,
+     "kind": "seat",
+     "seatLabel": "77",
+     "occupant": {
+      "grade": 3,
+      "name": "권해솔",
+      "display": "3. 권해솔"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "FIXED",
+       "text": "가"
+      }
+     ]
+    },
+    {
+     "row": 10,
+     "col": 10,
+     "kind": "seat",
+     "seatLabel": "78",
+     "occupant": {
+      "grade": 1,
+      "name": "최구름",
+      "display": "1. 최구름"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "EXC",
+       "text": "무지"
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 10,
+     "col": 12,
+     "kind": "seat",
+     "seatLabel": "79",
+     "occupant": {
+      "grade": 2,
+      "name": "강라온",
+      "display": "2. 강라온"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 11,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "80",
+     "occupant": {
+      "grade": 3,
+      "name": "임해솔",
+      "display": "3. 임해솔"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 11,
+     "col": 3,
+     "kind": "seat",
+     "seatLabel": "81",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 11,
+     "col": 4,
+     "kind": "seat",
+     "seatLabel": "82",
+     "occupant": {
+      "grade": 2,
+      "name": "이이슬",
+      "display": "2. 이이슬"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 11,
+     "col": 6,
+     "kind": "seat",
+     "seatLabel": "83",
+     "occupant": {
+      "grade": 3,
+      "name": "권새봄",
+      "display": "3. 권새봄"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 11,
+     "col": 7,
+     "kind": "seat",
+     "seatLabel": "84",
+     "occupant": {
+      "grade": 1,
+      "name": "강하늘",
+      "display": "1. 강하늘"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 11,
+     "col": 9,
+     "kind": "seat",
+     "seatLabel": "85",
+     "occupant": {
+      "grade": 2,
+      "name": "강다솜",
+      "display": "2. 강다솜"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 11,
+     "col": 10,
+     "kind": "seat",
+     "seatLabel": "86",
+     "occupant": {
+      "grade": 3,
+      "name": "한바다",
+      "display": "3. 한바다"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 11,
+     "col": 12,
+     "kind": "seat",
+     "seatLabel": "87",
+     "occupant": {
+      "grade": 1,
+      "name": "장구름",
+      "display": "1. 장구름"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "EXC",
+       "text": "병결 외 1"
+      },
+      {
+       "seq": 2,
+       "code": "EXC",
+       "text": "병결"
+      },
+      {
+       "seq": 3,
+       "code": "EXC",
+       "text": "병결"
+      }
+     ]
+    },
+    {
+     "row": 12,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "88",
+     "occupant": {
+      "grade": 2,
+      "name": "조하늘",
+      "display": "2. 조하늘"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 3,
+       "code": "FIXED",
+       "text": "가"
+      }
+     ]
+    },
+    {
+     "row": 12,
+     "col": 3,
+     "kind": "seat",
+     "seatLabel": "89",
+     "occupant": {
+      "grade": 3,
+      "name": "강마루",
+      "display": "3. 강마루"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 12,
+     "col": 4,
+     "kind": "seat",
+     "seatLabel": "90",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 12,
+     "col": 6,
+     "kind": "seat",
+     "seatLabel": "91",
+     "occupant": {
+      "grade": 2,
+      "name": "한라온",
+      "display": "2. 한라온"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "EXC",
+       "text": "무지"
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 12,
+     "col": 7,
+     "kind": "seat",
+     "seatLabel": "92",
+     "occupant": {
+      "grade": 3,
+      "name": "윤자람",
+      "display": "3. 윤자람"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 12,
+     "col": 9,
+     "kind": "seat",
+     "seatLabel": "93",
+     "occupant": {
+      "grade": 1,
+      "name": "김단비",
+      "display": "1. 김단비"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 12,
+     "col": 10,
+     "kind": "seat",
+     "seatLabel": "94",
+     "occupant": {
+      "grade": 2,
+      "name": "박별하",
+      "display": "2. 박별하"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 12,
+     "col": 12,
+     "kind": "pillar",
+     "seatLabel": "",
+     "occupant": null,
+     "vacant": false,
+     "marks": []
+    },
+    {
+     "row": 13,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "95",
+     "occupant": {
+      "grade": 3,
+      "name": "장보람",
+      "display": "3. 장보람"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 13,
+     "col": 3,
+     "kind": "seat",
+     "seatLabel": "96",
+     "occupant": {
+      "grade": 1,
+      "name": "권보람",
+      "display": "1. 권보람"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 13,
+     "col": 4,
+     "kind": "seat",
+     "seatLabel": "97",
+     "occupant": {
+      "grade": 2,
+      "name": "신구름",
+      "display": "2. 신구름"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 13,
+     "col": 6,
+     "kind": "seat",
+     "seatLabel": "98",
+     "occupant": {
+      "grade": 3,
+      "name": "신나래",
+      "display": "3. 신나래"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 13,
+     "col": 7,
+     "kind": "seat",
+     "seatLabel": "99",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 13,
+     "col": 9,
+     "kind": "seat",
+     "seatLabel": "100",
+     "occupant": {
+      "grade": 2,
+      "name": "장해솔",
+      "display": "2. 장해솔"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 13,
+     "col": 10,
+     "kind": "seat",
+     "seatLabel": "101",
+     "occupant": {
+      "grade": 3,
+      "name": "임솔빛",
+      "display": "3. 임솔빛"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 13,
+     "col": 12,
+     "kind": "seat",
+     "seatLabel": "102",
+     "occupant": {
+      "grade": 1,
+      "name": "조아라",
+      "display": "1. 조아라"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 14,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "103",
+     "occupant": {
+      "grade": 2,
+      "name": "정가온",
+      "display": "2. 정가온"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 14,
+     "col": 3,
+     "kind": "seat",
+     "seatLabel": "104",
+     "occupant": {
+      "grade": 3,
+      "name": "오하늘",
+      "display": "3. 오하늘"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "EXC",
+       "text": "무지"
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 14,
+     "col": 4,
+     "kind": "seat",
+     "seatLabel": "105",
+     "occupant": {
+      "grade": 1,
+      "name": "임누리",
+      "display": "1. 임누리"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 14,
+     "col": 6,
+     "kind": "seat",
+     "seatLabel": "106",
+     "occupant": {
+      "grade": 2,
+      "name": "조이슬",
+      "display": "2. 조이슬"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 14,
+     "col": 7,
+     "kind": "seat",
+     "seatLabel": "107",
+     "occupant": {
+      "grade": 3,
+      "name": "권해솔",
+      "display": "3. 권해솔"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 14,
+     "col": 9,
+     "kind": "seat",
+     "seatLabel": "108",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 14,
+     "col": 10,
+     "kind": "seat",
+     "seatLabel": "109",
+     "occupant": {
+      "grade": 2,
+      "name": "강라온",
+      "display": "2. 강라온"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 14,
+     "col": 12,
+     "kind": "seat",
+     "seatLabel": "110",
+     "occupant": {
+      "grade": 3,
+      "name": "임해솔",
+      "display": "3. 임해솔"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 3,
+       "code": "FIXED",
+       "text": "가"
+      }
+     ]
+    },
+    {
+     "row": 15,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "111",
+     "occupant": {
+      "grade": 1,
+      "name": "신한결",
+      "display": "1. 신한결"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 15,
+     "col": 3,
+     "kind": "seat",
+     "seatLabel": "112",
+     "occupant": {
+      "grade": 2,
+      "name": "이이슬",
+      "display": "2. 이이슬"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 15,
+     "col": 4,
+     "kind": "seat",
+     "seatLabel": "113",
+     "occupant": {
+      "grade": 3,
+      "name": "권새봄",
+      "display": "3. 권새봄"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 15,
+     "col": 6,
+     "kind": "seat",
+     "seatLabel": "114",
+     "occupant": {
+      "grade": 1,
+      "name": "강하늘",
+      "display": "1. 강하늘"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 15,
+     "col": 7,
+     "kind": "seat",
+     "seatLabel": "115",
+     "occupant": {
+      "grade": 2,
+      "name": "강다솜",
+      "display": "2. 강다솜"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 15,
+     "col": 9,
+     "kind": "seat",
+     "seatLabel": "116",
+     "occupant": {
+      "grade": 3,
+      "name": "한바다",
+      "display": "3. 한바다"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "EXC",
+       "text": "병결 외 1"
+      },
+      {
+       "seq": 2,
+       "code": "EXC",
+       "text": "병결"
+      },
+      {
+       "seq": 3,
+       "code": "EXC",
+       "text": "병결"
+      }
+     ]
+    },
+    {
+     "row": 15,
+     "col": 10,
+     "kind": "seat",
+     "seatLabel": "117",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 15,
+     "col": 12,
+     "kind": "seat",
+     "seatLabel": "118",
+     "occupant": {
+      "grade": 2,
+      "name": "조하늘",
+      "display": "2. 조하늘"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 16,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "119",
+     "occupant": {
+      "grade": 3,
+      "name": "강마루",
+      "display": "3. 강마루"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 16,
+     "col": 3,
+     "kind": "seat",
+     "seatLabel": "120",
+     "occupant": {
+      "grade": 1,
+      "name": "한새봄",
+      "display": "1. 한새봄"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 16,
+     "col": 4,
+     "kind": "seat",
+     "seatLabel": "121",
+     "occupant": {
+      "grade": 2,
+      "name": "한라온",
+      "display": "2. 한라온"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 3,
+       "code": "FIXED",
+       "text": "가"
+      }
+     ]
+    },
+    {
+     "row": 16,
+     "col": 6,
+     "kind": "seat",
+     "seatLabel": "122",
+     "occupant": {
+      "grade": 3,
+      "name": "윤자람",
+      "display": "3. 윤자람"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 16,
+     "col": 7,
+     "kind": "seat",
+     "seatLabel": "123",
+     "occupant": {
+      "grade": 1,
+      "name": "김단비",
+      "display": "1. 김단비"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 16,
+     "col": 9,
+     "kind": "seat",
+     "seatLabel": "124",
+     "occupant": {
+      "grade": 2,
+      "name": "박별하",
+      "display": "2. 박별하"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 16,
+     "col": 10,
+     "kind": "seat",
+     "seatLabel": "125",
+     "occupant": {
+      "grade": 3,
+      "name": "장보람",
+      "display": "3. 장보람"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 16,
+     "col": 12,
+     "kind": "seat",
+     "seatLabel": "126",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 17,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "127",
+     "occupant": {
+      "grade": 2,
+      "name": "신구름",
+      "display": "2. 신구름"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 17,
+     "col": 3,
+     "kind": "seat",
+     "seatLabel": "128",
+     "occupant": {
+      "grade": 3,
+      "name": "신나래",
+      "display": "3. 신나래"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 17,
+     "col": 4,
+     "kind": "seat",
+     "seatLabel": "129",
+     "occupant": {
+      "grade": 1,
+      "name": "윤이슬",
+      "display": "1. 윤이슬"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 17,
+     "col": 6,
+     "kind": "seat",
+     "seatLabel": "130",
+     "occupant": {
+      "grade": 2,
+      "name": "장해솔",
+      "display": "2. 장해솔"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "EXC",
+       "text": "무지"
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 17,
+     "col": 7,
+     "kind": "seat",
+     "seatLabel": "131",
+     "occupant": {
+      "grade": 3,
+      "name": "임솔빛",
+      "display": "3. 임솔빛"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 17,
+     "col": 9,
+     "kind": "seat",
+     "seatLabel": "132",
+     "occupant": {
+      "grade": 1,
+      "name": "조아라",
+      "display": "1. 조아라"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 3,
+       "code": "FIXED",
+       "text": "가"
+      }
+     ]
+    },
+    {
+     "row": 17,
+     "col": 10,
+     "kind": "seat",
+     "seatLabel": "133",
+     "occupant": {
+      "grade": 2,
+      "name": "정가온",
+      "display": "2. 정가온"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 18,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "134",
+     "occupant": {
+      "grade": 3,
+      "name": "오하늘",
+      "display": "3. 오하늘"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 18,
+     "col": 3,
+     "kind": "seat",
+     "seatLabel": "135",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 18,
+     "col": 4,
+     "kind": "seat",
+     "seatLabel": "136",
+     "occupant": {
+      "grade": 2,
+      "name": "조이슬",
+      "display": "2. 조이슬"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 18,
+     "col": 6,
+     "kind": "seat",
+     "seatLabel": "137",
+     "occupant": {
+      "grade": 3,
+      "name": "권해솔",
+      "display": "3. 권해솔"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 18,
+     "col": 7,
+     "kind": "seat",
+     "seatLabel": "138",
+     "occupant": {
+      "grade": 1,
+      "name": "최구름",
+      "display": "1. 최구름"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 18,
+     "col": 9,
+     "kind": "seat",
+     "seatLabel": "139",
+     "occupant": {
+      "grade": 2,
+      "name": "강라온",
+      "display": "2. 강라온"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 18,
+     "col": 10,
+     "kind": "seat",
+     "seatLabel": "140",
+     "occupant": {
+      "grade": 3,
+      "name": "임해솔",
+      "display": "3. 임해솔"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 19,
+     "col": 6,
+     "kind": "seat",
+     "seatLabel": "141",
+     "occupant": {
+      "grade": 1,
+      "name": "신한결",
+      "display": "1. 신한결"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 19,
+     "col": 7,
+     "kind": "seat",
+     "seatLabel": "142",
+     "occupant": {
+      "grade": 2,
+      "name": "이이슬",
+      "display": "2. 이이슬"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 19,
+     "col": 9,
+     "kind": "seat",
+     "seatLabel": "143",
+     "occupant": {
+      "grade": 3,
+      "name": "권새봄",
+      "display": "3. 권새봄"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "EXC",
+       "text": "무지"
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 3,
+       "code": "FIXED",
+       "text": "가"
+      }
+     ]
+    },
+    {
+     "row": 19,
+     "col": 10,
+     "kind": "seat",
+     "seatLabel": "144",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 20,
+     "col": 1,
+     "kind": "window",
+     "seatLabel": "",
+     "occupant": null,
+     "vacant": false,
+     "marks": []
+    },
+    {
+     "row": 20,
+     "col": 9,
+     "kind": "seat",
+     "seatLabel": "145",
+     "occupant": {
+      "grade": 2,
+      "name": "강다솜",
+      "display": "2. 강다솜"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "EXC",
+       "text": "병결 외 1"
+      },
+      {
+       "seq": 2,
+       "code": "EXC",
+       "text": "병결"
+      },
+      {
+       "seq": 3,
+       "code": "EXC",
+       "text": "병결"
+      }
+     ]
+    },
+    {
+     "row": 20,
+     "col": 10,
+     "kind": "seat",
+     "seatLabel": "146",
+     "occupant": {
+      "grade": 3,
+      "name": "한바다",
+      "display": "3. 한바다"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 20,
+     "col": 12,
+     "kind": "door",
+     "seatLabel": "",
+     "occupant": null,
+     "vacant": false,
+     "marks": []
+    }
+   ]
+  },
+  {
+   "id": "space-SA1",
+   "name": "SA1실",
+   "gender": "남",
+   "rows": 5,
+   "cols": 2,
+   "cells": [
+    {
+     "row": 1,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "1",
+     "occupant": {
+      "grade": 1,
+      "name": "장구름",
+      "display": "1. 장구름"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "2",
+     "occupant": {
+      "grade": 2,
+      "name": "조하늘",
+      "display": "2. 조하늘"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 2,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "3",
+     "occupant": {
+      "grade": 3,
+      "name": "강마루",
+      "display": "3. 강마루"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 2,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "4",
+     "occupant": {
+      "grade": 1,
+      "name": "한새봄",
+      "display": "1. 한새봄"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 3,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "5",
+     "occupant": {
+      "grade": 2,
+      "name": "한라온",
+      "display": "2. 한라온"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 3,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "6",
+     "occupant": {
+      "grade": 3,
+      "name": "윤자람",
+      "display": "3. 윤자람"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 4,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "7",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 4,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "8",
+     "occupant": {
+      "grade": 2,
+      "name": "박별하",
+      "display": "2. 박별하"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "FIXED",
+       "text": "가"
+      }
+     ]
+    },
+    {
+     "row": 5,
+     "col": 1,
+     "kind": "window",
+     "seatLabel": "",
+     "occupant": null,
+     "vacant": false,
+     "marks": []
+    },
+    {
+     "row": 5,
+     "col": 2,
+     "kind": "door",
+     "seatLabel": "",
+     "occupant": null,
+     "vacant": false,
+     "marks": []
+    }
+   ]
+  },
+  {
+   "id": "space-SA2",
+   "name": "SA2실",
+   "gender": "남",
+   "rows": 5,
+   "cols": 2,
+   "cells": [
+    {
+     "row": 1,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "1",
+     "occupant": {
+      "grade": 3,
+      "name": "장보람",
+      "display": "3. 장보람"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "2",
+     "occupant": {
+      "grade": 1,
+      "name": "권보람",
+      "display": "1. 권보람"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "EXC",
+       "text": "무지"
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 2,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "3",
+     "occupant": {
+      "grade": 2,
+      "name": "신구름",
+      "display": "2. 신구름"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 2,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "4",
+     "occupant": {
+      "grade": 3,
+      "name": "신나래",
+      "display": "3. 신나래"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 3,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "5",
+     "occupant": {
+      "grade": 1,
+      "name": "윤이슬",
+      "display": "1. 윤이슬"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 3,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "6",
+     "occupant": {
+      "grade": 2,
+      "name": "장해솔",
+      "display": "2. 장해솔"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 4,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "7",
+     "occupant": {
+      "grade": 3,
+      "name": "임솔빛",
+      "display": "3. 임솔빛"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 4,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "8",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 5,
+     "col": 1,
+     "kind": "window",
+     "seatLabel": "",
+     "occupant": null,
+     "vacant": false,
+     "marks": []
+    },
+    {
+     "row": 5,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "9",
+     "occupant": {
+      "grade": 2,
+      "name": "정가온",
+      "display": "2. 정가온"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "space-SA3",
+   "name": "SA3실",
+   "gender": "여",
+   "rows": 5,
+   "cols": 2,
+   "cells": [
+    {
+     "row": 1,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "1",
+     "occupant": {
+      "grade": 3,
+      "name": "오하늘",
+      "display": "3. 오하늘"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "2",
+     "occupant": {
+      "grade": 1,
+      "name": "임누리",
+      "display": "1. 임누리"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 3,
+       "code": "FIXED",
+       "text": "가"
+      }
+     ]
+    },
+    {
+     "row": 2,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "3",
+     "occupant": {
+      "grade": 2,
+      "name": "조이슬",
+      "display": "2. 조이슬"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 2,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "4",
+     "occupant": {
+      "grade": 3,
+      "name": "권해솔",
+      "display": "3. 권해솔"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 3,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "5",
+     "occupant": {
+      "grade": 1,
+      "name": "최구름",
+      "display": "1. 최구름"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 3,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "6",
+     "occupant": {
+      "grade": 2,
+      "name": "강라온",
+      "display": "2. 강라온"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "EXC",
+       "text": "무지"
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 4,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "7",
+     "occupant": {
+      "grade": 3,
+      "name": "임해솔",
+      "display": "3. 임해솔"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 4,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "8",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 5,
+     "col": 1,
+     "kind": "window",
+     "seatLabel": "",
+     "occupant": null,
+     "vacant": false,
+     "marks": []
+    },
+    {
+     "row": 5,
+     "col": 2,
+     "kind": "door",
+     "seatLabel": "",
+     "occupant": null,
+     "vacant": false,
+     "marks": []
+    }
+   ]
+  },
+  {
+   "id": "space-SA4",
+   "name": "SA4실",
+   "gender": "여",
+   "rows": 5,
+   "cols": 2,
+   "cells": [
+    {
+     "row": 1,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "1",
+     "occupant": {
+      "grade": 2,
+      "name": "이이슬",
+      "display": "2. 이이슬"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "2",
+     "occupant": {
+      "grade": 3,
+      "name": "권새봄",
+      "display": "3. 권새봄"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 2,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "3",
+     "occupant": {
+      "grade": 1,
+      "name": "강하늘",
+      "display": "1. 강하늘"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "EXC",
+       "text": "병결 외 1"
+      },
+      {
+       "seq": 2,
+       "code": "EXC",
+       "text": "병결"
+      },
+      {
+       "seq": 3,
+       "code": "EXC",
+       "text": "병결"
+      }
+     ]
+    },
+    {
+     "row": 2,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "4",
+     "occupant": {
+      "grade": 2,
+      "name": "강다솜",
+      "display": "2. 강다솜"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 3,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "5",
+     "occupant": {
+      "grade": 3,
+      "name": "한바다",
+      "display": "3. 한바다"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 3,
+       "code": "FIXED",
+       "text": "가"
+      }
+     ]
+    },
+    {
+     "row": 3,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "6",
+     "occupant": {
+      "grade": 1,
+      "name": "장구름",
+      "display": "1. 장구름"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 4,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "7",
+     "occupant": {
+      "grade": 2,
+      "name": "조하늘",
+      "display": "2. 조하늘"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 4,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "8",
+     "occupant": {
+      "grade": 3,
+      "name": "강마루",
+      "display": "3. 강마루"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 5,
+     "col": 1,
+     "kind": "window",
+     "seatLabel": "",
+     "occupant": null,
+     "vacant": false,
+     "marks": []
+    },
+    {
+     "row": 5,
+     "col": 2,
+     "kind": "door",
+     "seatLabel": "",
+     "occupant": null,
+     "vacant": false,
+     "marks": []
+    }
+   ]
+  },
+  {
+   "id": "space-SA5",
+   "name": "SA5실",
+   "gender": "여",
+   "rows": 5,
+   "cols": 2,
+   "cells": [
+    {
+     "row": 1,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "1",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "2",
+     "occupant": {
+      "grade": 2,
+      "name": "한라온",
+      "display": "2. 한라온"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 2,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "3",
+     "occupant": {
+      "grade": 3,
+      "name": "윤자람",
+      "display": "3. 윤자람"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "EXC",
+       "text": "무지"
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 2,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "4",
+     "occupant": {
+      "grade": 1,
+      "name": "김단비",
+      "display": "1. 김단비"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 3,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "5",
+     "occupant": {
+      "grade": 2,
+      "name": "박별하",
+      "display": "2. 박별하"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 3,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "6",
+     "occupant": {
+      "grade": 3,
+      "name": "장보람",
+      "display": "3. 장보람"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 4,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "7",
+     "occupant": {
+      "grade": 1,
+      "name": "권보람",
+      "display": "1. 권보람"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 4,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "8",
+     "occupant": {
+      "grade": 2,
+      "name": "신구름",
+      "display": "2. 신구름"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "가"
+      },
+      {
+       "seq": 3,
+       "code": "FIXED",
+       "text": "가"
+      }
+     ]
+    },
+    {
+     "row": 5,
+     "col": 1,
+     "kind": "window",
+     "seatLabel": "",
+     "occupant": null,
+     "vacant": false,
+     "marks": []
+    },
+    {
+     "row": 5,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "9",
+     "occupant": {
+      "grade": 3,
+      "name": "신나래",
+      "display": "3. 신나래"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "space-SA6",
+   "name": "SA6실",
+   "gender": "여",
+   "rows": 5,
+   "cols": 2,
+   "cells": [
+    {
+     "row": 1,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "1",
+     "occupant": null,
+     "vacant": true,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 1,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "2",
+     "occupant": {
+      "grade": 2,
+      "name": "장해솔",
+      "display": "2. 장해솔"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 2,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "3",
+     "occupant": {
+      "grade": 3,
+      "name": "임솔빛",
+      "display": "3. 임솔빛"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 2,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "4",
+     "occupant": {
+      "grade": 1,
+      "name": "조아라",
+      "display": "1. 조아라"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 3,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "5",
+     "occupant": {
+      "grade": 2,
+      "name": "정가온",
+      "display": "2. 정가온"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 3,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "6",
+     "occupant": {
+      "grade": 3,
+      "name": "오하늘",
+      "display": "3. 오하늘"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 4,
+     "col": 1,
+     "kind": "seat",
+     "seatLabel": "7",
+     "occupant": {
+      "grade": 1,
+      "name": "임누리",
+      "display": "1. 임누리"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "EXC",
+       "text": "무지"
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 4,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "8",
+     "occupant": {
+      "grade": 2,
+      "name": "조이슬",
+      "display": "2. 조이슬"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "FIXED",
+       "text": "학"
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    },
+    {
+     "row": 5,
+     "col": 1,
+     "kind": "window",
+     "seatLabel": "",
+     "occupant": null,
+     "vacant": false,
+     "marks": []
+    },
+    {
+     "row": 5,
+     "col": 2,
+     "kind": "seat",
+     "seatLabel": "9",
+     "occupant": {
+      "grade": 3,
+      "name": "권해솔",
+      "display": "3. 권해솔"
+     },
+     "vacant": false,
+     "marks": [
+      {
+       "seq": 1,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 2,
+       "code": "NONE",
+       "text": ""
+      },
+      {
+       "seq": 3,
+       "code": "NONE",
+       "text": ""
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "unseated": [
+  {
+   "display": "3. 박다솜"
+  }
+ ],
+ "warnings": [],
+ "generatedAt": "2027-03-06T17:40:00"
+}
