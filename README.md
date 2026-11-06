@@ -2,7 +2,7 @@
 
 Google Apps Script 웹앱 + Google Sheets. 요구사항은 [`PRD.md`](PRD.md), 작업 규칙은 [`CLAUDE.md`](CLAUDE.md).
 
-현재 단계: **0단계(기반·로그인 검증)** — 확인 체크리스트는 [`docs/stage0-checklist.md`](docs/stage0-checklist.md).
+현재 단계: 0단계 코드 완료, **선생님 확인(설치·개인 gmail 진단) 대기** — 체크리스트는 [`docs/stage0-checklist.md`](docs/stage0-checklist.md). 1단계(출석부 핵심)는 작업 세션들이 진행 중 — 분담은 [`docs/plan/stage1.md`](docs/plan/stage1.md), 결정 기록은 [`docs/decisions.md`](docs/decisions.md).
 
 ## 폴더
 
@@ -140,7 +140,7 @@ clasp(코드를 Apps Script로 올려 주는 도구)는 Node.js 위에서 돌아
    ```
    clasp push
    ```
-   `Manifest file has been updated. Do you want to push and overwrite?` 라고 물으면 `y` 를 입력하고 Enter. `Pushed 19 files` 처럼 파일 목록이 나오면 성공입니다.
+   `Manifest file has been updated. Do you want to push and overwrite?` 라고 물으면 `y` 를 입력하고 Enter. `Pushed 20 files` 처럼 파일 목록이 나오면 성공입니다(파일 수는 버전마다 다릅니다).
 4. 편집기 열기
    ```
    clasp open-script
