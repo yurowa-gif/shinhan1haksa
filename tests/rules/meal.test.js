@@ -52,7 +52,11 @@ test('마감 시각 설정을 바꿀 수 있다(meal.morning_cutoff), 잘못된 
   assert.deepStrictEqual(eff('start', '2027-03-03T11:45:00', { cutoff: '12:00' }), { date: '2027-03-03', rule: 'same_day' });
   assert.deepStrictEqual(eff('start', '2027-03-03T12:00:00', { cutoff: '12:00' }), { date: '2027-03-04', rule: 'next_day' });
   assert.deepStrictEqual(eff('start', '2027-03-03T11:29:59', { cutoff: '' }), { date: '2027-03-03', rule: 'same_day' });
-  for (const bad of ['11시', '24:00', '11:60', 1130]) assert.throws(() => eff('start', '2027-03-03T10:00:00', { cutoff: bad }), String(bad));
+  for (const bad of ['11시', '24:00', '11:60', 1130, '11:30:15']) assert.throws(() => eff('start', '2027-03-03T10:00:00', { cutoff: bad }), String(bad));
+  // 설정을 손으로 고친 흔한 표기도 읽는다
+  assert.deepStrictEqual(eff('start', '2027-03-03T09:29:59', { cutoff: '9:30' }), { date: '2027-03-03', rule: 'same_day' });
+  assert.deepStrictEqual(eff('start', '2027-03-03T09:30:00', { cutoff: '9:30' }), { date: '2027-03-04', rule: 'next_day' });
+  assert.deepStrictEqual(eff('start', '2027-03-03T11:30:00', { cutoff: '11:30:00' }), { date: '2027-03-04', rule: 'next_day' });
 });
 
 test('기숙사 입실과 함께 조식 실시 = 입실일, 학사 퇴실로 조식 중단 = 퇴실일 즉시(신청 시각과 무관)', () => {
@@ -71,7 +75,8 @@ table('잘못된 kind·신청 일시는 Error', [
 
 table('mealChangeKind_: 상태 변화 → 변경 종류', [
   ['조식', '미실시', '실시', 'start'], ['조식', '', '실시', 'start'], ['조식', '실시', '미실시', 'stop'],
-  ['조식', '실시', '실시', ''], ['조식', '', '미실시', 'stop'],
+  ['조식', '실시', '실시', ''], ['조식', '', '미실시', ''],     // 기록 없음 → 미실시: 그만둘 급식이 없음
+  ['석식', '', '미실시', ''], ['석식', '', '학사 석식', 'start'], ['석식', '', '일반 석식', 'to_general'],
   ['석식', '학사 석식', '일반 석식', 'to_general'],   // 결정 1
   ['석식', '일반 석식', '학사 석식', 'start'],
   ['석식', '미실시', '학사 석식', 'start'],
@@ -85,6 +90,16 @@ table('mealChangeKind_: 상태 변화 → 변경 종류', [
 table('mealChangeKind_: 모르는 항목·값은 Error', [
   ['중식', '', '실시'], ['조식', '', '학사 석식'], ['석식', '', '실시'], ['석식', '학사', '미실시'], ['조식', '실시', '']
 ], ([item, from, to]) => assert.throws(() => ctx.mealChangeKind_(item, from, to)));
+
+test('학사 퇴실과 함께 만드는 석식 변경: 퇴실일보다 이르지 않게(가정), 늦은 것은 그대로', () => {
+  // 3월 3일(수)에 3월 15일 퇴실을 미리 입력
+  assert.deepStrictEqual(eff('to_general', '2027-03-03T10:00:00', { leaveDate: '2027-03-15' }), { date: '2027-03-15', rule: 'leave_date' });
+  assert.deepStrictEqual(eff('stop', '2027-03-01T10:00:00', { leaveDate: '2027-03-15' }), { date: '2027-03-15', rule: 'leave_date' });
+  // 퇴실일이 계산값보다 이르면 계산값(미실시 규칙) 그대로 — PRD F6은 조식만 즉시 중단
+  assert.deepStrictEqual(eff('stop', '2027-03-03T10:00:00', { leaveDate: '2027-03-05' }), { date: '2027-03-15', rule: 'monday_after_next' });
+  assert.deepStrictEqual(eff('to_general', '2027-03-03T13:00:00', { leaveDate: '2027-03-03' }), { date: '2027-03-04', rule: 'next_day' });
+  assert.throws(() => eff('stop', '2027-03-03T10:00:00', { leaveDate: '2027-02-30' }));
+});
 
 test('흐름: 학사 퇴실(2027-03-03 수 15:00) — 조식은 퇴실일 즉시, 석식 "일반으로"는 다음 날, "중단"은 다다음 주 월요일', () => {
   const at = '2027-03-03T15:00:00';

@@ -158,10 +158,11 @@ function mealChangeKind_(item, fromValue, toValue)
 
 **MealRules** — 값 글자는 `docs/contracts/vocabulary.md`.
 - `mealEffectiveDate_(kind, requestedAt, opts)` → `{date, rule}`. `rule`: `same_day`·`next_day`·`next_monday`·`monday_after_next`·`entry_date`·`leave_date`(화면에 이유를 보여 줄 때 쓴다).
-  - `start`·`to_general`: 신청 일시(KST, `isoLocalSplit_` 형식)가 마감(`opts.cutoff`, 기본 `'11:30'`, 설정 `meal.morning_cutoff`) **전**이면 당일, 마감 **정각부터** 다음 날. 초까지 비교: 11:29:59 당일, 11:30:00 다음 날(ASSUMPTION 4절 f).
+  - `start`·`to_general`: 신청 일시(KST, `isoLocalSplit_` 형식)가 마감(`opts.cutoff`, 기본 `'11:30'`, 설정 `meal.morning_cutoff` — `9:30`·`11:30:00` 표기도 읽음) **전**이면 당일, 마감 **정각부터** 다음 날. 초까지 비교: 11:29:59 당일, 11:30:00 다음 날(ASSUMPTION 4절 f).
   - `stop`: 신청일이 월·화면 다음 주 월요일, 수~일이면 다다음 주 월요일(월~일을 한 주로, 시각 무관). 2026-12-30(수) → 2027-01-11.
   - `with_dorm_entry`: `opts.entryDate`, `on_leave`: `opts.leaveDate`(신청 시각 무관, 없으면 Error).
+  - `start`·`to_general`·`stop`에 `opts.leaveDate`를 함께 주면(학사 퇴실과 함께 만드는 석식 변경) 적용일이 퇴실일보다 이르면 퇴실일로 미룬다(`rule:'leave_date'`). ASSUMPTION: 퇴실을 미리 입력해도 퇴실 전에는 학사 석식이 이어진다. 퇴실일보다 늦은 적용일(석식 "중단"의 미실시 규칙)은 그대로 — PRD F6은 조식만 "즉시 중단"이라, 학사 석식은 퇴실 뒤 최대 2주 이어질 수 있다(**총괄 확인 필요**).
   - 잘못된 kind·일시·마감은 Error. 공휴일·운영 안 하는 날은 보지 않는다(적용일은 달력 날짜).
-- `mealChangeKind_(item, from, to)`: 조식 `실시`로 → `start`, `미실시`로 → `stop`. 석식 `학사 석식`으로 → `start`, `일반 석식`으로 → `to_general`(결정 1), `미실시`로 → `stop`(일반 석식 → 미실시 포함, ASSUMPTION 4절 g). 같으면 `''`. `from`이 `''`(기록 없음)도 받는다. 모르는 값은 Error.
+- `mealChangeKind_(item, from, to)`: 조식 `실시`로 → `start`, `미실시`로 → `stop`. 석식 `학사 석식`으로 → `start`, `일반 석식`으로 → `to_general`(결정 1), `미실시`로 → `stop`(일반 석식 → 미실시 포함, ASSUMPTION 4절 g). 같으면 `''`. `from`이 `''`(기록 없음)도 받는다: 기록 없음 → `미실시`는 그만둘 급식이 없으므로 `''`(부르는 쪽은 처음 값으로 바로 기록), 기록 없음 → 실시·학사 석식은 `start`, → 일반 석식은 `to_general`. 모르는 값은 Error.
 - F6 학사 퇴실: 조식은 `on_leave`(퇴실일 즉시), 석식은 선택에 따라 `stop` 또는 `to_general`로 F7 변경을 함께 만든다. 서류 미제출이어도 적용한다(결정 3) — 이 함수는 서류를 보지 않는다.
 - F7은 계산값을 `effective_date_auto`에, 교사가 고친 값을 `effective_date`에 저장한다(plan 5절).

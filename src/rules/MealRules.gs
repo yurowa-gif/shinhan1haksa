@@ -15,6 +15,7 @@
 /**
  * 적용일 계산. requestedAt = 신청 일시 KST 'yyyy-MM-ddTHH:mm:ss'(isoLocalSplit_이 받는 형식).
  * opts = {cutoff:'11:30', entryDate, leaveDate} → {date:'yyyy-MM-dd', rule}
+ * start·to_general·stop에 leaveDate를 함께 주면(학사 퇴실과 함께 만드는 석식 변경) 적용일이 퇴실일보다 이르지 않게 한다.
  * rule: 'same_day'|'next_day'|'next_monday'|'monday_after_next'|'entry_date'|'leave_date'
  * ASSUMPTION(plan 4절 f): 마감 시각 정각(11:30:00)에 낸 신청은 마감 이후로 본다(다음 날). 11:29:59는 당일.
  * 잘못된 kind·일시·마감 시각, 필요한 날짜가 없으면 Error.
@@ -30,25 +31,48 @@ function mealEffectiveDate_(kind, requestedAt, opts) {
   }
   var at = isoLocalSplit_(String(requestedAt || '').trim());
   if (k === 'start' || k === 'to_general') {
-    var cutoff = opts.cutoff === undefined || opts.cutoff === null || opts.cutoff === '' ? '11:30' : String(opts.cutoff).trim();
-    if (!hmIsValid_(cutoff) || cutoff === '24:00') throw new Error('마감 시각 형식이 아닙니다(HH:mm): ' + cutoff);
-    if (at.sec < hmToMin_(cutoff) * 60) return { date: at.date, rule: 'same_day' };
-    return { date: ymdAddDays_(at.date, 1), rule: 'next_day' };
+    var cutoff = mealCutoffHm_(opts.cutoff);
+    if (at.sec < hmToMin_(cutoff) * 60) return mealNotBeforeLeave_({ date: at.date, rule: 'same_day' }, opts);
+    return mealNotBeforeLeave_({ date: ymdAddDays_(at.date, 1), rule: 'next_day' }, opts);
   }
   if (k === 'stop') {
     var w = ymdWeekday_(at.date);           // 0=일 … 6=토
     var monday = ymdMondayOf_(at.date);      // 월~일 주의 월요일
-    if (w === 1 || w === 2) return { date: ymdAddDays_(monday, 7), rule: 'next_monday' };
-    return { date: ymdAddDays_(monday, 14), rule: 'monday_after_next' };
+    if (w === 1 || w === 2) return mealNotBeforeLeave_({ date: ymdAddDays_(monday, 7), rule: 'next_monday' }, opts);
+    return mealNotBeforeLeave_({ date: ymdAddDays_(monday, 14), rule: 'monday_after_next' }, opts);
   }
   throw new Error('알 수 없는 급식 변경 종류: ' + kind);
+}
+
+/** 설정 meal.morning_cutoff 읽기: 빈칸은 '11:30', 'H:mm'·'HH:mm:00'도 받는다. 시각이 아니면 Error. */
+function mealCutoffHm_(v) {
+  var s = String(v === undefined || v === null ? '' : v).trim();
+  if (!s) return '11:30';
+  var m = /^(\d{1,2}):(\d{2})(?::00)?$/.exec(s);
+  var hm = m ? (m[1].length === 1 ? '0' : '') + m[1] + ':' + m[2] : '';
+  if (!hmIsValid_(hm) || hm === '24:00') throw new Error('마감 시각 형식이 아닙니다(HH:mm): ' + s);
+  return hm;
+}
+
+/**
+ * 학사 퇴실과 함께 만드는 석식 변경(opts.leaveDate가 있을 때): 계산한 적용일이 퇴실일보다 이르면 퇴실일로 미룬다.
+ * ASSUMPTION: 퇴실을 미리 입력해도 퇴실 전에는 학사 석식이 이어진다(일반 석식 전환이 퇴실 전에 시작되지 않게).
+ * 퇴실일보다 늦은 적용일(미실시 규칙의 다음 주·다다음 주 월요일)은 그대로 둔다 — PRD F6은 조식만 "즉시 중단".
+ */
+function mealNotBeforeLeave_(r, opts) {
+  var leave = String(opts.leaveDate || '').trim();
+  if (!leave) return r;
+  if (!ymdIsValid_(leave)) throw new Error('leaveDate 형식이 아닙니다(yyyy-MM-dd): ' + leave);
+  return r.date < leave ? { date: leave, rule: 'leave_date' } : r;
 }
 
 /**
  * 상태 값이 바뀔 때의 변경 종류(mealEffectiveDate_의 kind). 바뀌지 않으면 ''.
  * item '조식': 실시로 → 'start', 미실시로 → 'stop'.
  * item '석식': 학사 석식으로 → 'start', 일반 석식으로 → 'to_general', 미실시로 → 'stop'.
- * fromValue ''(기록 없음)도 받는다. ASSUMPTION(plan 4절 g): 일반 석식 → 미실시도 미실시 규칙('stop').
+ * fromValue ''(기록 없음)도 받는다. 기록 없음 → 미실시는 그만둘 급식이 없으므로 ''(바뀐 것 없음)이다
+ *   — 부르는 쪽은 처음 값으로 바로 기록한다(적용일 = 신청일). 기록 없음 → 실시·일반 석식은 'start'·'to_general'.
+ * ASSUMPTION(plan 4절 g): 일반 석식 → 미실시도 미실시 규칙('stop').
  * with_dorm_entry·on_leave는 값 변화가 아니라 F6 입퇴실과 함께 정해지므로 여기서 나오지 않는다.
  * 모르는 item·값이면 Error.
  */
@@ -60,6 +84,7 @@ function mealChangeKind_(item, fromValue, toValue) {
   if (allowed.indexOf(to) < 0) throw new Error(it + ' 값이 아닙니다: ' + toValue);
   if (from && allowed.indexOf(from) < 0) throw new Error(it + ' 값이 아닙니다: ' + fromValue);
   if (from === to) return '';
+  if (!from && to === '미실시') return '';
   if (to === '미실시') return 'stop';
   if (to === '일반 석식') return 'to_general';
   return 'start';
