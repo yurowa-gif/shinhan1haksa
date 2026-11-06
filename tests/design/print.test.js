@@ -23,6 +23,15 @@ test('픽스처 4종이 sheet-model 계약 모양을 지킨다(블록 수 3/3/3/
   assert.deepStrictEqual(blocks, { mon_thu: 3, fri: 3, sat: 3, sun: 4 });
 });
 
+test('픽스처 블록은 기본 블록(Schema.gs defaultBlockRows_)과 같다(시각·라벨)', () => {
+  const rows = plain(loadGs(['src/Schema.gs']).defaultBlockRows_());
+  DAYS.forEach((d) => {
+    const want = rows.filter((r) => r.day_type === d).map((r) => ({ seq: Number(r.seq), start: r.start, end: r.end, label: r.label }));
+    assert.deepStrictEqual(fixture(d).blocks, want, d);
+  });
+  assert.strictEqual(fixture('fri').blocks[0].start, '18:00', '금요일 첫 블록은 18:00(실제 시작 18:30은 날짜별 일정으로 따로)');
+});
+
 test('픽스처는 design/preview/fixtures.js 가 만든 것과 같다(손으로 고치지 않는다)', () => {
   const { buildModel } = require('../../design/preview/fixtures');
   DAYS.forEach((d) => assert.deepStrictEqual(fixture(d), plain(buildModel(d)), d));
