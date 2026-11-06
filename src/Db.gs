@@ -214,3 +214,28 @@ function logDenied_(actorEmail, action, detail) {
     console.warn('거부 기록 생략: ' + e.message);
   }
 }
+
+/** 여러 행을 한 번에 쓴다(가짜 데이터·기본값 시드용). audit_log에는 한 줄로 요약해 남긴다. */
+function bulkAppend_(sheetName, rows, actorEmail) {
+  if (!rows.length) return;
+  withLock_(function () {
+    var sh = getSheet_('db', sheetName);
+    var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(cellToString_);
+    var now = nowIso_();
+    var values = rows.map(function (r) {
+      var rec = {};
+      Object.keys(r).forEach(function (k) { rec[k] = r[k]; });
+      rec.id = rec.id || Utilities.getUuid();
+      rec.created_at = rec.updated_at = now;
+      rec.created_by = rec.updated_by = actorEmail;
+      return toRowArray_(headers, rec);
+    });
+    var firstRow = sh.getLastRow() + 1;
+    ensureRows_(sh, firstRow, values.length);
+    var range = sh.getRange(firstRow, 1, values.length, headers.length);
+    range.setNumberFormat('@');
+    range.setValues(values);
+    invalidate_('db', sheetName);
+    writeAudit_(sheetName, '', 'bulk_create', null, null, actorEmail, 'db', rows.length + '행 (일괄 추가)');
+  });
+}
