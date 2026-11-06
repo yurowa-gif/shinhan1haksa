@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><base target="_top"><meta charset="utf-8"><?!= include('ui/Styles') ?></head>
+<body>
+  <header class="top"><h1>인쇄 방식 시험 (C0)</h1></header>
+  <main>
+    <div class="card">
+      <h2>1. 미리보기(iframe.srcdoc)</h2>
+      <p class="muted">가짜 1층 자습실 146석 출석부를 화면에 띄웁니다.</p>
+      <button class="btn" type="button" id="previewBtn">미리보기 열기</button>
+      <div id="previewOut" style="margin-top:12px"></div>
+    </div>
+    <div class="card">
+      <h2>2. PDF를 앱이 직접 내려받기(base64)</h2>
+      <p class="muted">만들어지면 아래에 "PDF 열기" 링크가 뜹니다. 그 링크를 눌러 휴대폰에서 열리는지 보세요.</p>
+      <button class="btn" type="button" id="b64A">A안(HTML 변환)</button>
+      <button class="btn secondary" type="button" id="b64B">B안(시트 내보내기)</button>
+      <div id="b64Out" style="margin-top:12px"></div>
+    </div>
+    <div class="card">
+      <h2>3. Drive에 저장하고 링크로 열기</h2>
+      <button class="btn" type="button" id="linkA">A안(HTML 변환)</button>
+      <button class="btn secondary" type="button" id="linkB">B안(시트 내보내기)</button>
+      <div id="linkOut" style="margin-top:12px"></div>
+    </div>
+    <div class="card muted">
+      확인할 것: ① A4 가로 한 장으로 나오는가 ② 한글이 깨지지 않는가 ③ 10초 안에 끝나는가(표시되는 초) ④ 휴대폰에서 열리는가.
+      결과는 총괄에게 알려 주세요. 이 화면은 소유자 계정으로만 열립니다.
+    </div>
+  </main>
+  <?!= include('ui/Client') ?>
+  <script>
+    (function () {
+      function busy(out, text) { clear(out).appendChild(el('div', { class: 'loading', text: text })); }
+      function fail(out, err) { clear(out); showError(out, err); }
+
+      document.getElementById('previewBtn').addEventListener('click', function () {
+        var out = document.getElementById('previewOut');
+        busy(out, '불러오는 중…');
+        call('spikeGetHtml').then(function (html) {
+          var frame = el('iframe', { title: '출석부 미리보기', style: 'width:100%;height:420px;border:1px solid var(--line);background:#fff' });
+          clear(out).appendChild(frame);
+          frame.srcdoc = html;
+        }).catch(function (e) { fail(out, e); });
+      });
+
+      function base64ToBlobUrl(b64) {
+        var bin = atob(b64);
+        var arr = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        return URL.createObjectURL(new Blob([arr], { type: 'application/pdf' }));
+      }
+
+      function bindBase64(btnId, method) {
+        document.getElementById(btnId).addEventListener('click', function () {
+          var out = document.getElementById('b64Out');
+          busy(out, method + '안 PDF를 만드는 중…');
+          var t0 = Date.now();
+          call('spikeGetPdfBase64', method).then(function (r) {
+            var wall = ((Date.now() - t0) / 1000).toFixed(1);
+            var url = base64ToBlobUrl(r.base64);
+            clear(out);
+            out.appendChild(kv([['방식', method + '안'], ['서버 시간', (r.ms / 1000).toFixed(1) + '초'],
+              ['화면까지', wall + '초'], ['크기', Math.round(r.bytes / 1024) + 'KB']]));
+            out.appendChild(el('a', { class: 'btn', href: url, target: '_blank', download: r.name, text: 'PDF 열기' }));
+          }).catch(function (e) { fail(out, e); });
+        });
+      }
+      bindBase64('b64A', 'A');
+      bindBase64('b64B', 'B');
+
+      function bindLink(btnId, method) {
+        document.getElementById(btnId).addEventListener('click', function () {
+          var out = document.getElementById('linkOut');
+          busy(out, method + '안 PDF를 만들어 저장하는 중…');
+          var t0 = Date.now();
+          call('spikeGetPdfLink', method).then(function (r) {
+            var wall = ((Date.now() - t0) / 1000).toFixed(1);
+            clear(out);
+            out.appendChild(kv([['방식', method + '안'], ['서버 시간', (r.ms / 1000).toFixed(1) + '초'],
+              ['화면까지', wall + '초'], ['크기', Math.round(r.bytes / 1024) + 'KB']]));
+            out.appendChild(el('a', { class: 'btn', href: r.url, target: '_blank', text: 'Drive에서 열기' }));
+          }).catch(function (e) { fail(out, e); });
+        });
+      }
+      bindLink('linkA', 'A');
+      bindLink('linkB', 'B');
+    })();
+  </script>
+</body>
+</html>

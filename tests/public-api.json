@@ -17,5 +17,10 @@
     "seedFakeData":      { "use": "편집기", "guard": "assertOwnerRun_" },
     "listTerms":         { "use": "화면",   "guard": "requirePermission_" },
     "saveTerm":          { "use": "화면",   "guard": "requirePermission_" }
+=======
+    "spikeRunAll":       { "use": "편집기", "guard": "assertOwnerRun_" },
+    "spikeGetHtml":      { "use": "화면",   "guard": "assertOwnerRun_" },
+    "spikeGetPdfBase64": { "use": "화면",   "guard": "assertOwnerRun_" },
+    "spikeGetPdfLink":   { "use": "화면",   "guard": "assertOwnerRun_" }
   }
 }

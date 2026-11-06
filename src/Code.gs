@@ -15,6 +15,12 @@ function doGet(e) {
     return renderPage_('ui/Diag', { diag: collectDiag_() }, '접속 진단');
   }
 
+  // C0 임시: 인쇄 방식 시험 화면(소유자 본인만). A/B 결정 뒤 지운다.
+  if (p.page === 'printspike') {
+    try { assertOwnerRun_(); } catch (err) { return renderPage_('ui/NoAccess', { email: '' }, '권한 없음'); }
+    return renderPage_('ui/screen_printspike', {}, '인쇄 방식 시험');
+  }
+
   var user;
   try {
     user = getCurrentUser_();
