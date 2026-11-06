@@ -27,7 +27,8 @@ function statChangeValid_(c) {
 /**
  * 그날의 상태 값. item '학사'|'기숙사'|'조식'|'석식' → 값(입실·퇴실·실시·…) 또는 ''(기록 없음).
  * 적용일(effective_date) <= ymd 인 유효 기록 중 적용일이 가장 늦은 것.
- * ASSUMPTION: 적용일이 같으면 나중에 기록한 것(created_at이 늦은 것, 같으면 시트에서 아래 행)이 이긴다.
+ * 적용일이 같으면 requested_at이 늦은 행(docs/contracts/vocabulary.md), 그것도 같으면 created_at이 늦은 행,
+ * 그것도 같으면 시트에서 아래 행이 이긴다.
  * 적용일이 날짜 형식이 아닌 행은 무시한다.
  */
 function statusOn_(changes, studentId, item, ymd) {
@@ -38,8 +39,9 @@ function statusOn_(changes, studentId, item, ymd) {
     if (statStr_(c.student_id) !== sid || statStr_(c.item) !== it) return;
     var eff = statStr_(c.effective_date);
     if (!statIsYmd_(eff) || eff > ymd) return;
-    var cand = { eff: eff, created: statStr_(c.created_at), index: i, value: statStr_(c.value) };
-    if (!best || cand.eff > best.eff || (cand.eff === best.eff && cand.created >= best.created)) best = cand;
+    var cand = { eff: eff, req: statStr_(c.requested_at), created: statStr_(c.created_at), value: statStr_(c.value) };
+    if (!best || cand.eff > best.eff || (cand.eff === best.eff &&
+        (cand.req > best.req || (cand.req === best.req && cand.created >= best.created)))) best = cand;
   });
   return best ? best.value : '';
 }

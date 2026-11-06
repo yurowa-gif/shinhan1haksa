@@ -49,6 +49,13 @@ table('statusOn_: 적용일 순 누적, 같은 날은 나중 기록, 취소·요
   ['s3', '학사', '2027-12-31', '']
 ], ([sid, item, d, want]) => assert.strictEqual(ctx.statusOn_(HIST, sid, item, d), want));
 
+test('statusOn_: 같은 적용일이면 requested_at이 늦은 행(created_at보다 먼저 본다)', () => {
+  const rows = [ch('x', '석식', '일반 석식', '2027-04-01', { requested_at: '2027-03-31T11:00:00', created_at: '2027-03-31T13:00:00' }),
+    ch('x', '석식', '미실시', '2027-04-01', { requested_at: '2027-03-31T12:00:00', created_at: '2027-03-31T12:00:01' })];
+  assert.strictEqual(ctx.statusOn_(rows, 'x', '석식', '2027-04-01'), '미실시');
+  assert.strictEqual(ctx.statusOn_(rows.slice().reverse(), 'x', '석식', '2027-04-01'), '미실시');
+});
+
 test('statusOn_: 같은 적용일·같은 created_at이면 시트에서 아래 행', () => {
   const rows = [ch('x', '학사', '입실', '2027-03-02', { created_at: 'T' }), ch('x', '학사', '퇴실', '2027-03-02', { created_at: 'T' })];
   assert.strictEqual(ctx.statusOn_(rows, 'x', '학사', '2027-03-02'), '퇴실');
