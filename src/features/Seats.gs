@@ -14,7 +14,7 @@
  * - 여러 행 쓰기는 bulkUpdateRecords_ 한 번 + bulkAppend_ 한 번. 수정을 먼저 하고 추가를 나중에 해서, 중간에 멈춰도 한 학생이 두 자리에 있지는 않다.
  * - 끝난 운영 기간의 좌석표는 보기만(결정 37).
  * - 좌석 번호(결정 37): 1층 등은 "줄-순번"(좌석이 있는 열을 왼쪽부터 센 줄 번호 + 앞(1행 쪽)에서부터 순번), SA실은 방 안 순번.
- *   ASSUMPTION: 방 이름이 "SA"로 시작하면 SA실, 그 밖은 줄-순번(시트 구조를 바꾸지 않으려고 이름으로 구분한다).
+ *   ASSUMPTION: 방 이름이 "SA"+숫자로 시작하면 SA실, 그 밖은 줄-순번(시트 구조를 바꾸지 않으려고 이름으로 구분한다).
  *
  * 순수 함수(parseSeatGridTsv_·seatGridPlan_·planSeatSwap_·planSeatAssign_)는 tests/features/seats.test.js가 검사한다.
  * ASSUMPTION: 좌석표 붙여넣기에서 이름 칸("1. 이름")은 자리만 가져오고 이름은 버린다(학생 배정은 따로).
@@ -40,19 +40,26 @@ function parseSeatGridTsv_(text) {
   var parsed = rosterParseText_(text);
   var errors = parsed.errors.map(function (e) { return { line: e.line, column: 0, message: e.message }; });
   var rows = parsed.rows;
-  var cells = [], seatCount = 0, namedCount = 0, width = 0, skippedHeads = 0;
+  var cells = [], seatCount = 0, namedCount = 0, width = 0, skippedHeads = 0, rowOffset = 0;
+  var headLike = function (v) { return /^\d+(\/\d+)?$/.test(v); };
+  // 맨 윗행이 줄 머리("5/19" 같은 숫자 칸)뿐이면 그 행 전체를 건너뛴다(실제 1층은 세로 줄이라 줄 머리가 윗행에 있다)
+  if (rows.length && rows[0].some(function (v) { return v !== ''; }) && rows[0].every(function (v) { return v === '' || headLike(v); })) {
+    skippedHeads += rows[0].filter(function (v) { return v !== ''; }).length;
+    rows = rows.slice(1);
+    rowOffset = 1;
+  }
   rows.forEach(function (r, i) {
     width = Math.max(width, r.length);
     r.forEach(function (v, j) {
       if (v === '') return;
       // 줄 머리 칸("5", "5/19"처럼 숫자만 있는 첫 칸)은 좌석표가 아니라 줄 이름이므로 건너뛴다(선택 개선)
-      if (j === 0 && /^\d+(\/\d+)?$/.test(v)) { skippedHeads++; return; }
+      if (j === 0 && headLike(v)) { skippedHeads++; return; }
       var kind = '';
       if (v === '공석') kind = '좌석';
       else if (/^\d+\.\s*\S+/.test(v)) { kind = '좌석'; namedCount++; }
       else if (SEAT_KINDS.indexOf(v) >= 0) kind = v;
       if (!kind) {
-        errors.push({ line: i + 1, column: j + 1, message: i + 1 + '행 ' + (j + 1) + '열 "' + v.slice(0, 12) + '"을(를) 알 수 없습니다. 칸에는 공석·"1. 이름"·기둥·비상문·창문 중 하나(또는 빈칸)만 적어 주세요.' });
+        errors.push({ line: i + 1 + rowOffset, column: j + 1, message: i + 1 + rowOffset + '행 ' + (j + 1) + '열 "' + v.slice(0, 12) + '"을(를) 알 수 없습니다. 칸에는 공석·"1. 이름"·기둥·비상문·창문 중 하나(또는 빈칸)만 적어 주세요.' });
         return;
       }
       if (kind === '좌석') seatCount++;
@@ -71,8 +78,8 @@ function parseSeatGridTsv_(text) {
   return { rows: rows.length, cols: width, cells: cells, seatCount: seatCount, namedCount: namedCount, skippedHeads: skippedHeads, errors: errors };
 }
 
-/** 번호 방식: SA로 시작하는 방 이름은 방 안 순번('room'), 그 밖은 줄-순번('line'). ASSUMPTION(결정 37, 위 머리말) */
-function seatLabelStyle_(spaceName) { return /^\s*SA/i.test(String(spaceName || '')) ? 'room' : 'line'; }
+/** 번호 방식: "SA"+숫자로 시작하는 방 이름(SA1실…)은 방 안 순번('room'), 그 밖은 줄-순번('line'). ASSUMPTION(결정 37, 위 머리말) */
+function seatLabelStyle_(spaceName) { return /^\s*SA\s*\d/i.test(String(spaceName || '')) ? 'room' : 'line'; }
 
 /**
  * 좌석 칸 번호(라벨) → {'행,열': 번호}. 좌석이 아닌 칸은 없다.
@@ -99,16 +106,18 @@ function seatLabelsFor_(cells, style) {
 /**
  * 한 공간의 격자를 새 모양으로 바꾸는 계획(순수).
  * existing = 그 공간의 지금 유효한 seats 행, desired = [{row,col,kind}] (빈칸은 넣지 않는다), rows·cols = 공간 크기,
- * assignedSeatIds = 지금·앞으로의 기간에 배정이 있는 좌석 id, pastOnlySeatIds = 지난 기간 배정만 있는 좌석 id,
+ * assignedSeatIds = 지금·앞으로의 기간에 배정 행이 하나라도 있는 좌석 id(오늘 끝난 행만 남아도 포함 — 결정 37),
+ * historySeatIds = 그중 지금 앉은 학생은 없고 이번 기간 기록만 남은 좌석(안내 문구만 다르다), pastOnlySeatIds = 지난 기간 배정만 있는 좌석 id,
  * style = 번호 방식('line'|'room', seatLabelStyle_).
  * 지금·앞으로 배정이 있는 좌석을 좌석이 아닌 것으로 바꾸거나 없애면 거부한다(먼저 배정을 풀어야 한다).
  * 지난 기간 배정만 있는 좌석은 경고만 하고 허용한다(지난 날짜 출석부를 다시 뽑으면 바뀐 격자로 나온다).
  * @return {{ok, errors:string[], warnings:string[], relabelAssigned:number, create:Object[], update:{id,patch}[], cancel:{id,patch}[]}}
  *   relabelAssigned = 번호가 바뀌는 배정 좌석 수(라벨이 바뀌어도 배정은 좌석 id로 이어진다)
  */
-function seatGridPlan_(existing, desired, assignedSeatIds, rows, cols, style, pastOnlySeatIds) {
+function seatGridPlan_(existing, desired, assignedSeatIds, rows, cols, style, pastOnlySeatIds, historySeatIds) {
   var errors = [], warnings = [];
-  var assigned = {}, pastOnly = {};
+  var assigned = {}, pastOnly = {}, history = {};
+  (historySeatIds || []).forEach(function (id) { history[id] = true; });
   (assignedSeatIds || []).forEach(function (id) { assigned[id] = true; });
   (pastOnlySeatIds || []).forEach(function (id) { pastOnly[id] = true; });
   var want = {};
@@ -123,6 +132,12 @@ function seatGridPlan_(existing, desired, assignedSeatIds, rows, cols, style, pa
   (existing || []).forEach(function (s) { have[s.row + ',' + s.col] = s; });
   var labels = seatLabelsFor_(Object.keys(want).map(function (k) { return want[k]; }), style || 'line');
   var create = [], update = [], cancel = [], relabelAssigned = 0, pastWarned = {};
+  // 지금 앉은 학생이 있으면 "배정을 먼저 풀어야" 하고, 이번 기간에 앉았던 기록만 남은 자리(오늘 풀었거나 옮겨 간 자리)는 기간이 끝난 뒤에 바꿀 수 있다
+  var blockMsg = function (s, what) {
+    return history[s.id]
+      ? s.row + '행 ' + s.col + '열은 이번 기간에 학생이 앉았던 기록이 있어 지금은 ' + what + ' 수 없습니다. 기간이 끝난 뒤에 바꿀 수 있습니다.'
+      : s.row + '행 ' + s.col + '열은 학생이 앉아 있어 ' + what + ' 수 없습니다. 먼저 배정을 풀어 주세요.';
+  };
   var warnPast = function (s, what) {
     if (!pastOnly[s.id] || pastWarned[s.id]) return;
     pastWarned[s.id] = true;
@@ -134,7 +149,7 @@ function seatGridPlan_(existing, desired, assignedSeatIds, rows, cols, style, pa
     var patch = {};
     if (s.kind !== c.kind) {
       if (s.kind === '좌석' && assigned[s.id]) {
-        errors.push(c.row + '행 ' + c.col + '열은 학생이 앉아 있어 바꿀 수 없습니다. 먼저 배정을 풀어 주세요.');
+        errors.push(blockMsg(s, '바꿀'));
         return;
       }
       if (s.kind === '좌석') warnPast(s, '좌석을 다른 칸으로 바꿉니다.');
@@ -153,7 +168,7 @@ function seatGridPlan_(existing, desired, assignedSeatIds, rows, cols, style, pa
     if (want[k]) return;
     var s = have[k];
     if (s.kind === '좌석' && assigned[s.id]) {
-      errors.push(s.row + '행 ' + s.col + '열은 학생이 앉아 있어 없앨 수 없습니다. 먼저 배정을 풀어 주세요.');
+      errors.push(blockMsg(s, '없앨'));
       return;
     }
     if (s.kind === '좌석') warnPast(s, '좌석을 없앱니다.');
@@ -176,18 +191,24 @@ function seatAssignmentAt_(live, seatId, ymd) {
   return { row: rows.length ? rows[rows.length - 1] : null };
 }
 
-/** 화면이 본 자리 배정 상태 표. 락 안에서 다시 계산해 다르면 "다른 선생님이 먼저 바꿨다"로 거부한다. 빈 자리는 ''. */
-function seatToken_(live, seatId, ymd) {
+/**
+ * 화면이 본 자리 배정 상태 표. 락 안에서 다시 계산해 다르면 "다른 선생님이 먼저 바꿨다"로 거부한다. 빈 자리는 ''.
+ * reason = seatMapOn_의 그 자리 상태('', '퇴실', '미입실', '미배정') — 퇴실이 취소돼 "옮기기"가 "맞바꾸기"로 바뀌는 것도 막는다.
+ */
+function seatToken_(live, seatId, ymd, reason) {
   var t = seatAssignmentAt_(live, seatId, ymd);
   if (t.bounded) return 'bounded';
-  return t.row ? [t.row.id, t.row.student_id, t.row.valid_from || '', t.row.valid_to || ''].join('|') : '';
+  return t.row ? [t.row.id, t.row.student_id, t.row.valid_from || '', t.row.valid_to || '', reason || ''].join('|') : '';
 }
 
-/** 기준일에 시작하는 새 배정이 이어받을 자리의 이전 행을 끝내는 쓰기. 기준일 전날로 끝내되, 아직 시작도 안 한 행이면 취소한다. */
-function seatEndOp_(row, ymd) {
-  var last = ymdAddDays_(ymd, -1);
-  if (row.valid_from && row.valid_from > last) return { op: 'cancel', id: row.id };
-  return { op: 'update', id: row.id, patch: { valid_to: last } };
+/**
+ * 기준일(적용일) D부터 이 행의 배정을 끝내는 쓰기: 옛 행은 valid_to = D - 1로 끝낸다(지난 날짜는 그대로).
+ * 기준일 이후에야 효력이 생기는 행(valid_from, 없으면 기간 시작일이 D 이상)은 지난 기록이 없으므로 취소한다.
+ */
+function seatEndOp_(row, ymd, termStart) {
+  var from = row.valid_from || termStart || '';
+  if (from && from >= ymd) return { op: 'cancel', id: row.id };
+  return { op: 'update', id: row.id, patch: { valid_to: ymdAddDays_(ymd, -1) } };
 }
 
 function seatNewRow_(termId, seatId, studentId, validFrom) {
@@ -202,7 +223,7 @@ function seatNewRow_(termId, seatId, studentId, validFrom) {
  * 입실 예정(미입실) 학생이 배정된 자리는 stale이 아니다 — 먼저 배정을 풀어야 한다.
  * @return {{ok, error?:string, ops:Object[], noop?:boolean}} ops: {op:'create', row} | {op:'update', id, patch} | {op:'cancel', id}
  */
-function planSeatAssign_(live, termId, seatId, studentId, seatKinds, enrolledIds, staleSeatIds, ymd) {
+function planSeatAssign_(live, termId, seatId, studentId, seatKinds, enrolledIds, staleSeatIds, ymd, termStart) {
   if (seatKinds[seatId] !== '좌석') return { ok: false, error: '좌석이 아닌 칸입니다.', ops: [] };
   if (enrolledIds.indexOf(studentId) < 0) return { ok: false, error: '이 기간에 등록된 학생이 아닙니다.', ops: [] };
   var target = seatAssignmentAt_(live, seatId, ymd);
@@ -215,22 +236,20 @@ function planSeatAssign_(live, termId, seatId, studentId, seatKinds, enrolledIds
     if ((staleSeatIds || []).indexOf(seatId) < 0) {
       return { ok: false, error: '이미 학생이 배정된 자리입니다. 두 자리를 차례로 눌러 맞바꾸거나, 먼저 배정을 풀어 주세요.', ops: [] };
     }
-    ops.push(seatEndOp_(target.row, ymd));
-    ops.push({ op: 'create', row: seatNewRow_(termId, seatId, studentId, ymd) });
-  } else {
-    ops.push({ op: 'create', row: seatNewRow_(termId, seatId, studentId, '') });
+    ops.push(seatEndOp_(target.row, ymd, termStart));
   }
+  ops.push({ op: 'create', row: seatNewRow_(termId, seatId, studentId, ymd) });
   return { ok: true, ops: ops };
 }
 
 /**
  * 두 자리 맞바꾸기(순수). 한쪽만 앉아 있으면 그 학생을 빈 자리로 옮긴다. 둘 다 비면 할 일 없음.
- * 둘 다 앉아 있으면 배정 행의 student_id를 제자리에서 맞바꾼다.
- * 퇴실한 학생의 배정만 남은 자리(stale)는 빈 자리로 보고, 거기로 옮겨 가면 그 행을 끝내고(valid_to = 기준일 - 1) 옮기는 학생의
- * 이전 행도 끝낸 뒤 새 행(valid_from = 기준일)을 만든다 — 취소로 지난 기록을 지우지 않는다.
+ * 모든 변경은 기준일 D부터: 관련된 옛 행은 valid_to = D - 1로 끝내고(D 이후에야 효력이 생기는 행은 취소),
+ * 새 행은 valid_from = D로 만든다. 행을 제자리에서 고치지 않으므로 지난 날짜 좌석표는 그대로다.
+ * 퇴실한 학생의 배정만 남은 자리(stale)는 빈 자리로 보고, 거기로 옮겨 가면 그 행도 같은 방식으로 끝낸다.
  * @return {{ok, error?, ops:Object[], noop?:boolean}}
  */
-function planSeatSwap_(live, a, b, seatKinds, staleSeatIds, ymd, termId) {
+function planSeatSwap_(live, a, b, seatKinds, staleSeatIds, ymd, termId, termStart) {
   if (a === b) return { ok: false, error: '같은 자리입니다. 다른 자리를 골라 주세요.', ops: [] };
   if (seatKinds[a] !== '좌석' || seatKinds[b] !== '좌석') return { ok: false, error: '좌석이 아닌 칸은 바꿀 수 없습니다.', ops: [] };
   var ra = seatAssignmentAt_(live, a, ymd), rb = seatAssignmentAt_(live, b, ymd);
@@ -240,13 +259,14 @@ function planSeatSwap_(live, a, b, seatKinds, staleSeatIds, ymd, termId) {
   var ea = eff(ra, a), eb = eff(rb, b);
   if (!ea && !eb) return { ok: true, ops: [], noop: true };
   if (ea && eb) {
-    return { ok: true, ops: [{ op: 'update', id: ea.id, patch: { student_id: eb.student_id } },
-      { op: 'update', id: eb.id, patch: { student_id: ea.student_id } }] };
+    return { ok: true, ops: [seatEndOp_(ea, ymd, termStart), seatEndOp_(eb, ymd, termStart),
+      { op: 'create', row: seatNewRow_(termId, a, eb.student_id, ymd) }, { op: 'create', row: seatNewRow_(termId, b, ea.student_id, ymd) }] };
   }
   var from = ea || eb, toId = ea ? b : a, toRow = ea ? rb.row : ra.row;
-  if (!toRow) return { ok: true, ops: [{ op: 'update', id: from.id, patch: { seat_id: toId } }] };
-  // 퇴실 학생의 자리로 이동: 이전 기록을 남기고 기준일부터 새 자리
-  return { ok: true, ops: [seatEndOp_(toRow, ymd), seatEndOp_(from, ymd), { op: 'create', row: seatNewRow_(termId, toId, from.student_id, ymd) }] };
+  var ops = [seatEndOp_(from, ymd, termStart)];
+  if (toRow) ops.push(seatEndOp_(toRow, ymd, termStart));   // 퇴실 학생의 자리: 그 행도 기준일부터 끝낸다(지난 기록은 남는다)
+  ops.push({ op: 'create', row: seatNewRow_(termId, toId, from.student_id, ymd) });
+  return { ok: true, ops: ops };
 }
 
 /** 성별 구역이 어긋나면 경고 문구(막지 않는다). space.gender '남'·'여'·'혼성' */
@@ -345,7 +365,7 @@ function getSeatData(termId) {
       return { id: s.id, row: +s.row, col: +s.col, kind: seatKindEn_(s.kind), seatLabel: s.label || '',
         text: st ? seatDisplay_(st) : '', vacant: s.kind === '좌석' && !st, reason: m && !st ? m.reason : '', studentId: st ? st.id : '',
         hold: !st && holder[s.id] && studentById[holder[s.id]] ? seatDisplay_(studentById[holder[s.id]]) : '',
-        token: s.kind === '좌석' ? seatToken_(live, s.id, ymd) : '' };
+        token: s.kind === '좌석' ? seatToken_(live, s.id, ymd, m ? m.reason : '') : '' };
     });
     return { id: sp.id, name: sp.name, gender: sp.gender, rows: +sp.rows, cols: +sp.cols, sortOrder: +sp.sort_order || 0, cells: cells };
   });
@@ -397,8 +417,25 @@ function saveSpace(input) {
     if (!cur) throw new Error('수정할 공간을 찾을 수 없습니다. 목록을 새로 불러와 주세요.');
     var out = seatActive_(readAll_('seats')).filter(function (s) { return s.space_id === id && (+s.row > +v.record.rows || +s.col > +v.record.cols); });
     if (out.length) return { ok: false, errors: [{ field: 'rows', message: '줄이려는 크기 밖에 칸이 ' + out.length + '개 있습니다. 격자 편집에서 그 칸을 먼저 비워 주세요.' }] };
+    // 이름을 바꿔 번호 방식(SA실 ↔ 줄-순번)이 바뀌면 같은 락에서 번호를 다시 매긴다. 저장 전에 확인(needsConfirm)을 받는다.
+    var relabel = [], relabelAssigned = 0;
+    if (seatLabelStyle_(cur.name) !== seatLabelStyle_(v.record.name)) {
+      var mine = seatActive_(readAll_('seats')).filter(function (s) { return s.space_id === id; });
+      var want = seatLabelsFor_(mine.map(function (s) { return { row: +s.row, col: +s.col, kind: s.kind }; }), seatLabelStyle_(v.record.name));
+      var ids = {};
+      mine.forEach(function (s) { ids[s.id] = true; });
+      var info = seatAssignedInfo_(ids);
+      mine.forEach(function (s) {
+        var label = want[+s.row + ',' + +s.col] || '';
+        if (String(s.label || '') === label) return;
+        relabel.push({ id: s.id, patch: { label: label } });
+        if (s.kind === '좌석' && info.assigned.indexOf(s.id) >= 0) relabelAssigned++;
+      });
+      if (relabel.length && !input.confirmRelabel) return { ok: false, needsConfirm: true, relabelCount: relabel.length, relabelAssigned: relabelAssigned };
+    }
     updateRecord_('spaces', id, v.record, user.email);
-    return { ok: true, id: id };
+    bulkUpdateRecords_('seats', relabel, user.email);
+    return { ok: true, id: id, relabeled: relabel.length };
   });
 }
 
@@ -406,6 +443,20 @@ function saveSpace(input) {
  * 한 공간의 격자 저장 계획(읽기만). 지금·앞으로의 기간에 배정된 좌석은 막고, 지난 기간 배정만 있는 좌석은 경고로 알린다.
  * 배정 행이 지금·앞으로인지: 그 기간이 끝나지 않았고(end_date ≥ 오늘) 행 자체도 오늘 전에 끝나지 않았다.
  */
+function seatAssignedInfo_(seatIds) {
+  var today = today_();
+  var termEnd = {};
+  readAll_('terms').forEach(function (t) { termEnd[t.id] = t.end_date; });
+  var assigned = {}, open = {}, pastOnly = {};
+  readAll_('seat_assignments').forEach(function (a) {
+    if (String(a.status || '').trim() === '취소' || !seatIds[a.seat_id]) return;
+    // 지금·앞으로의 기간(끝나지 않은 기간)의 행이면 어제까지 쓰였어도 막는다(결정 37). 오늘 앉아 있는 것은 open
+    if (termEnd[a.term_id] && termEnd[a.term_id] >= today) { assigned[a.seat_id] = true; if (!seatEnded_(a, today)) open[a.seat_id] = true; } else pastOnly[a.seat_id] = true;
+  });
+  return { assigned: Object.keys(assigned), history: Object.keys(assigned).filter(function (id) { return !open[id]; }),
+    pastOnly: Object.keys(pastOnly).filter(function (id) { return !assigned[id]; }) };
+}
+
 function seatGridPlanFor_(spaceId, cells) {
   seatFresh_();
   var sp = seatActive_(readAll_('spaces')).filter(function (s) { return s.id === String(spaceId || ''); })[0];
@@ -413,18 +464,10 @@ function seatGridPlanFor_(spaceId, cells) {
   var seats = seatActive_(readAll_('seats')).filter(function (s) { return s.space_id === sp.id; });
   var ids = {};
   seats.forEach(function (s) { ids[s.id] = true; });
-  var today = today_();
-  var termEnd = {};
-  readAll_('terms').forEach(function (t) { termEnd[t.id] = t.end_date; });
-  var assigned = {}, pastOnly = {};
-  readAll_('seat_assignments').forEach(function (a) {
-    if (String(a.status || '').trim() === '취소' || !ids[a.seat_id]) return;
-    var current = !!termEnd[a.term_id] && termEnd[a.term_id] >= today && !seatEnded_(a, today);
-    if (current) assigned[a.seat_id] = true; else pastOnly[a.seat_id] = true;
-  });
+  var info = seatAssignedInfo_(ids);
   var plan = seatGridPlan_(seats.map(function (s) { return { id: s.id, row: +s.row, col: +s.col, kind: s.kind, label: s.label }; }),
     (cells || []).map(function (c) { return { row: +c.row, col: +c.col, kind: c.kind }; }),
-    Object.keys(assigned), +sp.rows, +sp.cols, seatLabelStyle_(sp.name), Object.keys(pastOnly).filter(function (id) { return !assigned[id]; }));
+    info.assigned, +sp.rows, +sp.cols, seatLabelStyle_(sp.name), info.pastOnly, info.history);
   return { sp: sp, plan: plan };
 }
 
@@ -513,13 +556,13 @@ function seatAssignCommon_(termId, seatIds, expect, build) {
   if (seatTermEnded_(term, today)) return { ok: false, error: '끝난 운영 기간의 좌석표는 볼 수만 있습니다.' };
   var ymd = seatBaseYmd_(term, today);
   var live = seatLiveAssignments_(d.assignments, term.id);
+  var map = seatMapOn_(d.seats, d.assignments, d.enrollments, d.changes, term.id, ymd);
   var bad = !expect || typeof expect !== 'object' || seatIds.some(function (id) {
-    return typeof expect[id] !== 'string' || expect[id] !== seatToken_(live, id, ymd);
+    return typeof expect[id] !== 'string' || expect[id] !== seatToken_(live, id, ymd, map.bySeat[id] ? map.bySeat[id].reason : '');
   });
   if (bad) return { ok: false, stale: true, error: SEAT_STALE_MSG };
   var kinds = seatKindMap_(d.seats);
   var enrolledIds = d.enrollments.filter(function (e) { return e.term_id === term.id; }).map(function (e) { return e.student_id; });
-  var map = seatMapOn_(d.seats, d.assignments, d.enrollments, d.changes, term.id, ymd);
   var stale = Object.keys(map.bySeat).filter(function (id) { return map.bySeat[id].reason === '퇴실'; });
   var plan = build({ live: live, kinds: kinds, enrolledIds: enrolledIds, term: term, d: d, stale: stale, ymd: ymd });
   if (!plan.ok) return { ok: false, error: plan.error };
@@ -549,7 +592,7 @@ function assignSeat(termId, seatId, studentId, expect) {
   seatId = String(seatId || ''); studentId = String(studentId || '');
   return withLock_(function () {
     var r = seatAssignCommon_(termId, [seatId], expect, function (c) {
-      return planSeatAssign_(c.live, c.term.id, seatId, studentId, c.kinds, c.enrolledIds, c.stale, c.ymd);
+      return planSeatAssign_(c.live, c.term.id, seatId, studentId, c.kinds, c.enrolledIds, c.stale, c.ymd, c.term.start_date);
     });
     if (!r.ok) return r;
     seatApplyOps_('seat_assignments', r.plan.ops, user.email);
@@ -563,7 +606,7 @@ function swapSeats(termId, seatA, seatB, expect) {
   seatA = String(seatA || ''); seatB = String(seatB || '');
   return withLock_(function () {
     var r = seatAssignCommon_(termId, [seatA, seatB], expect, function (c) {
-      return planSeatSwap_(c.live, seatA, seatB, c.kinds, c.stale, c.ymd, c.term.id);
+      return planSeatSwap_(c.live, seatA, seatB, c.kinds, c.stale, c.ymd, c.term.id, c.term.start_date);
     });
     if (!r.ok) return r;
     seatApplyOps_('seat_assignments', r.plan.ops, user.email);
@@ -574,7 +617,7 @@ function swapSeats(termId, seatA, seatB, expect) {
   });
 }
 
-/** 한 자리의 배정을 푼다(status '취소'). 관리자·학사 교사. expect = {자리id: token} — 그사이 다른 학생이 옮겨 왔으면 거부. */
+/** 한 자리의 배정을 푼다(기준일 전날로 끝내기, 오늘 시작한 행이면 취소). 관리자·학사 교사. expect = {자리id: token} — 그사이 다른 학생이 옮겨 왔으면 거부. */
 function unassignSeat(termId, seatId, expect) {
   var user = requirePermission_('seat.edit');
   seatId = String(seatId || '');
@@ -583,7 +626,7 @@ function unassignSeat(termId, seatId, expect) {
       var t = seatAssignmentAt_(c.live, seatId, c.ymd);
       if (t.bounded) return { ok: false, error: '날짜를 좁힌 배정이 있는 자리입니다(3단계에서 다룹니다).', ops: [] };
       if (!t.row) return { ok: false, error: '이미 비어 있는 자리입니다.', ops: [] };
-      return { ok: true, ops: [{ op: 'cancel', id: t.row.id }] };
+      return { ok: true, ops: [seatEndOp_(t.row, c.ymd, c.term.start_date)] };   // 지난 기록은 남기고 기준일부터 비운다
     });
     if (!r.ok) return r;
     seatApplyOps_('seat_assignments', r.plan.ops, user.email);

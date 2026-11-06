@@ -200,15 +200,22 @@
       var actions = el('div', { class: 'seat-row-actions' }, [save]);
       if (sp) actions.appendChild(el('button', { type: 'button', class: 'btn secondary', text: '새 공간 추가', onclick: function () { state.spaceId = ''; drawBody(); } }));
       card.appendChild(actions);
-      save.addEventListener('click', function () {
+      function send(confirmRelabel) {
         save.disabled = true;
         Object.keys(fields).forEach(function (k) { fields[k].setError(''); });
-        call('saveSpace', { id: sp ? sp.id : '', name: name.value, gender: gender.value, rows: rows.value, cols: cols.value }).then(function (r) {
+        call('saveSpace', { id: sp ? sp.id : '', name: name.value, gender: gender.value, rows: rows.value, cols: cols.value, confirmRelabel: !!confirmRelabel }).then(function (r) {
           save.disabled = false;
+          if (r.needsConfirm) {   // 이름을 바꿔 번호 방식이 바뀐다: 저장 전에 "라벨이 바뀌는 배정 좌석 N개"를 보여 준다
+            UI.confirmSheet({ title: '좌석 번호 방식이 바뀝니다',
+              message: '이름을 바꾸면 번호 방식(SA실은 방 안 순번, 그 밖은 줄-순번)이 바뀌어 좌석 ' + r.relabelCount + '개의 번호가 달라집니다. 라벨이 바뀌는 배정 좌석 ' + r.relabelAssigned + '개(배정은 그대로 이어집니다).',
+              confirmText: '번호 다시 매기고 저장', cancelText: '취소', onconfirm: function () { send(true); } });
+            return;
+          }
           if (!r.ok) { r.errors.forEach(function (e) { if (fields[e.field]) fields[e.field].setError(e.message); }); return; }
           state.spaceId = r.id; load('저장했습니다.');
         }).catch(function (err) { save.disabled = false; fail(err); });
-      });
+      }
+      save.addEventListener('click', function () { send(false); });
       return card;
     }
 
