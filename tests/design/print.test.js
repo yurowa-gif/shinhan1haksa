@@ -176,15 +176,27 @@ test('오늘 특이사항 목록: 학생·블록·약어, 1쪽 아래에 들어�
   assert.strictEqual(count(ctx.printRenderSheet_(mon, { listPage: 'always' }), '<section class="page"'), 2);
 });
 
-test('1OUT·퇴실 대상: 이름 옆 ▲·▲▲(없으면 아무 표시 없음), 범례에도 그때만 나온다', () => {
+test('1OUT·퇴실 대상: 기본은 아무것도 그리지 않고(선생님 결정 전), opts.showOut 을 켜면 이름 옆 ▲·▲▲와 범례가 나온다', () => {
   const m = fixture('mon_thu');
-  assert.ok(ctx.printRenderSheet_(m, {}).indexOf('▲') < 0);
   const occ = m.spaces[0].cells.filter((c) => c.occupant);
   occ[0].occupant.outLevel = 1; occ[1].occupant.outLevel = 2;
+  const off = ctx.printRenderSheet_(m, {});
+  assert.ok(off.indexOf('▲') < 0 && off.indexOf('1OUT') < 0, '기본은 표시 없음');
+  const on = ctx.printRenderSheet_(m, { showOut: true });
+  assert.ok(on.indexOf(occ[0].occupant.display + ' ▲</td>') > 0);
+  assert.ok(on.indexOf(occ[1].occupant.display + ' ▲▲</td>') > 0);
+  assert.ok(on.indexOf('<b>▲</b>&nbsp;1OUT') > 0 && on.indexOf('퇴실 대상') > 0);
+  const clean = fixture('mon_thu');
+  assert.ok(ctx.printRenderSheet_(clean, { showOut: true }).indexOf('▲') < 0, 'outLevel 이 없으면 켜도 그리지 않는다');
+});
+
+test('특이사항 목록에는 사유 메모가 없다(유형 약어만, 결정 23)', () => {
+  const m = fixture('mon_thu');
+  const cell = m.spaces[0].cells.find((c) => c.kind === 'seat' && c.occupant);
+  cell.occupant.reason = '독감 38도';
+  cell.marks[0] = { seq: 1, code: 'EXC', text: '병결' };
   const html = ctx.printRenderSheet_(m, {});
-  assert.ok(html.indexOf(occ[0].occupant.display + ' ▲</td>') > 0);
-  assert.ok(html.indexOf(occ[1].occupant.display + ' ▲▲</td>') > 0);
-  assert.ok(html.indexOf('<b>▲</b>&nbsp;1OUT') > 0 && html.indexOf('퇴실 대상') > 0);
+  assert.ok(html.indexOf('독감') < 0 && html.indexOf('38도') < 0);
 });
 
 test('공석은 "공석"으로 적힌다(설정으로 바꿀 수 있다)', () => {

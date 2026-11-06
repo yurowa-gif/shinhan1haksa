@@ -5,7 +5,8 @@
  *   printSheetPlan_(model, opts)   → 배치 진단(줄 너비·칸 크기·SA 열 수·목록 칸 수·넘침 여부, 테스트·C7용).
  *
  * model 모양은 docs/contracts/sheet-model.md. 렌더러는 marks[].text를 바꾸지 않고 이스케이프만 한다.
- * 선택 필드(없어도 된다): occupant.outLevel(0|1|2 → 이름 옆 ▲·▲▲), model.standbyNames(예비 감독 이름).
+ * 선택 필드(없어도 된다): model.standbyNames(예비 감독 이름). occupant.outLevel(0|1|2 → 이름 옆 ▲·▲▲)은
+ * 선생님 결정 전이라 모델에 있어도 opts.showOut=true일 때만 그린다(범례의 ▲도 그때만).
  * PDF 변환기(Utilities 서비스의 Blob 변환)가 이해하도록 표(table) 기반·인라인 CSS만 쓴다(flex·grid·웹폰트·외부 리소스 없음).
  * 흑백 인쇄로도 구분되게 색 대신 회색 바탕·굵기·글자로 나타낸다.
  *
@@ -115,13 +116,14 @@ function printSeatCells_(space) {
   return (space.cells || []).filter(function (cell) { return cell.kind === 'seat'; });
 }
 
-function printOutSuffix_(occupant) {
+function printOutSuffix_(occupant, showOut) {
+  if (!showOut) return '';   // 1OUT 표시는 선생님 결정 전이라 옵션(opts.showOut)을 켜야만 그린다
   var lv = occupant && occupant.outLevel;
   return lv >= 2 ? ' ▲▲' : (lv === 1 ? ' ▲' : '');
 }
 
-function printNameText_(cell, vacantLabel) {
-  return cell.occupant ? cell.occupant.display + printOutSuffix_(cell.occupant) : vacantLabel;
+function printNameText_(cell, vacantLabel, showOut) {
+  return cell.occupant ? cell.occupant.display + printOutSuffix_(cell.occupant, showOut) : vacantLabel;
 }
 
 /** 블록(공간) 안에서 열이 차지하는 너비(pt). L = 줄 너비 */
@@ -228,7 +230,7 @@ function printLayout_(model, opts) {
   var maxNameEm = printTextEm_(vacantLabel);
   spaces.forEach(function (sp) {
     printSeatCells_(sp).forEach(function (cell) {
-      maxNameEm = Math.max(maxNameEm, printTextEm_(printNameText_(cell, vacantLabel)));
+      maxNameEm = Math.max(maxNameEm, printTextEm_(printNameText_(cell, vacantLabel, opts && opts.showOut)));
     });
   });
   var minL = Math.max(Math.ceil(maxNameEm * 8 + 3), Math.ceil(n * PRINT_MARK_MIN_W_PT));
@@ -297,7 +299,7 @@ function printLayout_(model, opts) {
     markW: chosen.markW, pitch: chosen.pitch, nameH: chosen.nameH, markH: chosen.markH, nameFont: nameFont,
     wraps: chosen.wraps, listH: chosen.listH, roomsH: chosen.roomsH, roomBlockH: chosen.roomBlockH, memoH: memoH,
     capacity: capacity, entries: entries, overflow: overflow, needPage2: needPage2, fits: chosen.fits, warnings: warnings,
-    minL: minL, bodyH: bodyH, vacantLabel: vacantLabel, summary: printSummary_(model), mainLines: mainLines
+    minL: minL, bodyH: bodyH, vacantLabel: vacantLabel, showOut: !!(opts && opts.showOut), summary: printSummary_(model), mainLines: mainLines
   };
 }
 
@@ -321,6 +323,7 @@ function printDutyText_(model) {
 }
 
 function printHeadHtml_(model, lay) {
+  var showOut = lay.showOut;
   var title = printEsc_(model.title || '신한학사 출석부');
   var first = model.blocks[0], last = model.blocks[model.blocks.length - 1];
   var standby = model.standbyNames && model.standbyNames.length ? printEsc_(model.standbyNames.join(', ')) : '________';
@@ -330,7 +333,7 @@ function printHeadHtml_(model, lay) {
   }).join('&nbsp;·&nbsp;');
   var hasOut = false;
   (model.spaces || []).forEach(function (sp) {
-    printSeatCells_(sp).forEach(function (cell) { if (cell.occupant && cell.occupant.outLevel > 0) hasOut = true; });
+    printSeatCells_(sp).forEach(function (cell) { if (showOut && cell.occupant && cell.occupant.outLevel > 0) hasOut = true; });
   });
   if (hasOut) legend += '&nbsp;·&nbsp;<b>▲</b>&nbsp;1OUT&nbsp;<b>▲▲</b>&nbsp;퇴실 대상';
   var s = lay.summary;
@@ -420,7 +423,7 @@ function printBlockHtml_(space, lay, model) {
       var vacant = !cell.occupant;
       var shade = vacant ? 'background:#f2f2f2;' : '';
       rows1.push('<td class="n" colspan="' + n + '" style="padding:0 1pt;overflow:hidden;white-space:nowrap;vertical-align:middle;border:0.8pt solid #222;border-bottom:0.5pt solid #555;' +
-        'font-size:' + printNum_(nameFont) + 'pt;line-height:' + lay.nameH + 'pt;' + (vacant ? 'color:#666;' + shade : 'font-weight:bold;') + '">' + printEsc_(printNameText_(cell, lay.vacantLabel)) + '</td>');
+        'font-size:' + printNum_(nameFont) + 'pt;line-height:' + lay.nameH + 'pt;' + (vacant ? 'color:#666;' + shade : 'font-weight:bold;') + '">' + printEsc_(printNameText_(cell, lay.vacantLabel, lay.showOut)) + '</td>');
       for (var i = 0; i < n; i++) {
         var m = (cell.marks || [])[i] || { text: '', code: 'NONE' };
         var filled = m.text !== '';
