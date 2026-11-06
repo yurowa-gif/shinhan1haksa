@@ -4585,7 +4585,7 @@
     },
     {
      "row": 18,
-     "col": 3,
+     "col": 4,
      "kind": "seat",
      "seatLabel": "135",
      "occupant": null,
@@ -4615,7 +4615,7 @@
     },
     {
      "row": 18,
-     "col": 4,
+     "col": 6,
      "kind": "seat",
      "seatLabel": "136",
      "occupant": {
@@ -4649,7 +4649,7 @@
     },
     {
      "row": 18,
-     "col": 6,
+     "col": 7,
      "kind": "seat",
      "seatLabel": "137",
      "occupant": {
@@ -4683,7 +4683,7 @@
     },
     {
      "row": 18,
-     "col": 7,
+     "col": 9,
      "kind": "seat",
      "seatLabel": "138",
      "occupant": {
@@ -4717,7 +4717,7 @@
     },
     {
      "row": 18,
-     "col": 9,
+     "col": 10,
      "kind": "seat",
      "seatLabel": "139",
      "occupant": {
@@ -4750,8 +4750,8 @@
      ]
     },
     {
-     "row": 18,
-     "col": 10,
+     "row": 19,
+     "col": 1,
      "kind": "seat",
      "seatLabel": "140",
      "occupant": {
