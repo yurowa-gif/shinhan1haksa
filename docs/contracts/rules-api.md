@@ -78,7 +78,7 @@ function diffRoster_(records, existing, termId, ymd)
 
 // src/rules/OutRules.gs
 function reconcileAutoOuts_(exceptions, violations, opts)
-        // opts = {autoTypes, ruleName:'무단 지각·결석·이탈', per:'group'|'row', dutyByDate:{}}
+        // opts = {autoTypes, ruleName:'무단 지각·결석·이탈', ruleId(R5 추가), per:'group'|'row', dutyByDate:{}}
         // → {toCreate, toCancel:[{violationId, reason}]}
 function outLevel_(violations, studentId, termId)   // {count, level:0|1|2, label:''|'1OUT'|'퇴실 대상'}
 
@@ -153,3 +153,14 @@ function mealChangeKind_(item, fromValue, toValue)
   - FIXED가 여럿이면 `teacher_confirmed_at` → `updated_at` 최신.
   - END: `endType`(`'23:00:00'`도 읽음) `=== opts.endTime`(기본 `'23:00'`), `dayType`이 `opts.endTypeDayTypes`(기본 `['mon_thu']`, 항목 앞뒤 공백 무시)에 있음, 마지막 블록, **그 블록과 그날 종료(`dayEnd`)가 모두 종료 시각보다 늦게 끝남**. ASSUMPTION: 날짜별 종료를 23:00 이하로 당긴 날(22:00·22:30·23:00)은 모두 그 시각에 귀가하므로 표시하지 않는다. ASSUMPTION: 특별 요일 유형(`exam` 등)으로 바꾼 날은 실제 달력 요일의 기본 유형으로 판정한다(목요일 exam → 표시, 금요일 exam → 표시 안 함).
 - `resolveStudentDay_`: 운영 안 하는 날은 `[]`. `exceptions`는 `date === plan.date`인 행만 쓴다(**날짜가 빈 행은 쓰지 않는다** — 빈 날짜 하나가 모든 날에 찍히지 않게). `plan.end`를 `dayEnd`로 넘긴다. `fixedRows`는 `effectiveFixedRows_` 결과를 넘긴다. 고정 일정 요일은 요일 유형이 아니라 **실제 달력 요일**(`ymdWeekdayKo_`). C7은 결과에서 `seq·code·text`만 sheet-model `marks`로 옮긴다.
+
+## 동작 메모(R5, 2026-11-06)
+
+**OutRules** — violations 탭(`violations_<기간>`, plan 5절 선택 탭)은 2단계 F4에서 만든다. 이 함수는 아무것도 쓰지 않는다.
+- `reconcileAutoOuts_`: 단위 = `per:'group'`(기본, 결정 22 "입력 1건 = 1OUT")이면 (학생, group_id) 묶음, group_id가 비면 행 하나. `per:'row'`면 행마다. 단위 안에 `확정`이고 유형이 `autoTypes`(괄호 설명을 떼고 비교, 설정 `exception.auto_out_types`)인 행이 하나라도 있으면 대상.
+  - 만들 초안: `source:'F1자동'`, `status:'유효'`, `source_exception_id` = 단위 안 대상 행 중 날짜가 가장 이른 행, `occurred_at` = 그 날짜 + 첫 블록 시작(`ALL`이면 `00:00`) + `:00`, `entered_by` = 확정자(없으면 요청자), `detected_by` = `dutyByDate[날짜]`(배열이면 쉼표로 이음, 없으면 빈칸 — F3 전에는 빈칸), `memo` = `'사전 특이사항 자동: 유형'`(묶음이 여러 날이면 `' 외 N일'`). id·공통 열은 부르는 쪽이 붙인다.
+  - 이미 있는 자동 OUT은 `source_exception_id`가 속한 단위에 연결된다(묶음의 대표가 아닌 행 id여도). 대상이고 살아 있는 OUT이 있으면 아무것도 안 함 → **두 번 실행해도 0건**.
+  - 취소(`toCancel`, 사유는 `'[자동] '`으로 시작): 단위가 대상이 아니게 됨(특이사항 취소·유형 변경·요청으로 돌아감), 연결된 특이사항 행이 없음, 같은 단위의 두 번째 살아 있는 자동 OUT(중복). C5/F4는 취소할 때 `cancel_reason`에 이 사유를 그대로 쓰고 audit_log에 남긴다.
+  - 교사가 직접 입력한 OUT(`source`가 `F1자동`이 아님)은 건드리지 않는다.
+  - ASSUMPTION: 관리자가 직접 취소한 자동 OUT(`cancel_reason`이 `'[자동] '`으로 시작하지 않음)이 있는 단위는 다시 만들지 않는다. 자동으로 취소된 뒤 다시 대상이 되면 새로 만든다.
+- `outLevel_`: 같은 학생·같은 `term_id`(학기마다 초기화)에서 status 빈칸·`유효`인 OUT 수(직접·자동 모두). 2개 이상이면 `level:2`, `'퇴실 대상'`.
