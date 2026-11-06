@@ -254,3 +254,58 @@ table('outLevel_: 학기마다 초기화, 취소 제외, 2개 이상이면 퇴�
   assert.strictEqual(r.level, level);
   assert.strictEqual(r.label, label);
 });
+
+/* ───── 총괄 2차 검토 ───── */
+
+test('설정을 넓혀도 앞으로만: autoTypesSince 이전에 확정된 "기타"에는 OUT을 만들지 않는다(총괄 결정)', () => {
+  const exc = [EX('old', { type: '기타', confirmed_at: '2027-03-03T09:00:00' }), EX('new', { type: '기타', student_id: 's2', confirmed_at: '2027-03-10T09:00:00' })];
+  const wide = { autoTypes: ['미인정지각', '미인정조퇴', '미인정결석', '기타'], autoTypesSince: '2027-03-05T12:00:00' };
+  assert.deepStrictEqual(run(exc, [], wide).toCreate.map((c) => c.source_exception_id), ['new']);
+  // since가 없으면 지금처럼(F4 처음 연결 때 한꺼번에 만들기)
+  assert.strictEqual(run(exc, [], { autoTypes: wide.autoTypes }).toCreate.length, 2);
+  // 공백 구분 일시도 같은 순서, 확정 시각이 비면 since 이전으로 본다
+  assert.deepStrictEqual(run([EX('x', { confirmed_at: '2027-03-05 12:00:00' }), EX('y', { student_id: 's3', confirmed_at: '' })], [], { autoTypesSince: '2027-03-05T12:00:00' })
+    .toCreate.map((c) => c.source_exception_id), ['x']);
+});
+
+test('묶음 일부만 since 이후에 확정되면 그 행들로만 만든다(대표·외 N일)', () => {
+  const exc = [EX('g1', { group_id: 'G', date: '2027-03-03', confirmed_at: '2027-03-01T09:00:00' }),
+    EX('g2', { group_id: 'G', date: '2027-03-04', confirmed_at: '2027-03-06T09:00:00' })];
+  const r = run(exc, [], { autoTypesSince: '2027-03-05T00:00:00' });
+  assert.deepStrictEqual(r.toCreate.map((c) => [c.source_exception_id, c.memo]), [['g2', '사전 특이사항 자동: 미인정결석']]);
+});
+
+table('rule_name은 vocabulary 형식일 때만 유형을 읽는다, 못 읽으면 설정을 좁혀도 취소하지 않는다', [
+  ['무단 지각·결석·이탈(미인정지각)', 1],          // 읽음: 미인정지각 → 그 유형 행이 있으니 유지 … 아래에서 유형을 병결로 바꿔 취소 확인
+  ['무단 결석(미인정지각)', 0],                     // 형식 아님 → 알 수 없음 → 유형으로 취소 안 함
+  ['직접 고친 이름', 0],
+  ['무단 지각·결석·이탈()', 0]
+], ([ruleName, cancelsOnTypeChange]) => {
+  const base = Object.assign({}, run([EX('e1', { type: '미인정지각' })]).toCreate[0], { id: 'v1', rule_name: ruleName });
+  // 설정을 좁혀도(미인정지각 빠짐) 유지
+  assert.deepStrictEqual(run([EX('e1', { type: '미인정지각' })], [base], { autoTypes: ['미인정결석'] }).toCancel, []);
+  // 특이사항 유형이 병결로 바뀌면: 형식이 맞을 때만 취소
+  assert.strictEqual(run([EX('e1', { type: '병결' })], [base], { autoTypes: ['미인정결석'] }).toCancel.length, cancelsOnTypeChange);
+});
+
+test('rule_name 안 유형에 괄호가 있어도 읽는다(바깥 괄호만 벗김)', () => {
+  const base = Object.assign({}, run([EX('e1', { type: '미인정지각(보충)' })]).toCreate[0], { id: 'v1' });
+  assert.strictEqual(base.rule_name, '무단 지각·결석·이탈(미인정지각)');
+  const odd = Object.assign({}, base, { rule_name: '무단 지각·결석·이탈(기타(현장 확인))' });
+  assert.deepStrictEqual(run([EX('e1', { type: '기타(현장 확인)' })], [odd], { autoTypes: ['미인정결석'] }).toCancel, []);
+  assert.strictEqual(run([EX('e1', { type: '병결' })], [odd], { autoTypes: ['미인정결석'] }).toCancel.length, 1);
+});
+
+test('관리자 취소 차단의 묶음 키는 취소된 OUT의 학생: 묶음 대표 행만 다른 학생으로 고쳐도 원래 학생 묶음은 계속 차단', () => {
+  // s1의 묶음 G(e1·e2) OUT을 관리자가 취소 → 대표 e1만 학생을 s2로 고침, e2는 s1 그대로
+  const vio = [{ id: 'm1', term_id: 'T1', student_id: 's1', source: 'F1자동', status: '취소', cancel_reason: '관리자 판단', source_exception_id: 'e1' }];
+  const exc = [EX('e1', { group_id: 'G', student_id: 's2', date: '2027-03-03' }), EX('e2', { group_id: 'G', date: '2027-03-04' })];
+  // s1 묶음(e2)은 다시 만들지 않고, 새 학생 s2(e1)에게는 만든다
+  assert.deepStrictEqual(run(exc, vio).toCreate.map((c) => [c.student_id, c.source_exception_id]), [['s2', 'e1']]);
+});
+
+test('특이사항 날짜가 원본: 사람이 OUT 날짜를 고쳐도 대표 날짜로 되돌린다(시각만 고친 것은 둔다)', () => {
+  const v1 = settle([EX('e1', { blocks: '18:00-20:00' })]);
+  const dateEdited = v1.map((v) => Object.assign({}, v, { occurred_at: '2027-03-04T18:00:00' }));
+  assert.deepStrictEqual(run([EX('e1', { blocks: '18:00-20:00' })], dateEdited).toUpdate[0].patch.occurred_at, '2027-03-03T18:00:00');
+});
