@@ -239,3 +239,53 @@ function bulkAppend_(sheetName, rows, actorEmail) {
     writeAudit_(sheetName, '', 'bulk_create', null, null, actorEmail, 'db', rows.length + '행 (일괄 추가)');
   });
 }
+
+/**
+ * 여러 행을 한 번에 고친다(명단 업로드처럼 수십~수백 행). 시트를 한 번 읽고 한 번 쓴다.
+ * audit_log에는 "일괄 1줄 + 바뀐 행 수·열 이름·id 목록"만 남긴다(행마다 전후 값을 쓰지 않는다 — 결정 26~29).
+ * @param {{id:string, patch:Object}[]} patches
+ * @return {number} 실제로 바뀐 행 수
+ */
+function bulkUpdateRecords_(sheetName, patches, actorEmail, kind) {
+  kind = kind || 'db';
+  if (!patches || !patches.length) return 0;
+  return withLock_(function () {
+    invalidate_(kind, sheetName);
+    var sh = getSheet_(kind, sheetName);
+    var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(cellToString_);
+    var rows = readAll_(sheetName, kind);
+    var byId = {};
+    rows.forEach(function (r) { byId[r.id] = r; });
+    var firstRow = 2;
+    var values = rows.length ? sh.getRange(firstRow, 1, sh.getLastRow() - 1, headers.length).getValues() : [];
+    var now = nowIso_();
+    var cols = {};
+    var changedIds = [];
+    patches.forEach(function (p) {
+      var row = byId[p.id];
+      if (!row) throw new Error('기록을 찾을 수 없습니다: ' + p.id);
+      var idx = row._row - firstRow;
+      var touched = false;
+      Object.keys(p.patch).forEach(function (k) {
+        if (k === 'id' || k === 'created_at' || k === 'created_by') return;
+        var c = headers.indexOf(k);
+        if (c < 0) throw new Error('없는 열입니다: ' + sheetName + '.' + k);
+        var v = p.patch[k] === undefined || p.patch[k] === null ? '' : String(p.patch[k]);
+        if (cellToString_(values[idx][c]) !== v) { values[idx][c] = v; cols[k] = true; touched = true; }
+      });
+      if (touched) {
+        values[idx][headers.indexOf('updated_at')] = now;
+        values[idx][headers.indexOf('updated_by')] = actorEmail || '';
+        changedIds.push(p.id);
+      }
+    });
+    if (!changedIds.length) return 0;
+    var range = sh.getRange(firstRow, 1, values.length, headers.length);
+    range.setNumberFormat('@');
+    range.setValues(values);
+    invalidate_(kind, sheetName);
+    writeAudit_(sheetName, '', 'bulk_update', null, { ids: changedIds }, actorEmail, kind,
+      changedIds.length + '행 변경 (열: ' + Object.keys(cols).join(', ') + ')');
+    return changedIds.length;
+  });
+}

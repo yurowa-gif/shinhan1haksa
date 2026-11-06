@@ -1,43 +1,176 @@
 <style>
-  .roster-text { width: 100%; min-height: 220px; padding: 12px; font: inherit; border: 1px solid var(--line);
-    border-radius: 10px; background: var(--card); color: var(--text); }
-  .roster-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-  .roster-err { padding: 8px 0; border-bottom: 1px solid var(--line); }
-  .roster-ok { color: var(--ok); margin-bottom: 8px; }
+  .roster-text { width: 100%; min-height: 200px; }
+  .roster-list { margin: 4px 0 12px; padding-left: 1.2em; }
+  .roster-list li { margin: 2px 0; }
+  .roster-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 </style>
 <script>
-  /** 명단 올리기 화면 1차: 붙여넣기 → 형식 확인(저장 없음). C3. */
+  /** 명단 올리기 화면(C3): 붙여넣기 → 확인(미리보기) → 하단 바에서 저장. 학생 명단 / 학부모 연결 두 탭. */
   function renderScreen(root) {
-    var text = el('textarea', { class: 'roster-text', placeholder: '시트에서 명단을 복사해 여기에 붙여넣으세요.\n열 순서: 학번, 학년, 반, 번호, 이름, 성별, 계열, 학사, 기숙사, 베리타스, 조식, 석식, 통학구분, 담당교사이메일, 학생구글계정, 비고' });
-    var out = el('div', { style: 'margin-top:12px' });
-    var check = el('button', { type: 'button', class: 'btn', text: '형식 확인' });
-    var clearBtn = el('button', { type: 'button', class: 'btn secondary', text: '지우기',
-      onclick: function () { text.value = ''; clear(out); } });
-    root.appendChild(el('div', { class: 'card' }, [
-      el('h2', { text: '학생 명단 붙여넣기' }),
-      el('div', { class: 'muted', text: '이 화면은 아직 형식만 확인합니다. 아무것도 저장하지 않습니다.' }),
-      el('div', { style: 'margin-top:12px' }, [text]),
-      el('div', { class: 'roster-actions' }, [check, clearBtn]),
-      out
-    ]));
+    var state = { ctx: null, tab: 'students', preview: null, snapshot: '', busy: false };
+    var head = el('div', { class: 'card' });
+    var inputCard = el('div', { class: 'card' });
+    var resultBox = el('div');
+    root.appendChild(head); root.appendChild(inputCard); root.appendChild(resultBox);
 
-    check.addEventListener('click', function () {
-      check.disabled = true;
-      clear(out).appendChild(el('div', { class: 'loading', text: '확인하는 중…' }));
-      call('previewRoster', text.value).then(function (r) {
-        check.disabled = false;
-        clear(out);
-        out.appendChild(kv([['구분', r.delimiter === 'tab' ? '탭(시트 복사)' : '쉼표(CSV)'],
-          ['머리글 줄', r.hasHeader ? '있음' : '없음'], ['학생 줄 수', String(r.rowCount)]]));
-        if (r.ok) {
-          out.appendChild(el('div', { class: 'roster-ok', text: '형식이 맞습니다.' }));
-          return;
-        }
-        out.appendChild(el('div', { class: 'error', text: '고칠 곳이 ' + r.errorCount + '군데 있습니다.' }));
-        r.errors.forEach(function (e) {
-          out.appendChild(el('div', { class: 'roster-err', text: (e.line ? e.line + '번째 줄: ' : '') + e.message }));
+    var termSelect, ymdField, textarea, textField, checkBtn;
+    var bar = UI.actionBar([
+      { text: '저장', kind: 'primary', disabled: true, onclick: onSave },
+      { text: '지우기', kind: 'secondary', onclick: function () { if (textarea) { textarea.value = ''; } setPreview(null); } }
+    ], { mount: true });
+    var saveBtn = bar.querySelectorAll('button')[0];
+
+    call('getRosterContext').then(function (ctx) {
+      state.ctx = ctx; build();
+    }).catch(function (err) { clear(head); showError(head, err); });
+
+    function opts() {
+      return { termId: termSelect.value, ymd: state.tab === 'students' ? ymdField.getValue() : '' };
+    }
+    function key() { return state.tab + '|' + termSelect.value + '|' + (state.tab === 'students' ? ymdField.getValue() : '') + '|' + textarea.value; }
+
+    function build() {
+      clear(head);
+      head.appendChild(el('h2', { text: '명단 올리기' }));
+      head.appendChild(UI.segmented({
+        label: '무엇을 올리나요', value: state.tab,
+        options: [{ value: 'students', label: '학생 명단' }, { value: 'guardians', label: '학부모 연결' }],
+        onchange: function (v) { state.tab = v; state.preview = null; state.snapshot = ''; saveBtn.disabled = true; build(); }
+      }));
+      termSelect = el('select', {}, state.ctx.terms.map(function (t) { return el('option', { value: t.id, text: t.name + ' (' + t.start_date + ' ~ ' + t.end_date + ')' }); }));
+      termSelect.value = state.ctx.defaultTermId;
+      head.appendChild(UI.field('운영 기간', termSelect, { name: 'term', hint: '이 기간의 학사생 명단으로 올립니다.' }));
+      if (state.tab === 'students') {
+        ymdField = UI.dateField({ label: '상태 적용일', value: defaultYmd(), name: 'ymd' });
+        head.appendChild(ymdField);
+        head.appendChild(el('div', { class: 'muted', text: '학사·기숙사·조식·석식의 초기 상태가 이 날부터 적용됩니다. 보통은 기간 시작일(학기 중 새로 올리면 오늘)입니다.' }));
+        termSelect.addEventListener('change', function () { ymdField.setValue(defaultYmd()); onInputChanged(); });
+      } else {
+        termSelect.addEventListener('change', onInputChanged);
+      }
+      drawInput();
+    }
+    function defaultYmd() {
+      var t = state.ctx.terms.filter(function (x) { return x.id === termSelect.value; })[0];
+      return t ? t.defaultYmd : '';
+    }
+
+    function drawInput() {
+      clear(inputCard);
+      var cols = state.tab === 'students'
+        ? '학번, 학년, 반, 번호, 이름, 성별, 계열, 학사, 기숙사, 베리타스, 조식, 석식, 통학구분, 담당교사이메일, 학생구글계정, 비고'
+        : '학부모구글계정, 학번, 관계';
+      textarea = el('textarea', { class: 'roster-text', placeholder: '첫 줄(머리글)부터 함께 붙여넣으세요.\n열 순서: ' + cols });
+      textarea.addEventListener('input', onInputChanged);
+      textField = UI.field(state.tab === 'students' ? '학생 명단' : '학부모 연결 명단', textarea, { name: 'text',
+        hint: '구글 시트에서 복사해 붙이거나 CSV를 붙입니다. 이 단계에서는 아직 저장되지 않습니다.' });
+      inputCard.appendChild(textField);
+      checkBtn = el('button', { type: 'button', class: 'btn secondary', text: '확인', onclick: onCheck });
+      inputCard.appendChild(el('div', { class: 'roster-actions' }, [checkBtn]));
+      clear(resultBox);
+    }
+
+    /** 미리보기가 지금 입력과 같은 내용에 대한 것인지(저장은 그때만 켠다) */
+    function isFresh() { return !!state.preview && state.snapshot === key(); }
+    function refreshSave() {
+      var p = state.preview;
+      saveBtn.disabled = state.busy || !(p && p.ok && !p.blocked && !p.nothingToDo && isFresh());
+    }
+    function setPreview(p) {
+      state.preview = p;
+      state.snapshot = p ? key() : '';
+      refreshSave();
+      if (!p) clear(resultBox);
+    }
+    function onInputChanged() {
+      refreshSave();
+      if (state.preview && !isFresh()) {
+        clear(resultBox);
+        resultBox.appendChild(el('div', { class: 'notice warn', text: '내용을 바꿨습니다. [확인]을 다시 눌러 결과를 보고 저장해 주세요.' }));
+      }
+    }
+
+    function onCheck() {
+      if (!textarea.value.trim()) { textField.setError('붙여넣은 내용이 없습니다. 시트에서 복사해 붙여넣어 주세요.'); return; }
+      textField.setError('');
+      checkBtn.disabled = true;
+      clear(resultBox); resultBox.appendChild(el('div', { class: 'loading', text: '확인하는 중…' }));
+      var snap = key();
+      var fn = state.tab === 'students' ? 'previewRoster' : 'previewGuardians';
+      call(fn, textarea.value, opts()).then(function (p) {
+        checkBtn.disabled = false;
+        state.preview = p; state.snapshot = snap;
+        refreshSave();
+        drawResult(p);
+      }).catch(function (err) { checkBtn.disabled = false; clear(resultBox); showError(resultBox, err); });
+    }
+
+    function nameList(items, max) {
+      var ul = el('ul', { class: 'roster-list' });
+      items.slice(0, max || 30).forEach(function (x) {
+        ul.appendChild(el('li', { text: x.student_no + ' ' + x.name + (x.fields ? ' — 바뀌는 칸: ' + x.fields.join('·') : '') + (x.reason ? ' — ' + x.reason : '') }));
+      });
+      if (items.length > (max || 30)) ul.appendChild(el('li', { class: 'muted', text: '외 ' + (items.length - (max || 30)) + '명' }));
+      return ul;
+    }
+
+    function drawResult(p) {
+      clear(resultBox);
+      if (!p.ok) {
+        var c = el('div', { class: 'card' }, [el('h2', { text: '고칠 곳이 ' + (p.errorCount || p.errors.length) + '군데 있습니다' })]);
+        p.errors.forEach(function (e) {
+          c.appendChild(el('div', { class: 'notice warn', text: (e.line ? e.line + '번째 줄' + (e.column ? ' · ' + e.column : '') + ': ' : '') + e.message }));
         });
-      }).catch(function (err) { check.disabled = false; clear(out); showError(out, err); });
-    });
+        resultBox.appendChild(c); return;
+      }
+      var card = el('div', { class: 'card' }, [el('h2', { text: '확인 결과' })]);
+      resultBox.appendChild(card);
+      if (p.nothingToDo) card.appendChild(el('div', { class: 'notice ok', text: '변경 없음 — 이미 같은 내용이 저장되어 있습니다.' }));
+      var k = p.counts;
+      if (state.tab === 'students') {
+        card.appendChild(kv([['새 학생', k.newStudents + '명'], ['정보 변경', k.updatedStudents + '명'],
+          ['등록 추가', k.newEnrollments + '명'], ['등록 변경', k.updatedEnrollments + '명'],
+          ['상태 기록', k.newChanges + '건'], ['새 계정', k.newUsers + '개'], ['역할 추가', k.updatedUsers + '개'],
+          ['퇴실 후보', k.leaving + '명']]));
+        if (p.blocked) {
+          var amb = el('div', { class: 'card' }, [el('h2', { text: '확인이 필요한 줄 ' + k.ambiguous + '개' }),
+            el('div', { class: 'notice warn', text: '같은 사람인지 알 수 없어 저장할 수 없습니다. 학생 구글 계정을 채우거나 학번·이름·학년을 확인해 다시 붙여넣어 주세요.' })]);
+          p.lists.ambiguous.forEach(function (a) { amb.appendChild(el('div', { text: a.line + '번째 줄: ' + a.student_no + ' ' + a.name + ' — ' + a.reason })); });
+          resultBox.appendChild(amb);
+        }
+        if (p.lists.newStudents.length) { card.appendChild(el('h2', { style: 'margin-top:12px', text: '새 학생' })); card.appendChild(nameList(p.lists.newStudents)); }
+        if (p.lists.updatedStudents.length) { card.appendChild(el('h2', { style: 'margin-top:12px', text: '정보가 바뀌는 학생' })); card.appendChild(nameList(p.lists.updatedStudents)); }
+        if (p.lists.leaving.length) {
+          card.appendChild(el('h2', { style: 'margin-top:12px', text: '명단에 없는 학사생(퇴실 후보)' }));
+          card.appendChild(el('div', { class: 'muted', text: '자동으로 퇴실 처리하지 않습니다. 퇴실은 입퇴실 화면(2단계)에서 처리합니다.' }));
+          card.appendChild(nameList(p.lists.leaving));
+        }
+      } else {
+        card.appendChild(kv([['새 연결', k.newLinks + '건'], ['건너뜀', k.skipped + '건'], ['새 계정', k.newUsers + '개'], ['역할 추가', k.updatedUsers + '개']]));
+      }
+      if (p.warnings && p.warnings.length) {
+        var w = el('div', { class: 'card' }, [el('h2', { text: '알아 두세요 (' + (p.warningCount || p.warnings.length) + ')' })]);
+        p.warnings.forEach(function (m) { w.appendChild(el('div', { class: 'notice warn', text: m })); });
+        resultBox.appendChild(w);
+      }
+    }
+
+    function onSave() {
+      var p = state.preview;
+      var students = state.tab === 'students';
+      var msg = students
+        ? '새 학생 ' + p.counts.newStudents + '명, 정보 변경 ' + p.counts.updatedStudents + '명, 상태 기록 ' + p.counts.newChanges + '건, 새 계정 ' + p.counts.newUsers + '개를 저장합니다.'
+        : '학부모 연결 ' + p.counts.newLinks + '건, 새 계정 ' + p.counts.newUsers + '개를 저장합니다.';
+      UI.confirmSheet({ title: '저장할까요?', message: msg, confirmText: '저장', cancelText: '취소', onconfirm: function () {
+        state.busy = true; saveBtn.disabled = true;
+        call(students ? 'commitRoster' : 'commitGuardians', textarea.value, opts(), p.counts).then(function (r) {
+          state.busy = false;
+          if (!r.ok) { setPreview(null); drawResult(r); UI.toast(r.stale ? '다시 확인해 주세요.' : '저장하지 못했습니다.', { kind: 'warn' }); return; }
+          UI.toast(r.nothingToDo ? '변경 없음' : '저장했습니다.', { kind: 'ok' });
+          textarea.value = ''; setPreview(null);
+          resultBox.appendChild(el('div', { class: 'notice ok', text: '저장했습니다. ' + (students ? '이어서 학부모 연결을 올려 주세요.' : '') }));
+        }).catch(function (err) { state.busy = false; clear(resultBox); showError(resultBox, err); });
+      } });
+    }
   }
 </script>
