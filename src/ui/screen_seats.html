@@ -1,4 +1,8 @@
 <style>
+  /* 좌석표는 줄이 많아(1층 8줄) PC에서는 화면 폭을 넓게 쓴다. 휴대폰에서는 격자 안에서 가로로 민다. */
+  main { max-width: none; }
+  .seat-filter .segmented { margin-bottom: 0; flex: 0 0 auto; }
+  .seat-filter .seg { white-space: nowrap; flex: 1 1 auto; padding: 8px 12px; }
   .seat-filter { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
   .seat-stu-list { display: flex; flex-wrap: wrap; gap: 8px; }
   .seat-stu { min-height: var(--tap); padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm);
