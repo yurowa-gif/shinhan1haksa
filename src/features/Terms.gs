@@ -6,7 +6,8 @@
  * terms 탭에는 status 열이 없다(plan 5절에 없음). 잘못 만든 기간은 이름·날짜를 고쳐 쓴다.
  *
  * 순수 함수(termValidate_ 등)는 tests/features/terms.test.js가 검사한다.
- * ASSUMPTION: "이전 학기 명단 이어받기"는 RULES의 carryOverEnrollments_(R2)가 병합된 뒤 다음 PR에서 붙인다.
+ * 이전 학기 명단 이어받기: RULES의 carryOverEnrollments_(R2)로 초안을 만들어 보여 주고, 관리자가 확인하면 등록(enrollments)을 추가한다.
+ * 방학 기간에는 이어받기가 없다(방학에 나올 학생은 명단 올리기로 올린다). 학생·상태 기록은 그대로 두고 등록만 만든다.
  * ASSUMPTION: 기간이 겹치면 막지 않고 경고만 한다(getCurrentTerm_이 나중에 시작한 기간을 고른다).
  */
 
@@ -88,11 +89,12 @@ function termView_(t, currentId) {
 
 /** 운영 기간 목록(시작일 순)과 오늘 날짜·현재 기간 */
 function listTerms() {
-  requirePermission_('term.view');
+  var user = requirePermission_('term.view');
   var current = getCurrentTerm_();
   var currentId = current ? current.id : '';
   return {
     today: today_(),
+    canEdit: hasAnyAllowedRole_(user.roles, permissions_()['term.edit'].roles),
     types: TERM_TYPES.slice(),
     terms: termSort_(readAll_('terms')).map(function (t) { return termView_(t, currentId); })
   };
@@ -116,7 +118,81 @@ function saveTerm(input) {
       saved = updateRecord_('terms', id, check.record, user.email);
     } else {
       saved = appendRecord_('terms', check.record, user.email);
+      ensureTermSheet_('exceptions', saved.id);   // 새 기간의 기간별 탭(특이사항)
     }
     return { ok: true, id: saved.id, warnings: check.warnings };
+  });
+}
+
+/* ───────────── 이전 학기 명단 이어받기 ───────────── */
+
+/**
+ * 이어받기 계획(순수). terms·enrollments·changes·students는 시트 행.
+ * @return {{ok:boolean, error?:string, applicable?:boolean, message?:string, term?:Object, fromTerm:Object|null,
+ *           count?:number, drafts?:Object[], students?:{student_no:string,name:string}[]}}
+ */
+function termCarryPlan_(terms, enrollments, changes, students, termId) {
+  var term = (terms || []).filter(function (t) { return t.id === String(termId || ''); })[0];
+  if (!term) return { ok: false, error: '이어받을 기간을 골라 주세요.' };
+  if (term.type !== '학기') {
+    return { ok: true, applicable: false, term: term, fromTerm: null, count: 0, drafts: [], students: [],
+      message: '방학 기간에는 이어받기가 없습니다. 방학에 나오는 학생은 "명단 올리기"로 올려 주세요.' };
+  }
+  var prev = null;
+  (terms || []).forEach(function (t) {
+    if (t.id === term.id || t.type !== '학기' || !(t.start_date < term.start_date)) return;
+    if (!prev || t.start_date > prev.start_date) prev = t;
+  });
+  if (!prev) {
+    return { ok: true, applicable: true, term: term, fromTerm: null, count: 0, drafts: [], students: [],
+      message: '이어받을 직전 학기가 없습니다. 첫 학기는 "명단 올리기"로 올려 주세요.' };
+  }
+  var drafts = carryOverEnrollments_(terms, enrollments, changes, term);
+  var byId = {};
+  (students || []).forEach(function (s) { byId[s.id] = s; });
+  return {
+    ok: true, applicable: true, term: term, fromTerm: prev, count: drafts.length, drafts: drafts,
+    students: drafts.map(function (d) { var s = byId[d.student_id] || {}; return { student_no: s.student_no || '', name: s.name || '' }; }),
+    message: drafts.length ? '' : '이어받을 학생이 없습니다. 직전 학기("' + prev.name + '")에서 새 학기 시작일에 학사생인 학생이 이미 모두 등록되어 있거나 없습니다.'
+  };
+}
+
+function termCarryView_(plan) {
+  if (!plan.ok) return { ok: false, error: plan.error };
+  return { ok: true, applicable: plan.applicable, message: plan.message, termName: plan.term.name,
+    fromTermName: plan.fromTerm ? plan.fromTerm.name : '', count: plan.count, students: plan.students.slice(0, 200) };
+}
+
+function termCarryLoad_() {
+  return { terms: readAll_('terms'), enrollments: readAll_('enrollments'), changes: readAll_('status_changes'), students: readAll_('students') };
+}
+
+/** 이어받기 미리보기(쓰기 없음). 관리자만. */
+function previewCarryOver(termId) {
+  requirePermission_('term.edit');
+  var d = termCarryLoad_();
+  return termCarryView_(termCarryPlan_(d.terms, d.enrollments, d.changes, d.students, termId));
+}
+
+/**
+ * 이어받기 저장: 직전 학기 학사생의 등록을 새 기간에 만든다. 관리자만.
+ * expectCount = 미리보기가 보여 준 인원. 락 안에서 다시 계산해 다르면 거부한다. 다시 눌러도 이미 등록된 학생은 건너뛴다.
+ */
+function commitCarryOver(termId, expectCount) {
+  var user = requirePermission_('term.edit');
+  return withLock_(function () {
+    ['terms', 'enrollments', 'status_changes', 'students'].forEach(function (n) { invalidate_('db', n); });
+    var d = termCarryLoad_();
+    var plan = termCarryPlan_(d.terms, d.enrollments, d.changes, d.students, termId);
+    if (!plan.ok) return { ok: false, error: plan.error };
+    if (!plan.applicable || !plan.count) return { ok: false, error: plan.message || '이어받을 학생이 없습니다.' };
+    if (plan.count !== Number(expectCount)) {
+      return { ok: false, stale: true, error: '미리보기 이후 데이터가 바뀌었습니다. [미리보기]를 다시 눌러 인원을 확인해 주세요.' };
+    }
+    bulkAppend_('enrollments', plan.drafts.map(function (x) {
+      return { term_id: x.term_id, student_id: x.student_id, teacher_email: x.teacher_email, veritas: x.veritas,
+        commute_type: x.commute_type, end_type: x.end_type, memo: x.memo };
+    }), user.email);
+    return { ok: true, count: plan.count };
   });
 }

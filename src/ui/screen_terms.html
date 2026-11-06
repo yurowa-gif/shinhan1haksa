@@ -22,14 +22,17 @@
     var state = { data: null, editing: null, canEdit: true };
     var listBox = el('div', { class: 'card' });
     var formBox = el('div', { class: 'card' });
+    var carryBox = el('div', { class: 'card' });
     root.appendChild(listBox);
     root.appendChild(formBox);
+    root.appendChild(carryBox);
 
     function load(note) {
       call('listTerms').then(function (data) {
         state.data = data;
         drawList();
         drawForm(note);
+        drawCarry();
       }).catch(function (err) { clear(listBox); showError(listBox, err); });
     }
 
@@ -60,6 +63,7 @@
 
     function drawForm(note) {
       clear(formBox);
+      if (!state.data.canEdit) { formBox.style.display = 'none'; return; }
       var t = state.editing;
       formBox.appendChild(el('h2', { text: t ? '기간 수정' : '기간 추가' }));
       if (note) formBox.appendChild(el('div', { class: 'term-ok', text: note }));
@@ -107,6 +111,55 @@
           state.editing = null;
           load(r.warnings.length ? '저장했습니다. 확인: ' + r.warnings.join(' ') : '저장했습니다.');
         }).catch(function (err) { save.disabled = false; clear(msg); showError(msg, err); });
+      });
+    }
+
+    /** 이전 학기 명단 이어받기(관리자): 학기 기간만. 미리보기로 인원을 확인한 뒤 저장한다. */
+    function drawCarry() {
+      clear(carryBox);
+      if (!state.data.canEdit) { carryBox.style.display = 'none'; return; }
+      carryBox.appendChild(el('h2', { text: '이전 학기 명단 이어받기' }));
+      var terms = state.data.terms.filter(function (t) { return t.type === '학기'; });
+      if (!terms.length) { carryBox.appendChild(el('div', { class: 'muted', text: '학기 기간을 먼저 추가해 주세요. 방학에는 이어받기가 없습니다.' })); return; }
+      carryBox.appendChild(el('div', { class: 'muted', text: '직전 학기에 학사생이던 학생(새 학기 시작일 기준)을 새 학기 명단에 등록합니다. 퇴실한 학생은 빠집니다.' }));
+      var sel = el('select', {}, terms.map(function (t) { return el('option', { value: t.id, text: t.name + ' (' + t.start_date + ' ~)' }); }));
+      sel.value = terms[terms.length - 1].id;
+      carryBox.appendChild(UI.field('이어받을 새 학기', sel, { name: 'carry' }));
+      var out = el('div');
+      var preview = el('button', { type: 'button', class: 'btn secondary', text: '미리보기' });
+      var go = el('button', { type: 'button', class: 'btn', text: '이어받기', disabled: 'disabled' });
+      go.disabled = true;
+      carryBox.appendChild(el('div', { class: 'term-actions' }, [preview, go]));
+      carryBox.appendChild(out);
+      var shown = null;
+      sel.addEventListener('change', function () { shown = null; go.disabled = true; clear(out); });
+      preview.addEventListener('click', function () {
+        preview.disabled = true; go.disabled = true; clear(out);
+        call('previewCarryOver', sel.value).then(function (r) {
+          preview.disabled = false;
+          if (!r.ok) { out.appendChild(el('div', { class: 'error', text: r.error })); return; }
+          if (r.message) out.appendChild(el('div', { class: 'muted', text: r.message }));
+          if (!r.count) return;
+          shown = r;
+          out.appendChild(kv([['이어받을 학기', r.fromTermName], ['새 학기', r.termName], ['이어받는 학생', r.count + '명']]));
+          var ul = el('ul', { class: 'list' });
+          r.students.slice(0, 30).forEach(function (x) { ul.appendChild(el('li', {}, [el('span', { text: x.student_no + ' ' + x.name })])); });
+          if (r.count > 30) ul.appendChild(el('li', {}, [el('span', { class: 'muted', text: '외 ' + (r.count - 30) + '명' })]));
+          out.appendChild(ul);
+          go.disabled = false;
+        }).catch(function (err) { preview.disabled = false; showError(out, err); });
+      });
+      go.addEventListener('click', function () {
+        if (!shown) return;
+        UI.confirmSheet({ title: '이어받을까요?', message: shown.fromTermName + ' → ' + shown.termName + ': 학생 ' + shown.count + '명을 등록합니다.',
+          confirmText: '이어받기', cancelText: '취소', onconfirm: function () {
+            go.disabled = true;
+            call('commitCarryOver', sel.value, shown.count).then(function (r) {
+              if (!r.ok) { UI.toast(r.error, { kind: 'warn', ms: 5000 }); clear(out); return; }
+              UI.toast(r.count + '명을 이어받았습니다.', { kind: 'ok' });
+              clear(out); out.appendChild(el('div', { class: 'notice ok', text: r.count + '명을 이어받았습니다. 변경이 필요한 학생은 "명단 올리기"로 고칩니다.' }));
+            }).catch(function (err) { go.disabled = false; UI.toast(err.message || String(err), { kind: 'warn', ms: 5000 }); });
+          } });
       });
     }
 

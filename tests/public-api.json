@@ -18,6 +18,8 @@
     "seedFakeStage1":    { "use": "편집기", "guard": "assertOwnerRun_" },
     "listTerms":         { "use": "화면",   "guard": "requirePermission_" },
     "saveTerm":          { "use": "화면",   "guard": "requirePermission_" },
+    "previewCarryOver":  { "use": "화면",   "guard": "requirePermission_" },
+    "commitCarryOver":   { "use": "화면",   "guard": "requirePermission_" },
     "getScheduleData":   { "use": "화면",   "guard": "requirePermission_" },
     "saveBlocks":        { "use": "화면",   "guard": "requirePermission_" },
     "saveDaySchedule":   { "use": "화면",   "guard": "requirePermission_" },
