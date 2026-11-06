@@ -33,6 +33,20 @@ function doGet(e) {
     return renderPage_('ui/NoAccess', { email: user.email }, '권한 없음');
   }
 
+  // 화면(?page=...): 역할을 확인한 뒤 화면 조각을 끼운다. 진짜 권한 검사는 화면이 부르는 서버 함수가 한다.
+  if (p.page) {
+    var sc = screenResolve_(p.page, user.roles);
+    if (!sc.ok) {
+      logDenied_(user.email, 'screen.' + String(p.page).slice(0, 40), sc.why);
+      return renderPage_('ui/NoAccess', { email: user.email }, '권한 없음');
+    }
+    return renderPage_('ui/screen_shell', {
+      screenFile: sc.screen.file,
+      screenTitle: sc.screen.title,
+      appUrl: ScriptApp.getService().getUrl()
+    }, sc.screen.title);
+  }
+
   // 역할 전환: 요청한 역할을 실제로 가진 경우에만 허용
   var role = p.role && hasRole_(user, p.role) ? p.role : user.roles[0];
 
@@ -44,6 +58,23 @@ function doGet(e) {
     appUrl: ScriptApp.getService().getUrl(),
     diagEnabled: isDiagEnabled_()
   }, ROLE_LABELS[role]);
+}
+
+/**
+ * 화면 목록. 새 화면은 여기 한 줄 + src/ui/screen_<이름>.html 하나.
+ * view: 화면을 열 수 있는 역할을 정하는 permissions_ 키
+ */
+var SCREENS = {
+  terms: { file: 'ui/screen_terms', title: '운영 기간', view: 'term.view' }
+};
+
+/** 순수 판정: 이 역할들이 이 화면을 열 수 있는가 → {ok, screen} 또는 {ok:false, why} */
+function screenResolve_(page, roles) {
+  if (!Object.prototype.hasOwnProperty.call(SCREENS, String(page))) return { ok: false, why: '없는 화면' };
+  var screen = SCREENS[page];
+  var rule = permissions_()[screen.view];
+  if (!rule || !hasAnyAllowedRole_(roles, rule.roles)) return { ok: false, why: '역할 불일치' };
+  return { ok: true, screen: screen };
 }
 
 function renderPage_(file, vars, title) {
@@ -78,7 +109,8 @@ function getHomeData(role) {
     role: role,
     userName: user.name,
     today: today_(),
-    termName: term ? term.name : '(운영 기간 없음)'
+    termName: term ? term.name : '(운영 기간 없음)',
+    appUrl: ScriptApp.getService().getUrl()
   };
 
   switch (role) {

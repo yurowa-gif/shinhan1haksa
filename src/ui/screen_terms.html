@@ -1,0 +1,120 @@
+<style>
+  .term-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%;
+    min-height: 56px; padding: 10px 4px; border: 0; border-bottom: 1px solid var(--line); background: transparent;
+    color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+  .term-row:last-child { border-bottom: 0; }
+  .term-tag { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .8rem;
+    background: var(--accent-weak); color: var(--accent); border: 1px solid var(--accent); }
+  .term-field { margin-bottom: 14px; }
+  .term-field label { display: block; margin-bottom: 4px; color: var(--muted); font-size: .9rem; }
+  .term-field input, .term-field select { width: 100%; min-height: 48px; padding: 8px 12px; font: inherit;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--text); }
+  .term-field .fix { color: var(--warn); font-size: .9rem; margin-top: 4px; }
+  .term-warn { background: var(--warn-weak); color: var(--warn); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
+  .term-ok { color: var(--ok); margin-bottom: 12px; }
+  .term-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+</style>
+<script>
+  /** 운영 기간 화면(관리자는 추가·수정, 그 밖의 교사는 보기). C1. */
+  function renderScreen(root) {
+    // DESIGN 이관 후보: localField(라벨 + 입력 + 오류 문구)
+    function localField(label, input, name) {
+      return el('div', { class: 'term-field' }, [
+        el('label', { text: label }), input, el('div', { class: 'fix', 'data-for': name })
+      ]);
+    }
+
+    var state = { data: null, editing: null, canEdit: true };
+    var listBox = el('div', { class: 'card' });
+    var formBox = el('div', { class: 'card' });
+    root.appendChild(listBox);
+    root.appendChild(formBox);
+
+    function load(note) {
+      call('listTerms').then(function (data) {
+        state.data = data;
+        drawList();
+        drawForm(note);
+      }).catch(function (err) { clear(listBox); showError(listBox, err); });
+    }
+
+    function drawList() {
+      clear(listBox);
+      listBox.appendChild(el('h2', { text: '운영 기간' }));
+      listBox.appendChild(el('div', { class: 'muted', text: '오늘은 ' + state.data.today + '입니다.' }));
+      if (!state.data.terms.length) {
+        listBox.appendChild(el('div', { class: 'muted', text: '아직 기간이 없습니다. 아래에서 첫 기간을 추가해 주세요.' }));
+        return;
+      }
+      var list = el('div', { style: 'margin-top:8px' });
+      state.data.terms.forEach(function (t) {
+        list.appendChild(el('button', {
+          type: 'button', class: 'term-row',
+          onclick: function () { state.editing = t; drawForm(); }
+        }, [
+          el('span', {}, [
+            el('b', { text: t.name }), ' ',
+            el('span', { class: 'muted', text: t.type }),
+            el('div', { class: 'muted', text: t.start_date + ' ~ ' + t.end_date })
+          ]),
+          t.isCurrent ? el('span', { class: 'term-tag', text: '현재' }) : null
+        ]));
+      });
+      listBox.appendChild(list);
+    }
+
+    function drawForm(note) {
+      clear(formBox);
+      var t = state.editing;
+      formBox.appendChild(el('h2', { text: t ? '기간 수정' : '기간 추가' }));
+      if (note) formBox.appendChild(el('div', { class: 'term-ok', text: note }));
+
+      var name = el('input', { type: 'text', maxlength: '40', placeholder: '예: 2027 1학기' });
+      var type = el('select', {}, state.data.types.map(function (x) { return el('option', { value: x, text: x }); }));
+      var start = el('input', { type: 'date' });
+      var end = el('input', { type: 'date' });
+      var memo = el('input', { type: 'text', placeholder: '메모(선택)' });
+      if (t) { name.value = t.name; type.value = t.type; start.value = t.start_date; end.value = t.end_date; memo.value = t.memo; }
+
+      formBox.appendChild(localField('기간 이름', name, 'name'));
+      formBox.appendChild(localField('유형', type, 'type'));
+      formBox.appendChild(localField('시작일', start, 'start_date'));
+      formBox.appendChild(localField('종료일', end, 'end_date'));
+      formBox.appendChild(localField('메모', memo, 'memo'));
+      var msg = el('div');
+      formBox.appendChild(msg);
+
+      var save = el('button', { type: 'button', class: 'btn', text: '저장' });
+      var actions = el('div', { class: 'term-actions' }, [save]);
+      if (t) actions.appendChild(el('button', {
+        type: 'button', class: 'btn secondary', text: '새 기간으로 돌아가기',
+        onclick: function () { state.editing = null; drawForm(); }
+      }));
+      formBox.appendChild(actions);
+
+      save.addEventListener('click', function () {
+        save.disabled = true;
+        clear(msg);
+        Array.prototype.forEach.call(formBox.querySelectorAll('.fix'), function (n) { n.textContent = ''; });
+        call('saveTerm', {
+          id: t ? t.id : '', name: name.value, type: type.value,
+          start_date: start.value, end_date: end.value, memo: memo.value
+        }).then(function (r) {
+          save.disabled = false;
+          if (!r.ok) {
+            r.errors.forEach(function (e) {
+              var slot = formBox.querySelector('.fix[data-for="' + e.field + '"]');
+              if (slot) slot.textContent = e.message;
+            });
+            msg.appendChild(el('div', { class: 'error', text: '저장하지 못했습니다. 빨간 글씨를 고쳐 주세요.' }));
+            return;
+          }
+          state.editing = null;
+          load(r.warnings.length ? '저장했습니다. 확인: ' + r.warnings.join(' ') : '저장했습니다.');
+        }).catch(function (err) { save.disabled = false; clear(msg); showError(msg, err); });
+      });
+    }
+
+    load();
+  }
+</script>
