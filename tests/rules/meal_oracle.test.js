@@ -12,7 +12,9 @@
  *     따로 계산)부터는 중단일 이후에 시작하는 학사 석식 의도를 세지 않고(고친 적용일로 생길 수 있다), 남은 가장 늦은 의도가
  *     학사 석식이면 '미실시', 아니면 그 값. 중단일 전에는 정확히 가장 늦은 의도의 값.
  * 사건(무작위): F7 신청(늦게 입력한 이전 신청서, 교사가 고친 적용일 포함 — R10), 학사 퇴실(미리·당일·늦게 입력, movePlan_),
- * 퇴실 취소(moveUndoPlan_ — 퇴실이 없었던 것처럼)·재입실(movePlan_ 학사 입실 — 재입실일부터 퇴실 전날 값을 새 의도로, R11b). 신청마다 같은 계획을 바로 다시 세우면
+ * 퇴실 취소(moveUndoPlan_ — 퇴실이 없었던 것처럼, 퇴실과 함께 고른 일반 석식도)·재입실(movePlan_ 학사 입실 — 재입실일부터 퇴실 전날 값을
+ * 새 의도로, 단 퇴실 기록 전 학생 신청 중 살아 있는 것은 남는다, R11b). 퇴실 때 넷에 하나는 석식 '일반 석식으로'(R11a).
+ * 신청이 superseded(더 새 의도가 그 전에 적용)인지도 오라클이 따로 판정한다(퇴실 정리가 끊은 의도는 빼고). 신청마다 같은 계획을 바로 다시 세우면
  * 할 일이 없어야 한다(수렴). 사건마다 3/1~4/30 모든 날을 비교한다.
  * 사건마다 날짜 7개 중 하나씩 돌아가며(9일 정도) 비교하고, 마지막 사건 뒤에는 모든 날을 비교한다(npm test 시간).
  * 기본 400가지, ORACLE_FULL=1이면 사건 수를 그대로 두고 매 사건 모든 날을 비교한다.
@@ -65,13 +67,28 @@ function simulate(seed, steps) {
     return head;
   }
 
+  // 그날 값의 의도: 신청 일시가 가장 늦은 의도. 단 재입실 의도(R)는 재입실일 값만 정한다 — R 뒤의 신청이 없으면, 퇴실 기록 전 신청만
+  // 본 그날 값(퇴실 정리가 끊은 것 빼고)이 재입실일보다 늦게 적용된 것이면 그 값, 아니면 R(총괄 결정: 학생이 낸 대기 신청은 그대로)
+  // 석식 정리(학사 석식을 끊는) 날: 퇴실 때 고른 일반 석식이 아직 그 날의 가장 새 의도면 그 날, 아니면 결정 35 중단일
+  function cutDate(lv) {
+    const g = lv.general;
+    if (g && intents.includes(g) && !intents.some((j) => j !== g && j.item === '석식' && !j.reentry && j.req > g.req && j.eff <= g.eff)) return g.eff;
+    return stop35(lv.t, lv.L);
+  }
   function oracleTop(item, d, skip) {
-    let top = null;
-    for (const i of intents) {
-      if (i.item !== item || i.eff > d || (skip && skip(i))) continue;
-      if (!top || i.req > top.req || (i.req === top.req && i.seq > top.seq)) top = i;
-    }
-    return top;
+    const live = intents.filter((i) => i.item === item && i.eff <= d && !(skip && skip(i)));
+    const newest = (list) => list.reduce((t, i) => (!t || i.req > t.req || (i.req === t.req && i.seq > t.seq) ? i : t), null);
+    const R = newest(live.filter((i) => i.reentry));
+    if (!R) return newest(live);
+    const after = newest(live.filter((i) => !i.reentry && i.req > R.req));
+    if (after) return after;
+    const cut = (i) => isHall(i.item, i.value) && i.eff >= (i.item === '조식' ? R.reentry.L : R.reentry.cutD());
+    // 퇴실 기록 전에 낸 신청 중 아직 살아 있는 것(다른 값의 더 새 의도가 그 전에 적용되지 않음, 퇴실 정리가 끊지 않음) — 그날까지 적용된 가장 새것
+    const alive = (i) => !intents.some((j) => j !== i && j.item === i.item && j.value !== i.value && !j.reentry && !cut(j) && j.req > i.req && j.eff <= i.eff);
+    // 살아 있는 것끼리는 시트와 같이 적용일이 늦은 것(같으면 신청 일시) — 같은 값 행은 서로 취소하지 않아 신청 순서와 적용일 순서가 다를 수 있다
+    const pre = live.filter((i) => !i.reentry && i.req < R.reentry.t && !cut(i) && alive(i))
+      .reduce((t, i) => (!t || i.eff > t.eff || (i.eff === t.eff && i.req > t.req) ? i : t), null);
+    return pre && pre.eff > R.eff ? pre : R;
   }
 
   function check(stepNo, all) {
@@ -82,7 +99,7 @@ function simulate(seed, steps) {
       const tb = oracleTop('조식', d, inLeave ? (i) => isHall('조식', i.value) : null);
       assert.strictEqual(b, tb ? tb.value : '미실시', where + '\n조식 ' + d);
       // 중단일부터: 중단일 이후에 시작하는 학사 석식 의도는 세지 않고(F6 정리가 취소), 남은 가장 늦은 의도가 학사 석식이면 미실시
-      const stop = leave ? stop35(leave.t, leave.L) : null;
+      const stop = leave ? cutDate(leave) : null;
       const stopped = stop && d >= stop && (!leave.E || d < leave.E);
       const top = oracleTop('석식', d, stopped ? (i) => isHall('석식', i.value) && i.eff >= stop : null).value;
       const want = stopped && isHall('석식', top) ? '미실시' : top;
@@ -101,7 +118,8 @@ function simulate(seed, steps) {
       // F6 학사 퇴실 저장(되살림 포함). 넷에 하나는 석식 '일반 석식으로' — 퇴실 입력 일시의 일반 석식 신청(의도)
       const general = R() < 0.25;
       leave = { L, t, E: null, head: saveMove({ type: '학사 퇴실', effectiveDate: L, requestedAt: t, dinner: general ? '일반 석식' : '중단' }, today) };
-      if (general) intents.push({ item: '석식', value: '일반 석식', eff: ctx.mealEffectiveDate_('to_general', t, { leaveDate: L }).date, req: t, seq: ++seq });
+      if (general) intents.push(leave.general = { item: '석식', value: '일반 석식', eff: ctx.mealEffectiveDate_('to_general', t, { leaveDate: L }).date, req: t, seq: ++seq });
+
       log.push(today + ' 퇴실 입력: 퇴실일 ' + L + (general ? ' 일반 석식으로' : ''));
     } else if (leave && !leave.E && R() < 0.15) {
       if (R() < 0.5) {
@@ -110,6 +128,7 @@ function simulate(seed, steps) {
         cancel(u.toCancel, '퇴실 취소');
         u.toRestore.forEach((c) => Object.assign(rows.find((r) => r.id === c.id), { status: '유효', cancel_reason: '' }));
         log.push(today + ' 퇴실 취소(' + leave.L + ') 취소 ' + u.toCancel.length + ' 되살림 ' + u.toRestore.length);
+        if (leave.general) intents.splice(intents.indexOf(leave.general), 1);   // 퇴실과 함께 고른 일반 석식도 없었던 것으로
         leave = null;
       } else {
         // R11b 재입실: 재입실일부터 퇴실 전날 값으로 급식을 다시 시작한다(오라클은 그 값을 따로 계산해 의도로 넣는다)
@@ -117,7 +136,8 @@ function simulate(seed, steps) {
         const before = ctx.ymdAddDays_(leave.L, -1);
         const pre = { '조식': (oracleTop('조식', before) || { value: '미실시' }).value, '석식': oracleTop('석식', before).value };
         saveMove({ type: '학사 입실', effectiveDate: E, requestedAt: t2 }, today);
-        for (const item of ['조식', '석식']) intents.push({ item, value: pre[item], eff: E, req: t2, seq: ++seq });
+        for (const item of ['조식', '석식']) intents.push({ item, value: pre[item], eff: E, req: t2, seq: ++seq, reentry: { t: leave.t, L: leave.L, cutD: ((lv) => () => cutDate(lv))(leave) } });
+        if (leave.general && leave.general.eff >= E) intents.splice(intents.indexOf(leave.general), 1);   // 퇴실과 함께 고른 일반 석식은 재입실일부터 뜻이 없다
         leave.E = E;
         log.push(today + ' 재입실 입력: 재입실일 ' + E + ' 급식 ' + pre['조식'] + '/' + pre['석식']);
       }
@@ -135,7 +155,11 @@ function simulate(seed, steps) {
       const voidHall = isHall(item, to) && leave && eff >= leave.L && (!leave.E || eff < leave.E) && (item === '조식' || req >= leave.t || eff >= stop35(leave.t, leave.L));
       log.push(today + ' 신청 ' + item + '→' + to + ' (신청 ' + req + (late ? ' 늦은 입력' : '') + (manual ? ' 수동 ' + manual : '') + ') → ' + JSON.stringify({ k: p.kind, d: p.date, b: !!p.blocked, s: p.superseded, c: p.toCancel.length, f: p.followUps.length }));
       assert.strictEqual(!!p.blocked, !!voidHall, 'seed ' + seed + ' blocked 판정\n' + log.slice(-6).join('\n'));
-      if (!voidHall) intents.push({ item, value: to, eff, req, seq: ++seq });
+      // 늦게 입력한 이전 신청서는 더 새 의도가 그 전에 적용되면 영영 적용되지 않는다(오라클이 따로 판정 — 의도로 남기지 않는다)
+      const cut = (i) => leave && isHall(i.item, i.value) && i.eff >= (i.item === '조식' ? leave.L : cutDate(leave)) && (!leave.E || i.eff < leave.E);   // 퇴실 정리가 끊은 의도
+      const shadowed = intents.some((i) => i.item === item && i.req > req && i.eff <= eff && !cut(i));
+      assert.strictEqual(p.superseded, !voidHall && shadowed, 'seed ' + seed + ' superseded 판정\n' + log.slice(-6).join('\n'));
+      if (!voidHall && !shadowed) intents.push({ item, value: to, eff, req, seq: ++seq });
       if (p.blocked) { check(step); continue; }
       cancel(p.toCancel, '[자동] r' + (rid + 1) + ' 새 신청으로 대체');   // 신청 행 id = 다음 addRow
       if (!p.superseded) {

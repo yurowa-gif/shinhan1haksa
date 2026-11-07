@@ -104,7 +104,7 @@ function mealIsHallOnly_(item, value) {
  * changes = 그 학생의 status_changes 행(학사·조식·석식, 취소 포함 그대로), requestedAt = 신청 일시(KST, 교사가 넣는 신청서 일시),
  * opts = {cutoff, leaveDate, today:'yyyy-MM-dd'(필수, 입력하는 날), effectiveDate, effectiveRule:'manual'(기본)|'entry_date'}
  * → {kind, date, rule, autoDate, from, blocked:''|사유, superseded:boolean, toCancel:[{id, effective_date, value}],
- *    followUps:[{item, value, effective_date, source:'F6'}], warnings:[]}
+ *    followUps:[{item, value, effective_date, source}], warnings:[]}   source: 미실시 중단 행 'F6', 재입실일 값 행 'F7'(R11b) — 저장 쪽은 그대로 쓴다
  *
  * 기준(오라클과 같은 뜻): 어떤 날의 값 = 그날까지 적용일이 지난 신청 중 **신청 일시가 가장 늦은** 신청의 값.
  *   학사생만 받는 값(조식 '실시'·석식 '학사 석식')은 학사 퇴실 뒤 끝나는 날(조식은 퇴실일, 석식은 결정 35의 중단일)부터는 셈하지 않는다.

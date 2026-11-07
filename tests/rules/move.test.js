@@ -220,7 +220,12 @@ test('퇴실 취소: 급식 신청의 followUps로 쓴 퇴실 정리 행(연결 
 });
 
 test('퇴실 취소: 없는·이미 취소된 대표는 경고만, 지난 적용일은 경고', () => {
-  assert.deepStrictEqual(undo(HALL(), 'nope').toCancel, []);
+  const none = undo(HALL(), 'nope');
+  assert.deepStrictEqual([none.toCancel, none.toRestore, none.warnings.length], [[], [], 1]);
+  const gone = HALL().concat([CH('학사', '퇴실', '2027-03-10', { id: 'dead', source: 'F6', status: '취소', requested_at: '2027-03-08T10:00:00' })]);
+  const g = undo(gone, 'dead');
+  assert.deepStrictEqual([g.toCancel, g.toRestore], [[], []]);
+  assert.ok(/이미 취소/.test(g.warnings[0]));
   const left = saveMove(HALL(), LEAVE, '2027-03-08');
   assert.ok(undo(left.rows, left.head, '2027-03-12').warnings.some((w) => /지났습니다/.test(w)));
 });
@@ -329,4 +334,52 @@ test('C16 후속: 명단 초기 행(명단업로드)은 "대기 중인 신청 �
   const rows = [CH('조식', '실시', '2027-03-10')];   // 기간 시작 3/10 명단 초기값
   const p = plain(ctx.mealPlanChange_(rows, 's1', '조식', '미실시', '2027-03-03T09:00:00', { today: '2027-03-03' }));
   assert.ok(!p.warnings.some((w) => /대기 중인 신청/.test(w)), JSON.stringify(p.warnings));
+});
+
+/* ───── 총괄 검토(#57) ───── */
+
+test('퇴실만 되돌린다: 입실(재입실) 대표를 취소하려 하면 경고와 빈 계획(잘못 넣은 입실은 새 퇴실로 바로잡는다)', () => {
+  const left = saveMove(HALL(), LEAVE, '2027-03-08');
+  const back = saveMove(left.rows, { type: '학사 입실', effectiveDate: '2027-03-11', requestedAt: '2027-03-11T09:00:00' }, '2027-03-11');
+  const u = undo(back.rows, back.head, '2027-03-11');
+  assert.deepStrictEqual([u.toCancel, u.toRestore], [[], []]);
+  assert.ok(/퇴실 기록만/.test(u.warnings[0]));
+});
+
+test('같은 날 재입실(입실일 = 퇴실일)도 그 퇴실의 재입실: 급식이 퇴실 전 값으로 다시 이어진다', () => {
+  const left = saveMove(HALL(), LEAVE, '2027-03-08');
+  const back = saveMove(left.rows, { type: '학사 입실', effectiveDate: '2027-03-10', requestedAt: '2027-03-09T09:00:00' }, '2027-03-09');
+  assert.deepStrictEqual(['2027-03-10', '2027-03-20'].map((d) => [at(back.rows, '학사', d), at(back.rows, '조식', d), at(back.rows, '석식', d)]),
+    [['입실', '실시', '학사 석식'], ['입실', '실시', '학사 석식']]);
+});
+
+test('재입실일 뒤에 기록된 학사 퇴실이 있으면 오류(그 퇴실의 정리 행까지 건드리지 않게 — 먼저 취소)', () => {
+  const rows = [CH('학사', '입실', '2027-03-01'), CH('학사', '퇴실', '2027-03-05', { source: 'F6', requested_at: '2027-03-03T10:00:00' }),
+    CH('학사', '퇴실', '2027-03-20', { source: 'F6', requested_at: '2027-03-18T10:00:00' })];
+  const p = plan(rows, { type: '학사 입실', effectiveDate: '2027-03-10', requestedAt: '2027-03-19T09:00:00' }, '2027-03-19');
+  assert.ok(p.errors.some((e) => /이후 날짜에 입퇴실 기록/.test(e)));
+});
+
+test('재입실 급식은 재입실일 값만 정한다: 퇴실 기록 전에 학생이 낸 대기 신청(F7)은 취소하지 않는다(총괄 결정)', () => {
+  // 3/2 신청 조식 미실시(3/8 적용 → 대기 3/25로 고침), 3/8 퇴실 입력(퇴실 3/10), 3/12 재입실 → 조식 3/12 실시, 3/25부터 미실시(학생 신청 그대로)
+  const base = HALL().concat([CH('조식', '미실시', '2027-03-25', { source: 'F7', requested_at: '2027-03-02T09:00:00' })]);
+  const left = saveMove(base, LEAVE, '2027-03-08');
+  const back = saveMove(left.rows, { type: '학사 입실', effectiveDate: '2027-03-12', requestedAt: '2027-03-11T09:00:00' }, '2027-03-11');
+  assert.deepStrictEqual([at(back.rows, '조식', '2027-03-12'), at(back.rows, '조식', '2027-03-25')], ['실시', '미실시']);
+  // 퇴실 기록 뒤(3/9)에 낸 다른 값 대기 신청은 재입실이 덮는다
+  const later = left.rows.concat([CH('조식', '미실시', '2027-03-22', { source: 'F7', requested_at: '2027-03-09T09:00:00' })]);
+  const back2 = saveMove(later, { type: '학사 입실', effectiveDate: '2027-03-12', requestedAt: '2027-03-11T09:00:00' }, '2027-03-11');
+  // 3/22 신청(퇴실 기록 뒤)은 재입실이 취소하고, 3/25 학생 신청(퇴실 전)은 남는다
+  assert.deepStrictEqual(['2027-03-22', '2027-03-24', '2027-03-25'].map((d) => at(back2.rows, '조식', d)), ['실시', '실시', '미실시']);
+});
+
+test('재입실은 퇴실과 함께 고른 일반 석식(연결 F7, 재입실일 이후)을 취소하고, 그것이 취소했던 학생 신청을 되살린다', () => {
+  const base = HALL().concat([CH('석식', '미실시', '2027-03-29', { source: 'F7', requested_at: '2027-03-02T09:00:00' })]);
+  const left = saveMove(base, { type: '학사 퇴실', effectiveDate: '2027-03-10', requestedAt: '2027-03-08T10:00:00', dinner: '일반 석식' }, '2027-03-08');
+  // 같은 날 재입실(3/10): 일반 석식(3/10, 퇴실일 하한)은 재입실일 이후라 뜻이 없어진다
+  const p = plan(left.rows, { type: '학사 입실', effectiveDate: '2027-03-10', requestedAt: '2027-03-09T09:00:00' }, '2027-03-09');
+  assert.deepStrictEqual(p.errors, []);
+  const general = left.rows.find((r) => r.linked_change_id === left.head && r.value === '일반 석식');
+  assert.ok(p.toCancel.some((c) => c.id === general.id));
+  assert.ok(p.toRestore.some((c) => base.some((b) => b.id === c.id && b.effective_date === '2027-03-29')));
 });
