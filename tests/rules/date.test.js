@@ -123,3 +123,23 @@ table('isoLocalSplit_: 잘못된 일시와 시간대가 붙은 값은 Error', [
   '2027-03-01', '2027-03-01T9:00:00', '2027-03-01T11:30:00Z', '2027-03-01T11:30:00+09:00',
   '2027-03-01T11:30:00.000', '', null
 ], (iso) => assert.throws(() => ctx.isoLocalSplit_(iso)));
+
+/* ───── 공통 헬퍼(R7) ───── */
+
+table('ruleStr_·ruleIso_: 빈칸·공백·숫자, 공백 구분 일시는 T 형식으로', [
+  [undefined, '', ''], [null, '', ''], ['  a b  ', 'a b', 'a b'], [0, '0', '0'], [12, '12', '12'],
+  [' 2027-03-01 09:00:00 ', '2027-03-01 09:00:00', '2027-03-01T09:00:00'], ['2027-03-01T09:00:00', '2027-03-01T09:00:00', '2027-03-01T09:00:00']
+], ([v, str, iso]) => {
+  assert.strictEqual(ctx.ruleStr_(v), str);
+  assert.strictEqual(ctx.ruleIso_(v), iso);
+});
+
+table('ruleRowLive_: status 빈칸·유효(앞뒤 공백 무시)만 살아 있음', [
+  [{ status: '' }, true], [{ status: ' 유효 ' }, true], [{}, true], [null, true],
+  [{ status: '취소' }, false], [{ status: '요청' }, false]
+], ([r, want]) => assert.strictEqual(ctx.ruleRowLive_(r), want));
+
+table('hmNorm_: 너그러운 시각 읽기 — 빈칸 \'\', 시각이 아니면 null(던지지 않음)', [
+  ['9:30', '09:30'], ['21:30:00', '21:30'], [' 07:05 ', '07:05'], ['24:00', '24:00'], ['', ''], [undefined, ''],
+  ['25:00', null], ['21:30:15', null], ['9시', null], ['1899-12-30', null]
+], ([v, want]) => assert.strictEqual(ctx.hmNorm_(v), want));

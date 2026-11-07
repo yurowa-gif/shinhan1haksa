@@ -1,7 +1,7 @@
 /**
  * 자습 일정 규칙(RULES 세션 소유, docs/contracts/rules-api.md, PRD 3.3).
  *
- * 순수 함수만 둔다. DateRules.gs의 함수(ymd…·hm…)를 부른다.
+ * 순수 함수만 둔다. DateRules.gs의 함수(ymd…·hm…·ruleStr_·hmNorm_)를 부른다.
  * 시트 행은 Db.gs readAll_이 돌려주는 모양(모든 값이 문자열)을 그대로 받는다.
  *   day_schedules: date, operating, start, end, day_type, memo, status, updated_at …
  *   blocks:        term_type, day_type, seq, start, end, label, status, updated_at …
@@ -18,7 +18,7 @@ function schedIsCancelled_(row) {
   return String((row && row.status) || '').trim() === '취소';
 }
 
-/** features/Schedule.gs가 부르는 이름. 같은 일은 DateRules.gs hmNorm_. */
+/** features/Schedule.gs가 부르는 이름(이 파일 안에서는 hmNorm_을 쓴다). 그쪽이 hmNorm_으로 바꾸면 지운다. */
 function schedNormHm_(v) {
   return hmNorm_(v);
 }
@@ -63,7 +63,7 @@ function schedOperatingValue_(v) {
  * '취소' 행은 건너뛴다. term_type은 '학기'·'방학', day_type은 빈칸이 아니어야 한다.
  * (term_type, day_type)이 같은 행끼리 순서 번호 중복·시간 겹침·순서와 시각 순서 불일치를 본다.
  * 끝이 앞 블록의 시작과 같은 것(20:00–22:00 다음 22:00–24:00)은 겹침이 아니다.
- * 시각은 schedNormHm_으로 읽는다('9:00'·'21:30:00'도 통과).
+ * 시각은 hmNorm_으로 읽는다('9:00'·'21:30:00'도 통과).
  */
 function validateBlocks_(blocks) {
   var errors = [];
@@ -78,7 +78,7 @@ function validateBlocks_(blocks) {
     var seq = ruleStr_(b.seq);
     var seqOk = /^[1-9]\d*$/.test(seq);
     if (!seqOk) errors.push({ index: i, message: '순서는 1 이상의 정수여야 합니다: ' + seq });
-    var start = schedNormHm_(b.start), end = schedNormHm_(b.end);
+    var start = hmNorm_(b.start), end = hmNorm_(b.end);
     var timeOk = true;
     if (!start || start === '24:00') {
       errors.push({ index: i, message: '시작 시각 형식이 아닙니다(HH:mm): ' + ruleStr_(b.start) });
@@ -227,7 +227,7 @@ function resolveDayPlan_(ymd, src) {
 
 /** 시각 값이면 'HH:mm', 빈칸이면 '', 잘못된 값(시작 '24:00' 포함)이면 warnings에 적고 ''. */
 function schedPickHm_(v, what, isStart, warnings) {
-  var hm = schedNormHm_(v);
+  var hm = hmNorm_(v);
   if (hm === '') return '';
   if (hm && !(isStart && hm === '24:00')) return hm;
   warnings.push(what + ' 시각 형식이 아니라 무시했습니다: ' + ruleStr_(v));
@@ -241,7 +241,7 @@ function schedBlocksFor_(rows, termType, dayType, warnings) {
     if (!r || schedIsCancelled_(r)) return;
     if (ruleStr_(r.term_type) !== termType || ruleStr_(r.day_type) !== dayType) return;
     var seq = ruleStr_(r.seq);
-    var start = schedNormHm_(r.start), end = schedNormHm_(r.end);
+    var start = hmNorm_(r.start), end = hmNorm_(r.end);
     if (!/^[1-9]\d*$/.test(seq) || !start || start === '24:00' || !end || hmToMin_(start) >= hmToMin_(end)) {
       warnings.push('잘못된 블록을 건너뛰었습니다: ' + termType + ' ' + dayType + ' ' + seq + ' ' +
         ruleStr_(r.start) + '–' + ruleStr_(r.end));

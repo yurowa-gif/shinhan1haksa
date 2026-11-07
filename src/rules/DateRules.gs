@@ -5,7 +5,8 @@
  * - 날짜: 'yyyy-MM-dd' 문자열. 내부 계산은 Date.UTC로만 해서 실행 시간대(TZ)와 무관하다.
  * - 시각: 'HH:mm'(00:00~23:59, 그리고 하루 끝 '24:00').
  * - 일시: 'yyyy-MM-ddTHH:mm:ss'(KST, Db.gs nowIso_와 같은 형식).
- * 잘못된 입력은 조용히 넘기지 않고 Error를 던진다(검사용으로는 ymdIsValid_·hmIsValid_).
+ * ymd…·hm…·isoLocalSplit_은 잘못된 입력을 조용히 넘기지 않고 Error를 던진다(검사용으로는 ymdIsValid_·hmIsValid_).
+ * 끝의 공통 헬퍼(ruleStr_·ruleIso_·ruleRowLive_·hmNorm_)는 시트 값을 읽는 쪽이라 던지지 않는다 — hmNorm_은 시각이 아니면 null.
  */
 
 /** 'yyyy-MM-dd' 형식이고 달력에 있는 날짜인지(2027-02-29는 false, 2028-02-29는 true). */
@@ -140,7 +141,7 @@ function ruleIso_(v) {
   return ruleStr_(v).replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T');
 }
 
-/** 살아 있는 기록 행인지: status 빈칸·'유효'(취소·요청 등은 아님). */
+/** 살아 있는 기록 행인지: status 빈칸·'유효'(취소·요청 등은 아님). status_changes·violations처럼 유효·취소를 쓰는 탭의 행. */
 function ruleRowLive_(r) {
   var st = ruleStr_(r && r.status);
   return st === '' || st === '유효';

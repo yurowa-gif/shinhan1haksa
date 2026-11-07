@@ -1,7 +1,7 @@
 /**
  * 출석부 칸 규칙(RULES 세션 소유, docs/contracts/rules-api.md·sheet-model.md, PRD 3.4·F1·F2·F9).
  *
- * 순수 함수만 둔다. DateRules.gs의 함수(hm…·ymd…)를 부른다.
+ * 순수 함수만 둔다. DateRules.gs의 함수(hm…·ymd…·ruleStr_·ruleIso_·hmNorm_)를 부른다.
  * 칸 우선순위: 확정 사전 특이사항(EXC) > 확정 고정 일정 '학'·'가'(FIXED) > 23:00 종료 "정상 종료"(END) > 빈칸(NONE).
  * 시트 행(문자열)은 그대로 받는다. 값 글자는 docs/contracts/vocabulary.md.
  *   exceptions_<기간>: id, student_id, date, blocks('ALL' | 'HH:mm-HH:mm;…'), type, status(요청·확정·취소), confirmed_at, updated_at …
