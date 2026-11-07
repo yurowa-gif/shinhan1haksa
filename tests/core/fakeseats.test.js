@@ -57,11 +57,11 @@ test('라벨: 좌석은 공간 안에서 비어 있지 않고 겹치지 않음, 
   for (const c of L.seats.filter((x) => x.kind !== '좌석')) assert.strictEqual(c.label, '');
 });
 
-test('1층은 실제 자리배치도처럼 세로 줄 8개(줄 길이 18·18·18·19·19·20·20·14석)', () => {
+test('1층은 실제 자리배치도처럼 세로 줄 8개(줄별 좌석 수 19·17·18·19·19·20·20·14석, 실제 출석부)', () => {
   const cols = {};
   for (const c of seatsOf('1F', '좌석')) cols[c.col] = (cols[c.col] || 0) + 1;
   assert.deepStrictEqual(Object.keys(cols).map(Number).sort((a, b) => a - b), [1, 3, 4, 6, 7, 9, 10, 12]);
-  assert.deepStrictEqual([1, 3, 4, 6, 7, 9, 10, 12].map((c) => cols[c]), [18, 18, 18, 19, 19, 20, 20, 14]);
+  assert.deepStrictEqual([1, 3, 4, 6, 7, 9, 10, 12].map((c) => cols[c]), [19, 17, 18, 19, 19, 20, 20, 14]);
 });
 
 test('언제 실행해도 같은 결과(새 vm에서 다시 만들어도 같음)', () => {

@@ -69,7 +69,7 @@
      "row": 1,
      "col": 1,
      "kind": "seat",
-     "seatLabel": "1",
+     "seatLabel": "1-1",
      "occupant": {
       "grade": 2,
       "name": "한라온",
@@ -103,7 +103,7 @@
      "row": 1,
      "col": 3,
      "kind": "seat",
-     "seatLabel": "2",
+     "seatLabel": "2-1",
      "occupant": {
       "grade": 3,
       "name": "윤자람",
@@ -137,7 +137,7 @@
      "row": 1,
      "col": 4,
      "kind": "seat",
-     "seatLabel": "3",
+     "seatLabel": "3-1",
      "occupant": {
       "grade": 1,
       "name": "김단비",
@@ -171,7 +171,7 @@
      "row": 1,
      "col": 6,
      "kind": "seat",
-     "seatLabel": "4",
+     "seatLabel": "4-1",
      "occupant": {
       "grade": 2,
       "name": "박별하",
@@ -205,7 +205,7 @@
      "row": 1,
      "col": 7,
      "kind": "seat",
-     "seatLabel": "5",
+     "seatLabel": "5-1",
      "occupant": {
       "grade": 3,
       "name": "장보람",
@@ -239,7 +239,7 @@
      "row": 1,
      "col": 9,
      "kind": "seat",
-     "seatLabel": "6",
+     "seatLabel": "6-1",
      "occupant": {
       "grade": 1,
       "name": "권보람",
@@ -273,7 +273,7 @@
      "row": 1,
      "col": 10,
      "kind": "seat",
-     "seatLabel": "7",
+     "seatLabel": "7-1",
      "occupant": {
       "grade": 2,
       "name": "신구름",
@@ -307,7 +307,7 @@
      "row": 1,
      "col": 12,
      "kind": "seat",
-     "seatLabel": "8",
+     "seatLabel": "8-1",
      "occupant": {
       "grade": 3,
       "name": "신나래",
@@ -341,7 +341,7 @@
      "row": 2,
      "col": 1,
      "kind": "seat",
-     "seatLabel": "9",
+     "seatLabel": "1-2",
      "occupant": null,
      "vacant": true,
      "marks": [
@@ -371,7 +371,7 @@
      "row": 2,
      "col": 3,
      "kind": "seat",
-     "seatLabel": "10",
+     "seatLabel": "2-2",
      "occupant": {
       "grade": 2,
       "name": "장해솔",
@@ -405,7 +405,7 @@
      "row": 2,
      "col": 4,
      "kind": "seat",
-     "seatLabel": "11",
+     "seatLabel": "3-2",
      "occupant": {
       "grade": 3,
       "name": "임솔빛",
@@ -439,7 +439,7 @@
      "row": 2,
      "col": 6,
      "kind": "seat",
-     "seatLabel": "12",
+     "seatLabel": "4-2",
      "occupant": {
       "grade": 1,
       "name": "조아라",
@@ -473,7 +473,7 @@
      "row": 2,
      "col": 7,
      "kind": "seat",
-     "seatLabel": "13",
+     "seatLabel": "5-2",
      "occupant": {
       "grade": 2,
       "name": "정가온",
@@ -507,7 +507,7 @@
      "row": 2,
      "col": 9,
      "kind": "seat",
-     "seatLabel": "14",
+     "seatLabel": "6-2",
      "occupant": {
       "grade": 3,
       "name": "오하늘",
@@ -541,7 +541,7 @@
      "row": 2,
      "col": 10,
      "kind": "seat",
-     "seatLabel": "15",
+     "seatLabel": "7-2",
      "occupant": {
       "grade": 1,
       "name": "임누리",
@@ -575,7 +575,7 @@
      "row": 2,
      "col": 12,
      "kind": "seat",
-     "seatLabel": "16",
+     "seatLabel": "8-2",
      "occupant": {
       "grade": 2,
       "name": "조이슬",
@@ -609,7 +609,7 @@
      "row": 3,
      "col": 1,
      "kind": "seat",
-     "seatLabel": "17",
+     "seatLabel": "1-3",
      "occupant": {
       "grade": 3,
       "name": "권해솔",
@@ -643,7 +643,7 @@
      "row": 3,
      "col": 3,
      "kind": "seat",
-     "seatLabel": "18",
+     "seatLabel": "2-3",
      "occupant": null,
      "vacant": true,
      "marks": [
@@ -673,7 +673,7 @@
      "row": 3,
      "col": 4,
      "kind": "seat",
-     "seatLabel": "19",
+     "seatLabel": "3-3",
      "occupant": {
       "grade": 2,
       "name": "강라온",
@@ -707,7 +707,7 @@
      "row": 3,
      "col": 6,
      "kind": "seat",
-     "seatLabel": "20",
+     "seatLabel": "4-3",
      "occupant": {
       "grade": 3,
       "name": "임해솔",
@@ -741,7 +741,7 @@
      "row": 3,
      "col": 7,
      "kind": "seat",
-     "seatLabel": "21",
+     "seatLabel": "5-3",
      "occupant": {
       "grade": 1,
       "name": "신한결",
@@ -775,7 +775,7 @@
      "row": 3,
      "col": 9,
      "kind": "seat",
-     "seatLabel": "22",
+     "seatLabel": "6-3",
      "occupant": {
       "grade": 2,
       "name": "이이슬",
@@ -809,7 +809,7 @@
      "row": 3,
      "col": 10,
      "kind": "seat",
-     "seatLabel": "23",
+     "seatLabel": "7-3",
      "occupant": {
       "grade": 3,
       "name": "권새봄",
@@ -843,7 +843,7 @@
      "row": 3,
      "col": 12,
      "kind": "seat",
-     "seatLabel": "24",
+     "seatLabel": "8-3",
      "occupant": {
       "grade": 1,
       "name": "강하늘",
@@ -877,7 +877,7 @@
      "row": 4,
      "col": 1,
      "kind": "seat",
-     "seatLabel": "25",
+     "seatLabel": "1-4",
      "occupant": {
       "grade": 2,
       "name": "강다솜",
@@ -911,7 +911,7 @@
      "row": 4,
      "col": 3,
      "kind": "seat",
-     "seatLabel": "26",
+     "seatLabel": "2-4",
      "occupant": {
       "grade": 3,
       "name": "한바다",
@@ -945,7 +945,7 @@
      "row": 4,
      "col": 4,
      "kind": "seat",
-     "seatLabel": "27",
+     "seatLabel": "3-4",
      "occupant": null,
      "vacant": true,
      "marks": [
@@ -975,7 +975,7 @@
      "row": 4,
      "col": 6,
      "kind": "seat",
-     "seatLabel": "28",
+     "seatLabel": "4-4",
      "occupant": {
       "grade": 2,
       "name": "조하늘",
@@ -1009,7 +1009,7 @@
      "row": 4,
      "col": 7,
      "kind": "seat",
-     "seatLabel": "29",
+     "seatLabel": "5-4",
      "occupant": {
       "grade": 3,
       "name": "강마루",
@@ -1043,7 +1043,7 @@
      "row": 4,
      "col": 9,
      "kind": "seat",
-     "seatLabel": "30",
+     "seatLabel": "6-4",
      "occupant": {
       "grade": 1,
       "name": "한새봄",
@@ -1077,7 +1077,7 @@
      "row": 4,
      "col": 10,
      "kind": "seat",
-     "seatLabel": "31",
+     "seatLabel": "7-4",
      "occupant": {
       "grade": 2,
       "name": "한라온",
@@ -1111,7 +1111,7 @@
      "row": 4,
      "col": 12,
      "kind": "seat",
-     "seatLabel": "32",
+     "seatLabel": "8-4",
      "occupant": {
       "grade": 3,
       "name": "윤자람",
@@ -1145,7 +1145,7 @@
      "row": 5,
      "col": 1,
      "kind": "seat",
-     "seatLabel": "33",
+     "seatLabel": "1-5",
      "occupant": {
       "grade": 1,
       "name": "김단비",
@@ -1179,7 +1179,7 @@
      "row": 5,
      "col": 3,
      "kind": "seat",
-     "seatLabel": "34",
+     "seatLabel": "2-5",
      "occupant": {
       "grade": 2,
       "name": "박별하",
@@ -1213,7 +1213,7 @@
      "row": 5,
      "col": 4,
      "kind": "seat",
-     "seatLabel": "35",
+     "seatLabel": "3-5",
      "occupant": {
       "grade": 3,
       "name": "장보람",
@@ -1247,7 +1247,7 @@
      "row": 5,
      "col": 6,
      "kind": "seat",
-     "seatLabel": "36",
+     "seatLabel": "4-5",
      "occupant": null,
      "vacant": true,
      "marks": [
@@ -1277,7 +1277,7 @@
      "row": 5,
      "col": 7,
      "kind": "seat",
-     "seatLabel": "37",
+     "seatLabel": "5-5",
      "occupant": {
       "grade": 2,
       "name": "신구름",
@@ -1311,7 +1311,7 @@
      "row": 5,
      "col": 9,
      "kind": "seat",
-     "seatLabel": "38",
+     "seatLabel": "6-5",
      "occupant": {
       "grade": 3,
       "name": "신나래",
@@ -1345,7 +1345,7 @@
      "row": 5,
      "col": 10,
      "kind": "seat",
-     "seatLabel": "39",
+     "seatLabel": "7-5",
      "occupant": {
       "grade": 1,
       "name": "윤이슬",
@@ -1379,7 +1379,7 @@
      "row": 5,
      "col": 12,
      "kind": "seat",
-     "seatLabel": "40",
+     "seatLabel": "8-5",
      "occupant": {
       "grade": 2,
       "name": "장해솔",
@@ -1413,7 +1413,7 @@
      "row": 6,
      "col": 1,
      "kind": "seat",
-     "seatLabel": "41",
+     "seatLabel": "1-6",
      "occupant": {
       "grade": 3,
       "name": "임솔빛",
@@ -1447,7 +1447,7 @@
      "row": 6,
      "col": 3,
      "kind": "seat",
-     "seatLabel": "42",
+     "seatLabel": "2-6",
      "occupant": {
       "grade": 1,
       "name": "조아라",
@@ -1481,7 +1481,7 @@
      "row": 6,
      "col": 4,
      "kind": "seat",
-     "seatLabel": "43",
+     "seatLabel": "3-6",
      "occupant": {
       "grade": 2,
       "name": "정가온",
@@ -1515,7 +1515,7 @@
      "row": 6,
      "col": 6,
      "kind": "seat",
-     "seatLabel": "44",
+     "seatLabel": "4-6",
      "occupant": {
       "grade": 3,
       "name": "오하늘",
@@ -1549,7 +1549,7 @@
      "row": 6,
      "col": 7,
      "kind": "seat",
-     "seatLabel": "45",
+     "seatLabel": "5-6",
      "occupant": null,
      "vacant": true,
      "marks": [
@@ -1579,7 +1579,7 @@
      "row": 6,
      "col": 9,
      "kind": "seat",
-     "seatLabel": "46",
+     "seatLabel": "6-6",
      "occupant": {
       "grade": 2,
       "name": "조이슬",
@@ -1613,7 +1613,7 @@
      "row": 6,
      "col": 10,
      "kind": "seat",
-     "seatLabel": "47",
+     "seatLabel": "7-6",
      "occupant": {
       "grade": 3,
       "name": "권해솔",
@@ -1647,7 +1647,7 @@
      "row": 6,
      "col": 12,
      "kind": "seat",
-     "seatLabel": "48",
+     "seatLabel": "1-7",
      "occupant": {
       "grade": 1,
       "name": "최구름",
@@ -1681,7 +1681,7 @@
      "row": 7,
      "col": 1,
      "kind": "seat",
-     "seatLabel": "49",
+     "seatLabel": "2-7",
      "occupant": {
       "grade": 2,
       "name": "강라온",
@@ -1715,7 +1715,7 @@
      "row": 7,
      "col": 3,
      "kind": "seat",
-     "seatLabel": "50",
+     "seatLabel": "3-7",
      "occupant": {
       "grade": 3,
       "name": "임해솔",
@@ -1749,7 +1749,7 @@
      "row": 7,
      "col": 4,
      "kind": "seat",
-     "seatLabel": "51",
+     "seatLabel": "4-7",
      "occupant": {
       "grade": 1,
       "name": "신한결",
@@ -1783,7 +1783,7 @@
      "row": 7,
      "col": 6,
      "kind": "seat",
-     "seatLabel": "52",
+     "seatLabel": "5-7",
      "occupant": {
       "grade": 2,
       "name": "이이슬",
@@ -1817,7 +1817,7 @@
      "row": 7,
      "col": 7,
      "kind": "seat",
-     "seatLabel": "53",
+     "seatLabel": "6-7",
      "occupant": {
       "grade": 3,
       "name": "권새봄",
@@ -1851,7 +1851,7 @@
      "row": 7,
      "col": 9,
      "kind": "seat",
-     "seatLabel": "54",
+     "seatLabel": "7-7",
      "occupant": null,
      "vacant": true,
      "marks": [
@@ -1881,7 +1881,7 @@
      "row": 7,
      "col": 10,
      "kind": "seat",
-     "seatLabel": "55",
+     "seatLabel": "8-6",
      "occupant": {
       "grade": 2,
       "name": "강다솜",
@@ -1915,7 +1915,7 @@
      "row": 7,
      "col": 12,
      "kind": "seat",
-     "seatLabel": "56",
+     "seatLabel": "1-8",
      "occupant": {
       "grade": 3,
       "name": "한바다",
@@ -1949,7 +1949,7 @@
      "row": 8,
      "col": 1,
      "kind": "seat",
-     "seatLabel": "57",
+     "seatLabel": "2-8",
      "occupant": {
       "grade": 1,
       "name": "장구름",
@@ -1983,7 +1983,7 @@
      "row": 8,
      "col": 3,
      "kind": "seat",
-     "seatLabel": "58",
+     "seatLabel": "3-8",
      "occupant": {
       "grade": 2,
       "name": "조하늘",
@@ -2017,7 +2017,7 @@
      "row": 8,
      "col": 4,
      "kind": "seat",
-     "seatLabel": "59",
+     "seatLabel": "4-8",
      "occupant": {
       "grade": 3,
       "name": "강마루",
@@ -2051,7 +2051,7 @@
      "row": 8,
      "col": 6,
      "kind": "seat",
-     "seatLabel": "60",
+     "seatLabel": "5-8",
      "occupant": {
       "grade": 1,
       "name": "한새봄",
@@ -2085,7 +2085,7 @@
      "row": 8,
      "col": 7,
      "kind": "seat",
-     "seatLabel": "61",
+     "seatLabel": "6-8",
      "occupant": {
       "grade": 2,
       "name": "한라온",
@@ -2119,7 +2119,7 @@
      "row": 8,
      "col": 9,
      "kind": "seat",
-     "seatLabel": "62",
+     "seatLabel": "7-8",
      "occupant": {
       "grade": 3,
       "name": "윤자람",
@@ -2153,7 +2153,7 @@
      "row": 8,
      "col": 10,
      "kind": "seat",
-     "seatLabel": "63",
+     "seatLabel": "8-7",
      "occupant": null,
      "vacant": true,
      "marks": [
@@ -2183,7 +2183,7 @@
      "row": 8,
      "col": 12,
      "kind": "seat",
-     "seatLabel": "64",
+     "seatLabel": "1-9",
      "occupant": {
       "grade": 2,
       "name": "박별하",
@@ -2217,7 +2217,7 @@
      "row": 9,
      "col": 1,
      "kind": "seat",
-     "seatLabel": "65",
+     "seatLabel": "2-9",
      "occupant": {
       "grade": 3,
       "name": "장보람",
@@ -2251,7 +2251,7 @@
      "row": 9,
      "col": 3,
      "kind": "seat",
-     "seatLabel": "66",
+     "seatLabel": "3-9",
      "occupant": {
       "grade": 1,
       "name": "권보람",
@@ -2285,7 +2285,7 @@
      "row": 9,
      "col": 4,
      "kind": "seat",
-     "seatLabel": "67",
+     "seatLabel": "4-9",
      "occupant": {
       "grade": 2,
       "name": "신구름",
@@ -2319,7 +2319,7 @@
      "row": 9,
      "col": 6,
      "kind": "seat",
-     "seatLabel": "68",
+     "seatLabel": "5-9",
      "occupant": {
       "grade": 3,
       "name": "신나래",
@@ -2353,7 +2353,7 @@
      "row": 9,
      "col": 7,
      "kind": "seat",
-     "seatLabel": "69",
+     "seatLabel": "6-9",
      "occupant": {
       "grade": 1,
       "name": "윤이슬",
@@ -2387,7 +2387,7 @@
      "row": 9,
      "col": 9,
      "kind": "seat",
-     "seatLabel": "70",
+     "seatLabel": "7-9",
      "occupant": {
       "grade": 2,
       "name": "장해솔",
@@ -2421,7 +2421,7 @@
      "row": 9,
      "col": 10,
      "kind": "seat",
-     "seatLabel": "71",
+     "seatLabel": "8-8",
      "occupant": {
       "grade": 3,
       "name": "임솔빛",
@@ -2455,7 +2455,7 @@
      "row": 9,
      "col": 12,
      "kind": "seat",
-     "seatLabel": "72",
+     "seatLabel": "1-10",
      "occupant": null,
      "vacant": true,
      "marks": [
@@ -2485,7 +2485,7 @@
      "row": 10,
      "col": 1,
      "kind": "seat",
-     "seatLabel": "73",
+     "seatLabel": "2-10",
      "occupant": {
       "grade": 2,
       "name": "정가온",
@@ -2519,7 +2519,7 @@
      "row": 10,
      "col": 3,
      "kind": "seat",
-     "seatLabel": "74",
+     "seatLabel": "3-10",
      "occupant": {
       "grade": 3,
       "name": "오하늘",
@@ -2553,7 +2553,7 @@
      "row": 10,
      "col": 4,
      "kind": "seat",
-     "seatLabel": "75",
+     "seatLabel": "4-10",
      "occupant": {
       "grade": 1,
       "name": "임누리",
@@ -2587,7 +2587,7 @@
      "row": 10,
      "col": 6,
      "kind": "seat",
-     "seatLabel": "76",
+     "seatLabel": "5-10",
      "occupant": {
       "grade": 2,
       "name": "조이슬",
@@ -2621,7 +2621,7 @@
      "row": 10,
      "col": 7,
      "kind": "seat",
-     "seatLabel": "77",
+     "seatLabel": "6-10",
      "occupant": {
       "grade": 3,
       "name": "권해솔",
@@ -2655,7 +2655,7 @@
      "row": 10,
      "col": 9,
      "kind": "seat",
-     "seatLabel": "78",
+     "seatLabel": "7-10",
      "occupant": {
       "grade": 1,
       "name": "최구름",
@@ -2689,7 +2689,7 @@
      "row": 10,
      "col": 10,
      "kind": "seat",
-     "seatLabel": "79",
+     "seatLabel": "8-9",
      "occupant": {
       "grade": 2,
       "name": "강라온",
@@ -2723,7 +2723,7 @@
      "row": 10,
      "col": 12,
      "kind": "seat",
-     "seatLabel": "80",
+     "seatLabel": "1-11",
      "occupant": {
       "grade": 3,
       "name": "임해솔",
@@ -2757,7 +2757,7 @@
      "row": 11,
      "col": 1,
      "kind": "seat",
-     "seatLabel": "81",
+     "seatLabel": "2-11",
      "occupant": null,
      "vacant": true,
      "marks": [
@@ -2787,7 +2787,7 @@
      "row": 11,
      "col": 3,
      "kind": "seat",
-     "seatLabel": "82",
+     "seatLabel": "3-11",
      "occupant": {
       "grade": 2,
       "name": "이이슬",
@@ -2821,7 +2821,7 @@
      "row": 11,
      "col": 4,
      "kind": "seat",
-     "seatLabel": "83",
+     "seatLabel": "4-11",
      "occupant": {
       "grade": 3,
       "name": "권새봄",
@@ -2855,7 +2855,7 @@
      "row": 11,
      "col": 6,
      "kind": "seat",
-     "seatLabel": "84",
+     "seatLabel": "5-11",
      "occupant": {
       "grade": 1,
       "name": "강하늘",
@@ -2889,7 +2889,7 @@
      "row": 11,
      "col": 7,
      "kind": "seat",
-     "seatLabel": "85",
+     "seatLabel": "6-11",
      "occupant": {
       "grade": 2,
       "name": "강다솜",
@@ -2923,7 +2923,7 @@
      "row": 11,
      "col": 9,
      "kind": "seat",
-     "seatLabel": "86",
+     "seatLabel": "7-11",
      "occupant": {
       "grade": 3,
       "name": "한바다",
@@ -2957,7 +2957,7 @@
      "row": 11,
      "col": 10,
      "kind": "seat",
-     "seatLabel": "87",
+     "seatLabel": "8-10",
      "occupant": {
       "grade": 1,
       "name": "장구름",
@@ -2991,7 +2991,7 @@
      "row": 11,
      "col": 12,
      "kind": "seat",
-     "seatLabel": "88",
+     "seatLabel": "1-12",
      "occupant": {
       "grade": 2,
       "name": "조하늘",
@@ -3025,7 +3025,7 @@
      "row": 12,
      "col": 1,
      "kind": "seat",
-     "seatLabel": "89",
+     "seatLabel": "2-12",
      "occupant": {
       "grade": 3,
       "name": "강마루",
@@ -3059,7 +3059,7 @@
      "row": 12,
      "col": 3,
      "kind": "seat",
-     "seatLabel": "90",
+     "seatLabel": "3-12",
      "occupant": null,
      "vacant": true,
      "marks": [
@@ -3089,7 +3089,7 @@
      "row": 12,
      "col": 4,
      "kind": "seat",
-     "seatLabel": "91",
+     "seatLabel": "4-12",
      "occupant": {
       "grade": 2,
       "name": "한라온",
@@ -3123,7 +3123,7 @@
      "row": 12,
      "col": 6,
      "kind": "seat",
-     "seatLabel": "92",
+     "seatLabel": "5-12",
      "occupant": {
       "grade": 3,
       "name": "윤자람",
@@ -3157,7 +3157,7 @@
      "row": 12,
      "col": 7,
      "kind": "seat",
-     "seatLabel": "93",
+     "seatLabel": "6-12",
      "occupant": {
       "grade": 1,
       "name": "김단비",
@@ -3191,7 +3191,7 @@
      "row": 12,
      "col": 9,
      "kind": "seat",
-     "seatLabel": "94",
+     "seatLabel": "7-12",
      "occupant": {
       "grade": 2,
       "name": "박별하",
@@ -3225,7 +3225,7 @@
      "row": 12,
      "col": 10,
      "kind": "seat",
-     "seatLabel": "95",
+     "seatLabel": "1-13",
      "occupant": {
       "grade": 3,
       "name": "장보람",
@@ -3259,7 +3259,7 @@
      "row": 12,
      "col": 12,
      "kind": "seat",
-     "seatLabel": "96",
+     "seatLabel": "2-13",
      "occupant": {
       "grade": 1,
       "name": "권보람",
@@ -3293,7 +3293,7 @@
      "row": 13,
      "col": 1,
      "kind": "seat",
-     "seatLabel": "97",
+     "seatLabel": "3-13",
      "occupant": {
       "grade": 2,
       "name": "신구름",
@@ -3327,7 +3327,7 @@
      "row": 13,
      "col": 3,
      "kind": "seat",
-     "seatLabel": "98",
+     "seatLabel": "4-13",
      "occupant": {
       "grade": 3,
       "name": "신나래",
@@ -3361,7 +3361,7 @@
      "row": 13,
      "col": 4,
      "kind": "seat",
-     "seatLabel": "99",
+     "seatLabel": "5-13",
      "occupant": null,
      "vacant": true,
      "marks": [
@@ -3391,7 +3391,7 @@
      "row": 13,
      "col": 6,
      "kind": "seat",
-     "seatLabel": "100",
+     "seatLabel": "6-13",
      "occupant": {
       "grade": 2,
       "name": "장해솔",
@@ -3425,7 +3425,7 @@
      "row": 13,
      "col": 7,
      "kind": "seat",
-     "seatLabel": "101",
+     "seatLabel": "7-13",
      "occupant": {
       "grade": 3,
       "name": "임솔빛",
@@ -3459,7 +3459,7 @@
      "row": 13,
      "col": 9,
      "kind": "seat",
-     "seatLabel": "102",
+     "seatLabel": "8-11",
      "occupant": {
       "grade": 1,
       "name": "조아라",
@@ -3493,7 +3493,7 @@
      "row": 13,
      "col": 10,
      "kind": "seat",
-     "seatLabel": "103",
+     "seatLabel": "1-14",
      "occupant": {
       "grade": 2,
       "name": "정가온",
@@ -3527,7 +3527,7 @@
      "row": 13,
      "col": 12,
      "kind": "seat",
-     "seatLabel": "104",
+     "seatLabel": "2-14",
      "occupant": {
       "grade": 3,
       "name": "오하늘",
@@ -3561,7 +3561,7 @@
      "row": 14,
      "col": 1,
      "kind": "seat",
-     "seatLabel": "105",
+     "seatLabel": "3-14",
      "occupant": {
       "grade": 1,
       "name": "임누리",
@@ -3595,7 +3595,7 @@
      "row": 14,
      "col": 3,
      "kind": "seat",
-     "seatLabel": "106",
+     "seatLabel": "4-14",
      "occupant": {
       "grade": 2,
       "name": "조이슬",
@@ -3629,7 +3629,7 @@
      "row": 14,
      "col": 4,
      "kind": "seat",
-     "seatLabel": "107",
+     "seatLabel": "5-14",
      "occupant": {
       "grade": 3,
       "name": "권해솔",
@@ -3663,7 +3663,7 @@
      "row": 14,
      "col": 6,
      "kind": "seat",
-     "seatLabel": "108",
+     "seatLabel": "6-14",
      "occupant": null,
      "vacant": true,
      "marks": [
@@ -3693,7 +3693,7 @@
      "row": 14,
      "col": 7,
      "kind": "seat",
-     "seatLabel": "109",
+     "seatLabel": "7-14",
      "occupant": {
       "grade": 2,
       "name": "강라온",
@@ -3727,7 +3727,7 @@
      "row": 14,
      "col": 9,
      "kind": "seat",
-     "seatLabel": "110",
+     "seatLabel": "8-12",
      "occupant": {
       "grade": 3,
       "name": "임해솔",
@@ -3761,7 +3761,7 @@
      "row": 14,
      "col": 10,
      "kind": "seat",
-     "seatLabel": "111",
+     "seatLabel": "1-15",
      "occupant": {
       "grade": 1,
       "name": "신한결",
@@ -3795,7 +3795,7 @@
      "row": 14,
      "col": 12,
      "kind": "seat",
-     "seatLabel": "112",
+     "seatLabel": "2-15",
      "occupant": {
       "grade": 2,
       "name": "이이슬",
@@ -3829,7 +3829,7 @@
      "row": 15,
      "col": 1,
      "kind": "seat",
-     "seatLabel": "113",
+     "seatLabel": "3-15",
      "occupant": {
       "grade": 3,
       "name": "권새봄",
@@ -3863,7 +3863,7 @@
      "row": 15,
      "col": 3,
      "kind": "seat",
-     "seatLabel": "114",
+     "seatLabel": "4-15",
      "occupant": {
       "grade": 1,
       "name": "강하늘",
@@ -3897,7 +3897,7 @@
      "row": 15,
      "col": 4,
      "kind": "seat",
-     "seatLabel": "115",
+     "seatLabel": "5-15",
      "occupant": {
       "grade": 2,
       "name": "강다솜",
@@ -3931,7 +3931,7 @@
      "row": 15,
      "col": 6,
      "kind": "seat",
-     "seatLabel": "116",
+     "seatLabel": "6-15",
      "occupant": {
       "grade": 3,
       "name": "한바다",
@@ -3965,7 +3965,7 @@
      "row": 15,
      "col": 7,
      "kind": "seat",
-     "seatLabel": "117",
+     "seatLabel": "7-15",
      "occupant": null,
      "vacant": true,
      "marks": [
@@ -3995,7 +3995,7 @@
      "row": 15,
      "col": 9,
      "kind": "seat",
-     "seatLabel": "118",
+     "seatLabel": "8-13",
      "occupant": {
       "grade": 2,
       "name": "조하늘",
@@ -4029,7 +4029,7 @@
      "row": 15,
      "col": 10,
      "kind": "seat",
-     "seatLabel": "119",
+     "seatLabel": "1-16",
      "occupant": {
       "grade": 3,
       "name": "강마루",
@@ -4063,7 +4063,7 @@
      "row": 16,
      "col": 1,
      "kind": "seat",
-     "seatLabel": "120",
+     "seatLabel": "2-16",
      "occupant": {
       "grade": 1,
       "name": "한새봄",
@@ -4097,7 +4097,7 @@
      "row": 16,
      "col": 3,
      "kind": "seat",
-     "seatLabel": "121",
+     "seatLabel": "3-16",
      "occupant": {
       "grade": 2,
       "name": "한라온",
@@ -4131,7 +4131,7 @@
      "row": 16,
      "col": 4,
      "kind": "seat",
-     "seatLabel": "122",
+     "seatLabel": "4-16",
      "occupant": {
       "grade": 3,
       "name": "윤자람",
@@ -4165,7 +4165,7 @@
      "row": 16,
      "col": 6,
      "kind": "seat",
-     "seatLabel": "123",
+     "seatLabel": "5-16",
      "occupant": {
       "grade": 1,
       "name": "김단비",
@@ -4199,7 +4199,7 @@
      "row": 16,
      "col": 7,
      "kind": "seat",
-     "seatLabel": "124",
+     "seatLabel": "6-16",
      "occupant": {
       "grade": 2,
       "name": "박별하",
@@ -4233,7 +4233,7 @@
      "row": 16,
      "col": 9,
      "kind": "seat",
-     "seatLabel": "125",
+     "seatLabel": "7-16",
      "occupant": {
       "grade": 3,
       "name": "장보람",
@@ -4267,7 +4267,7 @@
      "row": 16,
      "col": 10,
      "kind": "seat",
-     "seatLabel": "126",
+     "seatLabel": "8-14",
      "occupant": null,
      "vacant": true,
      "marks": [
@@ -4306,7 +4306,7 @@
      "row": 17,
      "col": 1,
      "kind": "seat",
-     "seatLabel": "127",
+     "seatLabel": "1-17",
      "occupant": {
       "grade": 2,
       "name": "신구름",
@@ -4340,7 +4340,7 @@
      "row": 17,
      "col": 3,
      "kind": "seat",
-     "seatLabel": "128",
+     "seatLabel": "2-17",
      "occupant": {
       "grade": 3,
       "name": "신나래",
@@ -4374,7 +4374,7 @@
      "row": 17,
      "col": 4,
      "kind": "seat",
-     "seatLabel": "129",
+     "seatLabel": "3-17",
      "occupant": {
       "grade": 1,
       "name": "윤이슬",
@@ -4408,7 +4408,7 @@
      "row": 17,
      "col": 6,
      "kind": "seat",
-     "seatLabel": "130",
+     "seatLabel": "4-17",
      "occupant": {
       "grade": 2,
       "name": "장해솔",
@@ -4442,7 +4442,7 @@
      "row": 17,
      "col": 7,
      "kind": "seat",
-     "seatLabel": "131",
+     "seatLabel": "5-17",
      "occupant": {
       "grade": 3,
       "name": "임솔빛",
@@ -4476,7 +4476,7 @@
      "row": 17,
      "col": 9,
      "kind": "seat",
-     "seatLabel": "132",
+     "seatLabel": "6-17",
      "occupant": {
       "grade": 1,
       "name": "조아라",
@@ -4510,7 +4510,7 @@
      "row": 17,
      "col": 10,
      "kind": "seat",
-     "seatLabel": "133",
+     "seatLabel": "7-17",
      "occupant": {
       "grade": 2,
       "name": "정가온",
@@ -4544,7 +4544,7 @@
      "row": 18,
      "col": 1,
      "kind": "seat",
-     "seatLabel": "134",
+     "seatLabel": "1-18",
      "occupant": {
       "grade": 3,
       "name": "오하늘",
@@ -4578,7 +4578,7 @@
      "row": 18,
      "col": 4,
      "kind": "seat",
-     "seatLabel": "135",
+     "seatLabel": "3-18",
      "occupant": null,
      "vacant": true,
      "marks": [
@@ -4608,7 +4608,7 @@
      "row": 18,
      "col": 6,
      "kind": "seat",
-     "seatLabel": "136",
+     "seatLabel": "4-18",
      "occupant": {
       "grade": 2,
       "name": "조이슬",
@@ -4642,7 +4642,7 @@
      "row": 18,
      "col": 7,
      "kind": "seat",
-     "seatLabel": "137",
+     "seatLabel": "5-18",
      "occupant": {
       "grade": 3,
       "name": "권해솔",
@@ -4676,7 +4676,7 @@
      "row": 18,
      "col": 9,
      "kind": "seat",
-     "seatLabel": "138",
+     "seatLabel": "6-18",
      "occupant": {
       "grade": 1,
       "name": "최구름",
@@ -4710,7 +4710,7 @@
      "row": 18,
      "col": 10,
      "kind": "seat",
-     "seatLabel": "139",
+     "seatLabel": "7-18",
      "occupant": {
       "grade": 2,
       "name": "강라온",
@@ -4744,7 +4744,7 @@
      "row": 19,
      "col": 1,
      "kind": "seat",
-     "seatLabel": "140",
+     "seatLabel": "1-19",
      "occupant": {
       "grade": 3,
       "name": "임해솔",
@@ -4778,7 +4778,7 @@
      "row": 19,
      "col": 6,
      "kind": "seat",
-     "seatLabel": "141",
+     "seatLabel": "4-19",
      "occupant": {
       "grade": 1,
       "name": "신한결",
@@ -4812,7 +4812,7 @@
      "row": 19,
      "col": 7,
      "kind": "seat",
-     "seatLabel": "142",
+     "seatLabel": "5-19",
      "occupant": {
       "grade": 2,
       "name": "이이슬",
@@ -4846,7 +4846,7 @@
      "row": 19,
      "col": 9,
      "kind": "seat",
-     "seatLabel": "143",
+     "seatLabel": "6-19",
      "occupant": {
       "grade": 3,
       "name": "권새봄",
@@ -4880,7 +4880,7 @@
      "row": 19,
      "col": 10,
      "kind": "seat",
-     "seatLabel": "144",
+     "seatLabel": "7-19",
      "occupant": null,
      "vacant": true,
      "marks": [
@@ -4919,7 +4919,7 @@
      "row": 20,
      "col": 9,
      "kind": "seat",
-     "seatLabel": "145",
+     "seatLabel": "6-20",
      "occupant": {
       "grade": 2,
       "name": "강다솜",
@@ -4953,7 +4953,7 @@
      "row": 20,
      "col": 10,
      "kind": "seat",
-     "seatLabel": "146",
+     "seatLabel": "7-20",
      "occupant": {
       "grade": 3,
       "name": "한바다",

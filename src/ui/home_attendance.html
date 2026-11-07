@@ -7,6 +7,11 @@
     ]));
     root.appendChild(soonCard('오늘·내일 사전 특이사항 · 담임·담당교사 요청', '1단계(F1)에서 만듭니다.'));
     root.appendChild(soonCard('출석부 인쇄', '1단계(F2)에서 만듭니다.'));
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '좌석표' }),
+      el('div', { class: 'muted', text: '학사생 자리를 확인합니다(배정은 학사 교사·관리자).' }),
+      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=seats', text: '좌석표 열기' })
+    ]));
     root.appendChild(soonCard('출결 결과 격자 정리', '5단계(F11)에서 만듭니다.'));
   }
 </script>
