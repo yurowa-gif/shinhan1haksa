@@ -12,6 +12,7 @@ const DAYS = ['mon_thu', 'fri', 'sat', 'sun'];
 const fixture = (d) => JSON.parse(fs.readFileSync(path.join(ROOT, 'design/fixtures/sheet-model.' + d + '.json'), 'utf8'));
 const count = (s, sub) => s.split(sub).length - 1;
 const seats = (m) => m.spaces.reduce((n, sp) => n + sp.cells.filter((c) => c.kind === 'seat').length, 0);
+const seatsInGrid = (m) => m.spaces.reduce((n, sp) => n + sp.cells.filter((c) => c.kind === 'seat' && c.row >= 1 && c.row <= sp.rows && c.col >= 1 && c.col <= sp.cols).length, 0);
 
 test('픽스처 4종이 sheet-model 계약 모양을 지킨다(블록 수 3/3/3/4)', () => {
   const blocks = {};
@@ -353,7 +354,7 @@ test('적대적 입력 전부: 그려진 좌석 수 = 모델 좌석 수, 미배�
   advCases.forEach((c) => {
     const html = ctx.printRenderSheet_(JSON.parse(JSON.stringify(c.model)), c.opts || {});
     const p = plan(JSON.parse(JSON.stringify(c.model)), c.opts || {});
-    assert.strictEqual(count(html, '<td class="n"'), seats(c.model), c.name + ' 좌석');
+    assert.strictEqual(count(html, '<td class="n"'), seatsInGrid(c.model), c.name + ' 좌석(격자 밖 좌석은 경고로 알린다)');
     assert.strictEqual(count(html, '<section class="page"'), p.pages, c.name + ' 쪽 수');
     (c.model.unseated || []).forEach((u) => assert.ok(html.indexOf(ctx.printEsc_(u.display)) >= 0, c.name + ' 미배정 ' + u.display));
     ctx.printEntries_(c.model).forEach((e) => {
@@ -379,7 +380,7 @@ test('미배정 180명: 앞면 아래 줄은 두 줄까지 "외 N명(뒷면에 �
   assert.ok(p.footOver && p.unseated === 180 && p.pages >= 2);
   const html = ctx.printRenderSheet_(JSON.parse(JSON.stringify(c.model)), {});
   assert.ok(html.indexOf('(뒷면에 전체)') > 0 && html.indexOf('자리 배정 안 됨 180명') > 0);
-  for (let i = 1; i <= 180; i++) assert.ok(html.indexOf('가짜' + i + '<') >= 0 || html.indexOf('가짜' + i + ',') >= 0, '가짜' + i);
+  for (let i = 1; i <= 180; i++) { const nm = '가짜' + String(i).padStart(3, '0'); assert.ok(html.indexOf(nm + '<') >= 0 || html.indexOf(nm + ',') >= 0, nm); }
 });
 
 test('특이사항 120명·긴 이름·긴 공석 문구: 뒷면이 여러 쪽이어도 전부 나오고, 큰 공간 줄 높이는 기준 이상이다', () => {
@@ -431,7 +432,8 @@ test('쪽 나누기 계산(printPackColumns_·printPackPages_): 위에서 아래
   assert.deepStrictEqual(a.columns, [['가', '나'], ['다', '라']]);
   assert.strictEqual(a.count, 4, '2열×2줄에 5개는 안 들어간다(자르지 않고 개수를 알려 준다)');
   assert.strictEqual(plain(ctx.printPackColumns_(texts, 2, 0, 100, 7)).count, 0);
-  assert.strictEqual(plain(ctx.printPackColumns_(['아주 긴 글자 '.repeat(20)], 1, 2, 30, 7)).count, 1, '한 항목이 칸보다 길어도 멈추지 않는다');
+  const tall = plain(ctx.printPackColumns_(['짧음', '아주 긴 글자 '.repeat(20), '그 뒤'], 1, 3, 30, 7));
+  assert.deepStrictEqual([tall.columns[0], tall.count], [['짧음'], 1], '칸 높이보다 긴 항목은 줄 수를 깎아 넣지 않고 통째로 뒷면으로(그 뒤 항목도 순서대로 뒷면)');
   const items = [{ title: true, text: 'T1' }, { text: 'a' }, { text: 'b' }, { title: true, text: 'T2' }, { text: 'c' }];
   const pages = plain(ctx.printPackPages_(items, 2, 4, 100, 8));
   const flat = pages.map((pg) => pg.map((col) => col.map((x) => x.text)));
@@ -440,4 +442,33 @@ test('쪽 나누기 계산(printPackColumns_·printPackPages_): 위에서 아래
   const p2 = plain(ctx.printPackPages_(many, 3, 4, 100, 8));
   assert.strictEqual(p2.length, 3, '30개 = 12개씩 3열×4줄 → 3쪽');
   assert.strictEqual(p2.reduce((k, pg) => k + pg.reduce((j, col) => j + col.length, 0), 0), 30, '하나도 빠지지 않는다');
+});
+
+test('리뷰 지적 재현: 4칸 약어가 모두 다른 목록·행이 많은 작은 방·큰 2층 공간·머리말 폭·요일 판정·격자 밖 좌석·라벨 없음', () => {
+  const by = (name) => advCases.find((x) => x.name === name);
+  const sun = by('일요일 4칸 약어가 모두 다름');
+  const sp = plan(sun.model);
+  assert.ok(sp.listOverflow, '앞면 목록 칸에 안 들어가는 항목은 뒷면으로');
+  const html = ctx.printRenderSheet_(JSON.parse(JSON.stringify(sun.model)), {});
+  assert.ok(html.indexOf('① 병결 · ② 무지 · ③ 외출 1 · ④ 상담') > 0, '뒷면에 전체(잘리지 않은) 표기');
+  const front = html.slice(0, html.indexOf('</section>'));
+  assert.ok(front.indexOf('④ 상담') < 0, '앞면에는 반쪽으로 잘린 항목이 없다');
+  const rooms = by('작은 방 3줄×5행 + 2줄×30행');
+  const rp = plan(rooms.model);
+  assert.ok(rp.contPages >= 1 && count(ctx.printRenderSheet_(JSON.parse(JSON.stringify(rooms.model)), {}), '(1~'), '행이 많은 방은 행 조각으로 나뉜다');
+  const big = plan(by('큰 2층 공간 추가(20행×8줄)').model);
+  assert.ok(big.pages >= 2 && big.contRooms >= 1);
+  const title = by('긴 제목 + 근무자 5명');
+  const th = ctx.printRenderSheet_(JSON.parse(JSON.stringify(title.model)), {});
+  assert.ok(th.indexOf('근무 가나다라마, 바사아자차') > 0 && th.indexOf('예비 타파하가나, 다라마바사') > 0, '긴 이름도 줄여 쓰거나 두 줄로 나눠 모두 보인다');
+  const sp2 = ctx.printHeadLine1_(JSON.parse(JSON.stringify(title.model)));
+  assert.ok(sp2.rows === 2 || sp2.left < 1, '머리말 첫 줄을 줄이거나 두 줄로 나눈다');
+  const holiday = ctx.printRenderSheet_(JSON.parse(JSON.stringify(by('특별 코드 평일(dayType 가 holiday)').model)), {});
+  assert.ok(holiday.indexOf('예비') < 0 && holiday.indexOf('근무 ________ ________') > 0, '수요일이면 요일 유형 코드가 특별해도 근무 2칸·예비 없음');
+  const out = ctx.printRenderSheet_(JSON.parse(JSON.stringify(by('격자 밖 좌석 2개').model)), {});
+  assert.ok(out.slice(0, out.indexOf('</section>')).indexOf('격자 밖 좌석 2개는 그려지지 않았습니다') > 0, '앞면 경고 줄');
+  assert.ok(plan(by('격자 밖 좌석 2개').model).warnings.join().indexOf('격자 밖 좌석 2개') >= 0);
+  const nolabel = ctx.printRenderSheet_(JSON.parse(JSON.stringify(by('블록 label 없음').model)), {});
+  assert.ok(nolabel.indexOf('①18:00–20:00') > 0 && nolabel.indexOf('undefined') < 0, '라벨이 없으면 시작–끝');
+  assert.ok(ctx.printTextEm_('WWWW') > ctx.printTextEm_('wwww') + 1 && ctx.printTextEm_('W') >= 0.9, '대문자 폭은 넓게 어림');
 });

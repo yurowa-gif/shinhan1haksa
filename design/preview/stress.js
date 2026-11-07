@@ -30,8 +30,8 @@ function cases() {
     sp.cells.push({ row: 21, col: 3, kind: 'seat', seatLabel: '3-19', occupant: { grade: 1, name: '가온', display: '1. 가온' }, vacant: false, marks: m.blocks.map((b) => ({ seq: b.seq, code: 'NONE', text: '' })) });
   });
   add('3글자 약어', (m) => { seatCells(m).filter((x) => x.occupant).slice(0, 40).forEach((c) => { c.marks = c.marks.map((x) => ({ seq: x.seq, code: 'EXC', text: '병결외' })); }); });
-  add('미배정 30명', (m) => { m.unseated = Array.from({ length: 30 }, (_, i) => ({ display: ((i % 3) + 1) + '. 가짜' + (i + 1) })); });
-  add('미배정 180명', (m) => { m.unseated = Array.from({ length: 180 }, (_, i) => ({ display: ((i % 3) + 1) + '. 가짜' + (i + 1) })); });
+  add('미배정 30명', (m) => { m.unseated = Array.from({ length: 30 }, (_, i) => ({ display: ((i % 3) + 1) + '. 가짜' + String(i + 1).padStart(3, '0') })); });
+  add('미배정 180명', (m) => { m.unseated = Array.from({ length: 180 }, (_, i) => ({ display: ((i % 3) + 1) + '. 가짜' + String(i + 1).padStart(3, '0') })); });
   add('특이사항 120명', (m) => {
     let n = 0;
     seatCells(m).filter((c) => c.occupant).forEach((c) => { if (n++ < 120) c.marks = c.marks.map((x, i) => (i === 0 ? { seq: 1, code: 'EXC', text: '병결' } : x)); });
@@ -40,6 +40,35 @@ function cases() {
   add('공간이 없음', (m) => { m.spaces = []; });
   add('긴 공간 이름', (m) => { m.spaces[1].name = 'SA1실(남자 베리타스 전용 자습실 별관)'; });
   add('근무자 이름이 배열이 아님', (m) => { m.dutyNames = '박선생'; m.standbyNames = null; });
+  add('일요일 4칸 약어가 모두 다름', (m) => {
+    const words = ['병결', '무지', '외출 1', '상담'];
+    seatCells(m).filter((c) => c.occupant).slice(0, 14).forEach((c) => { c.marks = c.marks.map((x, i) => ({ seq: i + 1, code: 'EXC', text: words[i] })); });
+  }, 'sun');
+  add('작은 방 3줄×5행 + 2줄×30행', (m) => {
+    const mk = (id, name, cols, rows) => {
+      const cells = [];
+      for (let r = 1; r <= rows; r++) for (let c = 1; c <= cols; c++) {
+        cells.push({ row: r, col: c, kind: 'seat', seatLabel: String(cells.length + 1), occupant: { grade: 1 + (r % 3), name: '방' + id + r + c, display: (1 + (r % 3)) + '. 방' + id + r + c }, vacant: false, marks: m.blocks.map((b) => ({ seq: b.seq, code: 'NONE', text: '' })) });
+      }
+      return { id, name, gender: '혼성', rows, cols, cells };
+    };
+    m.spaces.push(mk('X1', '3줄방', 3, 5), mk('X2', '긴 2줄방', 2, 30));
+  });
+  add('큰 2층 공간 추가(20행×8줄)', (m) => {
+    const big = clone(m.spaces[0]); big.id = 'f2'; big.name = '2층 자습실';
+    big.cells.forEach((c) => { if (c.occupant) { c.occupant.name = '이층' + c.seatLabel; c.occupant.display = c.occupant.grade + '. 이층' + c.seatLabel; } });
+    m.spaces.push(big);
+  });
+  add('영문 대문자 이름 미배정 60명', (m) => { m.unseated = Array.from({ length: 60 }, (_, i) => ({ display: '1. WWWWWMMMM' + String(i).padStart(2, '0') })); });
+  add('긴 제목 + 근무자 5명', (m) => { m.title = '신한학사 출석부 특별 보충 자습 시간 운영 결과 기록용 아주 긴 제목'; m.dutyNames = ['가나다라마', '바사아자차', '카타파하가', '나다라마바', '사아자차카']; m.standbyNames = ['타파하가나', '다라마바사']; });
+  add('특별 코드 평일(dayType 가 holiday)', (m) => { m.dayType = 'holiday'; });
+  list[list.length - 1].mustNot = ['예비'];   // 실제 요일이 수요일이라 예비 감독 칸이 없어야 한다
+  add('격자 밖 좌석 2개', (m) => {
+    const base = m.spaces[1].cells.find((c) => c.kind === 'seat');
+    [1, 2].forEach((k) => m.spaces[1].cells.push(Object.assign(clone(base), { row: 30 + k, col: 1, seatLabel: 'X' + k })));
+  });
+  list[list.length - 1].must = ['격자 밖 좌석 2개'];
+  add('블록 label 없음', (m) => { m.blocks.forEach((b) => { delete b.label; }); });
   add('일요일 + 특이사항 120명', (m) => {
     let n = 0;
     seatCells(m).filter((c) => c.occupant).forEach((c) => { if (n++ < 120) c.marks = c.marks.map((x, i) => (i === 0 ? { seq: 1, code: 'EXC', text: '병결' } : x)); });
@@ -68,20 +97,42 @@ async function runAll(browser) {
           const st = getComputedStyle(e);
           return (st.overflow === 'hidden' || e.tagName === 'SECTION') && e.textContent.trim() && (e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1);
         }).slice(0, 3).map((e) => e.textContent.trim().slice(0, 18) + ' [' + (e.scrollWidth - e.clientWidth) + ',' + (e.scrollHeight - e.clientHeight) + ']'),
-        names: document.querySelectorAll('td.n').length, text: document.body.innerText
+        names: document.querySelectorAll('td.n').length
       };
     });
+    // 글자가 실제로 보이는가: 글자 상자(Range)가 자기를 감싼 overflow:hidden 상자와 쪽 안에 들어 있어야 한다(innerText 는 잘린 글자도 센다)
+    const need = (c.model.unseated || []).map((u) => u.display).concat(ctx.printEntries_(clone(c.model)).map((e) => e.display));
+    const hidden = await page.evaluate((strings) => {
+      const clipRects = (node) => { const out = []; for (let e = node.parentElement; e; e = e.parentElement) { if (getComputedStyle(e).overflow === 'hidden' || e.tagName === 'SECTION') out.push(e.getBoundingClientRect()); } return out; };
+      const seen = (str) => {
+        const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        for (let n = w.nextNode(); n; n = w.nextNode()) {
+          const i = n.nodeValue.indexOf(str);
+          if (i < 0) continue;
+          const r = document.createRange(); r.setStart(n, i); r.setEnd(n, i + str.length);
+          const rects = Array.from(r.getClientRects()); const clips = clipRects(n);
+          if (rects.length && rects.every((q) => clips.every((k) => q.left >= k.left - 1 && q.right <= k.right + 1 && q.top >= k.top - 1 && q.bottom <= k.bottom + 1))) return true;
+        }
+        return false;
+      };
+      return strings.filter((t) => !seen(t)).slice(0, 5);
+    }, need);
     const pdf = await page.pdf({ format: 'A4', landscape: true, printBackground: true, preferCSSPageSize: true });
     const pdfPages = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
     const problems = [];
     if (info.over.length) problems.push('넘침 ' + JSON.stringify(info.over));
+    ['undefined', 'NaN', 'null'].forEach((w) => { if (html.indexOf(w) >= 0) problems.push('글자 "' + w + '" 이 인쇄됨'); });
+    (c.must || []).forEach((w) => { if (html.indexOf(w) < 0) problems.push('있어야 할 글자 없음: ' + w); });
+    (c.mustNot || []).forEach((w) => { if (html.indexOf(w) >= 0) problems.push('없어야 할 글자: ' + w); });
     if (info.clipped.length) problems.push('잘림 ' + JSON.stringify(info.clipped));
     if (pdfPages !== info.pages) problems.push('PDF ' + pdfPages + '쪽 ≠ section ' + info.pages);
     const model = c.model;
     if (model.operating !== false && model.spaces.length) {
-      const seats = seatCells(model).length;
-      if (info.names !== seats) problems.push('그려진 좌석 ' + info.names + ' ≠ 모델 ' + seats);
-      (model.unseated || []).forEach((u) => { if (info.text.indexOf(u.display) < 0) problems.push('미배정 안 보임: ' + u.display); });
+      const inGrid = model.spaces.reduce((k, sp) => k + sp.cells.filter((x) => x.kind === 'seat' && x.row >= 1 && x.row <= sp.rows && x.col >= 1 && x.col <= sp.cols).length, 0);
+      if (info.names !== inGrid) problems.push('그려진 좌석 ' + info.names + ' ≠ 격자 안 좌석 ' + inGrid);
+      if (hidden.length) problems.push('안 보이는 글자(잘림): ' + JSON.stringify(hidden));
+      const plan = ctx.printSheetPlan_(clone(model), c.opts || {});
+      if (plan && plan.pages !== info.pages) problems.push('계획 쪽 수 ' + plan.pages + ' ≠ 그려진 ' + info.pages);
     }
     if (process.argv.includes('--png')) await page.screenshot({ path: file.replace('.html', '.png'), fullPage: true });
     await page.close();
