@@ -71,17 +71,24 @@ var SCREENS = {
   schedule: { file: 'ui/screen_schedule', title: '자습 일정·블록', view: 'schedule.view' },
   sheet: { file: 'ui/screen_sheet', title: '출석부', view: 'sheet.view' },
   exceptions: { file: 'ui/screen_exceptions', title: '특이사항', view: 'exception.view' },
-  seats: { file: 'ui/screen_seats', title: '좌석표', view: 'seat.view' }
+  seats: { file: 'ui/screen_seats', title: '좌석표', view: 'seat.view' },
+  duty: { file: 'ui/screen_duty', title: '근무표', view: 'duty.view' },
+  outs: { file: 'ui/screen_outs', title: 'OUT', view: 'out.view' },
+  moves: { file: 'ui/screen_moves', title: '입퇴실·급식', view: 'status.list' },
+  mealcount: { file: 'ui/screen_mealcount', title: '식수 집계', view: 'meal.count' }
 };
 
 /**
- * 화면 조각에 넘기는 주소 값(?tab=, ?date=). 주소창 값은 믿을 수 없으므로 허용 목록·날짜 형식만 통과시킨다.
+ * 화면 조각에 넘기는 주소 값(?tab=, ?date=, ?month=, ?student=, ?prefill=). 주소창 값은 믿을 수 없으므로 허용 목록·형식만 통과시킨다.
  * (HtmlService 화면은 iframe 안이라 실제 주소를 읽을 수 없어서 서버가 대신 넘긴다.) 결과는 JSON 문자열.
  */
 function screenParams_(p) {
   var out = {};
-  if (['requests', 'list', 'mine'].indexOf(String(p.tab)) >= 0) out.tab = String(p.tab);
+  var tabs = ['requests', 'list', 'mine', 'week', 'month', 'record', 'entry', 'term', 'today', 'dismiss', 'rules', 'meal', 'move', 'history'];
+  if (tabs.indexOf(String(p.tab)) >= 0) out.tab = String(p.tab);
   if (/^\d{4}-\d{2}-\d{2}$/.test(String(p.date || ''))) out.date = String(p.date);
+  if (/^\d{4}-\d{2}$/.test(String(p.month || ''))) out.month = String(p.month);
+  if (String(p.prefill) === 'out2') out.prefill = 'out2';   // 2OUT 퇴실 확정 뒤 입퇴실 화면 미리 채우기
   if (/^[0-9a-fA-F-]{8,40}$/.test(String(p.student || ''))) out.student = String(p.student);   // 학생 id(UUID 모양만)
   return JSON.stringify(out).replace(/</g, '\\u003c');
 }
@@ -130,6 +137,21 @@ function getHomeData(role) {
     termName: term ? term.name : '(운영 기간 없음)',
     appUrl: ScriptApp.getService().getUrl()
   };
+
+  // 2단계 교사 홈 카드(각 기능 파일의 훅). 보고 있는 홈 역할이 그 보기 키를 가질 때만 부른다(출결 담당·근무표 담당자 홈에 OUT·급식 없음, 학생·학부모 홈에는 없음).
+  // 훅 하나가 실패해도 홈 전체는 열린다(setup 전 탭 없음 등). ms = 훅마다 걸린 시간 — 확인 ③에서 재고, PRD §9 3초를 넘으면 카드별 호출로 바꾼다
+  var perms = permissions_();
+  [['duty', dtyHomeInfo_, 'duty.view'], ['out', vioHomeInfo_, 'out.view'], ['food', foodHomeInfo_, 'status.list']].forEach(function (h) {
+    if (!hasAnyAllowedRole_([role], perms[h[2]].roles)) return;
+    var t0 = Date.now();
+    try {
+      base[h[0]] = h[1](user, role);
+    } catch (e) {
+      console.error(h[0] + ' 홈 훅: ' + e.message);
+      base[h[0]] = { error: '불러오지 못했습니다' };
+    }
+    (base.ms = base.ms || {})[h[0]] = Date.now() - t0;
+  });
 
   switch (role) {
     case 'admin':
