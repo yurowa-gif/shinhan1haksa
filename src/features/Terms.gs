@@ -114,7 +114,7 @@ function saveTerm(input) {
       saved = updateRecord_('terms', id, check.record, user.email);
     } else {
       saved = appendRecord_('terms', check.record, user.email);
-      ensureTermSheet_('exceptions', saved.id);   // 새 기간의 기간별 탭(특이사항)
+      Object.keys(SCHEMA_TERM_TABS).forEach(function (base) { ensureTermSheet_(base, saved.id); });   // 새 기간의 기간별 탭 전부(특이사항·OUT)
     }
     return { ok: true, id: saved.id, warnings: check.warnings };
   });

@@ -71,7 +71,7 @@ function buildFakeStage1_(fake) {
   var addChange = function (st, item, value, effective, source, reason) {
     statusChanges.push({ id: fake1Id_('f4000000', statusChanges.length + 1), student_id: st.id, item: item, value: value,
       requested_at: effective + 'T09:00:00', effective_date: effective, effective_date_auto: effective,
-      reason: reason || '', doc_submitted: 'FALSE', linked_change_id: '', source: source, status: '유효', memo: FAKE1_MEMO });
+      reason: reason || '', doc_submitted: 'FALSE', linked_change_id: '', source: source, status: '유효', memo: FAKE1_MEMO, cancel_reason: '' });
   };
   students.forEach(function (st) {
     var en = enrollByStudent[st.id];

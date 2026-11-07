@@ -5,7 +5,7 @@
  *
  * setup()
  *  1. 데이터 스프레드시트 3개(운영 DB, 상담일지, 설정)를 만들고 ID를 Script Properties에 저장
- *  2. 탭과 헤더를 만든다(이미 있으면 그대로 둔다. 헤더가 다르면 고치지 않고 경고만)
+ *  2. 탭과 헤더를 만든다(이미 있으면 그대로 둔다. 새 본문 열만 빠졌으면 락 안에서 제자리에 끼우고, 그 밖에 다르면 고치지 않고 경고만)
  *  3. users가 비어 있으면 실행한 사람을 관리자로 등록
  *
  * 만들어진 파일은 실행한 계정의 내 드라이브에 생기며, 아무와도 공유하지 않는다.
@@ -47,6 +47,7 @@ function setup() {
 
   ensureTermSheets_(report);
   seedDefaultBlocks_(report);
+  seedViolationRules_(owner, report);
   seedSettings_(owner, report);
 
   var users = readAll_('users');
@@ -67,7 +68,7 @@ function setup() {
 }
 
 /**
- * 모든 운영 기간에 대해 기간별 탭(exceptions_<id 앞 8자>)을 만든다. 있으면 그대로 둔다.
+ * 모든 운영 기간에 대해 기간별 탭(exceptions_·violations_<id 앞 8자>)을 만든다. 있으면 그대로 둔다.
  * 두 기간의 id 앞 8자가 같으면 탭이 섞이므로 멈춘다.
  */
 function ensureTermSheets_(report) {
@@ -98,12 +99,26 @@ function seedDefaultBlocks_(report) {
   report.push('[블록] 기본 블록 ' + rows.length + '개 추가');
 }
 
+/** violation_rules 탭이 비어 있으면 PRD F4 기본 4항목을 넣는다(결정 41). 있으면 그대로 둔다. */
+function seedViolationRules_(owner, report) {
+  if (readAll_('violation_rules').length) {
+    report.push('[위반 항목] 이미 있어 기본 항목을 넣지 않음');
+    return;
+  }
+  bulkAppend_('violation_rules', DEFAULT_VIOLATION_RULES.map(function (r, i) {
+    return { name: r[0], description: r[1], active: 'TRUE', sort_order: String(i + 1) };
+  }), owner);
+  report.push('[위반 항목] 기본 항목 ' + DEFAULT_VIOLATION_RULES.length + '개 추가');
+}
+
 function ensureSheet_(ss, kind, sheetName) {
   var headers = headersFor_(kind, sheetName);
   var sh = ss.getSheetByName(sheetName);
   if (!sh) {
     sh = ss.insertSheet(sheetName);
   }
+  // 열을 더한 뒤 시트 폭이 모자라면(손으로 열을 지운 탭) 먼저 넓힌다 — 아래 범위가 시트 밖이면 setup이 중간에 멈춘다
+  if (sh.getMaxColumns() < headers.length) sh.insertColumnsAfter(sh.getMaxColumns(), headers.length - sh.getMaxColumns());
   // 모든 칸을 "일반 텍스트"로: 날짜·학번이 자동 변환되지 않게
   sh.getRange(1, 1, sh.getMaxRows(), Math.max(sh.getMaxColumns(), headers.length)).setNumberFormat('@');
 
@@ -114,11 +129,33 @@ function ensureSheet_(ss, kind, sheetName) {
     return '[탭 생성] ' + sheetName;
   }
   var current = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(cellToString_);
-  if (current.join('|') !== headers.join('|')) {
-    return '[경고] ' + sheetName + ' 헤더가 코드와 다릅니다. 자동으로 고치지 않았습니다.\n' +
-      '    시트: ' + current.join(', ') + '\n    코드: ' + headers.join(', ');
-  }
-  return '[탭 유지] ' + sheetName;
+  if (current.join('|') === headers.join('|')) return '[탭 유지] ' + sheetName;
+  // 웹앱이 쓰는 도중에 행이 어긋나지 않게 락 안에서 다시 읽고 한 번에 쓴다(withLock_은 중첩되면 바깥 락을 쓴다 — saveTerm)
+  var added = withLock_(function () { return setupInsertMissingCols_(sh, headers); });
+  if (added) return added.length ? '[열 추가] ' + sheetName + ': ' + added.join(', ') : '[탭 유지] ' + sheetName;
+  return '[경고] ' + sheetName + ' 헤더가 코드와 다릅니다. 자동으로 고치지 않았습니다.\n' +
+    '    시트: ' + current.join(', ') + '\n    코드: ' + headers.join(', ');
+}
+
+/**
+ * 시트 헤더가 코드 헤더에서 본문 열만 빠진 모양(남은 열 순서 같음, id 처음·공통 4열 끝)이면 빈 열을 제자리에 끼워
+ * 헤더와 데이터 전체를 setValues 한 번으로 다시 쓰고 끼운 열 이름을 돌려준다. 다른 모양이면 아무것도 쓰지 않고 null.
+ * 락 안에서 부른다(결정 41, stage2.md 5절 7번).
+ */
+function setupInsertMissingCols_(sh, headers) {
+  var values = sh.getDataRange().getValues();
+  var current = values[0].map(cellToString_);
+  // pos[c] = 코드 헤더 c열이 시트의 몇 번째 열인지(빠졌으면 -1). 코드 헤더는 이름이 겹치지 않아 앞에서부터 맞추면 된다
+  var pos = [], j = 0;
+  headers.forEach(function (h) { pos.push(current[j] === h ? j++ : -1); });
+  if (j !== current.length || current[0] !== 'id' || current.slice(-COMMON_TAIL.length).join('|') !== COMMON_TAIL.join('|')) return null;
+  if (pos.indexOf(-1) < 0) return [];   // 락을 기다리는 동안 다른 setup이 이미 고쳤다: 다시 쓰지 않는다
+  var out = values.map(function (row, r) {
+    return headers.map(function (h, c) { return r === 0 ? h : pos[c] < 0 ? '' : row[pos[c]]; });
+  });
+  sh.getRange(1, 1, out.length, headers.length).setNumberFormat('@').setValues(out);
+  sh.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+  return headers.filter(function (h, c) { return pos[c] < 0; });
 }
 
 function removeDefaultSheet_(ss) {
