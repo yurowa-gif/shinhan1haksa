@@ -66,7 +66,7 @@ function printClamp_(x, lo, hi) {
   return x < lo ? lo : (x > hi ? hi : x);
 }
 
-/** 글자 폭 어림(em): 한글·전각 1, 숫자·영문 0.55, 공백 0.3 */
+/** 글자 폭 어림(em): 한글·전각 1, 숫자·영문 0.55, 공백 0.3. // shortcut: 실제 글꼴 폭이 아니다, C0 PDF에서 줄바꿈이 어긋나면 글꼴별 폭표로 바꾼다 */
 function printTextEm_(s) {
   var em = 0;
   var str = String(s === null || s === undefined ? '' : s);
@@ -308,7 +308,7 @@ function printHeadHtml_(model, lay) {
     '&nbsp;&nbsp;|&nbsp;&nbsp;<b>표시 칸(왼쪽→오른쪽)</b>&nbsp;' + blocks + '&nbsp;&nbsp;|&nbsp;&nbsp;' + legend + '</div></td></tr></table>';
 }
 
-/** 앞면 아래 줄 "자리 배정 안 됨": 최대 2줄, 넘치면 "외 N명(뒷면)" */
+/** 앞면 아래 줄 "자리 배정 안 됨": 최대 2줄, 넘치면 "외 N명(뒷면)". // shortcut: 줄바꿈 위치를 모르고 전체 폭으로 줄 수를 어림(여유 6%), 실제 인쇄에서 줄이 하나 더 생기면 여유를 늘린다 */
 function printFootInfo_(model, warnLine) {
   var items = (model.unseated || []).map(function (u) { return String(u && u.display !== undefined ? u.display : ''); });
   var warnH = warnLine ? PRINT_FOOT_LINE_PT : 0;
@@ -462,7 +462,7 @@ function printTryColumns_(model, opts, picked, c, base) {
   };
 }
 
-/** 이어지는 쪽 나누기: 앞면에 못 담은 큰 공간 행·작은 공간을 쪽 높이에 맞춰 나눈다. → [{mainFrom, mainTo, rooms:[index…]}] */
+/** 이어지는 쪽 나누기(// shortcut: 작은 공간 하나가 쪽 높이보다 크면 나누지 못한다, 실제 SA실이 한 쪽을 넘는 크기(가짜는 5행)면 행 나누기를 넣는다): 앞면에 못 담은 큰 공간 행·작은 공간을 쪽 높이에 맞춰 나눈다. → [{mainFrom, mainTo, rooms:[index…]}] */
 function printContPages_(lay, picked, base) {
   var pages = [];
   var main = picked.main, rooms = picked.rooms;
@@ -556,19 +556,17 @@ function printLayoutOnce_(model, opts, warnLine) {
   var pack = printPackColumns_(texts, 2, linesPerCol, listW, 7);
   lay.listPack = pack;
   lay.listShown = pack.count;
-  lay.listCapacity = pack.count;
   lay.listOverflow = pack.count < texts.length;
   lay.listTexts = texts;
   lay.listW = listW;
 
   // 뒷면(목록) 쪽
-  var listPage = opts.listPage || 'auto';
   var backItems = [];
   if (foot.over) {
     backItems.push({ title: true, text: '자리 배정 안 됨 ' + foot.items.length + '명' });
     foot.items.forEach(function (t) { backItems.push({ text: t }); });
   }
-  if (listPage === 'always' || (listPage !== 'never' && lay.listOverflow)) {
+  if (lay.listOverflow) {
     backItems.push({ title: true, text: '오늘 특이사항 ' + lay.entries.length + '명' });
     texts.forEach(function (t) { backItems.push({ text: t }); });
     if (!texts.length) backItems.push({ text: '없음' });
@@ -578,7 +576,6 @@ function printLayoutOnce_(model, opts, warnLine) {
   lay.back = backItems.length ? printPackPages_(backItems, PRINT_BACK_COLS, backLines, backColW - 1, 8) : [];
   lay.backColW = backColW;
   lay.pages = 1 + lay.cont.length + lay.back.length;
-  lay.needPage2 = lay.pages > 1;
 
   // 경고: 실제 원인대로
   if (lay.markW < PRINT_HAND_MIN_W_PT) warnings.push('표시 칸이 손글씨 하한(' + printNum_(PRINT_HAND_MIN_W_PT) + 'pt)보다 좁습니다(' + printNum_(lay.markW) + 'pt). 블록이 너무 많습니다.');
@@ -586,7 +583,7 @@ function printLayoutOnce_(model, opts, warnLine) {
   if (lay.mainRowsFront < main.rows) warnings.push('큰 공간이 ' + main.rows + '행이라 앞면에 ' + lay.mainRowsFront + '행만 들어가 나머지는 뒷면에 이어집니다.');
   if (lay.contRooms.length) warnings.push('작은 공간 ' + lay.contRooms.length + '개가 앞면에 안 들어가 뒷면에 이어집니다.');
   if (foot.over) warnings.push('자리 배정 안 된 학생 ' + foot.items.length + '명 중 일부만 앞면에 있습니다(전체는 뒷면).');
-  if (lay.listOverflow) warnings.push('오늘 특이사항 ' + lay.entries.length + '명 중 ' + lay.listShown + '명만 앞면에 있습니다' + (listPage === 'never' ? '.' : '(전체는 뒷면).'));
+  if (lay.listOverflow) warnings.push('오늘 특이사항 ' + lay.entries.length + '명 중 ' + lay.listShown + '명만 앞면에 있습니다(전체는 뒷면).');
   if (lay.pitch < PRINT_MIN_PITCH_PT) warnings.push('좌석 한 줄 높이가 기준(' + PRINT_MIN_PITCH_PT + 'pt)보다 낮습니다(' + printNum_(lay.pitch) + 'pt).');
   lay.warnings = warnings;
   lay.warnText = '큰 공간 ' + (lay.mainRowsFront < main.rows ? '일부 행' : '') + (lay.contRooms.length ? (lay.mainRowsFront < main.rows ? '과 ' : '') + '작은 공간 ' + lay.contRooms.length + '개' : '') + '가 앞면에 다 안 들어가 뒷면에 이어집니다.';
@@ -603,7 +600,7 @@ function printSheetPlan_(model, opts) {
     roomColumns: p.c, roomRows: p.c ? Math.ceil(p.frontRooms.length / p.c) : 0, frontRooms: p.frontRooms.length, contRooms: p.contRooms.length,
     mainRowsFront: p.mainRowsFront, lineW: p.L, markW: p.markW, markWmm: p.markW / 72 * 25.4,
     pitch: p.pitch, pitchMm: p.pitch / 72 * 25.4, markHmm: p.markH / 72 * 25.4, nameFontPt: PRINT_NAME_FONT_PT, markFontPt: 7,
-    listCapacity: p.listCapacity, listCount: p.entries.length, listOverflow: p.listOverflow, listHeight: p.listH,
+    listShown: p.listShown, listCount: p.entries.length, listOverflow: p.listOverflow, listHeight: p.listH,
     fits: p.fits, warnings: p.warnings, summary: p.summary, footOver: p.foot.over, unseated: p.foot.items.length
   };
 }
@@ -729,7 +726,7 @@ function printListDivs_(items) {
 }
 
 function printListHtml_(lay) {
-  var note = lay.listOverflow ? (lay.back.length && lay.listOverflow ? '&nbsp;(전체는 뒷면)' : '&nbsp;(자리가 모자라 일부만)') : '';
+  var note = lay.listOverflow ? '&nbsp;(전체는 뒷면)' : '';
   var cols = lay.listPack.columns;
   var body = lay.entries.length ? printListDivs_(cols[0]) : '<div style="font-size:7pt;line-height:' + PRINT_LIST_LINE_PT + 'pt">없음</div>';
   var out = '<div style="width:' + printNum_(lay.rightW) + 'pt;height:' + printNum_(Math.max(PRINT_LIST_TITLE_PT, lay.listH)) + 'pt;overflow:hidden">' +

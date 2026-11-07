@@ -162,11 +162,11 @@ test('인원 요약: 재적 = 자리 있는 학생 + 자리 없는 학사생, �
   m.unseated = [];
   assert.ok(ctx.printRenderSheet_(m, {}).indexOf('재적 ' + seated + '</b>') > 0 || ctx.printRenderSheet_(m, {}).indexOf('재적 ' + seated) > 0);
 });
-test('오늘 특이사항 목록: 블록별 약어("① 무지 · ②③ 병결"), 메모 칸은 일요일에도 앞면에 늘, 넘치면 뒷면, listPage 옵션', () => {
+test('오늘 특이사항 목록: 블록별 약어("① 무지 · ②③ 병결"), 메모 칸은 일요일에도 앞면에 늘, 넘치면 뒷면', () => {
   const mon = fixture('mon_thu');
   const p = plan(mon);
   assert.strictEqual(p.listCount, p.summary.special);
-  assert.ok(!p.listOverflow && p.listCapacity >= p.listCount && p.pages === 1);
+  assert.ok(!p.listOverflow && p.listShown >= p.listCount && p.pages === 1);
   const html = ctx.printRenderSheet_(mon, {});
   assert.ok(html.indexOf('오늘 특이사항 ' + p.listCount + '명') > 0);
   assert.ok(html.indexOf('① 무지') > 0 && html.indexOf('① 병결 외 1 · ②③ 병결') > 0, '어느 블록이 어느 약어인지');
@@ -181,10 +181,6 @@ test('오늘 특이사항 목록: 블록별 약어("① 무지 · ②③ 병결"
   const back = ctx.printRenderSheet_(sun, {});
   assert.ok(back.indexOf('뒷면 목록 (2/2)') > 0 && back.indexOf('① 병결 외 1 · ②③④ 병결') > 0);
   assert.strictEqual(plan(withoutExc(fixture('sun'), 1)).pages, 1);
-  assert.strictEqual(plan(sun, { listPage: 'always' }).pages, 2);
-  assert.strictEqual(plan(sun, { listPage: 'never' }).pages, 1);
-  assert.strictEqual(count(ctx.printRenderSheet_(sun, { listPage: 'never' }), '<section class="page"'), 1);
-  assert.strictEqual(count(ctx.printRenderSheet_(mon, { listPage: 'always' }), '<section class="page"'), 2);
 });
 test('OUT 표시는 인쇄물에 없다(결정 36): outLevel 이 모델에 있어도 ▲·1OUT 을 그리지 않는다', () => {
   const m = fixture('mon_thu');
@@ -427,4 +423,21 @@ test('흑백 인쇄: 공석(연한 회색)과 미리 채운 칸(진한 회색)�
   assert.ok(html.indexOf('background:#d4d4d4') > 0 && html.indexOf('background:#f4f4f4') > 0);
   assert.ok(html.indexOf('print-color-adjust:exact') > 0);
   assert.notStrictEqual(ctx.PRINT_FILLED_BG, ctx.PRINT_VACANT_BG);
+});
+
+test('쪽 나누기 계산(printPackColumns_·printPackPages_): 위에서 아래·열 순서로 채우고, 제목은 다음 항목과 같은 열에 두며, 칸이 0이면 하나도 안 넣는다', () => {
+  const texts = ['가', '나', '다', '라', '마'];
+  const a = plain(ctx.printPackColumns_(texts, 2, 2, 100, 7));
+  assert.deepStrictEqual(a.columns, [['가', '나'], ['다', '라']]);
+  assert.strictEqual(a.count, 4, '2열×2줄에 5개는 안 들어간다(자르지 않고 개수를 알려 준다)');
+  assert.strictEqual(plain(ctx.printPackColumns_(texts, 2, 0, 100, 7)).count, 0);
+  assert.strictEqual(plain(ctx.printPackColumns_(['아주 긴 글자 '.repeat(20)], 1, 2, 30, 7)).count, 1, '한 항목이 칸보다 길어도 멈추지 않는다');
+  const items = [{ title: true, text: 'T1' }, { text: 'a' }, { text: 'b' }, { title: true, text: 'T2' }, { text: 'c' }];
+  const pages = plain(ctx.printPackPages_(items, 2, 4, 100, 8));
+  const flat = pages.map((pg) => pg.map((col) => col.map((x) => x.text)));
+  assert.deepStrictEqual(flat, [[['T1', 'a', 'b'], ['T2', 'c']]], '제목(2줄) + 항목이 한 열에 안 들어가면 다음 열로');
+  const many = Array.from({ length: 30 }, (_, i) => ({ text: 'x' + i }));
+  const p2 = plain(ctx.printPackPages_(many, 3, 4, 100, 8));
+  assert.strictEqual(p2.length, 3, '30개 = 12개씩 3열×4줄 → 3쪽');
+  assert.strictEqual(p2.reduce((k, pg) => k + pg.reduce((j, col) => j + col.length, 0), 0), 30, '하나도 빠지지 않는다');
 });
