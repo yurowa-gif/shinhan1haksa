@@ -159,8 +159,9 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
   if (manual) {   // 교사가 고친 적용일(R10, 결정 52)
     rule = rule || 'manual';
     if (!ymdIsValid_(manual)) throw new Error('effectiveDate 형식이 아닙니다(yyyy-MM-dd): ' + opts.effectiveDate);
-    if (manual < at.date) throw new Error('적용일은 신청일(' + at.date + ') 이후여야 합니다: ' + manual);
     if (rule !== 'manual' && rule !== 'entry_date') throw new Error('effectiveRule은 manual 또는 entry_date: ' + opts.effectiveRule);
+    // 입실일(entry_date)은 입퇴실 기록의 사실이라 늦게 입력하면 신청일보다 이를 수 있다. 교사가 고친 날(manual)만 신청일 이후로 막는다.
+    if (rule === 'manual' && manual < at.date) throw new Error('적용일은 신청일(' + at.date + ') 이후여야 합니다: ' + manual);
     cand = { date: manual, rule: rule };
   }
   var from = statusOn_(rows, sid, it, cand.date);
@@ -210,7 +211,7 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
     var e = ruleStr_(c.effective_date), v = ruleStr_(c.value);
     if (v === to) return;
     if (e > cand.date) out.warnings.push(e + '부터 ' + v + '(으)로 바뀌는 행이 있어 이 신청을 덮습니다(' + (ruleStr_(c.source) || '기록') + ')');
-    else if (e > today && e < cand.date) out.warnings.push(e + '부터 ' + v + '(으)로 바뀌는 대기 중인 신청이 먼저 적용됩니다(필요하면 직접 취소)');
+    else if (e > today && e < cand.date && ruleStr_(c.source) !== '명단업로드') out.warnings.push(e + '부터 ' + v + '(으)로 바뀌는 대기 중인 신청이 먼저 적용됩니다(필요하면 직접 취소)');
   });
 
   // 학사생 값이 퇴실 뒤 중단일까지 이어지면 퇴실 정리 행을 함께 쓴다(none이어도 — 이전 미실시 대기 행을 취소한 경우).
