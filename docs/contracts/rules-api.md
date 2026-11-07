@@ -36,6 +36,11 @@ function hmIsValid_(hm)                     // 'HH:mm'(00:00~23:59, '24:00') 인
 function hmToMin_(hm)                       // 'HH:mm' → 분, '24:00' = 1440
 function minToHm_(min)
 function isoLocalSplit_(iso)                // → {date:'yyyy-MM-dd', min:Number, sec:Number}(sec는 R1 추가)
+// 모든 규칙 파일이 함께 쓰는 헬퍼(R7 추가 — 파일마다 따로 있던 같은 함수를 합침)
+function ruleStr_(v)       // 셀 값 → trim한 문자열(undefined·null은 '')
+function ruleIso_(v)       // 일시 비교용: 'yyyy-MM-dd HH:mm:ss' → 'T' 형식
+function ruleRowLive_(r)   // status 빈칸·'유효'
+function hmNorm_(v)        // 'H:mm'·'HH:mm:00' → 'HH:mm', 빈칸 '', 시각 아님 null(schedNormHm_은 같은 일을 하는 옛 이름, features/Schedule.gs용)
 
 // src/rules/ScheduleRules.gs
 function baseDayType_(ymd)                  // 'mon_thu'|'fri'|'sat'|'sun'
@@ -182,7 +187,7 @@ function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)    
 - ASSUMPTION: 관리자가 직접 취소한 자동 OUT(`cancel_reason`이 `'[자동] '`으로 시작하지 않음)이 가리키던 특이사항 행, 또는 같은 묶음(**취소된 OUT의 학생** + group_id)의 행이 들어 있는 단위는, 그 OUT과 **학생·기간이 같으면** 다시 만들지 않는다(`per`를 바꿔도 같음).
 - ASSUMPTION(결정 22 적용): 같은 학생·같은 날·겹치는 블록에 다른 묶음의 자동 유형 특이사항 두 건이 확정되면 OUT도 두 건(→ 퇴실 대상이 될 수 있다). C5는 저장·확정 때 겹침 경고 후 확인을 받는다(막지는 않음).
 - `outLevel_`: 같은 학생·같은 `term_id`(학기마다 초기화)에서 status 빈칸·`유효`인 OUT 수(직접·자동 모두). 2개 이상이면 `level:2`, `'퇴실 대상'`.
-- 이 파일은 DateRules(`ymdIsValid_`)·AttendanceRules(`attStr_`·`attTypeBase_`·`parseBlockSpec_`)를 부른다. 테스트는 세 파일을 함께 올린다.
+- 이 파일은 DateRules(`ymdIsValid_`·`ruleStr_`·`ruleIso_`·`ruleRowLive_`)·AttendanceRules(`attTypeBase_`·`parseBlockSpec_`)를 부른다. 테스트는 세 파일을 함께 올린다.
 
 ## 동작 메모(R6, 2026-11-07, 총괄 검토 3차 반영)
 

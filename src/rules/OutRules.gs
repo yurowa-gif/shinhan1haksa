@@ -1,7 +1,7 @@
 /**
  * OUT 규칙(RULES 세션 소유, docs/contracts/rules-api.md, PRD F1·F4, 결정 4·10·22, vocabulary.md violations).
  *
- * 순수 함수만 둔다. DateRules.gs(ymdIsValid_)·AttendanceRules.gs(attStr_·attIso_·attTypeBase_·parseBlockSpec_)의 함수를 부른다.
+ * 순수 함수만 둔다. DateRules.gs(ymdIsValid_·ruleStr_·ruleIso_·ruleRowLive_)·AttendanceRules.gs(attTypeBase_·parseBlockSpec_)의 함수를 부른다.
  * 시트 행(문자열)은 그대로 받는다.
  *   exceptions_<기간>:  id, term_id, group_id, student_id, date, blocks, type, status(요청·확정·취소),
  *                      requested_by, confirmed_by, confirmed_at …
@@ -12,13 +12,7 @@
 
 /** 자동 OUT 기록인지(source 'F1자동'). */
 function outIsAuto_(v) {
-  return attStr_(v && v.source) === 'F1자동';
-}
-
-/** 살아 있는 OUT인지(status 빈칸·'유효'). */
-function outIsLive_(v) {
-  var st = attStr_(v && v.status);
-  return st === '' || st === '유효';
+  return ruleStr_(v && v.source) === 'F1자동';
 }
 
 /** 자동 취소 사유의 머리말(vocabulary.md). 관리자가 직접 취소한 자동 OUT과 구별한다. */
@@ -28,7 +22,7 @@ function outAutoCancelPrefix_() {
 
 /** 자동 OUT의 rule_name: '무단 지각·결석·이탈(미인정결석)' — 만들 때의 특이사항 유형을 괄호에 남긴다. */
 function outRuleName_(ruleName, type) {
-  return (attStr_(ruleName) || '무단 지각·결석·이탈') + '(' + attTypeBase_(type) + ')';
+  return (ruleStr_(ruleName) || '무단 지각·결석·이탈') + '(' + attTypeBase_(type) + ')';
 }
 
 /**
@@ -37,8 +31,8 @@ function outRuleName_(ruleName, type) {
  * (유형 안의 짝 맞는 괄호는 허용). 유형이 비었거나('( )') 통째로 괄호에 싸였거나('((x))') 형식이 다르면 null('알 수 없음').
  */
 function outRecordedType_(ruleNameValue, ruleName) {
-  var head = attStr_(ruleName) || '무단 지각·결석·이탈';
-  var s = attStr_(ruleNameValue);
+  var head = ruleStr_(ruleName) || '무단 지각·결석·이탈';
+  var s = ruleStr_(ruleNameValue);
   if (s.indexOf(head + '(') !== 0) return null;
   var rest = s.slice(head.length);              // '(' … ')'
   var close = outMatchingClose_(rest, 0);
@@ -61,7 +55,7 @@ function outMatchingClose_(s, open) {
 /** dutyByDate 값 → 'a@x,b@x' */
 function outDutyText_(dutyByDate, date) {
   var d = (dutyByDate || {})[date];
-  return Array.isArray(d) ? d.map(attStr_).filter(Boolean).join(',') : attStr_(d);
+  return Array.isArray(d) ? d.map(ruleStr_).filter(Boolean).join(',') : ruleStr_(d);
 }
 
 /**
@@ -113,38 +107,38 @@ function reconcileAutoOuts_(exceptions, violations, opts) {
   var autoTypes = (opts.autoTypes || []).map(attTypeBase_).filter(function (t) { return t !== ''; });
   if (!autoTypes.length) autoTypes = ['미인정지각', '미인정조퇴', '미인정결석'];
   var sinceMap = {};
-  Object.keys(opts.autoTypeSince || {}).forEach(function (t) { sinceMap[attTypeBase_(t)] = attIso_(opts.autoTypeSince[t]); });
+  Object.keys(opts.autoTypeSince || {}).forEach(function (t) { sinceMap[attTypeBase_(t)] = ruleIso_(opts.autoTypeSince[t]); });
   var per = opts.per === 'row' ? 'row' : 'group';
   var prefix = outAutoCancelPrefix_();
   var only = null;
   if (Array.isArray(opts.studentIds)) {
     only = {};
-    opts.studentIds.forEach(function (s) { only[attStr_(s)] = true; });
+    opts.studentIds.forEach(function (s) { only[ruleStr_(s)] = true; });
   }
-  var inScope = function (sid) { return !only || only[attStr_(sid)]; };
+  var inScope = function (sid) { return !only || only[ruleStr_(sid)]; };
   var sinceOk = function (e, type) {
-    return !Object.prototype.hasOwnProperty.call(sinceMap, type) || attIso_(e.confirmed_at) >= sinceMap[type];
+    return !Object.prototype.hasOwnProperty.call(sinceMap, type) || ruleIso_(e.confirmed_at) >= sinceMap[type];
   };
   var eligible = function (e) {
     var t = attTypeBase_(e.type);
     return autoTypes.indexOf(t) >= 0 && sinceOk(e, t);
   };
   var byDate = function (a, b) {
-    var da = attStr_(a.date), db = attStr_(b.date);
-    return da < db ? -1 : da > db ? 1 : (attStr_(a.id) < attStr_(b.id) ? -1 : 1);
+    var da = ruleStr_(a.date), db = ruleStr_(b.date);
+    return da < db ? -1 : da > db ? 1 : (ruleStr_(a.id) < ruleStr_(b.id) ? -1 : 1);
   };
 
   // 1) 단위 만들기
   var units = {}, unitOfException = {}, exById = {};
   (exceptions || []).forEach(function (e) {
-    if (!e || !attStr_(e.id)) return;
-    var id = attStr_(e.id), gid = attStr_(e.group_id);
-    var key = per === 'group' && gid ? 'g:' + attStr_(e.student_id) + '|' + gid : 'r:' + id;
+    if (!e || !ruleStr_(e.id)) return;
+    var id = ruleStr_(e.id), gid = ruleStr_(e.group_id);
+    var key = per === 'group' && gid ? 'g:' + ruleStr_(e.student_id) + '|' + gid : 'r:' + id;
     var u = units[key] = units[key] || { key: key, rows: [], confirmed: [] };
     u.rows.push(e);
     unitOfException[id] = key;
     exById[id] = e;
-    if (attStr_(e.status) === '확정' && ymdIsValid_(attStr_(e.date))) u.confirmed.push(e);
+    if (ruleStr_(e.status) === '확정' && ymdIsValid_(ruleStr_(e.date))) u.confirmed.push(e);
   });
   Object.keys(units).forEach(function (k) {
     var u = units[k];
@@ -158,17 +152,17 @@ function reconcileAutoOuts_(exceptions, violations, opts) {
   var movedReason = prefix + '특이사항의 학생 또는 기간이 바뀌었습니다';
   var manual = [];
   (violations || []).forEach(function (v) {
-    if (v && outIsAuto_(v) && attStr_(v.cancel_reason) === movedReason) moved[unitOfException[attStr_(v.source_exception_id)]] = true;
-    if (!v || !outIsAuto_(v) || outIsLive_(v) || attStr_(v.cancel_reason).indexOf(prefix) === 0) return;
-    var ex = exById[attStr_(v.source_exception_id)];
-    manual.push({ exId: attStr_(v.source_exception_id), group: ex && attStr_(ex.group_id) ? attStr_(v.student_id) + '|' + attStr_(ex.group_id) : '',
-      student: attStr_(v.student_id), term: attStr_(v.term_id) });
+    if (v && outIsAuto_(v) && ruleStr_(v.cancel_reason) === movedReason) moved[unitOfException[ruleStr_(v.source_exception_id)]] = true;
+    if (!v || !outIsAuto_(v) || ruleRowLive_(v) || ruleStr_(v.cancel_reason).indexOf(prefix) === 0) return;
+    var ex = exById[ruleStr_(v.source_exception_id)];
+    manual.push({ exId: ruleStr_(v.source_exception_id), group: ex && ruleStr_(ex.group_id) ? ruleStr_(v.student_id) + '|' + ruleStr_(ex.group_id) : '',
+      student: ruleStr_(v.student_id), term: ruleStr_(v.term_id) });
   });
   var isManualCancelled = function (u, rep) {
     return manual.some(function (m) {
-      if (m.student !== attStr_(rep.student_id) || m.term !== attStr_(rep.term_id)) return false;
+      if (m.student !== ruleStr_(rep.student_id) || m.term !== ruleStr_(rep.term_id)) return false;
       return u.rows.some(function (e) {
-        return attStr_(e.id) === m.exId || (m.group && attStr_(e.group_id) && attStr_(e.student_id) + '|' + attStr_(e.group_id) === m.group);
+        return ruleStr_(e.id) === m.exId || (m.group && ruleStr_(e.group_id) && ruleStr_(e.student_id) + '|' + ruleStr_(e.group_id) === m.group);
       });
     });
   };
@@ -176,9 +170,9 @@ function reconcileAutoOuts_(exceptions, violations, opts) {
   // 2) 이미 있는 자동 OUT을 단위에 연결
   var live = {}, force = {}, toCancel = [], toUpdate = [];
   (violations || []).forEach(function (v) {
-    if (!v || !outIsAuto_(v) || !outIsLive_(v) || !inScope(v.student_id)) return;
-    var vid = attStr_(v.id);
-    var key = unitOfException[attStr_(v.source_exception_id)];
+    if (!v || !outIsAuto_(v) || !ruleRowLive_(v) || !inScope(v.student_id)) return;
+    var vid = ruleStr_(v.id);
+    var key = unitOfException[ruleStr_(v.source_exception_id)];
     if (!key) { toCancel.push({ violationId: vid, reason: prefix + '연결된 특이사항이 없습니다' }); return; }
     var u = units[key];
     var recorded = outRecordedType_(v.rule_name, opts.ruleName);
@@ -186,7 +180,7 @@ function reconcileAutoOuts_(exceptions, violations, opts) {
       // since가 이 OUT보다 늦으면 OUT이 있은 뒤의 설정 변경이다 → 그 since로 거르지 않는다(결정 40)
       // shortcut: 다시 넓히면 처음 넓히기 전에 확정된 같은 유형 행도 유지 행이 되어 대표가 그쪽으로 옮겨질 수 있다(덜 죽일 뿐 거짓 취소는 없음), 설정이 넓힌 이력을 남기면 고친다
       return eligible(e) || (recorded !== null && attTypeBase_(e.type) === recorded &&
-        (sinceOk(e, recorded) || attIso_(v.created_at) < sinceMap[recorded] || moved[key]));
+        (sinceOk(e, recorded) || ruleIso_(v.created_at) < sinceMap[recorded] || moved[key]));
     });
     if (!keepers.length) {
       if (recorded === null && u.confirmed.length) {   // 알 수 없음: 유형으로는 취소하지 않고 그대로 둔다
@@ -196,9 +190,9 @@ function reconcileAutoOuts_(exceptions, violations, opts) {
         return;
       }
     }
-    var cur = exById[attStr_(v.source_exception_id)];
+    var cur = exById[ruleStr_(v.source_exception_id)];
     var rep = keepers.length ? (keepers.indexOf(cur) >= 0 ? cur : keepers[0]) : cur;
-    if (attStr_(v.student_id) !== attStr_(rep.student_id) || attStr_(v.term_id) !== attStr_(rep.term_id)) {
+    if (ruleStr_(v.student_id) !== ruleStr_(rep.student_id) || ruleStr_(v.term_id) !== ruleStr_(rep.term_id)) {
       toCancel.push({ violationId: vid, reason: movedReason });
       if (keepers.length && !force[key]) force[key] = { rep: rep, n: keepers.length };
       return;
@@ -226,19 +220,19 @@ function reconcileAutoOuts_(exceptions, violations, opts) {
 
 /** 대표 행으로 만든 OUT 초안(n = 함께 세는 날 수). */
 function outDraft_(rep, n, opts) {
-  var date = attStr_(rep.date);
+  var date = ruleStr_(rep.date);
   return {
-    term_id: attStr_(rep.term_id),
-    student_id: attStr_(rep.student_id),
+    term_id: ruleStr_(rep.term_id),
+    student_id: ruleStr_(rep.student_id),
     occurred_at: date + 'T' + outFirstStart_(rep.blocks) + ':00',
-    rule_id: attStr_(opts.ruleId),
+    rule_id: ruleStr_(opts.ruleId),
     rule_name: outRuleName_(opts.ruleName, rep.type),
     memo: '사전 특이사항 자동: ' + attTypeBase_(rep.type) + (n > 1 ? ' 외 ' + (n - 1) + '일' : ''),
     detected_by: outDutyText_(opts.dutyByDate, date),
-    entered_by: attStr_(rep.confirmed_by) || attStr_(rep.requested_by),
+    entered_by: ruleStr_(rep.confirmed_by) || ruleStr_(rep.requested_by),
     status: '유효',
     source: 'F1자동',
-    source_exception_id: attStr_(rep.id),
+    source_exception_id: ruleStr_(rep.id),
     cancel_reason: ''
   };
 }
@@ -246,22 +240,22 @@ function outDraft_(rep, n, opts) {
 /** 살아 있는 자동 OUT을 대표 행에 맞추는 고침(사람이 고친 값은 그대로). */
 function outUpdatePatch_(v, rep, opts) {
   var patch = {};
-  var repDate = attStr_(rep.date);
-  var oldDate = attStr_(v.occurred_at).slice(0, 10);
-  var repChanged = attStr_(v.source_exception_id) !== attStr_(rep.id);
+  var repDate = ruleStr_(rep.date);
+  var oldDate = ruleStr_(v.occurred_at).slice(0, 10);
+  var repChanged = ruleStr_(v.source_exception_id) !== ruleStr_(rep.id);
   var dateChanged = oldDate !== repDate;
-  if (repChanged) patch.source_exception_id = attStr_(rep.id);
+  if (repChanged) patch.source_exception_id = ruleStr_(rep.id);
   if (repChanged || dateChanged) {
     var at = repDate + 'T' + outFirstStart_(rep.blocks) + ':00';
-    if (attStr_(v.occurred_at) !== at) patch.occurred_at = at;
+    if (ruleStr_(v.occurred_at) !== at) patch.occurred_at = at;
   }
-  var cur = attStr_(v.detected_by);
+  var cur = ruleStr_(v.detected_by);
   var dutyNew = outDutyText_(opts.dutyByDate, repDate);
   if (!cur && dutyNew) patch.detected_by = dutyNew;
   else if (dateChanged && cur && cur === outDutyText_(opts.dutyByDate, oldDate) && cur !== dutyNew) patch.detected_by = dutyNew;
   var recorded = outRecordedType_(v.rule_name, opts.ruleName);
   var nowType = attTypeBase_(rep.type);
-  if (recorded !== null && recorded !== nowType && attStr_(v.rule_name) === outRuleName_(opts.ruleName, recorded)) {
+  if (recorded !== null && recorded !== nowType && ruleStr_(v.rule_name) === outRuleName_(opts.ruleName, recorded)) {
     patch.rule_name = outRuleName_(opts.ruleName, nowType);
   }
   return patch;
@@ -269,14 +263,14 @@ function outUpdatePatch_(v, rep, opts) {
 
 /** 단위가 왜 OUT 대상이 아닌지(취소 사유 문구). */
 function outWhyNotTarget_(u) {
-  if (u.rows.every(function (e) { return attStr_(e.status) === '취소'; })) return '특이사항이 취소되었습니다';
+  if (u.rows.every(function (e) { return ruleStr_(e.status) === '취소'; })) return '특이사항이 취소되었습니다';
   if (!u.confirmed.length) return '확정된 미인정 특이사항이 없습니다';
   return '특이사항 유형이 바뀌었습니다';
 }
 
 /** 블록 표기의 첫 시작 시각(parseBlockSpec_ 기준). 'ALL'·잘못된 표기는 '00:00'. */
 function outFirstStart_(blocks) {
-  var p = parseBlockSpec_(attStr_(blocks));
+  var p = parseBlockSpec_(ruleStr_(blocks));
   return !p.all && p.ranges.length ? p.ranges[0].start : '00:00';
 }
 
@@ -286,9 +280,9 @@ function outFirstStart_(blocks) {
  * 2개 이상이면 '퇴실 대상'(결정 4: 학부모 면담 기록 후 관리자가 퇴실 확정, 유예 없음).
  */
 function outLevel_(violations, studentId, termId) {
-  var sid = attStr_(studentId), tid = attStr_(termId);
+  var sid = ruleStr_(studentId), tid = ruleStr_(termId);
   var count = (violations || []).filter(function (v) {
-    return v && outIsLive_(v) && attStr_(v.student_id) === sid && attStr_(v.term_id) === tid;
+    return v && ruleRowLive_(v) && ruleStr_(v.student_id) === sid && ruleStr_(v.term_id) === tid;
   }).length;
   var level = count >= 2 ? 2 : count;
   return { count: count, level: level, label: ['', '1OUT', '퇴실 대상'][level] };

@@ -1,7 +1,7 @@
 /**
  * 급식 적용일 규칙(RULES 세션 소유, docs/contracts/rules-api.md, PRD F6·F7, 결정 1·2·3·23(④⑤)·35).
  *
- * 순수 함수만 둔다. DateRules.gs의 함수(isoLocalSplit_·ymd…·hm…)와 StatusRules.gs의 statusOn_·statIso_·statChangeValid_를 부른다.
+ * 순수 함수만 둔다. DateRules.gs의 함수(isoLocalSplit_·ymd…·hm…·ruleStr_·ruleIso_·ruleRowLive_)와 StatusRules.gs의 statusOn_을 부른다.
  *
  * | kind            | 언제                                   | 적용일                                         |
  * | start           | 실시 신청(조식 실시, 석식 학사 실시)     | 마감(11:30) 전 신청 → 당일, 마감 이후 → 다음 날   |
@@ -23,14 +23,14 @@
  */
 function mealEffectiveDate_(kind, requestedAt, opts) {
   opts = opts || {};
-  var k = String(kind || '').trim();
+  var k = ruleStr_(kind);
   if (k === 'with_dorm_entry' || k === 'on_leave') {
     var key = k === 'with_dorm_entry' ? 'entryDate' : 'leaveDate';
-    var d = String(opts[key] || '').trim();
+    var d = ruleStr_(opts[key]);
     if (!ymdIsValid_(d)) throw new Error(key + '가 필요합니다(yyyy-MM-dd): ' + d);
     return { date: d, rule: k === 'with_dorm_entry' ? 'entry_date' : 'leave_date' };
   }
-  var at = isoLocalSplit_(String(requestedAt || '').trim());
+  var at = isoLocalSplit_(ruleStr_(requestedAt));
   if (k === 'initial') return { date: at.date, rule: 'initial' };
   if (k === 'start' || k === 'to_general') {
     var cutoff = mealCutoffHm_(opts.cutoff);
@@ -48,11 +48,9 @@ function mealEffectiveDate_(kind, requestedAt, opts) {
 
 /** 설정 meal.morning_cutoff 읽기: 빈칸은 '11:30', 'H:mm'·'HH:mm:00'도 받는다. 시각이 아니면 Error. */
 function mealCutoffHm_(v) {
-  var s = String(v === undefined || v === null ? '' : v).trim();
-  if (!s) return '11:30';
-  var m = /^(\d{1,2}):(\d{2})(?::00)?$/.exec(s);
-  var hm = m ? (m[1].length === 1 ? '0' : '') + m[1] + ':' + m[2] : '';
-  if (!hmIsValid_(hm) || hm === '24:00') throw new Error('마감 시각 형식이 아닙니다(HH:mm): ' + s);
+  var hm = hmNorm_(v);
+  if (hm === '') return '11:30';
+  if (!hm || hm === '24:00') throw new Error('마감 시각 형식이 아닙니다(HH:mm): ' + ruleStr_(v));
   return hm;
 }
 
@@ -63,7 +61,7 @@ function mealCutoffHm_(v) {
  * 조식만 퇴실일에 끝나고, 학사 석식 중단은 미실시 적용일을 따른다(그동안 학사 석식은 이어진다).
  */
 function mealNotBeforeLeave_(r, opts) {
-  var leave = String(opts.leaveDate || '').trim();
+  var leave = ruleStr_(opts.leaveDate);
   if (!leave) return r;
   if (!ymdIsValid_(leave)) throw new Error('leaveDate 형식이 아닙니다(yyyy-MM-dd): ' + leave);
   return r.date < leave ? { date: leave, rule: 'leave_date' } : r;
@@ -80,8 +78,8 @@ function mealNotBeforeLeave_(r, opts) {
  * with_dorm_entry·on_leave는 값 변화가 아니라 F6 입퇴실과 함께 정해지므로 여기서 나오지 않는다. 모르는 item·값이면 Error.
  */
 function mealChangeKind_(item, fromValue, toValue) {
-  var it = String(item || '').trim();
-  var from = String(fromValue || '').trim(), to = String(toValue || '').trim();
+  var it = ruleStr_(item);
+  var from = ruleStr_(fromValue), to = ruleStr_(toValue);
   var allowed = mealAllowedValues_(it);
   if (!allowed) throw new Error('급식 항목은 조식 또는 석식이어야 합니다: ' + item);
   if (allowed.indexOf(to) < 0) throw new Error(it + ' 값이 아닙니다: ' + toValue);
@@ -134,16 +132,16 @@ function mealIsHallOnly_(item, value) {
  */
 function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
   opts = opts || {};
-  var sid = String(studentId || '').trim(), it = String(item || '').trim(), to = String(toValue || '').trim();
+  var sid = ruleStr_(studentId), it = ruleStr_(item), to = ruleStr_(toValue);
   mealChangeKind_(it, '', to);                                     // 항목·값 검사(같은 오류 문구)
-  var today = String(opts.today || '').trim();
+  var today = ruleStr_(opts.today);
   if (!ymdIsValid_(today)) throw new Error('today가 필요합니다(yyyy-MM-dd): ' + opts.today);
-  var at = isoLocalSplit_(String(requestedAt || '').trim());
-  var req = statIso_(requestedAt);
+  var at = isoLocalSplit_(ruleStr_(requestedAt));
+  var req = ruleIso_(requestedAt);
   var rows = (changes || []).filter(function (c) {
-    return c && statChangeValid_(c) && String(c.student_id || '').trim() === sid && ymdIsValid_(String(c.effective_date || '').trim());
+    return c && ruleRowLive_(c) && ruleStr_(c.student_id) === sid && ymdIsValid_(ruleStr_(c.effective_date));
   });
-  var mine = rows.filter(function (c) { return String(c.item || '').trim() === it; });
+  var mine = rows.filter(function (c) { return ruleStr_(c.item) === it; });
 
   var cand;
   if (to === '미실시') {
@@ -166,11 +164,11 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
   }
   // 늦게 입력한 이전 신청서: 더 새 신청이 이미 그 전에 적용되면 이 신청은 영영 적용되지 않는다
   var newer = mine.filter(function (c) {   // 퇴실 정리(F6) 행은 신청이 아니다
-    return String(c.source || '').trim() !== 'F6' && statIso_(c.requested_at) > req && String(c.effective_date).trim() <= cand.date;
+    return ruleStr_(c.source) !== 'F6' && ruleIso_(c.requested_at) > req && ruleStr_(c.effective_date) <= cand.date;
   });
   if (newer.length) {
     out.kind = 'none'; out.date = ''; out.rule = ''; out.superseded = true;
-    out.warnings.push('더 새 신청(' + newer.map(function (c) { return String(c.effective_date).trim() + ' ' + String(c.value).trim(); }).join(', ') +
+    out.warnings.push('더 새 신청(' + newer.map(function (c) { return ruleStr_(c.effective_date) + ' ' + ruleStr_(c.value); }).join(', ') +
       ')이 먼저 적용되어 이 신청은 적용되지 않습니다');
     return out;
   }
@@ -180,30 +178,30 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
   // 퇴실 정리(F6) 행은 학사생 값을 끝내는 표시다. 이 신청을 저장한 뒤 그 행이 없어도 그날 값이 학사생 값이 아니고 그 행 값과도
   // 다르면(예: 퇴실 뒤·퇴실 전 늦은 입력의 일반 석식) 뜻이 없어졌으므로 함께 취소한다.
   var newRow = { student_id: sid, item: it, value: to, effective_date: cand.date, requested_at: req, status: '유효', created_at: '9999' };
-  mine.filter(function (c) { return String(c.source || '').trim() === 'F6' && String(c.effective_date).trim() > cand.date; })
+  mine.filter(function (c) { return ruleStr_(c.source) === 'F6' && ruleStr_(c.effective_date) > cand.date; })
     .sort(function (a, b) { return String(a.effective_date) < String(b.effective_date) ? -1 : 1; })
     .forEach(function (f) {
-      var others = rows.filter(function (c) { return c !== f && !cancelled[String(c.id || '').trim()]; }).concat([newRow]);
-      var without = statusOn_(others, sid, it, String(f.effective_date).trim());
-      if (without && !mealIsHallOnly_(it, without) && without !== String(f.value || '').trim()) {
-        out.toCancel.push({ id: String(f.id || '').trim(), effective_date: String(f.effective_date).trim(), value: String(f.value || '').trim() });
-        cancelled[String(f.id || '').trim()] = true;
+      var others = rows.filter(function (c) { return c !== f && !cancelled[ruleStr_(c.id)]; }).concat([newRow]);
+      var without = statusOn_(others, sid, it, ruleStr_(f.effective_date));
+      if (without && !mealIsHallOnly_(it, without) && without !== ruleStr_(f.value)) {
+        out.toCancel.push({ id: ruleStr_(f.id), effective_date: ruleStr_(f.effective_date), value: ruleStr_(f.value) });
+        cancelled[ruleStr_(f.id)] = true;
       }
     });
 
   // 남아서 이 신청을 나중에 덮는 행 / 이 신청 전에 먼저 적용되는 다른 값의 대기 행 → 경고
   mine.forEach(function (c) {
-    if (cancelled[String(c.id || '').trim()]) return;
-    var e = String(c.effective_date).trim(), v = String(c.value || '').trim();
+    if (cancelled[ruleStr_(c.id)]) return;
+    var e = ruleStr_(c.effective_date), v = ruleStr_(c.value);
     if (v === to) return;
-    if (e > cand.date) out.warnings.push(e + '부터 ' + v + '(으)로 바뀌는 행이 있어 이 신청을 덮습니다(' + (String(c.source || '').trim() || '기록') + ')');
+    if (e > cand.date) out.warnings.push(e + '부터 ' + v + '(으)로 바뀌는 행이 있어 이 신청을 덮습니다(' + (ruleStr_(c.source) || '기록') + ')');
     else if (e > today && e < cand.date) out.warnings.push(e + '부터 ' + v + '(으)로 바뀌는 대기 중인 신청이 먼저 적용됩니다(필요하면 직접 취소)');
   });
 
   // 학사생 값이 퇴실 뒤 중단일까지 이어지면 퇴실 정리 행을 함께 쓴다(none이어도 — 이전 미실시 대기 행을 취소한 경우).
   // 중단일에 다시 입실해 있으면 쓰지 않는다.
   if (leave && statusOn_(rows, sid, '학사', leave.stop) === '퇴실') {
-    var after = rows.filter(function (c) { return !cancelled[String(c.id || '').trim()]; }).concat([newRow]);
+    var after = rows.filter(function (c) { return !cancelled[ruleStr_(c.id)]; }).concat([newRow]);
     if (mealIsHallOnly_(it, statusOn_(after, sid, it, leave.stop))) {
       out.followUps.push({ item: it, value: '미실시', effective_date: leave.stop, source: 'F6' });
     }
@@ -218,12 +216,12 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
 function mealLeaveFor_(rows, sid, item, date, req) {
   var inLeave = statusOn_(rows, sid, '학사', date) === '퇴실', row = null, e0 = '';
   rows.forEach(function (c) {
-    var e = statStr_(c.effective_date);
-    if (statStr_(c.item) !== '학사' || statStr_(c.value) !== '퇴실' || statusOn_(rows, sid, '학사', e) !== '퇴실') return;
+    var e = ruleStr_(c.effective_date);
+    if (ruleStr_(c.item) !== '학사' || ruleStr_(c.value) !== '퇴실' || statusOn_(rows, sid, '학사', e) !== '퇴실') return;
     if (inLeave ? e <= date && (!row || e > e0) : e > date && (!row || e < e0)) { row = c; e0 = e; }
   });
   if (!row) return null;
-  var at = statIso_(row.requested_at);
+  var at = ruleIso_(row.requested_at);
   try {
     return { date: e0, at: at, stop: item === '조식' ? e0 : mealEffectiveDate_('stop', at, { leaveDate: e0 }).date };
   } catch (err) {
@@ -248,20 +246,20 @@ function mealLeaveFor_(rows, sid, item, date, req) {
  */
 function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts) {
   opts = opts || {};
-  var sid = String(studentId || '').trim(), it = String(item || '').trim(), eff = String(effectiveDate || '').trim();
+  var sid = ruleStr_(studentId), it = ruleStr_(item), eff = ruleStr_(effectiveDate);
   if (!ymdIsValid_(eff)) throw new Error('적용일 형식이 아닙니다(yyyy-MM-dd): ' + effectiveDate);
-  var fromF6 = String(opts.source || 'F7').trim() === 'F6';
-  var req = statIso_(opts.requestedAt);
-  var nv = String(opts.newValue || '').trim();
+  var fromF6 = (ruleStr_(opts.source) || 'F7') === 'F6';
+  var req = ruleIso_(opts.requestedAt);
+  var nv = ruleStr_(opts.newValue);
   return (changes || []).filter(function (c) {
-    if (!c || !statChangeValid_(c) || String(c.student_id || '').trim() !== sid || String(c.item || '').trim() !== it) return false;
-    var e = String(c.effective_date || '').trim();
+    if (!c || !ruleRowLive_(c) || ruleStr_(c.student_id) !== sid || ruleStr_(c.item) !== it) return false;
+    var e = ruleStr_(c.effective_date);
     if (!ymdIsValid_(e)) return false;
-    var isF6 = String(c.source || '').trim() === 'F6';
-    if (fromF6) return !isF6 && e >= eff && mealIsHallOnly_(it, String(c.value || '').trim());
-    if (e <= eff || isF6 || (nv && String(c.value || '').trim() === nv)) return false;   // F6 행은 mealPlanChange_가 따로 본다. 같은 값은 덮을 필요 없음
-    return !req || statIso_(c.requested_at) <= req;
+    var isF6 = ruleStr_(c.source) === 'F6';
+    if (fromF6) return !isF6 && e >= eff && mealIsHallOnly_(it, ruleStr_(c.value));
+    if (e <= eff || isF6 || (nv && ruleStr_(c.value) === nv)) return false;   // F6 행은 mealPlanChange_가 따로 본다. 같은 값은 덮을 필요 없음
+    return !req || ruleIso_(c.requested_at) <= req;
   }).map(function (c) {
-    return { id: String(c.id || '').trim(), effective_date: String(c.effective_date || '').trim(), value: String(c.value || '').trim() };
+    return { id: ruleStr_(c.id), effective_date: ruleStr_(c.effective_date), value: ruleStr_(c.value) };
   }).sort(function (a, b) { return a.effective_date < b.effective_date ? -1 : a.effective_date > b.effective_date ? 1 : 0; });
 }

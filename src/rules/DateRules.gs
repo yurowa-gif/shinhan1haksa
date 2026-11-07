@@ -127,3 +127,30 @@ function isoLocalSplit_(iso) {
   if (h > 23 || mi > 59 || s > 59) throw new Error('일시 형식이 아닙니다(yyyy-MM-ddTHH:mm:ss): ' + iso);
   return { date: m[1], min: h * 60 + mi, sec: (h * 60 + mi) * 60 + s };
 }
+
+/* ───── 모든 규칙 파일이 함께 쓰는 헬퍼(시트 값은 문자열로 온다) ───── */
+
+/** 셀 값 → 앞뒤 공백 없는 문자열(undefined·null은 ''). */
+function ruleStr_(v) {
+  return String(v === undefined || v === null ? '' : v).trim();
+}
+
+/** 일시 비교용: 'yyyy-MM-dd HH:mm:ss'처럼 공백으로 쓴 값도 'T' 형식과 같은 순서가 되게. */
+function ruleIso_(v) {
+  return ruleStr_(v).replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T');
+}
+
+/** 살아 있는 기록 행인지: status 빈칸·'유효'(취소·요청 등은 아님). */
+function ruleRowLive_(r) {
+  var st = ruleStr_(r && r.status);
+  return st === '' || st === '유효';
+}
+
+/** 시트에서 읽은 시각 → 'HH:mm'. 'H:mm'(9:00)·초가 00인 'HH:mm:ss'(21:30:00)도 받는다. 빈칸이면 '', 시각이 아니면 null. */
+function hmNorm_(v) {
+  var s = ruleStr_(v);
+  if (!s) return '';
+  var m = /^(\d{1,2}):(\d{2})(?::00)?$/.exec(s);
+  var hm = m ? (m[1].length === 1 ? '0' : '') + m[1] + ':' + m[2] : '';
+  return hmIsValid_(hm) ? hm : null;
+}

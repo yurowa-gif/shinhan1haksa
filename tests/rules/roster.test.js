@@ -2,7 +2,7 @@
 const assert = require('assert');
 const { test, loadGs, plain } = require('../helpers/harness');
 
-const ctx = loadGs(['src/rules/StatusRules.gs', 'src/rules/RosterRules.gs']);
+const ctx = loadGs(['src/rules/DateRules.gs', 'src/rules/StatusRules.gs', 'src/rules/RosterRules.gs']);
 
 function table(name, rows, fn) {
   test(name, () => {

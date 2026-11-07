@@ -9,23 +9,6 @@
  *                      teacher_confirmed_at, updated_at …
  */
 
-function attStr_(v) {
-  return String(v === undefined || v === null ? '' : v).trim();
-}
-
-/** 'H:mm'·'HH:mm'·초가 00인 'HH:mm:ss' → 'HH:mm', 아니면 null. */
-function attHm_(s) {
-  var m = /^(\d{1,2}):(\d{2})(?::00)?$/.exec(attStr_(s));
-  if (!m) return null;
-  var hm = (m[1].length === 1 ? '0' : '') + m[1] + ':' + m[2];
-  return hmIsValid_(hm) ? hm : null;
-}
-
-/** 일시 비교용(공백 구분도 T 형식과 같은 순서로). */
-function attIso_(v) {
-  return attStr_(v).replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T');
-}
-
 /**
  * 블록 표기 해석. 'ALL'(대소문자·공백 무시) 또는 'HH:mm-HH:mm;HH:mm-HH:mm'.
  * → {all:boolean, ranges:[{start,end}](시작 순, 겹치거나 맞닿은 범위는 합침), errors:[문자열]}
@@ -33,7 +16,7 @@ function attIso_(v) {
  * 잘못된 조각은 errors에 적고 뺀다. 빈 표기도 오류.
  */
 function parseBlockSpec_(spec) {
-  var s = attStr_(spec);
+  var s = ruleStr_(spec);
   if (s.toUpperCase() === 'ALL') return { all: true, ranges: [], errors: [] };
   var errors = [], ranges = [];
   if (!s) return { all: false, ranges: [], errors: ['블록 표기가 비어 있습니다'] };
@@ -41,7 +24,7 @@ function parseBlockSpec_(spec) {
     var p = part.trim();
     if (!p) return;
     var m = /^(\d{1,2}:\d{2})\s*[-–~]\s*(\d{1,2}:\d{2})$/.exec(p);
-    var a = m && attHm_(m[1]), b = m && attHm_(m[2]);
+    var a = m && hmNorm_(m[1]), b = m && hmNorm_(m[2]);
     if (!a || !b || a === '24:00' || hmToMin_(a) >= hmToMin_(b)) {
       errors.push('블록 표기가 아닙니다(HH:mm-HH:mm): ' + p);
       return;
@@ -66,7 +49,7 @@ function parseBlockSpec_(spec) {
 function formatBlockSpec_(parsed) {
   if (!parsed) return '';
   if (parsed.all) return 'ALL';
-  var p = parseBlockSpec_((parsed.ranges || []).map(function (r) { return attStr_(r.start) + '-' + attStr_(r.end); }).join(';'));
+  var p = parseBlockSpec_((parsed.ranges || []).map(function (r) { return ruleStr_(r.start) + '-' + ruleStr_(r.end); }).join(';'));
   return p.ranges.map(function (r) { return r.start + '-' + r.end; }).join(';');
 }
 
@@ -78,7 +61,7 @@ function blockSpecCovers_(spec, block) {
   var p = typeof spec === 'string' || spec === undefined || spec === null ? parseBlockSpec_(spec) : spec;
   if (p.all) return true;
   if (!block) return false;
-  var bs = attHm_(block.start), be = attHm_(block.end);
+  var bs = hmNorm_(block.start), be = hmNorm_(block.end);
   if (!bs || !be) return false;
   var s = hmToMin_(bs), e = hmToMin_(be);
   return (p.ranges || []).some(function (r) { return hmToMin_(r.start) < e && s < hmToMin_(r.end); });
@@ -93,14 +76,14 @@ function blockSpecCovers_(spec, block) {
  *   그 달로 바꾸지 않고 앞 달을 유지한다(결정 31의 "확정 행이 있는 가장 최근 달"에 더한 조건, R3에서 총괄 승인).
  */
 function effectiveFixedRows_(rows, studentId, ymd) {
-  var sid = attStr_(studentId), ym = attStr_(ymd).slice(0, 7);
+  var sid = ruleStr_(studentId), ym = ruleStr_(ymd).slice(0, 7);
   var byMonth = {};
   (rows || []).forEach(function (r) {
-    if (!r || attStr_(r.student_id) !== sid) return;
-    var mo = attStr_(r.month);
+    if (!r || ruleStr_(r.student_id) !== sid) return;
+    var mo = ruleStr_(r.month);
     if (!/^\d{4}-\d{2}$/.test(mo) || mo > ym) return;
     var m = byMonth[mo] = byMonth[mo] || { confirmed: [], pending: false };
-    var st = attStr_(r.status);
+    var st = ruleStr_(r.status);
     if (st === '확정') m.confirmed.push(r);
     else if (st === '제출' || st === '동의') m.pending = true;
   });
@@ -109,7 +92,7 @@ function effectiveFixedRows_(rows, studentId, ymd) {
   }).sort();
   if (!months.length) return [];
   return byMonth[months[months.length - 1]].confirmed.filter(function (r) {
-    var code = attStr_(r.code);
+    var code = ruleStr_(r.code);
     return code === '학' || code === '가';
   });
 }
@@ -128,31 +111,31 @@ function attDefaultTypeShort_() {
  */
 function attTypeShort_(type, typeShort) {
   var map = typeShort || attDefaultTypeShort_();
-  var t = attStr_(type);
-  if (Object.prototype.hasOwnProperty.call(map, t)) return attStr_(map[t]);
+  var t = ruleStr_(type);
+  if (Object.prototype.hasOwnProperty.call(map, t)) return ruleStr_(map[t]);
   var base = attTypeBase_(t);
   var keys = Object.keys(map);
   for (var i = 0; i < keys.length; i++) {
-    if (attTypeBase_(keys[i]) === base) return attStr_(map[keys[i]]);
+    if (attTypeBase_(keys[i]) === base) return ruleStr_(map[keys[i]]);
   }
   return base || t;
 }
 
 /** 유형 이름에서 끝의 괄호 설명을 뗀다: '가정사유(가족여행 포함)' → '가정사유'. */
 function attTypeBase_(t) {
-  return attStr_(t).replace(/\s*\(.*\)\s*$/, '').trim();
+  return ruleStr_(t).replace(/\s*\(.*\)\s*$/, '').trim();
 }
 
 /** 요일 글자 → 기본 요일 유형. */
 function attWeekdayBaseType_(weekdayKo) {
-  return { '월': 'mon_thu', '화': 'mon_thu', '수': 'mon_thu', '목': 'mon_thu', '금': 'fri', '토': 'sat', '일': 'sun' }[attStr_(weekdayKo)] || '';
+  return { '월': 'mon_thu', '화': 'mon_thu', '수': 'mon_thu', '목': 'mon_thu', '금': 'fri', '토': 'sat', '일': 'sun' }[ruleStr_(weekdayKo)] || '';
 }
 
 /** 행 a가 b보다 최근 확정인지(확정 시각 → updated_at, 같으면 a = 나중 행이 이김). */
 function attNewer_(a, b, confirmedKey) {
-  var ca = attIso_(a[confirmedKey]), cb = attIso_(b[confirmedKey]);
+  var ca = ruleIso_(a[confirmedKey]), cb = ruleIso_(b[confirmedKey]);
   if (ca !== cb) return ca > cb;
-  return attIso_(a.updated_at) >= attIso_(b.updated_at);
+  return ruleIso_(a.updated_at) >= ruleIso_(b.updated_at);
 }
 
 /**
@@ -173,38 +156,38 @@ function resolveCell_(c) {
   var block = c.block || {};
 
   var exc = (c.exceptions || []).filter(function (e) {
-    return e && attStr_(e.status) === '확정' && blockSpecCovers_(attStr_(e.blocks), block);
+    return e && ruleStr_(e.status) === '확정' && blockSpecCovers_(ruleStr_(e.blocks), block);
   });
   if (exc.length) {
     var top = exc.reduce(function (m, e) { return !m || attNewer_(e, m, 'confirmed_at') ? e : m; }, null);
     var more = exc.length - 1;
     var text = attTypeShort_(top.type, opts.typeShort) + (more ? ' 외 ' + more : '');
-    return { code: 'EXC', text: text, exceptionId: attStr_(top.id), more: more };
+    return { code: 'EXC', text: text, exceptionId: ruleStr_(top.id), more: more };
   }
 
-  var wk = attStr_(c.weekdayKo);
+  var wk = ruleStr_(c.weekdayKo);
   var fixed = (c.fixedRows || []).filter(function (f) {
     if (!f) return false;
-    var code = attStr_(f.code);
-    return attStr_(f.status) === '확정' && attStr_(f.weekday) === wk && (code === '학' || code === '가') &&
-      blockSpecCovers_(attStr_(f.blocks), block);
+    var code = ruleStr_(f.code);
+    return ruleStr_(f.status) === '확정' && ruleStr_(f.weekday) === wk && (code === '학' || code === '가') &&
+      blockSpecCovers_(ruleStr_(f.blocks), block);
   });
   if (fixed.length) {
     var ft = fixed.reduce(function (m, f) { return !m || attNewer_(f, m, 'teacher_confirmed_at') ? f : m; }, null);
-    return { code: 'FIXED', text: attStr_(ft.code), exceptionId: '', more: 0 };
+    return { code: 'FIXED', text: ruleStr_(ft.code), exceptionId: '', more: 0 };
   }
 
-  var endTime = attHm_(opts.endTime) || '23:00';
-  var dayTypes = (opts.endTypeDayTypes || ['mon_thu']).map(attStr_);
-  var dt = attStr_(c.dayType);
+  var endTime = hmNorm_(opts.endTime) || '23:00';
+  var dayTypes = (opts.endTypeDayTypes || ['mon_thu']).map(ruleStr_);
+  var dt = ruleStr_(c.dayType);
   // ASSUMPTION: 특별 요일 유형(exam 등)으로 바꾼 날은 실제 달력 요일의 기본 유형으로 판정한다(목요일 exam → mon_thu).
   var isBase = ['mon_thu', 'fri', 'sat', 'sun'].indexOf(dt) >= 0;
   var dayOk = dayTypes.indexOf(dt) >= 0 || (!isBase && dayTypes.indexOf(attWeekdayBaseType_(c.weekdayKo)) >= 0);
-  var be = attHm_(block.end);
-  var dayEnd = attHm_(c.dayEnd);
-  if (c.isLastBlock && attHm_(c.endType) === endTime && dayOk && be && hmToMin_(be) > hmToMin_(endTime) &&
+  var be = hmNorm_(block.end);
+  var dayEnd = hmNorm_(c.dayEnd);
+  if (c.isLastBlock && hmNorm_(c.endType) === endTime && dayOk && be && hmToMin_(be) > hmToMin_(endTime) &&
       (!dayEnd || hmToMin_(dayEnd) > hmToMin_(endTime))) {
-    return { code: 'END', text: attStr_(opts.endLabel) || '정상 종료', exceptionId: '', more: 0 };
+    return { code: 'END', text: ruleStr_(opts.endLabel) || '정상 종료', exceptionId: '', more: 0 };
   }
   return { code: 'NONE', text: '', exceptionId: '', more: 0 };
 }
@@ -220,9 +203,9 @@ function resolveStudentDay_(plan, s, opts) {
   if (!plan || !plan.operating) return [];
   s = s || {};
   var blocks = plan.blocks || [];
-  var date = attStr_(plan.date);
+  var date = ruleStr_(plan.date);
   var exceptions = (s.exceptions || []).filter(function (e) {
-    return e && attStr_(e.date) === date;   // 날짜가 비었거나 다른 행은 쓰지 않는다(빈 날짜가 모든 날에 찍히지 않게)
+    return e && ruleStr_(e.date) === date;   // 날짜가 비었거나 다른 행은 쓰지 않는다(빈 날짜가 모든 날에 찍히지 않게)
   });
   var weekdayKo = ymdWeekdayKo_(date);
   return blocks.map(function (b, i) {
