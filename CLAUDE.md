@@ -58,6 +58,12 @@
 - 총괄 세션(오푸스)이 계획·검토·병합을 맡는다. 작업 세션(코딩·디자인·규칙·테스트·자료조사)은 각자 브랜치에서 일하고 main으로 PR을 연 뒤 총괄에게 알린다.
 - 결정 기록은 `docs/decisions.md`. PRD와 다르면 decisions.md가 최신이다 — 발견하면 총괄에게 알린다.
 
+## 코딩 방식(ponytail)
+- 코딩은 `.claude/skills/ponytail`(필요한 것을 빠짐없이, 가장 짧은 변경으로), 검토는 `ponytail-review`, 저장소 전체 점검은 `ponytail-audit`를 따른다. 원본·범위는 `.claude/skills/ponytail/SOURCE.md`(훅·작업판은 넣지 않음).
+- **이 문서의 "반드시 지킬 것"이 ponytail보다 앞선다.** "줄이기"는 권한 검사(`requirePermission_`), 쓰기 잠금(`LockService`), 감사 기록, 취소 대신 삭제 금지, 테스트를 빼는 근거가 되지 않는다.
+- 재사용 순서: `Db.gs`·`Auth.gs`·`src/rules`·`UI.*` → Apps Script 서비스 → 새 코드. 새 외부 라이브러리는 넣지 않는다.
+- 선생님께 보고하는 글은 `ponytail-review`의 쉬운 말 형식(무엇을 하는지 → 반드시 고칠 것 / 고치면 좋은 것 / 있으면 좋은 것 → 판정)으로 쓰고, 화면·출력물 사진을 함께 붙인다.
+
 ## 작업 순서(PRD 11절)
 (2026-11-06) 0단계 진단(설치·개인 gmail)은 아직이다. 교사용 기능(1·2단계)을 먼저 하고, 학생·학부모 기능은 진단 결과로 6.1 안을 정한 뒤 시작한다. 1단계 분담은 `docs/plan/stage1.md`.
 
