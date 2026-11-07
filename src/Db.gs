@@ -206,10 +206,11 @@ function logDenied_(actorEmail, action, detail) {
     var cache = CacheService.getScriptCache();
     var key = 'deny:' + Utilities.base64EncodeWebSafe(String(actorEmail || '-') + '|' + action).slice(0, 200);
     if (cache.get(key)) return;
-    cache.put(key, '1', DENY_LOG_INTERVAL_SEC);
     withLock_(function () {
-      writeAudit_('-', '', 'denied:' + action, null, null, actorEmail || '(이메일 없음)', 'db', detail);
+      // 상세는 500자로 자른다(큰 입력 한 번으로 감사 쓰기가 실패하지 않게). 10분 제한 캐시는 기록에 성공한 뒤에 둔다
+      writeAudit_('-', '', 'denied:' + action, null, null, actorEmail || '(이메일 없음)', 'db', String(detail === undefined ? '' : detail).slice(0, 500));
     }, 2000);
+    cache.put(key, '1', DENY_LOG_INTERVAL_SEC);
   } catch (e) {
     console.warn('거부 기록 생략: ' + e.message);
   }
