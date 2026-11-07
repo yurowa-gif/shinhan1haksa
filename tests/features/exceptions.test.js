@@ -633,10 +633,9 @@ test('넓은 보기는 그 기록이 속한 기간에 등록된 학생만: 그 �
   // 다른 기간에만 등록된 학생: 직전 기간에만 있고 이번 기간에는 없는 학생은 이번 기간 기준으로는 거부, 직전 기간 기준으로는 허용
   const prev = prevTermOf(x), inPrev = (id, t) => x.env.rows('enrollments').some((e) => e.term_id === t.id && e.student_id === id);
   const prevOnly = x.env.rows('enrollments').find((e) => e.term_id === prev.id && !inPrev(e.student_id, x.term) && e.student_id !== x.acc.unenrolledStudentId);
-  if (prevOnly) {
-    x.env.expectDenied(TEACHER, 'exception.view', 'listExceptions', { scope: 'student', studentId: prevOnly.student_id, termId: x.term.id });
-    x.env.expectAllowed(TEACHER, 'listExceptions', { scope: 'student', studentId: prevOnly.student_id, termId: prev.id });
-  }
+  assert.ok(prevOnly, '직전 기간에만 등록된 학생이 가짜 데이터에 있어야 이 시험이 뜻을 가진다');
+  x.env.expectDenied(TEACHER, 'exception.view', 'listExceptions', { scope: 'student', studentId: prevOnly.student_id, termId: x.term.id });
+  x.env.expectAllowed(TEACHER, 'listExceptions', { scope: 'student', studentId: prevOnly.student_id, termId: prev.id });
 });
 
 test('담임은 넓어지지 않는다: 목록은 자기 반 학생만(출결 담당보다 적다), 다른 반 학생 학생별 보기는 거부, viewStudents도 자기 반만', () => {
