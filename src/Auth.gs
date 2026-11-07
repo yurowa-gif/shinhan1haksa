@@ -20,7 +20,8 @@ function permissions_() {
     // 홈 화면: 요청한 역할(context.role)을 실제로 가진 사람만
     'home.view': { roles: ROLES, scope: 'ownRole' },
     // 학생 한 명의 기본 정보 보기
-    'student.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom', 'student', 'parent'], scope: 'student' },
+    // wideView: 보기 키만 — 학사 교사도 이번 기간 학사생 전체를 본다(결정 45). 쓰기 키·counsel.view에는 달지 않는다
+    'student.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom', 'student', 'parent'], scope: 'student', wideView: true },
     // 계정 목록 보기(관리자 홈 요약)
     'admin.users.view': { roles: ['admin'] },
     // 운영 기간: 교사 계정은 보기, 추가·수정은 관리자만
@@ -34,7 +35,8 @@ function permissions_() {
     'schedule.view': { roles: ['admin', 'attendance', 'hall_teacher', 'duty_manager', 'homeroom'] },
     'schedule.edit': { roles: ['admin'] },
     // 사전 특이사항(F1): 출결 담당·관리자는 입력(바로 확정)·확정, 담임(자기 반)·학사 교사(담당 학생)는 요청만, 취소는 출결 담당·관리자 또는 본인 요청
-    'exception.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] },
+    // wideView는 목록·학생별 보기 범위(excVisibleIds_)에서 쓴다. 입력 화면의 학생 선택 목록은 넓히지 않는다
+    'exception.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'], wideView: true },
     // noDuty: 근무일(isOnDuty)은 범위에 넣지 않는다 — 저장은 담당·담임·출결·관리자만(ASSUMPTION: F3 이후에도 근무일 교사가 모든 학생에게 요청하지는 못하게)
     'exception.save': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'], scope: 'student', noDuty: true },
     'exception.confirm': { roles: ['admin', 'attendance'] },
@@ -65,7 +67,7 @@ function permissions_() {
     // 입퇴실·급식(F6·F7): list는 화면 열기·행 id 함수 첫 줄(역할만), 저장은 근무일 제외
     // 보기: 1학사 교사(학사 교사·출결 담당)는 학사생 전체, 담임은 자기 반(결정 45). 저장은 담당·관리자
     'status.list': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] },
-    'status.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'], scope: 'student' },
+    'status.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'], scope: 'student', wideView: true },
     'status.edit': { roles: ['admin', 'hall_teacher'], scope: 'student', noDuty: true },
     'meal.count': { roles: ['admin'] }
   };
@@ -192,13 +194,14 @@ function sameClass_(homeroomClass, grade, classNo) {
  * @param {string[]} roles 접속자 역할
  * @param {Object} facts studentFacts_ 결과
  * @param {string[]} allowedRoles 이 기능에 허용된 역할
+ * @param {boolean=} wide 보기 키(wideView): 학사 교사도 이번 기간 학사생이면 통과
  */
-function canAccessStudentByFacts_(roles, facts, allowedRoles) {
+function canAccessStudentByFacts_(roles, facts, allowedRoles, wide) {
   var allowed = function (r) { return roles.indexOf(r) >= 0 && allowedRoles.indexOf(r) >= 0; };
   if (allowed('admin')) return true;
   // 출결 담당: 이번 기간 학사생 전체
   if (allowed('attendance') && facts.isEnrolled) return true;
-  if (allowed('hall_teacher') && (facts.isAssigned || facts.isOnDuty)) return true;
+  if (allowed('hall_teacher') && (facts.isAssigned || facts.isOnDuty || (wide && facts.isEnrolled))) return true;
   if (allowed('homeroom') && facts.inHomeroom) return true;
   if (allowed('student') && facts.isOwn) return true;
   if (allowed('parent') && facts.isGuardian) return true;
@@ -243,7 +246,7 @@ function requirePermission_(action, context) {
     if (!student) deny('학생 없음');
     var facts = studentFacts_(user, student, ymd);
     if (rule.noDuty) facts.isOnDuty = false;
-    if (!canAccessStudentByFacts_(user.roles, facts, rule.roles)) deny('범위 밖 학생');
+    if (!canAccessStudentByFacts_(user.roles, facts, rule.roles, !!rule.wideView)) deny('범위 밖 학생');
   }
   return user;
 }

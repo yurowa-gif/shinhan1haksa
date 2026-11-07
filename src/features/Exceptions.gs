@@ -140,9 +140,10 @@ function excGroups_(rows) {
 
 /**
  * 이 사용자가 볼 수 있는 학생 id 집합(순수): 이번 기간 등록 학생 중
- * 관리자·출결 담당 = 전체, 학사 교사 = 담당 학생, 담임 = 자기 반(여러 역할이면 합집합).
+ * 관리자·출결 담당 = 전체, 학사 교사 = 담당 학생(wide면 전체, 결정 45 보기용), 담임 = 자기 반(여러 역할이면 합집합).
+ * 입력 화면의 학생 선택은 wide를 주지 않는다(저장 범위와 같아야 한다).
  */
-function excVisibleIds_(user, enrollments, students, termId) {
+function excVisibleIds_(user, enrollments, students, termId, wide) {
   var enrolled = enrollments.filter(function (e) { return e.term_id === termId; });
   var byId = {};
   students.forEach(function (s) { byId[s.id] = s; });
@@ -152,7 +153,7 @@ function excVisibleIds_(user, enrollments, students, termId) {
     var s = byId[e.student_id];
     if (!s) return;
     if (all ||
-        (user.roles.indexOf('hall_teacher') >= 0 && normalizeEmail_(e.teacher_email) === user.email) ||
+        (user.roles.indexOf('hall_teacher') >= 0 && (wide || normalizeEmail_(e.teacher_email) === user.email)) ||
         (user.roles.indexOf('homeroom') >= 0 && sameClass_(user.homeroomClass, s.grade, s.class_no))) ids[s.id] = true;
   });
   return ids;
@@ -344,7 +345,7 @@ function listExceptions(filter) {
   }
   if (scope === 'pending' && !excCanConfirm_(user)) excDenied_(user, 'exception.view', '요청 처리 목록은 출결 담당·관리자만');
   if (scope === 'student') {
-    var anyVisible = terms.some(function (t) { return excVisibleIds_(user, d.enrollments, d.students, t.id)[String(filter.studentId || '')]; });   // 학생 id는 prototype 없는 집합에서만 찾는다
+    var anyVisible = terms.some(function (t) { return excVisibleIds_(user, d.enrollments, d.students, t.id, true)[String(filter.studentId || '')]; });   // 학생 id는 prototype 없는 집합에서만 찾는다
     if (!anyVisible) excDenied_(user, 'exception.view', '범위 밖 학생 ' + String(filter.studentId || ''));
   }
   if (!terms.length) return { ok: true, groups: [], term: null, total: 0 };
@@ -354,7 +355,7 @@ function listExceptions(filter) {
   d.students.forEach(function (s) { byId[s.id] = s; });
   var groups = [];
   terms.forEach(function (term) {
-    var visible = excVisibleIds_(user, d.enrollments, d.students, term.id);
+    var visible = excVisibleIds_(user, d.enrollments, d.students, term.id, true);
     var rows = excRows_(term).rows.filter(function (r) { return visible[r.student_id] || (scope === 'mine' && r.requested_by === user.email); });
     if (scope === 'pending') rows = rows.filter(function (r) { return r.status === '요청'; });
     else if (scope === 'mine') rows = rows.filter(function (r) { return r.requested_by === user.email; });

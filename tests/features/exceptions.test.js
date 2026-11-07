@@ -176,10 +176,14 @@ test('listExceptions range/mine/student: 역할별로 볼 수 있는 학생만, 
   const all = x.env.call(ATT, 'listExceptions', { scope: 'range', from: '2027-03-03', to: '2027-03-09' });
   assert.ok(all.groups.length >= 6);
   const t = x.env.call(TEACHER, 'listExceptions', { scope: 'range', from: '2027-03-03', to: '2027-03-09' });
-  assert.ok(t.groups.every((g) => x.mine.some((m) => m.id === g.studentId)), '담당 학생 것만');
-  assert.ok(t.groups.length < all.groups.length);
-  // 담당 아닌 학생의 누적은 거부
-  x.env.expectDenied(TEACHER, 'exception.view', 'listExceptions', { scope: 'student', studentId: x.other.id });
+  assert.strictEqual(t.groups.length, all.groups.length, '결정 45: 학사 교사도 학사생 전체의 특이사항을 본다');
+  assert.ok(t.groups.some((g) => !x.mine.some((m) => m.id === g.studentId)), '담당 아닌 학생 것도 포함');
+  // 담당 아닌 학생의 누적도 본다(보기만) — 학사생이 아닌 학생은 거부
+  x.env.expectAllowed(TEACHER, 'listExceptions', { scope: 'student', studentId: x.other.id });
+  x.env.expectDenied(TEACHER, 'exception.view', 'listExceptions', { scope: 'student', studentId: x.acc.unenrolledStudentId });
+  // 쓰기·선택 목록은 넓히지 않는다: 담당 아닌 학생 저장 거부, 입력 화면 학생 목록은 담당만
+  x.env.expectDenied(TEACHER, 'exception.save', 'saveException', { studentId: x.other.id, from: '2027-03-12', blocks: 'ALL', type: '병결' });
+  assert.ok(x.env.call(TEACHER, 'getExceptionContext').students.every((s) => x.mine.some((m) => m.id === s.id)));
   // 학생별 누적(날짜 역순): 가정사유 3일 묶음 학생
   const grp = all.groups.find((g) => g.dates.length === 3);
   const stu = x.env.call(ATT, 'listExceptions', { scope: 'student', studentId: grp.studentId });

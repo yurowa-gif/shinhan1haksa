@@ -24,7 +24,7 @@ const STAGE2_KEYS = {
   'counsel.save': { roles: ['hall_teacher'], scope: 'student', noDuty: true },
   'counsel.cancel': { roles: ['hall_teacher'] },
   'status.list': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] },
-  'status.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'], scope: 'student' },
+  'status.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'], scope: 'student', wideView: true },
   'status.edit': { roles: ['admin', 'hall_teacher'], scope: 'student', noDuty: true },
   'meal.count': { roles: ['admin'] }
 };
