@@ -1,0 +1,131 @@
+<style>
+  /* A4 가로(297×210mm ≈ 1123×794px)를 화면 폭에 맞춰 줄여 보여 준다. 두 손가락 확대는 페이지 확대로 된다. */
+  .sheet-box { width: 100%; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+  .sheet-frame { width: 1123px; border: 0; background: #fff; transform-origin: 0 0; display: block; }
+  .sheet-warn { background: var(--warn-weak); color: var(--warn); border-radius: 10px; padding: 8px 12px; margin: 8px 0; }
+  .sheet-link { display: inline-block; margin-top: 8px; }
+</style>
+<script>
+  /** 출석부 화면(C7): 날짜를 고르면 미리보기, 아래 바에서 PDF 받기. */
+  function renderScreen(root) {
+    var state = { date: '', data: null, busy: false, duty: '', standby: '', seq: 0, fit: null };
+    var head = el('div', { class: 'card' });
+    var info = el('div');
+    var namesCard = el('div', { class: 'card' });
+    var preview = el('div', { class: 'card' });
+    root.appendChild(head); root.appendChild(namesCard); root.appendChild(info); root.appendChild(preview);
+
+    var dateField = null;
+    var pdfBtn = null;
+    var bar = UI.actionBar([
+      { text: 'PDF 받기', kind: 'primary', disabled: true, onclick: onPdf }
+    ], { mount: true });
+    pdfBtn = bar.querySelectorAll('button')[0];
+
+    function addDays(ymd, n) {
+      var p = ymd.split('-'); var d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + n));
+      return d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + d.getUTCDate()).slice(-2);
+    }
+
+    function buildHead(date, today) {
+      clear(head);
+      head.appendChild(el('h2', { text: '출석부' }));
+      dateField = UI.dateField({
+        label: '날짜', value: date, name: 'date',
+        shortcuts: [{ label: '오늘', value: today }, { label: '내일', value: addDays(today, 1) }],
+        onchange: function (v) { load(v); }
+      });
+      head.appendChild(dateField);
+    }
+
+    // 근무·예비 감독 이름: 인쇄할 때만 쓰고 저장하지 않는다(F3 근무표가 생기기 전까지 손으로 넣는다)
+    function names() { return { dutyNames: state.duty, standbyNames: state.standby }; }
+    function buildNames() {
+      clear(namesCard);
+      namesCard.appendChild(el('h2', { text: '인쇄할 이름(저장 안 함)' }));
+      var duty = el('input', { type: 'text', maxlength: '60', placeholder: '예: 김선생, 이선생' });
+      var standby = el('input', { type: 'text', maxlength: '30', placeholder: '금·토·일만, 예: 박선생' });
+      duty.value = state.duty; standby.value = state.standby;
+      namesCard.appendChild(UI.field('근무 교사', duty, { name: 'duty', hint: '쉼표로 나눕니다. 비워 두면 머리말에 빈칸이 나옵니다.' }));
+      namesCard.appendChild(UI.field('예비 감독', standby, { name: 'standby' }));
+      var timer = null;
+      function changed() {
+        state.duty = duty.value; state.standby = standby.value;
+        clearTimeout(timer);
+        timer = setTimeout(function () { var d = dateField && dateField.getValue(); if (d) load(d); }, 500);   // 늘 날짜 칸의 현재 값으로
+      }
+      duty.addEventListener('input', changed); standby.addEventListener('input', changed);
+    }
+
+    window.addEventListener('resize', function () { if (state.fit) state.fit(); });   // 한 번만 등록(다시 불러올 때마다 늘리지 않는다)
+
+    function load(date) {
+      var mine = ++state.seq;   // 늦게 도착한 옛 응답(이름을 계속 고칠 때)은 버린다
+      state.busy = true; pdfBtn.disabled = true; pdfBtn.textContent = 'PDF 받기';   // 버튼 상태는 load()가 정한다
+      clear(info); clear(preview);
+      preview.appendChild(el('div', { class: 'muted', text: '불러오는 중…' }));
+      call('getAttendanceSheet', date || '', names()).then(function (r) {
+        if (mine !== state.seq) return;
+        state.busy = false; state.data = r; clear(preview);
+        if (!dateField) { buildHead(r.date, r.today || r.date); buildNames(); }
+        dateField.setValue(r.date);   // 날짜 칸을 비웠어도 응답 날짜로 맞춘다
+        if (r.warnings && r.warnings.length) r.warnings.forEach(function (w) { info.appendChild(el('div', { class: 'sheet-warn', text: w })); });
+        if (!r.ok) { preview.appendChild(el('div', { class: 'error', text: r.error })); return; }
+        if (!r.operating) { preview.appendChild(el('div', { class: 'muted', text: r.message })); return; }
+        preview.appendChild(kv([
+          ['날짜', r.date + '(' + r.weekdayKo + ')'], ['쪽 수', r.pageCount + '쪽'],
+          ['자리', r.seatCount + '석 (공석 ' + r.vacantCount + ')'], ['블록', r.blockLabels.join(' · ')]
+        ]));
+        if (r.unseatedCount) preview.appendChild(el('div', { class: 'sheet-warn', text: '자리가 없는 학생 ' + r.unseatedCount + '명이 있습니다. 좌석 배치를 확인해 주세요.' }));
+        var box = el('div', { class: 'sheet-box' });
+        var frame = el('iframe', { class: 'sheet-frame', title: '출석부 미리보기', scrolling: 'no' });
+        frame.setAttribute('sandbox', 'allow-same-origin');   // 스크립트는 못 돌고, 높이만 읽는다
+        function fit() {
+          var k = Math.min(1, box.clientWidth / 1123);
+          var h = 794 * Math.max(1, r.pageCount || 1);
+          try { h = Math.max(h, frame.contentDocument.documentElement.scrollHeight); } catch (e) { /* 높이를 못 읽으면 쪽 수로 */ }
+          frame.style.height = h + 'px';
+          frame.style.transform = 'scale(' + k + ')';
+          box.style.height = Math.ceil(h * k) + 'px';
+        }
+        frame.addEventListener('load', fit);
+        state.fit = fit;
+        box.appendChild(frame);
+        preview.appendChild(box);
+        frame.srcdoc = r.html;
+        setTimeout(fit, 0);
+        pdfBtn.disabled = false;
+      }).catch(function (err) { if (mine !== state.seq) return; state.busy = false; state.data = null; clear(preview); showError(preview, err); });
+    }
+
+    function b64Blob(b64) {
+      var bin = atob(b64); var arr = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      return new Blob([arr], { type: 'application/pdf' });
+    }
+
+    function onPdf() {
+      if (state.busy || !state.data || !state.data.ok || !state.data.operating) return;
+      pdfBtn.disabled = true;
+      var mine = state.seq;   // 만드는 동안 미리보기가 다시 불러와지면 이 PDF는 버린다(날짜·이름이 달라졌다)
+      pdfBtn.textContent = 'PDF 만드는 중…';
+      call('getAttendanceSheetPdf', state.data.date, names()).then(function (r) {
+        if (mine !== state.seq) { UI.toast('미리보기가 바뀌어 이 PDF는 쓰지 않았습니다. 다시 눌러 주세요.', { kind: 'warn', ms: 5000 }); return; }   // 버튼은 건드리지 않는다(load()가 정함)
+        pdfBtn.textContent = 'PDF 받기'; pdfBtn.disabled = false;
+        if (!r.ok) { UI.toast(r.error || 'PDF를 만들지 못했습니다.', { kind: 'warn', ms: 5000 }); return; }
+        var url = URL.createObjectURL(b64Blob(r.base64));
+        var a = el('a', { class: 'btn sheet-link', href: url, download: r.name, text: r.name + ' 열기' });
+        var old2 = preview.querySelector('.sheet-link'); if (old2) old2.remove();
+        preview.appendChild(a);
+        a.click();
+        UI.toast('PDF를 만들었습니다. 받아지지 않으면 아래 링크를 누르세요.', { kind: 'ok', ms: 5000 });
+      }).catch(function (err) {
+        if (mine !== state.seq) return;
+        pdfBtn.textContent = 'PDF 받기'; pdfBtn.disabled = false;
+        UI.toast(err.message || String(err), { kind: 'warn', ms: 5000 });
+      });
+    }
+
+    load(window.SCREEN_DATE || '');
+  }
+</script>

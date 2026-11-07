@@ -22,6 +22,8 @@
     "commitCarryOver":   { "use": "화면",   "guard": "requirePermission_" },
     "getScheduleData":   { "use": "화면",   "guard": "requirePermission_" },
     "saveBlocks":        { "use": "화면",   "guard": "requirePermission_" },
+    "getAttendanceSheet": { "use": "화면",   "guard": "requirePermission_" },
+    "getAttendanceSheetPdf": { "use": "화면",   "guard": "requirePermission_" },
     "getExceptionContext": { "use": "화면",   "guard": "requirePermission_" },
     "getDayBlocks":      { "use": "화면",   "guard": "requirePermission_" },
     "previewException":  { "use": "화면",   "guard": "requirePermission_" },
