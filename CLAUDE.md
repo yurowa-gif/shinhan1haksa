@@ -57,6 +57,7 @@
 ## 세션 운영
 - 총괄 세션(오푸스)이 계획·검토·병합을 맡는다. 작업 세션(코딩·디자인·규칙·테스트·자료조사)은 각자 브랜치에서 일하고 main으로 PR을 연 뒤 총괄에게 알린다.
 - 결정 기록은 `docs/decisions.md`. PRD와 다르면 decisions.md가 최신이다 — 발견하면 총괄에게 알린다.
+- 검토에서 남긴 후속 작업은 `docs/plan/followups.md`. 그 기능을 만들거나 연결할 때 먼저 읽는다.
 
 ## 코딩 방식(ponytail)
 - 코딩은 `.claude/skills/ponytail`(필요한 것을 빠짐없이, 가장 짧은 변경으로), 검토는 `ponytail-review`, 저장소 전체 점검은 `ponytail-audit`를 따른다. 원본·범위는 `.claude/skills/ponytail/SOURCE.md`(훅·작업판은 넣지 않음).
