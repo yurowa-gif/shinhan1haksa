@@ -9,6 +9,8 @@ const fake = plain(pure.buildFakeData_({}));
 const s1 = plain(pure.buildFakeStage1_(fake));
 const TERM = s1.term;
 
+const TRUE_MSG = '이번 운영 기간에 학생이 앉았던 자리라 기간이 끝난 뒤 바꿀 수 있습니다';
+
 /* ───── 좌석표 붙여넣기 ───── */
 
 const parse = (t) => plain(pure.parseSeatGridTsv_(t));
@@ -65,6 +67,14 @@ test('parseSeatGridTsv_: 맨 윗행이 줄 머리("5/19", "6/2")뿐이면 그 �
   assert.strictEqual(mixed.rows, 2);
   const both = parse('1/5\t2/5\n3\t공석\n4\t공석');   // 윗행 머리 + 첫 열 머리: 둘 다 건너뛴다
   assert.deepStrictEqual([both.rows, both.cols, both.seatCount], [2, 1, 2]);
+});
+
+test('parseSeatGridTsv_: 맨 위 빈 행(탭만)이 있어도 그 아래 줄 머리 행을 건너뛴다(빈 행은 함께 버린다)', () => {
+  const g = parse('\t\t\n5/19\t6/2\n공석\t공석\n공석\t공석');
+  assert.deepStrictEqual(g.errors, []);
+  assert.deepStrictEqual([g.skippedHeads, g.rows, g.cols, g.seatCount], [2, 2, 2, 4]);
+  const err = parse('\t\n5/19\t6/2\n공석\t아무말');   // 오류 줄 번호는 붙여넣은 표 기준(건너뛴 행을 센다)
+  assert.deepStrictEqual([err.errors[0].line, err.errors[0].column], [3, 2]);
 });
 
 /* ───── 번호 ───── */
@@ -125,7 +135,7 @@ test('seatGridPlan_: 같은 모양이면 바뀐 것 0건(멱등)', () => {
 test('seatGridPlan_: 앉은 좌석을 바꾸거나 없애면 거부하고, 번호가 밀리는 것만으로는 거부하지 않는다(나쁜 입력)', () => {
   const existing = [ex('a', 1, 1, '좌석', '1'), ex('b', 1, 2, '좌석', '2')];
   const noSeat = gp(existing, [{ row: 1, col: 1, kind: '기둥' }, { row: 1, col: 2, kind: '좌석' }], ['a']);
-  assert.strictEqual(noSeat.ok, false); assert.ok(noSeat.errors[0].includes('1행 1열') && noSeat.errors[0].includes('배정을 풀어'));
+  assert.strictEqual(noSeat.ok, false); assert.ok(noSeat.errors[0].includes('1행 1열') && noSeat.errors[0].includes(TRUE_MSG) && !noSeat.errors[0].includes('배정을 풀어'), noSeat.errors[0]);
   const gone = gp(existing, [{ row: 1, col: 2, kind: '좌석' }], ['a']);
   assert.strictEqual(gone.ok, false);
   const shift = gp(existing, [{ row: 1, col: 1, kind: '창문' }, { row: 1, col: 2, kind: '좌석' }], ['b']);
@@ -167,6 +177,16 @@ const swp = (live, a, b, stale, ymd) => plain(pure.planSeatSwap_(live, a, b, kin
 test('planSeatAssign_: 빈 자리에 새로 배정(기준일부터), 같은 자리면 할 일 없음', () => {
   assert.deepStrictEqual(asg([], 's1', 'x').ops, [NEW('s1', 'x')]);
   assert.strictEqual(asg([A('r1', 's1', 'x')], 's1', 'x').noop, true);
+});
+
+test('적용일이 기간 시작일 이하이면 새 행의 valid_from은 빈칸(기간 전체) — 나중에 기간 시작일을 앞당겨도 잠기지 않는다', () => {
+  const row = (ops) => ops.find((o) => o.op === 'create').row;
+  assert.strictEqual(row(asg([], 's1', 'x', null, null, '2027-03-02').ops).valid_from, '', '시작일 당일');
+  assert.strictEqual(row(asg([], 's1', 'x', null, null, '2027-03-01').ops).valid_from, '', '시작 전');
+  assert.strictEqual(row(asg([], 's1', 'x', null, null, '2027-03-03').ops).valid_from, '2027-03-03', '시작 뒤는 적용일');
+  const sw = plain(pure.planSeatSwap_([A('r1', 's1', 'x'), A('r2', 's2', 'y')], 's1', 's2', kinds, [], '2027-03-02', 'T', '2027-03-02'));
+  assert.deepStrictEqual(sw.ops.filter((o) => o.op === 'create').map((o) => o.row.valid_from), ['', '']);
+  assert.deepStrictEqual(sw.ops.filter((o) => o.op !== 'create').map((o) => o.op), ['cancel', 'cancel'], '시작 전부터 있던 행은 끝내지 않고 취소(지난 기록 없음)');
 });
 
 test('planSeatAssign_: 이미 다른 자리에 배정된 학생은 옮기지 않고 거부한다(이동은 맞바꾸기로만)', () => {
@@ -499,7 +519,7 @@ test('격자 저장: 이번 기간에 어제까지 쓰인 자리(valid_to로 끝
   const sp = data(s).spaces[0];
   const pv = plain(s.c.previewSpaceGrid(sp.id, gridOf(sp).filter((x) => !(x.row === c.row && x.col === c.col))));
   assert.strictEqual(pv.ok, false);
-  assert.ok(pv.errors[0].includes('이번 기간') && !pv.errors[0].includes('지난 기간'), pv.errors[0]);
+  assert.ok(pv.errors[0].includes(TRUE_MSG) && !pv.errors[0].includes('지난 기간') && !pv.errors[0].includes('배정을 풀어'), pv.errors[0]);
   assert.strictEqual(plain(s.c.saveSpaceGrid(sp.id, gridOf(sp).filter((x) => !(x.row === c.row && x.col === c.col)))).ok, false);
   assert.strictEqual(s.db.seats.find((x) => x.id === c.id).status, '유효');
   const freshSeat = sp.cells.find((x) => x.kind === 'seat' && x.vacant && !x.hold && x.id !== c.id);   // 기록이 전혀 없는 자리는 지울 수 있다
@@ -526,6 +546,17 @@ test('공간 이름을 바꿔 번호 방식이 바뀌면 saveSpace가 같은 락
   // 같은 방식끼리 이름만 바꾸면 확인 없이 저장
   const sa2 = d.spaces.find((x) => x.name === 'SA4실');
   assert.strictEqual(plain(s.c.saveSpace({ id: sa2.id, name: 'SA4호실', gender: sa2.gender, rows: sa2.rows, cols: sa2.cols })).ok, true);
+});
+
+test('saveSpace: 번호 쓰기가 실패하면 이름도 바뀌지 않는다(번호를 먼저 쓴다)', () => {
+  const s = admin();
+  const sa = data(s).spaces.find((x) => x.name === 'SA3실');
+  const before = JSON.stringify([s.db.spaces.find((x) => x.id === sa.id), s.db.seats.filter((x) => x.space_id === sa.id)]);
+  s.flags.failUpdate = true;
+  assert.throws(() => s.c.saveSpace({ id: sa.id, name: '자습 3호', gender: sa.gender, rows: sa.rows, cols: sa.cols, confirmRelabel: true }), /시트 쓰기 실패/);
+  assert.strictEqual(JSON.stringify([s.db.spaces.find((x) => x.id === sa.id), s.db.seats.filter((x) => x.space_id === sa.id)]), before);
+  s.flags.failUpdate = false;
+  assert.strictEqual(plain(s.c.saveSpace({ id: sa.id, name: '자습 3호', gender: sa.gender, rows: sa.rows, cols: sa.cols, confirmRelabel: true })).ok, true, '다시 하면 된다');
 });
 
 /* ───── 동시 편집·원자성·끝난 기간 ───── */
@@ -686,7 +717,7 @@ test('saveSpaceGrid: 같은 모양으로 다시 저장하면 바뀐 것 0건, �
   const floor = d.spaces[0];
   const seated = floor.cells.find((c) => c.studentId);
   const bad = plain(s.c.saveSpaceGrid(floor.id, gridOf(floor).filter((c) => !(c.row === seated.row && c.col === seated.col))));
-  assert.strictEqual(bad.ok, false); assert.ok(bad.errors[0].includes('배정을 풀어'));
+  assert.strictEqual(bad.ok, false); assert.ok(bad.errors[0].includes(TRUE_MSG) && !bad.errors[0].includes('배정을 풀어'), bad.errors[0]);
 });
 
 test('1층은 줄-순번(3-7): 격자를 저장하면 같은 모양이라도 0건이고, 앞 칸을 비우면 뒤 번호가 당겨지며 "번호가 바뀌는 배정 좌석 N개"를 미리 알려 준다', () => {
@@ -735,7 +766,7 @@ test('격자 저장: 지난 기간 배정만 있는 좌석은 경고 후 허용,
   // 지금 기간 배정이 있는 좌석은 거부
   const seated = d.spaces[0].cells.find((c) => c.studentId);
   const bad = plain(s.c.previewSpaceGrid(d.spaces[0].id, gridOf(d.spaces[0]).filter((c) => !(c.row === seated.row && c.col === seated.col))));
-  assert.strictEqual(bad.ok, false); assert.ok(bad.errors[0].includes('배정을 풀어'));
+  assert.strictEqual(bad.ok, false); assert.ok(bad.errors[0].includes(TRUE_MSG) && !bad.errors[0].includes('배정을 풀어'), bad.errors[0]);
   // 이번 기간에 어제까지 쓰인 자리(퇴실 자리를 재배정해 끝낸 행)는 지난 기간이 아니므로 경고가 아니라 거부(결정 37)
   const held = allCells(d).find((c) => c.reason === '퇴실');
   assert.strictEqual(asgn(s, held.id, s1.lateEntrantId).ok, true);
