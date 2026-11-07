@@ -150,14 +150,22 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
   } else {
     cand = mealEffectiveDate_(to === '일반 석식' ? 'to_general' : 'start', requestedAt, opts);
   }
+  var autoDate = cand.date;
+  if (opts.effectiveDate !== undefined && opts.effectiveDate !== '') {   // 교사가 고친 적용일(R10)
+    var manual = ruleStr_(opts.effectiveDate), rule = ruleStr_(opts.effectiveRule) || 'manual';
+    if (!ymdIsValid_(manual)) throw new Error('effectiveDate 형식이 아닙니다(yyyy-MM-dd): ' + opts.effectiveDate);
+    if (manual < at.date) throw new Error('적용일은 신청일(' + at.date + ') 이후여야 합니다: ' + manual);
+    if (rule !== 'manual' && rule !== 'entry_date') throw new Error('effectiveRule은 manual 또는 entry_date: ' + opts.effectiveRule);
+    cand = { date: manual, rule: rule };
+  }
   var from = statusOn_(rows, sid, it, cand.date);
-  var out = { kind: mealChangeKind_(it, from, to), date: cand.date, rule: cand.rule, from: from, blocked: '', superseded: false,
+  var out = { kind: mealChangeKind_(it, from, to), date: cand.date, rule: cand.rule, autoDate: autoDate, from: from, blocked: '', superseded: false,
     toCancel: [], followUps: [], warnings: [] };
 
-  // 퇴실 상태인 날의 학사생 값: 퇴실 기록보다 뒤에 신청했으면 막는다(신청 일시 순서 — 입력 순서와 무관). 조식은 늘 막는다(즉시 중단).
-  // 먼저 신청한 석식은 중단일 전에 적용되므로(신청 다음 날까지 < 퇴실 입력 + 1주) 그대로 두고 아래 followUps가 중단일에 끝낸다.
+  // 퇴실 상태인 날의 학사생 값: 조식은 늘, 석식은 퇴실 기록보다 뒤에 신청했거나(신청 일시 순서 — 입력 순서와 무관) 중단일 이후면 막는다.
+  // 먼저 신청한 석식이 중단일 전에 적용되면 그대로 두고 아래 followUps가 중단일에 끝낸다(F6 정리가 중단일 이후 행만 취소하는 것과 같다).
   var leave = mealIsHallOnly_(it, to) ? mealLeaveFor_(rows, sid, it, cand.date, req) : null;
-  if (leave && leave.date <= cand.date && (it === '조식' || leave.at <= req)) {
+  if (leave && leave.date <= cand.date && (it === '조식' || leave.at <= req || cand.date >= leave.stop)) {
     out.kind = 'none'; out.date = ''; out.rule = '';
     out.blocked = cand.date + '에는 학사 퇴실 상태라 ' + it + ' ' + to + '을(를) 새로 신청할 수 없습니다';
     return out;
