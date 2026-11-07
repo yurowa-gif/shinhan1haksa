@@ -8,7 +8,7 @@
 <script>
   /** 출석부 화면(C7): 날짜를 고르면 미리보기, 아래 바에서 PDF 받기. */
   function renderScreen(root) {
-    var state = { date: '', data: null, busy: false, duty: '', standby: '' };
+    var state = { date: '', data: null, busy: false, duty: '', standby: '', seq: 0, fit: null };
     var head = el('div', { class: 'card' });
     var info = el('div');
     var namesCard = el('div', { class: 'card' });
@@ -57,11 +57,15 @@
       duty.addEventListener('input', changed); standby.addEventListener('input', changed);
     }
 
+    window.addEventListener('resize', function () { if (state.fit) state.fit(); });   // 한 번만 등록(다시 불러올 때마다 늘리지 않는다)
+
     function load(date) {
+      var mine = ++state.seq;   // 늦게 도착한 옛 응답(이름을 계속 고칠 때)은 버린다
       state.busy = true; pdfBtn.disabled = true;
       clear(info); clear(preview);
       preview.appendChild(el('div', { class: 'muted', text: '불러오는 중…' }));
       call('getAttendanceSheet', date || '', names()).then(function (r) {
+        if (mine !== state.seq) return;
         state.busy = false; state.data = r; clear(preview);
         if (!dateField) { buildHead(r.date); buildNames(); }
         state.date = r.date;
@@ -85,13 +89,13 @@
           box.style.height = Math.ceil(h * k) + 'px';
         }
         frame.addEventListener('load', fit);
-        window.addEventListener('resize', fit);
+        state.fit = fit;
         box.appendChild(frame);
         preview.appendChild(box);
         frame.srcdoc = r.html;
         setTimeout(fit, 0);
         pdfBtn.disabled = false;
-      }).catch(function (err) { state.busy = false; clear(preview); showError(preview, err); });
+      }).catch(function (err) { if (mine !== state.seq) return; state.busy = false; clear(preview); showError(preview, err); });
     }
 
     function b64Blob(b64) {
