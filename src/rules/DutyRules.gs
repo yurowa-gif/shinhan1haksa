@@ -28,8 +28,8 @@ function dutyEmail_(v) {
 }
 
 /**
- * 그날 근무자. → {duty:[{slot, email, end, swappedFrom}], standby:[email], warnings}
- * 취소 제외, (date, slot)마다 updated_at 최신 1행(같으면 아래 행) + 경고. email = actual_email(빈칸이면 original_email).
+ * 그날 근무자. → {duty:[{slot, email, end, swappedFrom}], standby:[{email, swappedFrom}], warnings}
+ * 취소 제외, (date, slot)마다 updated_at 최신 1행(같으면 아래 행) + 경고. 그 요일 틀 밖의 칸(토요일 21:30조, 화요일 단독·예비 등)도 쓰되 경고. email = actual_email(빈칸이면 original_email).
  * swappedFrom = 실제 근무자가 원래 근무자와 다르면 원래 근무자. 순서 21:30조 → 23:00조 → 단독.
  * ASSUMPTION: 교대 전에는 actual_email이 빈칸일 수 있다(그때는 original_email이 근무자).
  */
@@ -41,8 +41,9 @@ function dutyOn_(rows, ymd) {
     if (!r) return;
     var original = dutyEmail_(r.original_email), email = dutyEmail_(r.actual_email) || original;
     if (!email) { warnings.push(ymd + ' ' + slot + ' 칸에 근무자가 없습니다'); return; }
-    if (slot === '예비') standby.push(email);
-    else duty.push({ slot: slot, email: email, end: hmNorm_(r.end_time) || '', swappedFrom: original && original !== email ? original : '' });
+    var from = original && original !== email ? original : '';
+    if (slot === '예비') standby.push({ email: email, swappedFrom: from });
+    else duty.push({ slot: slot, email: email, end: hmNorm_(r.end_time) || '', swappedFrom: from });
   });
   return { duty: duty, standby: standby, warnings: warnings };
 }
@@ -50,10 +51,12 @@ function dutyOn_(rows, ymd) {
 /** 그날 칸마다 쓸 행: 취소 제외, updated_at 최신(같으면 아래 행). → {bySlot:{slot:row}, warnings} */
 function dutyPick_(rows, ymd) {
   var bySlot = {}, warnings = [];
+  var frame = ymdIsValid_(ymd) && baseDayType_(ymd) === 'mon_thu' ? ['21:30조', '23:00조'] : ['단독', '예비'];   // 그 요일의 칸 틀(dutySlotsFor_와 같음)
   (rows || []).forEach(function (r) {
     if (!r || !ruleRowLive_(r) || ruleStr_(r.date) !== ymd) return;
     var slot = ruleStr_(r.slot);
     if (['21:30조', '23:00조', '단독', '예비'].indexOf(slot) < 0) { warnings.push(ymd + ' 알 수 없는 근무 칸: ' + slot); return; }
+    if (frame.indexOf(slot) < 0 && !bySlot[slot]) warnings.push(ymd + ' 그 요일에 없는 근무 칸입니다: ' + slot);
     if (bySlot[slot]) warnings.push(ymd + ' ' + slot + ' 칸이 여러 행입니다(가장 최근 수정 행을 씁니다)');
     if (!bySlot[slot] || ruleIso_(r.updated_at) >= ruleIso_(bySlot[slot].updated_at)) bySlot[slot] = r;
   });
@@ -77,7 +80,7 @@ function dutyIsOn_(rows, email, ymd, today, windowDays) {
  * 월말 근무 기록(수당 근거, PRD F3). month 'yyyy-MM', opts = {operatingByDate:{date:false}}
  * → {teachers:[{email, total, bySlot:{'21:30조','23:00조','단독'}, dates:[{date,slot,end,swappedFrom}]}],
  *    standby:[{email, count}], swaps:[{date, slot, from, to, at, by}], warnings}   금액은 계산하지 않는다(결정 47).
- * 교사별 합계 = 그날 칸의 실제 근무자(원래 근무자에게는 세지 않음). swaps = 칸마다 마지막 교대.
+ * 교사별 합계 = 그날 칸의 실제 근무자(원래 근무자에게는 세지 않음). swaps = 칸마다 마지막 교대(예비 칸 포함). 예비만 있는 교사도 teachers에(total 0).
  * 예비 지정은 standby로 따로 센다(결정 46). 그날 대신 근무한 예비는 근무로만 세고 standby에서는 뺀다(두 번 세지 않음).
  * ASSUMPTION: 운영 안 하는 날(operatingByDate[date] === false)의 행도 센다 + 경고(조용히 빼면 실제 근무를 놓친다).
  */
@@ -102,13 +105,17 @@ function dutyRecord_(rows, month, opts) {
       var t = teacher(d.email);
       t.total++; t.bySlot[d.slot]++;
       t.dates.push({ date: date, slot: d.slot, end: d.end, swappedFrom: d.swappedFrom });
-      if (d.swappedFrom) {
-        var r = dutyPick_(byDate[date], date).bySlot[d.slot];
-        swaps.push({ date: date, slot: d.slot, from: d.swappedFrom, to: d.email, at: ruleStr_(r.swapped_at), by: dutyEmail_(r.swapped_by) });
-      }
     });
-    day.standby.forEach(function (email) {
-      if (!day.duty.some(function (d) { return d.email === email; })) standby[email] = (standby[email] || 0) + 1;
+    var swap = function (slot, d) {
+      if (!d.swappedFrom) return;
+      var r = dutyPick_(byDate[date], date).bySlot[slot];
+      swaps.push({ date: date, slot: slot, from: d.swappedFrom, to: d.email, at: ruleStr_(r.swapped_at), by: dutyEmail_(r.swapped_by) });
+    };
+    day.duty.forEach(function (d) { swap(d.slot, d); });
+    day.standby.forEach(function (sb) {
+      swap('예비', sb);   // 예비도 수당 근거라 교대를 남긴다(결정 46)
+      teacher(sb.email);   // 예비만 있는 교사도 목록에(total 0)
+      if (!day.duty.some(function (d) { return d.email === sb.email; })) standby[sb.email] = (standby[sb.email] || 0) + 1;
     });
   });
   return {
