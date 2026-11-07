@@ -473,7 +473,7 @@ table('outDismissalGate_: 면담 기록이 있어야 퇴실 확정(결정 4·PRD
   ['면담 취소', TWO(), [NOTE({ status: '취소' })], false, '면담 기록 필요'],
   ['면담 날짜 < 둘째 OUT 발생일', TWO(), [NOTE({ date: '2027-03-09' })], false, '면담 기록 필요'],
   ['면담 날짜 = 둘째 OUT 발생일', TWO(), [NOTE({ date: '2027-03-10' })], true, ''],
-  ['연결 OUT이 관리자 취소로 죽고 다른 2건이 남음(가정, Q9)', TWO().map((v) => (v.id === 'o2' ? Object.assign(v, { status: '취소' }) : v)).concat([OUT('o3', '2027-03-11T21:00:00')]),
+  ['연결 OUT이 관리자 취소로 죽고 다른 2건이 남음(결정 51)', TWO().map((v) => (v.id === 'o2' ? Object.assign(v, { status: '취소' }) : v)).concat([OUT('o3', '2027-03-11T21:00:00')]),
     [NOTE()], false, '면담 기록 필요'],
   ['다른 학생 면담', TWO(), [NOTE({ student_id: 's2' })], false, '면담 기록 필요'],
   ['다른 유형 면담', TWO(), [NOTE({ type: '진로 상담' })], false, '면담 기록 필요'],
@@ -496,4 +496,22 @@ test('outDismissalGate_: 이미 학사 퇴실이면 "이미 퇴실"(그날 학�
   const r = gate(TWO(), [NOTE()], left);
   assert.deepStrictEqual([r.alreadyLeft, r.ok, r.reason], [true, false, '이미 퇴실']);
   assert.strictEqual(gate([OUT('o1', '2027-03-03T21:00:00')], [], left).reason, '이미 퇴실');   // 이미 퇴실이 먼저(OUT 1건이어도)
+});
+
+/* ───── 총괄 검토(#56) ───── */
+
+test('outDismissalGate_: OUT 3건이면 발생 순 둘째가 기준(3/3·3/10·3/20 + o2에 연결된 3/11 면담 → ok)', () => {
+  const r = gate(TWO().concat([OUT('o3', '2027-03-20T21:00:00')]), [NOTE()]);
+  assert.deepStrictEqual([r.count, r.triggerOutId, r.ok], [3, 'o2', true]);
+});
+
+test('outDismissalGate_: 발생 일시가 같으면 created_at 순(id 순서는 반대여도)', () => {
+  const tie = [OUT('a', '2027-03-03T21:00:00', { created_at: '2027-03-04T09:00:00' }), OUT('b', '2027-03-03T21:00:00', { created_at: '2027-03-03T22:00:00' })];
+  assert.strictEqual(gate(tie, []).triggerOutId, 'a');
+});
+
+test('outDismissalGate_: 앞으로 학사 퇴실이 잡혀 있어도 "이미 퇴실"(퇴실 신청을 두 번 만들지 않게)', () => {
+  const planned = HALL_IN.concat([{ id: 'c3', student_id: 's1', item: '학사', value: '퇴실', effective_date: '2027-03-20', status: '유효', requested_at: '2027-03-11T10:00:00' }]);
+  const r = gate(TWO(), [NOTE()], planned);
+  assert.deepStrictEqual([r.alreadyLeft, r.ok, r.reason], [true, false, '이미 퇴실']);
 });

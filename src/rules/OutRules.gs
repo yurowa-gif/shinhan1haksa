@@ -71,7 +71,7 @@ function outDutyText_(dutyByDate, date) {
  * 용어(행 = 특이사항 행)
  * - 자격 행: status '확정', 날짜가 달력에 있음, 유형이 autoTypes(괄호 설명을 떼고 비교)이고, 그 유형이 autoTypeSince에
  *   있으면 confirmed_at >= 그 시각. **설정 변경은 앞으로만(총괄 결정):** 설정을 넓혀 새로 자동 대상이 된 유형은 넓힌 시각
- *   (설정 행 updated_at)을 autoTypeSince에 넣는다 — 그 전에 확정된 특이사항에는 소급해 OUT을 만들지 않는다. 처음부터 자동
+ *   (outAutoSinceNext_의 since — 설정 행 updated_at은 다른 칸을 고쳐도 바뀌어 쓰지 않는다)을 autoTypeSince에 넣는다 — 그 전에 확정된 특이사항에는 소급해 OUT을 만들지 않는다. 처음부터 자동
  *   대상이던 유형은 넣지 않는다(그래서 취소됐다가 다시 확정된 특이사항의 OUT은 다시 생긴다). 2단계 F4 처음 연결 때
  *   쌓인 특이사항을 한꺼번에 만들 때는 넘기지 않는다.
  * - 단위: per 'group'(기본, 결정 22 "입력 1건 = 1OUT")이면 (학생, group_id) 묶음, group_id가 비면 행 하나. per 'row'면 행마다.
@@ -320,8 +320,8 @@ function outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes) {
  * → {count, level, triggerOutId, meetingNote:{id, date, teacher_email}|null, alreadyLeft, ok, reason:''|'퇴실 대상 아님'|'면담 기록 필요'|'이미 퇴실'}
  * - 이번 기간 살아 있는 OUT(outLevel_과 같음)을 occurred_at → created_at → id 순으로 놓았을 때 둘째가 triggerOutId.
  * - 면담 = status 빈칸·유효, 같은 학생, type '2OUT 학부모 면담', 이번 기간 살아 있는 OUT에 연결, 날짜 ≥ triggerOut 발생일.
- * - alreadyLeft = ymd에 학사 퇴실 상태. 순서: 이미 퇴실 → 퇴실 대상 아님(2건 미만) → 면담 기록 필요 → ok.
- * ASSUMPTION(Q9): 연결한 OUT이 관리자 취소로 죽으면 그 면담은 세지 않는다(다른 2건이 남아도 다시 면담).
+ * - alreadyLeft = ymd에 학사 퇴실 상태이거나 앞으로 학사 퇴실이 잡혀 있음. 순서: 이미 퇴실 → 퇴실 대상 아님(2건 미만) → 면담 기록 필요 → ok.
+ * 결정 51: 연결한 OUT이 나중에 취소되면 그 면담은 세지 않는다(다른 2건이 남아도 다시 면담), 둘째 OUT보다 앞선 날짜의 면담도.
  */
 function outDismissalGate_(violations, notes, changes, studentId, termId, ymd) {
   var sid = ruleStr_(studentId), tid = ruleStr_(termId);
@@ -341,7 +341,8 @@ function outDismissalGate_(violations, notes, changes, studentId, termId, ymd) {
   })[0];
   var out = { count: lv.count, level: lv.level, triggerOutId: trigger ? ruleStr_(trigger.id) : '',
     meetingNote: n ? { id: ruleStr_(n.id), date: ruleStr_(n.date), teacher_email: ruleStr_(n.teacher_email) } : null,
-    alreadyLeft: statusOn_(changes, sid, '학사', ymd) === '퇴실', ok: false, reason: '' };
+    // 이미 퇴실했거나 앞으로 퇴실이 잡혀 있으면(퇴실 신청을 두 번 만들지 않게) 이미 퇴실
+    alreadyLeft: statusOn_(changes, sid, '학사', ymd) === '퇴실' || statusOn_(changes, sid, '학사', '9999-12-31') === '퇴실', ok: false, reason: '' };
   out.reason = out.alreadyLeft ? '이미 퇴실' : lv.count < 2 ? '퇴실 대상 아님' : !n ? '면담 기록 필요' : '';
   out.ok = !out.reason;
   return out;
