@@ -42,6 +42,15 @@ function ruleIso_(v)       // 일시 비교용: 'yyyy-MM-dd HH:mm:ss' → 'T' �
 function ruleRowLive_(r)   // status 빈칸·'유효'
 function hmNorm_(v)        // 'H:mm'·'HH:mm:00' → 'HH:mm', 빈칸 '', 시각 아님 null(ScheduleRules.schedNormHm_은 features/Schedule.gs가 부르는 같은 함수)
 
+// src/rules/DutyRules.gs (R8)
+function dutySlotsFor_(plan)
+        // resolveDayPlan_ 결과 → 운영 안 함 [] | 월~목 [{slot:'21:30조',end},{slot:'23:00조',end}] | 금·토·일 [{slot:'단독',end},{slot:'예비',end:''}]
+function dutyOn_(rows, ymd)                   // → {duty:[{slot, email, end, swappedFrom}], standby:[email], warnings}
+function dutyIsOn_(rows, email, ymd, today, windowDays)   // → boolean(그날 실제 근무자 && ymd ≤ today ≤ ymd + windowDays, 기본 0)
+function dutyRecord_(rows, month, opts)
+        // opts = {operatingByDate:{}} → {teachers:[{email, total, bySlot, dates:[{date,slot,end,swappedFrom}]}],
+        //    standby:[{email, count}], swaps:[{date, slot, from, to, at, by}], warnings}
+
 // src/rules/ScheduleRules.gs
 function baseDayType_(ymd)                  // 'mon_thu'|'fri'|'sat'|'sun'
 function schedOperatingValue_(v)            // day_schedules.operating 값 → boolean(R1 추가)
@@ -220,6 +229,15 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd)
 - **F6 학사 퇴실 정리 순서:** ① 학사 `퇴실` 행(`source:'F6'`) ② 조식(중단일 = 퇴실일)·석식(중단일 = `mealEffectiveDate_('stop', 퇴실 입력 일시, {leaveDate})`)마다 `mealPendingToCancel_(…, 중단일, {source:'F6'})`를 취소 ③ 그 뒤에도 중단일의 값(`statusOn_`)이 학사생 값이면 그날 `미실시` 행을 `source:'F6'`으로 쓴다. 늦게 입력한 퇴실(퇴실일이 오늘 이전)도 같다. 서류 미제출이어도 적용한다(결정 3).
 - F7은 계산값을 `effective_date_auto`에, 교사가 고친 값을 `effective_date`에 저장한다(plan 5절). 적용일을 손으로 고치면 위 기준과 어긋날 수 있으므로 고친 뒤 다시 `mealPlanChange_`로 확인한다.
 - StatusRules: `statusOn_`의 적용일 검사는 이제 달력 검사(`2027-02-30` 행 무시)로 `ymdIsValid_`와 같다(R6에서 고침).
+
+## 동작 메모(R8, 2026-11-07)
+
+**DutyRules** — duty_slots 행(아직 승인 전 탭, stage2.md 5절 1번)을 그대로 받는다. DateRules·ScheduleRules(`baseDayType_`)를 부른다.
+
+- `dutySlotsFor_`: 끝 시각 = min(조 시각, 그날 종료), 단독 = 그날 종료, 예비 `''`. 방학도 같은 틀(4-2). ASSUMPTION: 특별 요일 유형(exam 등)은 실제 달력 요일의 틀(R3 END와 같은 방식).
+- `dutyOn_`: 취소 제외, (date, slot)마다 `updated_at` 최신 1행(같으면 아래 행) + 경고. 근무자 = `actual_email`(빈칸이면 `original_email` — ASSUMPTION: 교대 전에는 빈칸일 수 있다). 이메일은 소문자·공백 없이. 모르는 칸 이름·근무자 없는 칸은 빼고 경고. 예비 칸은 `standby`로만.
+- `dutyIsOn_`(근무교사 시간 범위 권한): 그날 실제 근무자만 참. 예비 지정만·교대로 넘긴 원래 근무자는 거짓. `windowDays` 기본 0(Q2 기본: 보기는 당일만, OUT 입력만 1). 잘못된 날짜·음수·소수 `windowDays`는 거짓(넓히지 않는다).
+- `dutyRecord_`(월말 근무 기록): 교사별 합계 = 실제 근무자(원래 근무자에게는 세지 않음). `swaps` = 칸마다 마지막 교대(원래 → 실제, `at`·`by`는 그날 쓴 행의 `swapped_at`·`swapped_by`). 예비 지정은 `standby`로 근무 합계와 따로 센다(결정 46). 그날 대신 근무한 예비는 근무로만 세고 `standby`에서는 뺀다(두 번 세지 않음). ASSUMPTION: 운영 안 하는 날(`operatingByDate[date] === false`)의 행도 세고 경고. 금액은 계산하지 않는다(결정 47 — 두 조의 수당이 같아 합계를 크게, 조별은 참고). 잘못된 달은 Error.
 
 ## 동작 메모(R12, 2026-11-07)
 
