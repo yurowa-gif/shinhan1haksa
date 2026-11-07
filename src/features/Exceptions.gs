@@ -146,7 +146,7 @@ function excVisibleIds_(user, enrollments, students, termId) {
   var enrolled = enrollments.filter(function (e) { return e.term_id === termId; });
   var byId = {};
   students.forEach(function (s) { byId[s.id] = s; });
-  var ids = {};
+  var ids = Object.create(null);   // 'constructor' 같은 학생 id가 범위 검사를 지나지 않게
   var all = user.roles.indexOf('admin') >= 0 || user.roles.indexOf('attendance') >= 0;
   enrolled.forEach(function (e) {
     var s = byId[e.student_id];
@@ -165,8 +165,11 @@ function excDisplay_(s) { return s.grade + '. ' + s.name; }
 
 function excCanConfirm_(user) { return hasAnyAllowedRole_(user.roles, permissions_()['exception.confirm'].roles); }
 
-/** 학생이 그 기간 명단에 있는지(관리자도 마찬가지 — 목록에 안 보여 취소할 수 없는 기록을 막는다) → 오류 목록 */
-function excEnrollErrors_(enrollments, studentId, term) {
+var EXC_ENDED_MSG = '끝난 운영 기간의 특이사항은 볼 수만 있습니다.';
+
+/** 저장할 기간의 오류: 끝난 기간은 보기만, 학생은 그 기간 명단에 있어야 한다(관리자도 마찬가지 — 목록에 안 보여 취소할 수 없는 기록을 막는다) */
+function excTermErrors_(enrollments, studentId, term) {
+  if (term.end_date < today_()) return [{ field: 'from', message: '"' + term.name + '"은(는) 끝난 기간입니다. ' + EXC_ENDED_MSG }];
   var ok = enrollments.some(function (e) { return e.term_id === term.id && e.student_id === studentId; });
   return ok ? [] : [{ field: 'studentId', message: '"' + term.name + '" 명단에 없는 학생입니다. 명단 올리기에서 먼저 등록해 주세요.' }];
 }
@@ -240,7 +243,7 @@ function previewException(input) {
   var user = requirePermission_('exception.save', { studentId: input && input.studentId, ymd: excYmd_(input) });
   var d = excLoad_();
   var v = excValidate_(input, { terms: d.terms, types: d.settings.types });
-  if (v.term) v.errors = v.errors.concat(excEnrollErrors_(d.enrollments, String(input.studentId), v.term));
+  if (v.term) v.errors = v.errors.concat(excTermErrors_(d.enrollments, String(input.studentId), v.term));
   v.ok = !v.errors.length;
   var out = { ok: v.ok, errors: v.errors, mode: excCanConfirm_(user) ? 'confirm' : 'request', dayCount: v.dates.length, warnings: [],
     autoOut: v.ok && d.settings.autoOut.indexOf(v.rec.type) >= 0 };
@@ -260,7 +263,7 @@ function saveException(input) {
     var d = excLoad_();
     var v = excValidate_(input, { terms: d.terms, types: d.settings.types });
     var studentId = String(input.studentId);
-    if (v.term) v.errors = v.errors.concat(excEnrollErrors_(d.enrollments, studentId, v.term));
+    if (v.term) v.errors = v.errors.concat(excTermErrors_(d.enrollments, studentId, v.term));
     if (v.errors.length) return { ok: false, errors: v.errors };
     var student = d.students.filter(function (s) { return s.id === studentId; })[0];
     var existing = excRows_(v.term);
@@ -336,7 +339,7 @@ function listExceptions(filter) {
   }
   if (scope === 'pending' && !excCanConfirm_(user)) excDenied_(user, 'exception.view', '요청 처리 목록은 출결 담당·관리자만');
   if (scope === 'student') {
-    var anyVisible = terms.some(function (t) { return excVisibleIds_(user, d.enrollments, d.students, t.id)[String(filter.studentId || '')]; });
+    var anyVisible = terms.some(function (t) { return excVisibleIds_(user, d.enrollments, d.students, t.id)[String(filter.studentId || '')]; });   // 학생 id는 prototype 없는 집합에서만 찾는다
     if (!anyVisible) excDenied_(user, 'exception.view', '범위 밖 학생 ' + String(filter.studentId || ''));
   }
   if (!terms.length) return { ok: true, groups: [], term: null, total: 0 };
@@ -364,7 +367,9 @@ function listExceptions(filter) {
   });
   if (scope === 'range') groups.sort(function (a, b) { return a.rangeDates[0] < b.rangeDates[0] ? -1 : a.rangeDates[0] > b.rangeDates[0] ? 1 : 0; });
   else groups.sort(function (a, b) { return a.dates[0] < b.dates[0] ? 1 : a.dates[0] > b.dates[0] ? -1 : 0; });
-  return { ok: true, term: { id: terms[0].id, name: terms[0].name }, groups: groups.slice(0, 300), total: groups.length };
+  var live = {};   // 살아 있는(취소 아닌, 조회 범위의 그 날이 취소되지 않은) 묶음의 학생 수 — 홈 "오늘 N명"과 같은 기준
+  groups.forEach(function (g) { if (g.status !== '취소' && !g.rangeCanceled) live[g.studentId] = true; });
+  return { ok: true, term: { id: terms[0].id, name: terms[0].name }, groups: groups.slice(0, 300), total: groups.length, liveStudentCount: Object.keys(live).length };
 }
 
 function excFindTerm_(termId) {
@@ -380,13 +385,16 @@ function excFindTerm_(termId) {
  */
 function confirmException(termId, groupId, acknowledge) {
   var user = requirePermission_('exception.confirm');
+  var gid = String(groupId || '').trim();
+  if (!gid) return { ok: false, error: '묶음을 찾을 수 없습니다. 목록을 새로 불러와 주세요.' };   // 빈 id가 group_id가 빈 여러 행과 맞지 않게
   return withLock_(function () {
     var term = excFindTerm_(termId);
+    if (term.end_date < today_()) return { ok: false, error: EXC_ENDED_MSG };
     var sheet = termSheetName_('exceptions', term.id);
     invalidate_('db', sheet);
     invalidate_('db', 'enrollments');
     var all = excRows_(term).rows;
-    var rows = all.filter(function (r) { return r.group_id === String(groupId || ''); });
+    var rows = all.filter(function (r) { return r.group_id === gid; });
     var pending = rows.filter(function (r) { return r.status === '요청'; });
     if (!pending.length) return { ok: false, error: '이미 처리된 요청입니다. 목록을 새로 불러와 주세요.' };
     var enrolled = {};
@@ -394,7 +402,7 @@ function confirmException(termId, groupId, acknowledge) {
     if (pending.some(function (r) { return !enrolled[r.student_id]; })) {
       return { ok: false, error: '이 기간에 등록된 학생이 아니어서 확정할 수 없습니다. 명단을 확인해 주세요.' };
     }
-    var others = all.filter(function (r) { return r.group_id !== String(groupId || ''); });
+    var others = all.filter(function (r) { return r.group_id !== gid; });
     var warnings = [];
     pending.forEach(function (r) {
       excOverlapWarnings_(others, r.student_id, [r.date], r.blocks).forEach(function (w) { if (warnings.indexOf(w) < 0) warnings.push(w); });
@@ -412,27 +420,26 @@ function confirmException(termId, groupId, acknowledge) {
  */
 function cancelException(termId, groupId, reason, onlyDate) {
   var user = requirePermission_('exception.cancel');
+  var gid = String(groupId || '').trim();
+  if (!gid) return { ok: false, error: '묶음을 찾을 수 없습니다. 목록을 새로 불러와 주세요.' };
   return withLock_(function () {
     var why = String(reason || '').trim();
     var term = excFindTerm_(termId);
+    if (term.end_date < today_()) return { ok: false, error: EXC_ENDED_MSG };
     var sheet = termSheetName_('exceptions', term.id);
     invalidate_('db', sheet);
-    var rows = excRows_(term).rows.filter(function (r) { return r.group_id === String(groupId || ''); });
+    var rows = excRows_(term).rows.filter(function (r) { return r.group_id === gid; });
     var live = rows.filter(function (r) { return String(r.status).trim() !== '취소'; });
     if (!live.length) return { ok: false, error: '이미 취소된 기록입니다. 목록을 새로 불러와 주세요.' };
+    // 소유 검사가 먼저: 남의 묶음이면 날짜가 맞든 안 맞든 거부 기록을 남긴다
+    if (!excCanConfirm_(user) && live.some(function (r) { return r.requested_by !== user.email; })) excDenied_(user, 'exception.cancel', '내가 보낸 요청이 아님');
     var only = String(onlyDate || '').trim();
     if (only) {
       live = live.filter(function (r) { return r.date === only; });
       if (!live.length) return { ok: false, error: only + '은(는) 이 묶음에 없거나 이미 취소된 날입니다. 목록을 새로 불러와 주세요.' };
     }
-    if (!excCanConfirm_(user)) {
-      var own = live.every(function (r) { return r.requested_by === user.email && r.status === '요청'; });
-      if (!own) {
-        if (live.every(function (r) { return r.requested_by === user.email; })) {
-          return { ok: false, error: '이미 확정되어 출결 담당만 취소할 수 있습니다. 출결 담당 선생님께 취소를 요청해 주세요.' };
-        }
-        excDenied_(user, 'exception.cancel', '내가 보낸 요청이 아님');
-      }
+    if (!excCanConfirm_(user) && live.some(function (r) { return r.status !== '요청'; })) {
+      return { ok: false, error: '이미 확정되어 출결 담당만 취소할 수 있습니다. 출결 담당 선생님께 취소를 요청해 주세요.' };
     }
     if (why.length < EXC_CANCEL_REASON_MIN) return { ok: false, error: '취소 사유를 ' + EXC_CANCEL_REASON_MIN + '자 이상 적어 주세요.' };
     if (why.length > EXC_REASON_MAX) return { ok: false, error: '취소 사유는 ' + EXC_REASON_MAX + '자 안으로 적어 주세요.' };

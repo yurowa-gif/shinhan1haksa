@@ -1,6 +1,6 @@
 /** C5 F1 사전 특이사항: R4 gas-fakes 환경(src 전체)에서 실제 공개 함수를 부른다. 가짜 데이터만. */
 const assert = require('assert');
-const { test } = require('../helpers/harness');
+const { test, plain } = require('../helpers/harness');
 const { createGasEnv } = require('../helpers/gas-fakes');
 
 const ATT = 'test.attendance@example.com', ADMIN = 'test.admin@example.com', TEACHER = 'test.teacher@example.com',
@@ -513,13 +513,13 @@ test('관리자도 그 기간 미등록 학생에게는 저장 거부(목록에 
 });
 
 test('기간 경계에 걸친 주는 두 기간의 탭을 모두 읽는다(양쪽 기록이 함께 나온다)', () => {
-  const x = makeEnv('2027-03-01T20:00:00');
+  const x = makeEnv('2027-02-27T20:00:00');
   const prev = prevTermOf(x);
-  const a = x.env.call(ATT, 'saveException', { studentId: x.first.id, from: '2027-02-26', blocks: 'ALL', type: '병결' });
+  const a = x.env.call(ATT, 'saveException', { studentId: x.first.id, from: '2027-02-27', blocks: 'ALL', type: '병결' });
   const b = x.env.call(ATT, 'saveException', { studentId: x.first.id, from: '2027-03-02', blocks: 'ALL', type: '병결' });
   assert.ok(a.ok && b.ok);
   assert.ok(termTab(x, prev).some((q) => q.group_id === a.groupId) && termTab(x, x.term).some((q) => q.group_id === b.groupId), '서로 다른 탭에 저장됨');
-  const ids = x.env.call(ATT, 'listExceptions', { scope: 'range', from: '2027-02-26', to: '2027-03-03' }).groups.map((g) => g.groupId);
+  const ids = x.env.call(ATT, 'listExceptions', { scope: 'range', from: '2027-02-27', to: '2027-03-03' }).groups.map((g) => g.groupId);
   assert.ok(ids.includes(a.groupId) && ids.includes(b.groupId), JSON.stringify(ids));
 });
 
@@ -545,4 +545,110 @@ test('홈 요청 배지는 요청 처리 목록과 같은 기준(그 기간 명�
   const list = x.env.call(ATT, 'listExceptions', { scope: 'pending' }).groups;
   assert.strictEqual(x.env.call(ATT, 'getHomeData', 'attendance').exc.pending, list.length);
   assert.ok(!list.some((g) => g.groupId === 'g-ghost'));
+});
+
+/* ───── 총괄 3차 검증 반영(재현 → 수정) ───── */
+
+test('공백·제어문자·다른 자료형 날짜로도 권한 판정을 우회할 수 없다(저장·미리보기 모두 거부, 쓰기 0건)', () => {
+  const x = makeEnv('2027-02-26T20:00:00');
+  const sid = x.mine[0].id;
+  setEnr(x, sid, x.term.id, { teacher_email: 'someone.else@example.com' });
+  const w = termTab(x, x.term).length;
+  const dates = ['\t2027-03-18', '2027-03-18\n', ' 2027-03-18', '2027-03-18　', ' 2027-03-18 ', { toString: () => '2027-03-18' }, ['2027-03-18'], 20270318, true];
+  for (const from of dates) {
+    for (const fn of ['saveException', 'previewException']) {
+      const err = x.env.errorOf(TEACHER, (c) => c[fn]({ studentId: sid, from, blocks: 'ALL', type: '병결' }));
+      assert.ok(err && /권한이 없습니다/.test(err.message) || (err && /날짜/.test(err.message)), fn + ' ' + JSON.stringify(from) + ' → ' + (err && err.message));
+    }
+  }
+  assert.strictEqual(termTab(x, x.term).length, w);
+});
+
+test('"오늘 N명": 목록이 돌려주는 liveStudentCount가 홈 "오늘 N명"과 늘 같다(취소한 묶음·날은 빠진다)', () => {
+  const x = makeEnv();
+  const lst = () => x.env.call(ATT, 'listExceptions', { scope: 'range', from: '2027-03-03', to: '2027-03-03' }).liveStudentCount;
+  const home = () => x.env.call(ATT, 'getHomeData', 'attendance').exc.today;
+  assert.strictEqual(lst(), home());
+  const r = x.env.call(ATT, 'saveException', { studentId: x.first.id, from: '2027-03-03', to: '2027-03-04', blocks: '20:00-22:00', type: '병결', confirmOverlap: true });
+  assert.strictEqual(lst(), home());
+  const base = lst();
+  x.env.call(ATT, 'cancelException', x.term.id, r.groupId, '그날만', '2027-03-03');
+  assert.strictEqual(lst(), home());
+  const cancelledAll = x.env.call(ATT, 'saveException', { studentId: x.mine[2].id, from: '2027-03-03', blocks: 'ALL', type: '병결' });
+  assert.strictEqual(lst(), home());
+  x.env.call(ATT, 'cancelException', x.term.id, cancelledAll.groupId, '전체 취소');
+  assert.strictEqual(lst(), home());
+  assert.ok(base >= lst(), '취소하면 줄어든다');
+});
+
+test('끝난 운영 기간은 보기만: 저장·미리보기·확정·취소 모두 거부 안내(쓰기 0건)', () => {
+  const x = makeEnv();   // 3/3
+  const req = x.env.call(TEACHER, 'saveException', { studentId: x.mine[0].id, from: '2027-03-12', blocks: 'ALL', type: '병결' });
+  const conf = x.env.call(ATT, 'saveException', { studentId: x.first.id, from: '2027-03-15', blocks: 'ALL', type: '병결' });
+  x.env.setNow('2027-08-01T10:00:00');   // 2027 1학기 종료(7/17) 뒤
+  const w = x.tab().length, snap = JSON.stringify(x.tab());
+  const input = { studentId: x.first.id, from: '2027-07-10', blocks: 'ALL', type: '병결' };
+  for (const who of [ATT, ADMIN]) {
+    const s = x.env.call(who, 'saveException', input), p = x.env.call(who, 'previewException', input);
+    assert.deepStrictEqual([s.ok, s.errors[0].field], [false, 'from']); assert.ok(s.errors[0].message.includes('끝난 운영 기간'));
+    assert.strictEqual(p.ok, false);
+  }
+  const c = x.env.call(ATT, 'confirmException', x.term.id, req.groupId), k = x.env.call(ATT, 'cancelException', x.term.id, conf.groupId, '끝난 기간 취소');
+  assert.ok(!c.ok && c.error.includes('끝난 운영 기간') && !k.ok && k.error.includes('끝난 운영 기간'));
+  assert.strictEqual(x.tab().length, w); assert.strictEqual(JSON.stringify(x.tab()), snap);
+});
+
+test('범위 밖·특수 학생 id(constructor·__proto__)로 학생별 목록을 불러도 거부되고 거부 기록이 남는다', () => {
+  const x = makeEnv();
+  for (const who of [ATT, TEACHER, HOMEROOM]) {
+    for (const id of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+      x.env.expectDenied(who, 'exception.view', 'listExceptions', { scope: 'student', studentId: id });
+    }
+  }
+});
+
+test('남의 묶음에 onlyDate를 줘도(없는 날짜여도) 소유 검사가 먼저라 거부 기록이 남는다', () => {
+  const x = makeEnv();
+  const own = x.env.call(HOMEROOM, 'getExceptionContext').students[0];
+  const hr = x.env.call(HOMEROOM, 'saveException', { studentId: own.id, from: '2027-03-13', blocks: 'ALL', type: '병결' });
+  for (const day of ['2027-03-13', '2099-01-01', '']) {
+    x.env.expectDenied(TEACHER, 'exception.cancel', 'cancelException', x.term.id, hr.groupId, '남의 묶음이라 거부', day);
+  }
+  assert.ok(x.tab().filter((q) => q.group_id === hr.groupId).every((q) => q.status === '요청'));
+});
+
+test('빈 groupId는 거부: group_id가 빈 여러 학생 행이 한꺼번에 확정·취소되지 않는다', () => {
+  const x = makeEnv();
+  const add = (sid, date) => x.env.asOwner((c) => c.appendRecord_(c.termSheetName_('exceptions', x.term.id), {
+    term_id: x.term.id, group_id: '', student_id: sid, date, blocks: 'ALL', type: '병결', reason: '', status: '요청', requested_by: TEACHER,
+    requested_at: '2027-03-03T10:00:00', confirmed_by: '', confirmed_at: '', cancel_reason: ''
+  }, ADMIN));
+  add(x.first.id, '2027-03-21'); add(x.mine[1].id, '2027-03-22');
+  const snap = JSON.stringify(x.tab());
+  for (const gid of ['', '  ']) {
+    assert.strictEqual(x.env.call(ATT, 'confirmException', x.term.id, gid).ok, false);
+    assert.strictEqual(x.env.call(ATT, 'cancelException', x.term.id, gid, '빈 묶음 취소').ok, false);
+  }
+  for (const gid of [undefined, null]) {   // 자료형이 없는 값은 공개 호출 경계 밖에서 직접
+    assert.strictEqual(plain(x.env.as(ATT, (c) => c.confirmException(x.term.id, gid))).ok, false);
+    assert.strictEqual(plain(x.env.as(ATT, (c) => c.cancelException(x.term.id, gid, '빈 묶음 취소'))).ok, false);
+  }
+  assert.strictEqual(JSON.stringify(x.tab()), snap);
+});
+
+test('거부 기록(logDenied_): 상세는 500자로 자르고, 쓰기에 실패하면 10분 제한 캐시를 두지 않아 다음 거부는 기록된다', () => {
+  const x = makeEnv();
+  const huge = 'ㄱ'.repeat(60000);
+  const n = x.env.auditActions('denied:exception.save').length;
+  x.env.expectDenied(STUDENT, 'exception.save', 'saveException', { studentId: huge, from: '2027-03-04', blocks: 'ALL', type: '병결' });
+  const rows = x.env.rows('audit_log').filter((r) => r.action === 'denied:exception.save');
+  assert.strictEqual(rows.length, n + 1);
+  assert.ok(rows[rows.length - 1].detail.length <= 500, '상세 길이 ' + rows[rows.length - 1].detail.length);
+  // 기록 쓰기가 한 번 실패해도 같은 계정의 다음 거부는 10분 안이라도 기록된다
+  const y = makeEnv();
+  Object.keys(y.env.cache).filter((k) => k.indexOf('script:deny:') === 0).forEach((k) => delete y.env.cache[k]);
+  y.env.as(STUDENT, (c) => { c.writeAudit_ = () => { throw new Error('감사 쓰기 실패(가짜)'); }; c.logDenied_(STUDENT, 'exception.save', '실패하는 기록'); });
+  const before = y.env.auditActions('denied:exception.save').length;
+  y.env.as(STUDENT, (c) => c.logDenied_(STUDENT, 'exception.save', '두 번째'));
+  assert.strictEqual(y.env.auditActions('denied:exception.save').length, before + 1, '실패한 기록 때문에 10분 동안 막히지 않는다');
 });

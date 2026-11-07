@@ -16,7 +16,7 @@
   function renderScreen(root) {
     var U = UI.util;
     var state = { ctx: null, tab: 'input', student: null, mode: 'day', range: null, from: '', to: '', blocks: null, retTime: '', type: '', reason: '',
-      preview: null, last: '', dayInfo: null, listMode: 'today', listStudent: null };
+      preview: null, last: '', dayInfo: null, listMode: 'today', listStudent: null, ctxFor: '', ctxSeq: 0 };
     var tabsBox = el('div', { class: 'card' });
     var body = el('div');
     root.appendChild(tabsBox); root.appendChild(body);
@@ -65,9 +65,12 @@
     // 폼 날짜가 지금 불러온 기간 밖이면 그 날짜가 속한 기간의 학생 목록으로 다시 불러온다(2/26에 다음 기간 신입생 입력)
     function ensureCtx(date) {
       var t = state.ctx.term;
-      if (!date || (date >= t.start_date && date <= t.end_date) || state.ctxFor === date) return;
+      if (!date || (date >= t.start_date && date <= t.end_date)) { state.ctxSeq++; state.ctxFor = ''; return; }   // 지금 기간 안으로 돌아오면 대기 중인 응답은 무효
+      if (state.ctxFor === date) return;
       state.ctxFor = date;
+      var mine = ++state.ctxSeq;   // 늦게 온 옛 응답(날짜를 연달아 바꿀 때)은 버리고, 버릴 때 ctxFor도 비워 다시 고르면 다시 불러온다
       call('getExceptionContext', date).then(function (ctx) {
+        if (mine !== state.ctxSeq) { if (state.ctxFor === date) state.ctxFor = ''; return; }
         if (ctx.term.id === t.id) return;
         state.ctx = ctx; state.student = null; drawTabs(); drawTab();
       }).catch(fail);
@@ -190,7 +193,7 @@
           if (!p.ok) {
             p.errors.forEach(function (e) { previewBox.appendChild(el('div', { class: 'error', text: e.message })); });
           } else {
-            if (state.mode === 'range') previewBox.appendChild(el('div', { class: 'notice info', text: p.dayCount + '일 · ' + U.formatRangeKo(state.from, state.to) + ' — 날짜마다 한 건씩 저장됩니다.' }));
+            if (state.mode === 'range') previewBox.appendChild(el('div', { class: 'notice info', text: U.formatRangeKo(state.from, state.to) + ' — 날짜마다 한 건씩 저장됩니다.' }));
             p.warnings.forEach(function (w) { previewBox.appendChild(el('div', { class: 'notice warn', text: w })); });
             if (p.warnings.length) previewBox.appendChild(el('div', { class: 'muted', text: '겹치는 특이사항이 있으면 저장할 때 한 번 더 확인합니다.' }));
           }
@@ -327,9 +330,7 @@
         clear(card); card.appendChild(el('div', { class: 'loading', text: '불러오는 중…' }));
         call('listExceptions', filter).then(function (r) {
           clear(card);
-          var students = {};
-          r.groups.forEach(function (g) { if (g.status !== '취소' && !g.rangeCanceled) students[g.studentId] = true; });   // 홈 "오늘 N명"과 같은 기준: 살아 있는 행만
-          card.appendChild(el('h2', { text: title + ' · ' + (filter.scope === 'range' && filter.from === filter.to ? Object.keys(students).length + '명' : r.groups.length + '건') }));
+          card.appendChild(el('h2', { text: title + ' · ' + (filter.scope === 'range' && filter.from === filter.to ? r.liveStudentCount + '명' : r.groups.length + '건') }));   // 홈 "오늘 N명"과 같은 서버 계산
           if (!r.groups.length) { card.appendChild(UI.emptyState('이 조건에 해당하는 특이사항이 없습니다.', c.mode === 'confirm' || true ? { text: '특이사항 입력', onclick: function () { state.tab = 'input'; drawTabs(); drawTab(); } } : null)); return; }
           r.groups.forEach(function (g) { card.appendChild(groupCard(g, function () { show(filter, title); }, { day: filter.scope === 'range' && filter.from === filter.to })); });
         }).catch(function (err) { clear(card); showError(card, err); });
