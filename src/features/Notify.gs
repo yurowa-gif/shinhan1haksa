@@ -2,7 +2,7 @@
  * 알림 메일(C9a). 메일은 스크립트 소유자 계정에서 나간다(executeAs USER_DEPLOYING). docs/plan/stage2.md C9a.
  *
  * notifyMail_(toEmails, subject, body, actorEmail) → {notified, sent, failed}
- * - 락 밖에서만 부른다(저장을 끝낸 뒤). 메일이 실패해도 저장은 되돌리지 않는다. 오류는 삼키고 audit_log에만 남긴다.
+ * - 락 밖에서만 부른다(저장을 끝낸 뒤). 메일이 실패해도 저장은 되돌리지 않는다. 오류는 삼키고 audit_log에만 남긴다(단, 락 안에서 부르면 부르는 쪽 실수라 던진다).
  * - 본문에 학생 정보를 넣지 않는 것은 부르는 쪽 책임이다(날짜·조·이름 정도만).
  * - Script Property MAIL_ENABLED가 'true'일 때만 보낸다(꺼져 있으면 아무것도 안 하고 audit도 없다).
  * - @example.com 가짜 주소는 늘 뺀다. 보내기 전에 남은 하루 한도(받는 사람 수 기준)를 보고, 모자라면 보내지 않고 audit notify:quota.

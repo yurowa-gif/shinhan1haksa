@@ -120,3 +120,23 @@ test('호출 시점에 락이 없으면(락 밖에서 부르는 약속) 메일 �
   const { locks } = run(env, [REAL1, REAL2]);
   assert.deepStrictEqual(locks, [false, false]);
 });
+
+test('발송 실패가 두 번(다른 문구)이어도 notify:failed는 첫 문구만, 오류 부분은 200자 이내', () => {
+  const env = makeEnv(true);
+  const { r } = run(env, [REAL1, REAL2], { fail: () => true, failMsg: 'x'.repeat(500) });
+  assert.deepStrictEqual(r, { notified: false, sent: 0, failed: 2 });
+  const d = env.rows('audit_log').find((x) => x.action === 'notify:failed').detail;
+  assert.ok(d.startsWith('받는 사람 2명 중 2명 실패: x') && d.split(': ')[1].length <= 200, d);
+  const two = makeEnv(true);
+  const msgs = ['첫째 오류', '둘째 오류'];
+  const rr = plain(two.as(ACTOR, (c) => { c.MailApp = { sendEmail() { throw new Error(msgs.shift()); }, getRemainingDailyQuota: () => 10 }; return c.notifyMail_([REAL1, REAL2], 's', 'b', ACTOR); }));
+  assert.strictEqual(rr.failed, 2);
+  const d2 = two.rows('audit_log').find((x) => x.action === 'notify:failed').detail;
+  assert.ok(d2.includes('첫째 오류') && !d2.includes('둘째 오류'), d2);
+});
+
+test('꺾쇠 하나만 든 값(<만, >만)도 뺀다', () => {
+  const { r, sent } = run(makeEnv(true), ['a<b@fakeschool.invalid', 'a>b@fakeschool.invalid', REAL1]);
+  assert.deepStrictEqual(r, { notified: true, sent: 1, failed: 0 });
+  assert.deepStrictEqual(sent.map((s) => s[0]), [REAL1]);
+});
