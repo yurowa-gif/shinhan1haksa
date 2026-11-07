@@ -65,7 +65,8 @@ test('검사기: 잡아야 할 것을 잡는다', () => {
     [{ unit: ' 물리학과' }, /앞뒤 공백/],
     [{ unit: '문의 010-1234-5678' }, /전화번호/],
     [{ unit: 'a@b.kr' }, /이메일/],
-    [{ note: '문의 02-123-4567' }, /note 이메일·전화번호/]
+    [{ note: '문의 02-123-4567' }, /note 이메일·전화번호/],
+    [{ note: '반영과목(원문, 핵심·권장 구분 없음): 물리학' }, /구분 없음 행인데 core_courses/]
   ];
   for (const c of cases) assert.match(errsOf([row(c[0])]), c[1], JSON.stringify(c[0]));
   assert.match(errsOf([row({}), row({}, 3)]), /중복\(2번째 줄\)/);
@@ -93,4 +94,20 @@ test('허용 도메인 목록이 계획 문서(course-recs-plan.md 5절)와 같�
   if (!fs.existsSync(p)) return; // RS1 병합 전에는 건너뜀
   const doc = fs.readFileSync(p, 'utf8');
   for (const d of C.ALLOWED_DOMAINS) assert.ok(doc.indexOf(d) >= 0, '문서에 없는 도메인: ' + d);
+});
+
+test('검사기: note 조건에 이름이 나온 과목은 과목 칸에 있어야 한다(예시는 제외)', () => {
+  const std = new Set(['물리학', '화학', '기하', '미적분Ⅱ', '생물의 유전', '세포와 물질대사', '지구과학']);
+  assert.deepStrictEqual(C.namedInNote('권장(원문): 기하 또는 미적분Ⅱ, 과학', std), ['기하', '미적분Ⅱ']);
+  assert.deepStrictEqual(C.namedInNote('핵심(원문): [세포와 물질대사, 생물의 유전 중 3과목]', std), ['세포와 물질대사', '생물의 유전']);
+  assert.deepStrictEqual(C.namedInNote('비고: 진로선택 과목 중 생물의 유전을 포함하여 3과목 이상', std), ['생물의 유전']);
+  assert.deepStrictEqual(C.namedInNote('핵심(원문): 화학, 그 외는 희망 진로에 따라 물리학 또는 지구과학 등', std), []);
+  const fr = { standard: new Set(['기하', '미적분Ⅱ']), map: {}, sources: { [T]: U } };
+  assert.match(C.checkRecommendations([row({ core_courses: '', recommended_courses: '기하', note: '기하 또는 미적분Ⅱ' })], fr).join(), /과목 칸에 없음: 미적분Ⅱ/);
+});
+
+test('검사기: 같은 모집단위 두 줄은 둘 다 "공식 자료에 유형이 다른 두 행"일 때만 허용', () => {
+  const two = '공식 자료에 유형이 다른 두 행';
+  assert.strictEqual(errsOf([row({ note: two }), row({ note: two }, 3)]), '');
+  assert.match(errsOf([row({ note: two }), row({}, 3)]), /중복/);
 });
