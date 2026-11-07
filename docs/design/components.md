@@ -55,7 +55,7 @@
 `UI.bottomSheet({title, content:Node, actions:[{text,onclick,kind,disabled}], onclose, initialFocus?:0})` → `{open(), close(), el, buttons}`. 바깥 누르기·Esc로 닫히고, 닫으면 포커스가 원래 자리로 돌아간다.
 
 ### UI.confirmSheet
-`UI.confirmSheet({title, message, confirmText?:'확인', cancelText?:'취소', danger?, onconfirm, oncancel})` → 열린 시트. 포커스는 **취소** 쪽. 무엇이 바뀌는지 `message`에 한 줄로 쓴다(rules.md 6절).
+`UI.confirmSheet({title, lead?, lines?, message?, confirmText?:'확인', cancelText?:'취소', danger?, onconfirm, oncancel})` → 열린 시트. 포커스는 **취소** 쪽. 무엇이 바뀌는지 `message`에 한 줄로 쓴다(rules.md 6절). 적용일처럼 꼭 봐야 할 한 줄은 `lead`(크고 굵게, 예 "3월 5일(금)부터 학사 퇴실"), 그 아래 바뀌는 것 목록은 `lines`(문자열 배열). `lead`·`lines`만 주면 `message`는 없어도 된다.
 
 ### UI.confirmWithReason
 `UI.confirmWithReason({title, message, reasonLabel?:'사유', confirmText?:'확인', minLength?:2, danger?:true, onconfirm(reason), oncancel})` → 열린 시트. 사유를 `minLength`자 이상 적어야 확인 버튼이 켜진다. `onconfirm`에는 앞뒤 공백을 자른 사유가 온다. 사유 저장·`audit_log`는 서버 몫이다.
