@@ -143,7 +143,7 @@ function excGroups_(rows) {
  * 관리자·출결 담당 = 전체, 학사 교사 = 담당 학생(wide면 전체, 결정 45 보기용), 담임 = 자기 반(여러 역할이면 합집합).
  * 입력 화면의 학생 선택은 wide를 주지 않는다(저장 범위와 같아야 한다).
  */
-function excVisibleIds_(user, enrollments, students, termId, wide) {
+function excVisibleIds_(user, enrollments, students, termId, wide) {   // wide = excViewWide_() — 보기 목록만 true
   var enrolled = enrollments.filter(function (e) { return e.term_id === termId; });
   var byId = {};
   students.forEach(function (s) { byId[s.id] = s; });
@@ -158,6 +158,9 @@ function excVisibleIds_(user, enrollments, students, termId, wide) {
   });
   return ids;
 }
+
+/** 보기(목록·학생별)가 넓은지: 권한표 exception.view의 wideView 표시를 읽는다(저장·입력 선택에는 쓰지 않는다) */
+function excViewWide_() { return !!permissions_()['exception.view'].wideView; }
 
 /** 저장·검사가 쓰는 시작일과 같은 값(trim) — 권한 판정도 이 날짜의 기간으로 한다 */
 function excYmd_(input) { return String((input && input.from) || '').trim(); }
@@ -215,15 +218,18 @@ function getExceptionContext(date) {
   var term = termOnDate_(ymd, d.terms) || getCurrentTerm_();
   if (!term) throw new Error('운영 기간이 없습니다. 관리자에게 운영 기간을 만들어 달라고 요청해 주세요.');
   var base = ymd < term.start_date ? term.start_date : (ymd > term.end_date ? term.end_date : ymd);
-  var visible = excVisibleIds_(user, d.enrollments, d.students, term.id);
   var enrByStudent = {};
   d.enrollments.forEach(function (e) { if (e.term_id === term.id) enrByStudent[e.student_id] = e; });
-  var students = d.students.filter(function (s) { return visible[s.id] && isActiveOn_(d.changes, enrByStudent[s.id], base); })
-    .sort(function (a, b) { return String(a.student_no).localeCompare(String(b.student_no)); })
-    .map(function (s) { return { id: s.id, name: s.name, grade: +s.grade, classNo: s.class_no, number: s.number, studentNo: s.student_no }; });
+  var pick = function (visible) {
+    return d.students.filter(function (s) { return visible[s.id] && isActiveOn_(d.changes, enrByStudent[s.id], base); })
+      .sort(function (a, b) { return String(a.student_no).localeCompare(String(b.student_no)); })
+      .map(function (s) { return { id: s.id, name: s.name, grade: +s.grade, classNo: s.class_no, number: s.number, studentNo: s.student_no }; });
+  };
+  var students = pick(excVisibleIds_(user, d.enrollments, d.students, term.id));   // 입력용: 저장할 수 있는 학생만
+  var viewStudents = pick(excVisibleIds_(user, d.enrollments, d.students, term.id, excViewWide_()));   // 학생별 보기용(그 기간 등록 학생)
   return {
     today: today, date: ymd, tomorrow: ymdAddDays_(today, 1), term: { id: term.id, name: term.name, start_date: term.start_date, end_date: term.end_date },
-    mode: excCanConfirm_(user) ? 'confirm' : 'request', types: excTypeChips_(d.settings), students: students,
+    mode: excCanConfirm_(user) ? 'confirm' : 'request', types: excTypeChips_(d.settings), students: students, viewStudents: viewStudents,
     canConfirm: excCanConfirm_(user)
   };
 }
@@ -345,7 +351,7 @@ function listExceptions(filter) {
   }
   if (scope === 'pending' && !excCanConfirm_(user)) excDenied_(user, 'exception.view', '요청 처리 목록은 출결 담당·관리자만');
   if (scope === 'student') {
-    var anyVisible = terms.some(function (t) { return excVisibleIds_(user, d.enrollments, d.students, t.id, true)[String(filter.studentId || '')]; });   // 학생 id는 prototype 없는 집합에서만 찾는다
+    var anyVisible = terms.some(function (t) { return excVisibleIds_(user, d.enrollments, d.students, t.id, excViewWide_())[String(filter.studentId || '')]; });   // 학생 id는 prototype 없는 집합에서만 찾는다
     if (!anyVisible) excDenied_(user, 'exception.view', '범위 밖 학생 ' + String(filter.studentId || ''));
   }
   if (!terms.length) return { ok: true, groups: [], term: null, total: 0 };
@@ -355,7 +361,7 @@ function listExceptions(filter) {
   d.students.forEach(function (s) { byId[s.id] = s; });
   var groups = [];
   terms.forEach(function (term) {
-    var visible = excVisibleIds_(user, d.enrollments, d.students, term.id, true);
+    var visible = excVisibleIds_(user, d.enrollments, d.students, term.id, excViewWide_());
     var rows = excRows_(term).rows.filter(function (r) { return visible[r.student_id] || (scope === 'mine' && r.requested_by === user.email); });
     if (scope === 'pending') rows = rows.filter(function (r) { return r.status === '요청'; });
     else if (scope === 'mine') rows = rows.filter(function (r) { return r.requested_by === user.email; });

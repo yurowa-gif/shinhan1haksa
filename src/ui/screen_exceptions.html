@@ -37,7 +37,7 @@
       var want = window.SCREEN_TAB;
       state.tab = (want === 'requests' && ctx.canConfirm) || (want === 'mine' && !ctx.canConfirm) || (want === 'list') ? want : 'input';
       if (window.SCREEN_STUDENT) {   // 담임 홈에서 학생을 눌러 들어오면 학생별 목록으로
-        var sel = ctx.students.filter(function (s) { return s.id === window.SCREEN_STUDENT; })[0];
+        var sel = (ctx.viewStudents || ctx.students).filter(function (s) { return s.id === window.SCREEN_STUDENT; })[0];
         if (sel) { state.tab = 'list'; state.listMode = 'student'; state.listStudent = sel; }
       }
       drawTabs(); drawTab();
@@ -340,7 +340,7 @@
       else if (state.listMode === 'week') { var w = weekOf(c.today); show({ scope: 'range', from: w[0], to: w[1] }, U.formatRangeKo(w[0], w[1])); }
       else {
         var holder = el('div');
-        card.appendChild(UI.studentPicker({ students: c.students, label: '학생', placeholder: '이름·초성·학번', onpick: function (s) {
+        card.appendChild(UI.studentPicker({ students: c.viewStudents || c.students, label: '학생', placeholder: '이름·초성·학번', onpick: function (s) {
           clear(holder);
           if (s) { var sub = el('div'); holder.appendChild(sub); var inner = card; show2(s); }
         } }));

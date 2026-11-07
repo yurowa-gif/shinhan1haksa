@@ -619,6 +619,49 @@ test('범위 밖·특수 학생 id(constructor·__proto__)로 학생별 목록�
   }
 });
 
+test('넓은 보기는 그 기록이 속한 기간에 등록된 학생만: 그 기간 등록이 없는 학생은 목록·학생별 모두 안 보인다', () => {
+  const x = makeEnv();
+  const sid = x.other.id;   // 담당이 아닌 학생
+  const g = x.env.call(ATT, 'saveException', { studentId: sid, from: '2027-03-12', blocks: 'ALL', type: '병결' });
+  const range = () => x.env.call(TEACHER, 'listExceptions', { scope: 'range', from: '2027-03-12', to: '2027-03-12' }).groups.map((q) => q.groupId);
+  assert.ok(range().includes(g.groupId), '그 기간 등록 학생이면 담당이 아니어도 보인다');
+  x.env.expectAllowed(TEACHER, 'listExceptions', { scope: 'student', studentId: sid, termId: x.term.id });
+  setEnr(x, sid, x.term.id, { student_id: 'gone-' + sid.slice(-4) });   // 이 기간 등록에서 빠진다(다른 기간에만 등록된 학생과 같은 상황)
+  assert.ok(!range().includes(g.groupId), '이 기간 등록이 없으면 목록에서 빠진다');
+  x.env.expectDenied(TEACHER, 'exception.view', 'listExceptions', { scope: 'student', studentId: sid, termId: x.term.id });
+  assert.ok(!x.env.call(TEACHER, 'getExceptionContext').viewStudents.some((s) => s.id === sid));
+  // 다른 기간에만 등록된 학생: 직전 기간에만 있고 이번 기간에는 없는 학생은 이번 기간 기준으로는 거부, 직전 기간 기준으로는 허용
+  const prev = prevTermOf(x), inPrev = (id, t) => x.env.rows('enrollments').some((e) => e.term_id === t.id && e.student_id === id);
+  const prevOnly = x.env.rows('enrollments').find((e) => e.term_id === prev.id && !inPrev(e.student_id, x.term) && e.student_id !== x.acc.unenrolledStudentId);
+  if (prevOnly) {
+    x.env.expectDenied(TEACHER, 'exception.view', 'listExceptions', { scope: 'student', studentId: prevOnly.student_id, termId: x.term.id });
+    x.env.expectAllowed(TEACHER, 'listExceptions', { scope: 'student', studentId: prevOnly.student_id, termId: prev.id });
+  }
+});
+
+test('담임은 넓어지지 않는다: 목록은 자기 반 학생만(출결 담당보다 적다), 다른 반 학생 학생별 보기는 거부, viewStudents도 자기 반만', () => {
+  const x = makeEnv();
+  const all = x.env.call(ATT, 'listExceptions', { scope: 'range', from: '2027-03-03', to: '2027-03-09' });
+  const h = x.env.call(HOMEROOM, 'listExceptions', { scope: 'range', from: '2027-03-03', to: '2027-03-09' });
+  const cls = new Set(x.env.call(HOMEROOM, 'getExceptionContext').viewStudents.map((s) => s.id));
+  assert.ok(cls.size > 0 && h.groups.length < all.groups.length, '담임 목록은 출결 담당보다 적다');
+  assert.ok(h.groups.every((g) => cls.has(g.studentId)), '자기 반 학생 것만');
+  const outside = x.students.find((s) => x.enr.some((e) => e.student_id === s.id) && !cls.has(s.id));
+  x.env.expectDenied(HOMEROOM, 'exception.view', 'listExceptions', { scope: 'student', studentId: outside.id });
+  assert.deepStrictEqual(x.env.call(HOMEROOM, 'getExceptionContext').students.map((s) => s.id).sort(), Array.from(cls).sort());
+});
+
+test('getExceptionContext: 학사 교사의 viewStudents(학생별 보기용)에는 담당 아닌 학생이 있고, 입력용 students에는 없다', () => {
+  const x = makeEnv();
+  const c = x.env.call(TEACHER, 'getExceptionContext');
+  assert.ok(c.viewStudents.some((s) => s.id === x.other.id));
+  assert.ok(!c.students.some((s) => s.id === x.other.id));
+  assert.ok(c.students.every((s) => x.mine.some((m) => m.id === s.id)));
+  assert.ok(c.viewStudents.length > c.students.length);
+  const a = x.env.call(ATT, 'getExceptionContext');
+  assert.deepStrictEqual(a.viewStudents, a.students, '출결 담당은 둘이 같다');
+});
+
 test('남의 묶음에 onlyDate를 줘도(없는 날짜여도) 소유 검사가 먼저라 거부 기록이 남는다', () => {
   const x = makeEnv();
   const own = x.env.call(HOMEROOM, 'getExceptionContext').students[0];
