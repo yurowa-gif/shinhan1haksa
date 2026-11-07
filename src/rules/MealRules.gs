@@ -1,7 +1,7 @@
 /**
  * 급식 적용일 규칙(RULES 세션 소유, docs/contracts/rules-api.md, PRD F6·F7, 결정 1·2·3·23(④⑤)·35).
  *
- * 순수 함수만 둔다. DateRules.gs의 함수(isoLocalSplit_·ymd…·hm…)와 StatusRules.gs의 statusOn_을 부른다.
+ * 순수 함수만 둔다. DateRules.gs의 함수(isoLocalSplit_·ymd…·hm…)와 StatusRules.gs의 statusOn_·statIso_·statChangeValid_를 부른다.
  *
  * | kind            | 언제                                   | 적용일                                         |
  * | start           | 실시 신청(조식 실시, 석식 학사 실시)     | 마감(11:30) 전 신청 → 당일, 마감 이후 → 다음 날   |
@@ -139,9 +139,9 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
   var today = String(opts.today || '').trim();
   if (!ymdIsValid_(today)) throw new Error('today가 필요합니다(yyyy-MM-dd): ' + opts.today);
   var at = isoLocalSplit_(String(requestedAt || '').trim());
-  var req = mealIso_(requestedAt);
+  var req = statIso_(requestedAt);
   var rows = (changes || []).filter(function (c) {
-    return mealRowLive_(c) && String(c.student_id || '').trim() === sid && ymdIsValid_(String(c.effective_date || '').trim());
+    return c && statChangeValid_(c) && String(c.student_id || '').trim() === sid && ymdIsValid_(String(c.effective_date || '').trim());
   });
   var mine = rows.filter(function (c) { return String(c.item || '').trim() === it; });
 
@@ -162,7 +162,7 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
     return out;
   }
   // 늦게 입력한 이전 신청서: 더 새 신청이 이미 그 전에 적용되면 이 신청은 영영 적용되지 않는다
-  var newer = mine.filter(function (c) { return mealIso_(c.requested_at) > req && String(c.effective_date).trim() <= cand.date; });
+  var newer = mine.filter(function (c) { return statIso_(c.requested_at) > req && String(c.effective_date).trim() <= cand.date; });
   if (newer.length) {
     out.kind = 'none'; out.date = ''; out.rule = ''; out.superseded = true;
     out.warnings.push('더 새 신청(' + newer.map(function (c) { return String(c.effective_date).trim() + ' ' + String(c.value).trim(); }).join(', ') +
@@ -214,17 +214,6 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
   return out;
 }
 
-function mealRowLive_(c) {
-  if (!c) return false;
-  var st = String(c.status || '').trim();
-  return st === '' || st === '유효';
-}
-
-/** 일시 비교용(공백 구분도 T 형식과 같은 순서로). */
-function mealIso_(v) {
-  return String(v === undefined || v === null ? '' : v).trim().replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T');
-}
-
 /**
  * 새 급식 변경 행(적용일 effectiveDate)을 저장할 때 '취소'로 바꿔야 할 행들. → [{id, effective_date, value}](적용일 순)
  * opts = {source:'F7'|'F6', requestedAt:새 행의 신청 일시, newValue:새 행의 값}
@@ -244,16 +233,16 @@ function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts) {
   var sid = String(studentId || '').trim(), it = String(item || '').trim(), eff = String(effectiveDate || '').trim();
   if (!ymdIsValid_(eff)) throw new Error('적용일 형식이 아닙니다(yyyy-MM-dd): ' + effectiveDate);
   var fromF6 = String(opts.source || 'F7').trim() === 'F6';
-  var req = mealIso_(opts.requestedAt);
+  var req = statIso_(opts.requestedAt);
   var nv = String(opts.newValue || '').trim();
   return (changes || []).filter(function (c) {
-    if (!mealRowLive_(c) || String(c.student_id || '').trim() !== sid || String(c.item || '').trim() !== it) return false;
+    if (!c || !statChangeValid_(c) || String(c.student_id || '').trim() !== sid || String(c.item || '').trim() !== it) return false;
     var e = String(c.effective_date || '').trim();
     if (!ymdIsValid_(e)) return false;
     var isF6 = String(c.source || '').trim() === 'F6';
     if (fromF6) return !isF6 && e >= eff && mealIsHallOnly_(it, String(c.value || '').trim());
     if (e <= eff || isF6 || (nv && String(c.value || '').trim() === nv)) return false;   // F6 행은 mealPlanChange_가 따로 본다. 같은 값은 덮을 필요 없음
-    return !req || mealIso_(c.requested_at) <= req;
+    return !req || statIso_(c.requested_at) <= req;
   }).map(function (c) {
     return { id: String(c.id || '').trim(), effective_date: String(c.effective_date || '').trim(), value: String(c.value || '').trim() };
   }).sort(function (a, b) { return a.effective_date < b.effective_date ? -1 : a.effective_date > b.effective_date ? 1 : 0; });
