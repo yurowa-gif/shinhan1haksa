@@ -87,6 +87,8 @@ function movePlan_(changes, studentId, move, opts)
         //         dinner:'중단'|'일반 석식', breakfastWithDorm, breakfastStopWithDorm}, opts = {today(필수), cutoff}
         // → {errors, warnings, rows:[{item, value, effective_date, effective_date_auto, requested_at, reason, source, head}],
         //    toCancel:[{id, cancel_reason}], summary:{date, breakfast:{value,from}|null, dinner:{value,from}|null}}
+        //   move.meals:{조식, 석식}(학사 입실 때 시작할 급식, R11b)
+function moveUndoPlan_(changes, headId, opts)   // (R11b) opts = {today} → {toCancel:[{id}], toRestore:[{id}], warnings}
 
 // src/rules/OutRules.gs
 function reconcileAutoOuts_(exceptions, violations, opts)
@@ -223,7 +225,7 @@ function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)    
   - `source:'F7'`: 위 ①.
   - `source:'F6'`(퇴실 정리): 적용일이 `effectiveDate`(조식은 퇴실일, 석식은 결정 35 중단일) **이상**인 F6 아닌 행 중 학사생 값 행 전부(신청 일시·오늘과 상관없이 — PRD F6 "퇴실일부터 바로 중단"). 미실시·일반 석식 신청은 남긴다.
 - **F6 학사 퇴실 정리 순서**(R11a부터 `movePlan_`이 이 순서로 계획한다): ① 학사 `퇴실` 행(`source:'F6'`) ② 조식(중단일 = 퇴실일)·석식(중단일 = `mealEffectiveDate_('stop', 퇴실 입력 일시, {leaveDate})`)마다 `mealPendingToCancel_(…, 중단일, {source:'F6'})`를 취소 ③ 그 뒤에도 중단일의 값(`statusOn_`)이 학사생 값이면 그날 `미실시` 행을 `source:'F6'`으로 쓴다. 늦게 입력한 퇴실(퇴실일이 오늘 이전)도 같다. 서류 미제출이어도 적용한다(결정 3).
-- **고친 적용일(R10):** `opts.effectiveDate`(yyyy-MM-dd)를 주면 그 날을 적용일로 계산한다 — `kind`·`blocked`·`superseded`·`toCancel`·`followUps`·경고 모두 고친 날 기준. `rule` = `opts.effectiveRule`(`'manual'` 기본, 기숙사 입실 조식은 `'entry_date'`). 결과 `autoDate` = 규칙 계산값(고치지 않았으면 `date`와 같다, blocked·superseded여도 들어 있다). F7은 `autoDate`를 `effective_date_auto`에, 쓴 날짜를 `effective_date`에 저장한다(stage2.md 5절). 고친 날짜는 자동보다 이르거나 늦거나 오늘 이전이어도 되지만 신청일보다 이르면 Error, 날짜가 아니거나 모르는 `effectiveRule`도 Error.
+- **고친 적용일(R10):** `opts.effectiveDate`(yyyy-MM-dd)를 주면 그 날을 적용일로 계산한다 — `kind`·`blocked`·`superseded`·`toCancel`·`followUps`·경고 모두 고친 날 기준. `rule` = `opts.effectiveRule`(`'manual'` 기본, 기숙사 입실 조식은 `'entry_date'`). 결과 `autoDate` = 규칙 계산값(고치지 않았으면 `date`와 같다, blocked·superseded여도 들어 있다). F7은 `autoDate`를 `effective_date_auto`에, 쓴 날짜를 `effective_date`에 저장한다(stage2.md 5절). 고친 날짜는 자동보다 이르거나 늦거나 오늘 이전이어도 되지만 `manual`은 신청일보다 이르면 Error(`entry_date`는 입퇴실을 늦게 입력하면 신청일보다 이를 수 있어 허용, R11b), 날짜가 아니거나 모르는 `effectiveRule`도 Error.
 - 퇴실 기록보다 먼저 신청한 학사 석식도 고친 적용일이 결정 35 중단일 이후면 `blocked`(F6 정리가 중단일 이후 학사생 값 행을 취소하는 것과 같다).
 - StatusRules: `statusOn_`의 적용일 검사는 이제 달력 검사(`2027-02-30` 행 무시)로 `ymdIsValid_`와 같다(R6에서 고침).
 
@@ -237,3 +239,10 @@ function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)    
 - 기숙사 입실 + 조식: `mealPlanChange_(…, {effectiveDate: 입실일, effectiveRule:'entry_date'})` → 조식 실시@입실일(F7, `effective_date_auto` = 입실일, PRD F7 표 2줄). 기숙사 퇴실 + 조식 미실시: 미실시 규칙(기숙사 퇴실일보다 이르지 않게, F7). ASSUMPTION(4-2): 두 조식 선택은 기본으로 켠다(`false`를 넘기면 끔). 이미 그 값이고 취소할 대기 행도 없으면 급식 행을 쓰지 않는다.
 - ASSUMPTION: 학사 입실(재입실 포함)의 급식은 R11b(`moveUndoPlan_`·재입실)에서 정한다 — 지금은 대표 행만.
 - 테스트의 F6 퇴실 흉내(`meal.test.js` saveLeave, `meal_oracle.test.js`)는 이 함수를 쓴다(규칙은 한 곳에).
+
+## 동작 메모(R11b, 2026-11-07)
+
+- **재입실**(`movePlan_` 학사 입실): 직전 학사 퇴실 이후의 F6 급식 `미실시` 행 중 입실일 이상인 것(아직 오지 않은 석식 중단 등)을 취소하고, 급식은 `move.meals`(없으면 직전 퇴실 전날의 값 — ASSUMPTION 4-2)를 입실일부터 시작한다(`entry_date`, F7, **값이 같아도 쓴다** — 그날부터의 의도라 늦게 입력된 옛 신청서가 덮지 못하게). 직전 퇴실이 없고(학기 중 신규) `meals`도 없으면 대표 행만.
+- **`mealPlanChange_` followUps 추가(R11b):** 학사생 값 신청이 닿는 퇴실의 중단일 뒤에 재입실이 있으면 재입실일에 이 신청 값 행(`source:'F7'`, 이 신청의 일부)을 더한다 — 재입실일에 이미 더 새 신청(F6 제외)이 적용되면 빼고, 이 신청의 같은 행이 이미 있으면(다시 계획) 빼고. 다른 신청의 행이 같은 값을 주고 있어도 쓴다(그 행은 그 신청과 함께 취소될 수 있으므로). 저장 쪽은 followUps마다 `source`를 그대로 쓴다.
+- **`moveUndoPlan_(changes, headId, opts)`**(퇴실 취소): toCancel = 대표 + 연결 행(`linked_change_id`), 대표가 학사 퇴실이면 그 퇴실의 중단일(조식 퇴실일·석식 결정 35)에 있는 F6 `미실시` 행(급식 신청 followUps로 쓴 것 포함 — 남은 다른 학사 퇴실이 같은 날을 중단일로 쓰면 둠). toRestore = cancel_reason이 `[자동] <headId>`로 시작하거나 memo에 그 꼬리표가 있는 취소 행 중 더 새 신청(신청 일시가 늦고 적용일이 그 행 이하, F6 제외)에 덮이지 않는 것(덮이면 경고). 되살린 신청 행은 처음 저장될 때처럼 그보다 먼저 신청했는데 더 늦게 적용되는 다른 값의 행(그동안 늦게 입력된 옛 신청서)을 toCancel에 더한다. 대표가 없거나 이미 취소면 경고만, 지난 적용일은 경고. ASSUMPTION: 누가 언제 취소할 수 있는지(4-2)는 저장 쪽이 판정한다.
+- 오라클(`meal_oracle.test.js`)에 퇴실 취소(퇴실이 없었던 것처럼)·재입실(재입실일부터 퇴실 전날 값을 새 의도로) 사건이 들어 있다. 재입실일부터는 퇴실 규칙(조식 즉시 중단·석식 중단일)을 적용하지 않는다.

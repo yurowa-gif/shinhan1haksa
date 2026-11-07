@@ -154,8 +154,9 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
   if (opts.effectiveDate !== undefined && opts.effectiveDate !== '') {   // 교사가 고친 적용일(R10)
     var manual = ruleStr_(opts.effectiveDate), rule = ruleStr_(opts.effectiveRule) || 'manual';
     if (!ymdIsValid_(manual)) throw new Error('effectiveDate 형식이 아닙니다(yyyy-MM-dd): ' + opts.effectiveDate);
-    if (manual < at.date) throw new Error('적용일은 신청일(' + at.date + ') 이후여야 합니다: ' + manual);
     if (rule !== 'manual' && rule !== 'entry_date') throw new Error('effectiveRule은 manual 또는 entry_date: ' + opts.effectiveRule);
+    // 입실일(entry_date)은 입퇴실 기록의 사실이라 늦게 입력하면 신청일보다 이를 수 있다. 교사가 고친 날(manual)만 신청일 이후로 막는다.
+    if (rule === 'manual' && manual < at.date) throw new Error('적용일은 신청일(' + at.date + ') 이후여야 합니다: ' + manual);
     cand = { date: manual, rule: rule };
   }
   var from = statusOn_(rows, sid, it, cand.date);
@@ -212,7 +213,22 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
     var after = rows.filter(function (c) { return !cancelled[ruleStr_(c.id)]; }).concat([newRow]);
     if (mealIsHallOnly_(it, statusOn_(after, sid, it, leave.stop))) {
       out.followUps.push({ item: it, value: '미실시', effective_date: leave.stop, source: 'F6' });
+      after.push({ student_id: sid, item: it, value: '미실시', effective_date: leave.stop, requested_at: req, source: 'F6', status: '유효', created_at: '9999' });
     }
+    // 중단일 뒤에 다시 입실했으면 재입실일부터 이 신청 값을 다시(R11b — 이 신청의 일부라 source F7). 재입실일에 이미 더 새 신청이
+    // 적용되면 되살리지 않는다.
+    var back = rows.filter(function (c) {
+      var e = ruleStr_(c.effective_date);
+      return ruleStr_(c.item) === '학사' && ruleStr_(c.value) === '입실' && e > leave.stop && statusOn_(rows, sid, '학사', e) === '입실';
+    }).map(function (c) { return ruleStr_(c.effective_date); }).sort()[0];
+    var newerAtBack = back && mine.some(function (c) {
+      return !cancelled[ruleStr_(c.id)] && ruleStr_(c.source) !== 'F6' && ruleIso_(c.requested_at) > req && ruleStr_(c.effective_date) <= back;
+    });
+    var ownAtBack = back && after.some(function (c) {   // 이 신청의 행이 이미 재입실일에 있으면(다시 계획할 때) 또 쓰지 않는다
+      return ruleStr_(c.effective_date) === back && ruleStr_(c.value) === to && ruleIso_(c.requested_at) === req && ruleStr_(c.source) !== 'F6';
+    });
+    // 다른 신청의 행이 같은 값을 주고 있어도 쓴다: 그 행은 그 신청과 함께 취소될 수 있다(늦게 입력된 옛 신청서가 취소하는 경우)
+    if (back && !newerAtBack && !ownAtBack) out.followUps.push({ item: it, value: to, effective_date: back, source: 'F7' });
   }
   return out;
 }
