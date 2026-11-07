@@ -344,11 +344,8 @@ function commitRoster(text, opts, expect) {
     bulkUpdateRecords_('students', d.updateStudents, email);
     bulkAppend_('enrollments', rosterApplyRefs_(d.createEnrollments, idByRef), email);
     bulkUpdateRecords_('enrollments', d.updateEnrollments, email);
-    var now = nowIso_();
-    bulkAppend_('status_changes', rosterApplyRefs_(d.createChanges, idByRef).map(function (c) {
-      c.requested_at = c.requested_at || now;
-      return c;
-    }), email);
+    // 명단 초기 행의 requested_at은 ''로 둔다(업로드 시각이 아니다): 같은 적용일의 F6 퇴실이 늘 뒤에 오고, 업로드 전 날짜의 F7 신청서도 밀려난다(규칙·오라클 전제)
+    bulkAppend_('status_changes', rosterApplyRefs_(d.createChanges, idByRef), email);
     bulkAppend_('users', plan.userPlan.create, email);
     bulkUpdateRecords_('users', plan.userPlan.update, email);
     return { ok: true, counts: plan.counts };
