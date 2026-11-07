@@ -16,11 +16,7 @@ var TERM_NAME_MAX = 40;
 
 /** 'yyyy-MM-dd' 형식이고 실제로 있는 날짜인지(규칙 세션의 ymdIsValid_ 병합 전까지 쓰는 자체 검사) */
 function termYmdOk_(s) {
-  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ''));
-  if (!m) return false;
-  var y = +m[1], mo = +m[2], d = +m[3];
-  var t = new Date(Date.UTC(y, mo - 1, d));
-  return t.getUTCFullYear() === y && t.getUTCMonth() === mo - 1 && t.getUTCDate() === d;
+  return ymdIsValid_(String(s || '').trim());   // 규칙 함수(carryOverEnrollments_ 등)와 같은 판정(0100~0999년 거부)
 }
 
 /**

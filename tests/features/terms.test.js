@@ -2,7 +2,7 @@
 const assert = require('assert');
 const { test, loadGs, plain } = require('../helpers/harness');
 
-const ctx = loadGs(['src/Schema.gs', 'src/Auth.gs', 'src/Code.gs', 'src/features/Terms.gs']);
+const ctx = loadGs(['src/rules/DateRules.gs', 'src/Schema.gs', 'src/Auth.gs', 'src/Code.gs', 'src/features/Terms.gs']);
 
 const good = { name: '2027 1학기', type: '학기', start_date: '2027-03-02', end_date: '2027-07-17', memo: '' };
 const v = (input, terms) => plain(ctx.termValidate_(input, terms || []));
@@ -93,7 +93,7 @@ test('SCREENS의 모든 화면 파일이 실제로 있고 permissions_ 키가 �
 function makeServer(email, roles) {
   const denied = [];
   const users = [{ id: 'u1', email, active: 'TRUE', roles: roles.join(','), name: '가짜교사', homeroom_class: '' }];
-  const c = loadGs(['src/Schema.gs', 'src/Auth.gs', 'src/features/Terms.gs'], {
+  const c = loadGs(['src/rules/DateRules.gs', 'src/Schema.gs', 'src/Auth.gs', 'src/features/Terms.gs'], {
     Session: { getActiveUser: () => ({ getEmail: () => email }) },
     readAll_: (sheet) => (sheet === 'users' ? users : []),
     findById_: () => null,
@@ -121,4 +121,11 @@ test('listTerms: 학생·학부모는 거부, 교사 역할은 통과', () => {
   assert.throws(() => makeServer('p@example.com', ['parent']).c.listTerms(), /권한이 없습니다/);
   const r = plain(makeServer('t@example.com', ['hall_teacher']).c.listTerms());
   assert.deepStrictEqual(r.terms, []);
+});
+
+test('saveTerm: 0100~0999년 날짜(오타 0227-03-02)는 규칙 함수와 같게 거부하고 저장하지 않는다', () => {
+  const s = makeServer('a@example.com', ['admin']);
+  const r = plain(s.c.saveTerm(Object.assign({}, good, { start_date: '0227-03-02' })));
+  assert.strictEqual(r.ok, false);
+  assert.deepStrictEqual(r.errors.map((e) => e.field), ['start_date']);
 });

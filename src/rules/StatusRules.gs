@@ -1,7 +1,7 @@
 /**
  * 학생 상태 규칙(RULES 세션 소유, docs/contracts/rules-api.md, PRD 3.2·3.5).
  *
- * 순수 함수만 둔다. 다른 파일의 함수·전역 값을 쓰지 않는다('yyyy-MM-dd'는 문자열 비교로 순서를 정한다).
+ * 순수 함수만 둔다. DateRules.gs의 함수(ymdIsValid_·ruleStr_·ruleIso_·ruleRowLive_)를 부른다('yyyy-MM-dd'는 문자열 비교로 순서를 정한다).
  * 시트 행은 Db.gs readAll_이 돌려주는 모양(모든 값이 문자열)을 그대로 받는다.
  *   status_changes:   student_id, item, value, requested_at, effective_date, …, status(유효·취소), created_at …
  *   enrollments:      term_id, student_id, teacher_email, veritas, commute_type, end_type, memo …
@@ -9,29 +9,6 @@
  *   seat_assignments: term_id, seat_id, student_id, valid_from, valid_to, status(배정·취소), memo …
  *   terms:            name, type(학기·방학), start_date, end_date …
  */
-
-function statStr_(v) {
-  return String(v === undefined || v === null ? '' : v).trim();
-}
-
-/** 일시 비교용: 'yyyy-MM-dd HH:mm:ss'처럼 공백으로 쓴 값도 'T' 형식과 같은 순서가 되게. */
-function statIso_(v) {
-  return statStr_(v).replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T');
-}
-
-/** 'yyyy-MM-dd' 형식이고 달력에 있는 날짜인지(2027-02-30은 false — DateRules.ymdIsValid_와 같은 판정, 이 파일만으로 돈다). */
-function statIsYmd_(s) {
-  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-  if (!m) return false;
-  var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
-  return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3];
-}
-
-/** status_changes 행이 유효한지: status가 빈칸 또는 '유효'(취소·요청 등은 무시). */
-function statChangeValid_(c) {
-  var st = statStr_(c && c.status);
-  return st === '' || st === '유효';
-}
 
 /**
  * 그날의 상태 값. item '학사'|'기숙사'|'조식'|'석식' → 값(입실·퇴실·실시·…) 또는 ''(기록 없음).
@@ -41,14 +18,14 @@ function statChangeValid_(c) {
  * 적용일이 날짜 형식이 아닌 행은 무시한다.
  */
 function statusOn_(changes, studentId, item, ymd) {
-  var sid = statStr_(studentId), it = statStr_(item);
+  var sid = ruleStr_(studentId), it = ruleStr_(item);
   var best = null;
   (changes || []).forEach(function (c, i) {
-    if (!c || !statChangeValid_(c)) return;
-    if (statStr_(c.student_id) !== sid || statStr_(c.item) !== it) return;
-    var eff = statStr_(c.effective_date);
-    if (!statIsYmd_(eff) || eff > ymd) return;
-    var cand = { eff: eff, req: statIso_(c.requested_at), created: statIso_(c.created_at), value: statStr_(c.value) };
+    if (!c || !ruleRowLive_(c)) return;
+    if (ruleStr_(c.student_id) !== sid || ruleStr_(c.item) !== it) return;
+    var eff = ruleStr_(c.effective_date);
+    if (!ymdIsValid_(eff) || eff > ymd) return;
+    var cand = { eff: eff, req: ruleIso_(c.requested_at), created: ruleIso_(c.created_at), value: ruleStr_(c.value) };
     if (!best || cand.eff > best.eff || (cand.eff === best.eff &&
         (cand.req > best.req || (cand.req === best.req && cand.created >= best.created)))) best = cand;
   });
@@ -61,7 +38,7 @@ function statusOn_(changes, studentId, item, ymd) {
  * ASSUMPTION: 퇴실 적용일 당일부터 학사생이 아니다(stage1 4절 a, 결정 23 ①).
  */
 function isActiveOn_(changes, enrollment, ymd) {
-  if (!enrollment || !statStr_(enrollment.student_id)) return false;
+  if (!enrollment || !ruleStr_(enrollment.student_id)) return false;
   return statusOn_(changes, enrollment.student_id, '학사', ymd) === '입실';
 }
 
@@ -75,7 +52,7 @@ function assignmentOn_(assignments, seatId, termId, ymd) {
   var best = null;
   (assignments || []).forEach(function (a) {
     if (!statAssignmentLive_(a, termId, ymd)) return;
-    if (statStr_(a.seat_id) !== statStr_(seatId)) return;
+    if (ruleStr_(a.seat_id) !== ruleStr_(seatId)) return;
     if (!best || statAssignmentWins_(a, best)) best = a;
   });
   return best;
@@ -83,18 +60,18 @@ function assignmentOn_(assignments, seatId, termId, ymd) {
 
 /** 배정 a가 b보다 우선인지(같으면 true = 나중 행이 이김). */
 function statAssignmentWins_(a, b) {
-  var bounds = function (x) { return (statStr_(x.valid_from) ? 1 : 0) + (statStr_(x.valid_to) ? 1 : 0); };
+  var bounds = function (x) { return (ruleStr_(x.valid_from) ? 1 : 0) + (ruleStr_(x.valid_to) ? 1 : 0); };
   if (bounds(a) !== bounds(b)) return bounds(a) > bounds(b);
-  var fa = statStr_(a.valid_from), fb = statStr_(b.valid_from);
+  var fa = ruleStr_(a.valid_from), fb = ruleStr_(b.valid_from);
   if (fa !== fb) return fa > fb;
-  return statIso_(a.updated_at) >= statIso_(b.updated_at);
+  return ruleIso_(a.updated_at) >= ruleIso_(b.updated_at);
 }
 
 /** 배정 행이 그 기간·날짜에 살아 있는지. */
 function statAssignmentLive_(a, termId, ymd) {
-  if (!a || statStr_(a.status) === '취소' || statStr_(a.term_id) !== statStr_(termId)) return false;
-  if (!statStr_(a.seat_id) || !statStr_(a.student_id)) return false;
-  var from = statStr_(a.valid_from), to = statStr_(a.valid_to);
+  if (!a || ruleStr_(a.status) === '취소' || ruleStr_(a.term_id) !== ruleStr_(termId)) return false;
+  if (!ruleStr_(a.seat_id) || !ruleStr_(a.student_id)) return false;
+  var from = ruleStr_(a.valid_from), to = ruleStr_(a.valid_to);
   if (from && from > ymd) return false;
   if (to && to < ymd) return false;
   return true;
@@ -112,19 +89,19 @@ function statAssignmentLive_(a, termId, ymd) {
  * - unseated: 이 기간 등록이 있고 그날 학사생인데 앉은 자리가 없는 학생(중도 입실 등). 등록 행 순서.
  */
 function seatMapOn_(seats, assignments, enrollments, changes, termId, ymd) {
-  var tid = statStr_(termId);
+  var tid = ruleStr_(termId);
   var warnings = [];
   var enrByStudent = {};
   (enrollments || []).forEach(function (e) {
-    if (!e || statStr_(e.term_id) !== tid) return;
-    var sid = statStr_(e.student_id);
+    if (!e || ruleStr_(e.term_id) !== tid) return;
+    var sid = ruleStr_(e.student_id);
     if (sid && !enrByStudent[sid]) enrByStudent[sid] = e;
   });
 
   var seatIds = [];
   (seats || []).forEach(function (s) {
-    if (!s || statStr_(s.status) === '취소' || statStr_(s.kind) !== '좌석') return;
-    var id = statStr_(s.id);
+    if (!s || ruleStr_(s.status) === '취소' || ruleStr_(s.kind) !== '좌석') return;
+    var id = ruleStr_(s.id);
     if (id && seatIds.indexOf(id) < 0) seatIds.push(id);
   });
 
@@ -135,7 +112,7 @@ function seatMapOn_(seats, assignments, enrollments, changes, termId, ymd) {
   seatIds.forEach(function (id) {
     var a = pick[id];
     if (!a) return;
-    var sid = statStr_(a.student_id);
+    var sid = ruleStr_(a.student_id);
     var prev = seatOfStudent[sid];
     if (!prev) { seatOfStudent[sid] = id; return; }
     warnings.push('한 학생이 같은 날 두 자리에 배정되어 있습니다(날짜를 좁힌 배정·최근 배정을 씀): ' + sid);
@@ -152,7 +129,7 @@ function seatMapOn_(seats, assignments, enrollments, changes, termId, ymd) {
   seatIds.forEach(function (id) {
     var a = pick[id];
     if (!a) { bySeat[id] = { studentId: null, vacant: true, reason: '미배정' }; return; }
-    var sid = statStr_(a.student_id);
+    var sid = ruleStr_(a.student_id);
     var enr = enrByStudent[sid];
     if (enr && isActiveOn_(changes, enr, ymd)) {
       bySeat[id] = { studentId: sid, vacant: false, reason: '' };
@@ -165,8 +142,8 @@ function seatMapOn_(seats, assignments, enrollments, changes, termId, ymd) {
 
   var unseated = [];
   (enrollments || []).forEach(function (e) {
-    if (!e || statStr_(e.term_id) !== tid) return;
-    var sid = statStr_(e.student_id);
+    if (!e || ruleStr_(e.term_id) !== tid) return;
+    var sid = ruleStr_(e.student_id);
     if (!sid || seated[sid] || unseated.indexOf(sid) >= 0) return;
     if (isActiveOn_(changes, enrByStudent[sid], ymd)) unseated.push(sid);
   });
@@ -184,38 +161,38 @@ function seatMapOn_(seats, assignments, enrollments, changes, termId, ymd) {
  * 퇴실 후보로 처리). 화면은 초안을 보여 주고 관리자가 확인한다.
  */
 function carryOverEnrollments_(terms, enrollments, changes, newTerm) {
-  if (!newTerm || statStr_(newTerm.type) !== '학기') return [];
-  var newId = statStr_(newTerm.id), newStart = statStr_(newTerm.start_date);
-  if (!statIsYmd_(newStart)) return [];
+  if (!newTerm || ruleStr_(newTerm.type) !== '학기') return [];
+  var newId = ruleStr_(newTerm.id), newStart = ruleStr_(newTerm.start_date);
+  if (!ymdIsValid_(newStart)) return [];
   var prev = null;
   (terms || []).forEach(function (t) {
-    if (!t || statStr_(t.id) === newId || statStr_(t.type) !== '학기') return;
-    var s = statStr_(t.start_date);
-    if (!statIsYmd_(s) || s >= newStart) return;
-    if (!prev || s > statStr_(prev.start_date)) prev = t;
+    if (!t || ruleStr_(t.id) === newId || ruleStr_(t.type) !== '학기') return;
+    var s = ruleStr_(t.start_date);
+    if (!ymdIsValid_(s) || s >= newStart) return;
+    if (!prev || s > ruleStr_(prev.start_date)) prev = t;
   });
   if (!prev) return [];
-  var prevId = statStr_(prev.id);
+  var prevId = ruleStr_(prev.id);
   var already = {};
   (enrollments || []).forEach(function (e) {
-    if (e && statStr_(e.term_id) === newId) already[statStr_(e.student_id)] = true;
+    if (e && ruleStr_(e.term_id) === newId) already[ruleStr_(e.student_id)] = true;
   });
   var out = [];
   (enrollments || []).forEach(function (e) {
-    if (!e || statStr_(e.term_id) !== prevId) return;
-    var sid = statStr_(e.student_id);
+    if (!e || ruleStr_(e.term_id) !== prevId) return;
+    var sid = ruleStr_(e.student_id);
     if (!sid || already[sid]) return;
     if (!isActiveOn_(changes, e, newStart)) return;
     already[sid] = true;
     out.push({
       term_id: newId,
       student_id: sid,
-      teacher_email: statStr_(e.teacher_email),
-      veritas: statStr_(e.veritas),
-      commute_type: statStr_(e.commute_type),
-      end_type: statStr_(e.end_type),
+      teacher_email: ruleStr_(e.teacher_email),
+      veritas: ruleStr_(e.veritas),
+      commute_type: ruleStr_(e.commute_type),
+      end_type: ruleStr_(e.end_type),
       memo: '',
-      from_enrollment_id: statStr_(e.id)
+      from_enrollment_id: ruleStr_(e.id)
     });
   });
   return out;

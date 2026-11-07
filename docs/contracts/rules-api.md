@@ -36,6 +36,11 @@ function hmIsValid_(hm)                     // 'HH:mm'(00:00~23:59, '24:00') 인
 function hmToMin_(hm)                       // 'HH:mm' → 분, '24:00' = 1440
 function minToHm_(min)
 function isoLocalSplit_(iso)                // → {date:'yyyy-MM-dd', min:Number, sec:Number}(sec는 R1 추가)
+// 모든 규칙 파일이 함께 쓰는 헬퍼(R7 추가 — 파일마다 따로 있던 같은 함수를 합침)
+function ruleStr_(v)       // 셀 값 → trim한 문자열(undefined·null은 '')
+function ruleIso_(v)       // 일시 비교용: 'yyyy-MM-dd HH:mm:ss' → 'T' 형식
+function ruleRowLive_(r)   // status 빈칸·'유효'
+function hmNorm_(v)        // 'H:mm'·'HH:mm:00' → 'HH:mm', 빈칸 '', 시각 아님 null(ScheduleRules.schedNormHm_은 features/Schedule.gs가 부르는 같은 함수)
 
 // src/rules/ScheduleRules.gs
 function baseDayType_(ymd)                  // 'mon_thu'|'fri'|'sat'|'sun'
@@ -99,10 +104,11 @@ function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)    
 ## 동작 메모(R1, 2026-11-06)
 
 **DateRules**
-- 잘못된 날짜·시각을 받거나 결과가 `yyyy-MM-dd` 범위를 벗어나면 조용히 넘기지 않고 `Error`를 던진다. 화면 입력 검사는 `ymdIsValid_`·`hmIsValid_`로 먼저 한다.
+- `ymd…`·`hm…`·`isoLocalSplit_`은 잘못된 날짜·시각을 받거나 결과가 `yyyy-MM-dd` 범위를 벗어나면 조용히 넘기지 않고 `Error`를 던진다(공통 헬퍼 `ruleStr_`·`ruleIso_`·`ruleRowLive_`·`hmNorm_`은 던지지 않는다). 화면 입력 검사는 `ymdIsValid_`·`hmIsValid_`로 먼저 한다.
 - `ymdRange_(from, to, maxDays)`: from이 to보다 늦으면 빈 배열, 날 수가 `maxDays`(기본 366)를 넘으면 Error. `maxDays`는 1 이상의 정수만(NaN·문자열이면 Error — 설정값이 비어 검사가 꺼지지 않게).
 - `isoLocalSplit_`: `'yyyy-MM-ddTHH:mm:ss'`, `'yyyy-MM-ddTHH:mm'`, `'yyyy-MM-dd HH:mm:ss'`를 받는다. `Z`·`+09:00`이 붙은 값은 거부한다(KST 벽시계 값만). `min`은 초를 버린 분이라 11:29:59 → 689, 11:30:00 → 690. 마감 비교는 `min >= hmToMin_('11:30')`.
-- `hmIsValid_`·`hmToMin_`은 엄격한 `'HH:mm'`만 받는다. 시트 값을 읽을 때의 너그러운 해석은 ScheduleRules가 한다(아래).
+- `hmIsValid_`·`hmToMin_`은 엄격한 `'HH:mm'`만 받는다. 시트 값을 읽을 때의 너그러운 해석은 `hmNorm_`(DateRules, R7)이 한다: `'9:00'`·`'21:30:00'` → `'HH:mm'`, 빈칸 `''`, 시각이 아니면 `null`(던지지 않음).
+- `ruleRowLive_`: status 빈칸·`'유효'`인 행(status_changes·violations처럼 유효·취소를 쓰는 탭).
 
 **ScheduleRules**
 - 시트 행은 `readAll_`이 돌려주는 문자열 그대로 받는다. `status`가 `'취소'`(앞뒤 공백 무시)인 행은 모두 무시한다.
@@ -182,7 +188,7 @@ function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)    
 - ASSUMPTION: 관리자가 직접 취소한 자동 OUT(`cancel_reason`이 `'[자동] '`으로 시작하지 않음)이 가리키던 특이사항 행, 또는 같은 묶음(**취소된 OUT의 학생** + group_id)의 행이 들어 있는 단위는, 그 OUT과 **학생·기간이 같으면** 다시 만들지 않는다(`per`를 바꿔도 같음).
 - ASSUMPTION(결정 22 적용): 같은 학생·같은 날·겹치는 블록에 다른 묶음의 자동 유형 특이사항 두 건이 확정되면 OUT도 두 건(→ 퇴실 대상이 될 수 있다). C5는 저장·확정 때 겹침 경고 후 확인을 받는다(막지는 않음).
 - `outLevel_`: 같은 학생·같은 `term_id`(학기마다 초기화)에서 status 빈칸·`유효`인 OUT 수(직접·자동 모두). 2개 이상이면 `level:2`, `'퇴실 대상'`.
-- 이 파일은 DateRules(`ymdIsValid_`)·AttendanceRules(`attStr_`·`attTypeBase_`·`parseBlockSpec_`)를 부른다. 테스트는 세 파일을 함께 올린다.
+- 이 파일은 DateRules(`ymdIsValid_`·`ruleStr_`·`ruleIso_`·`ruleRowLive_`)·AttendanceRules(`attTypeBase_`·`parseBlockSpec_`)를 부른다. 테스트는 세 파일을 함께 올린다.
 
 ## 동작 메모(R6, 2026-11-07, 총괄 검토 3차 반영)
 

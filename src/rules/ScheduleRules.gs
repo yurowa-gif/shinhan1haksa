@@ -1,7 +1,7 @@
 /**
  * 자습 일정 규칙(RULES 세션 소유, docs/contracts/rules-api.md, PRD 3.3).
  *
- * 순수 함수만 둔다. DateRules.gs의 함수(ymd…·hm…)를 부른다.
+ * 순수 함수만 둔다. DateRules.gs의 함수(ymd…·hm…·ruleStr_·hmNorm_)를 부른다.
  * 시트 행은 Db.gs readAll_이 돌려주는 모양(모든 값이 문자열)을 그대로 받는다.
  *   day_schedules: date, operating, start, end, day_type, memo, status, updated_at …
  *   blocks:        term_type, day_type, seq, start, end, label, status, updated_at …
@@ -18,21 +18,9 @@ function schedIsCancelled_(row) {
   return String((row && row.status) || '').trim() === '취소';
 }
 
-function schedStr_(v) {
-  return String(v === undefined || v === null ? '' : v).trim();
-}
-
-/**
- * 시트에서 읽은 시각 문자열을 'HH:mm'으로. 'H:mm'(9:00)과 초가 00인 'HH:mm:ss'(21:30:00)도 받는다.
- * 빈칸이면 '', 시각이 아니면 null.
- */
+/** features/Schedule.gs가 부르는 이름(이 파일 안에서는 hmNorm_을 쓴다). 그쪽이 hmNorm_으로 바꾸면 지운다. */
 function schedNormHm_(v) {
-  var s = schedStr_(v);
-  if (!s) return '';
-  var m = /^(\d{1,2}):(\d{2})(?::(00))?$/.exec(s);
-  if (!m) return null;
-  var hm = (m[1].length === 1 ? '0' : '') + m[1] + ':' + m[2];
-  return hmIsValid_(hm) ? hm : null;
+  return hmNorm_(v);
 }
 
 /**
@@ -42,8 +30,8 @@ function schedNormHm_(v) {
 function pickDaySchedule_(rows, ymd) {
   var best = null;
   (rows || []).forEach(function (r) {
-    if (!r || schedIsCancelled_(r) || schedStr_(r.date) !== ymd) return;
-    if (!best || schedStr_(r.updated_at) >= schedStr_(best.updated_at)) best = r;
+    if (!r || schedIsCancelled_(r) || ruleStr_(r.date) !== ymd) return;
+    if (!best || ruleStr_(r.updated_at) >= ruleStr_(best.updated_at)) best = r;
   });
   return best;
 }
@@ -58,7 +46,7 @@ function pickDaySchedule_(rows, ymd) {
 function schedOperatingParse_(v) {
   if (v === true) return { value: true, known: true };
   if (v === false || v === 0) return { value: false, known: true };
-  var s = schedStr_(v).toUpperCase().replace(/\s+/g, '');
+  var s = ruleStr_(v).toUpperCase().replace(/\s+/g, '');
   if (['', 'TRUE', 'Y', 'YES', 'O', '1', '예', '운영'].indexOf(s) >= 0) return { value: true, known: true };
   if (['FALSE', 'N', 'NO', 'X', '×', '0', 'OFF', '아니오', '아니요', '미운영', '운영안함', '운영X', '휴무', '휴일']
       .indexOf(s) >= 0) return { value: false, known: true };
@@ -75,29 +63,29 @@ function schedOperatingValue_(v) {
  * '취소' 행은 건너뛴다. term_type은 '학기'·'방학', day_type은 빈칸이 아니어야 한다.
  * (term_type, day_type)이 같은 행끼리 순서 번호 중복·시간 겹침·순서와 시각 순서 불일치를 본다.
  * 끝이 앞 블록의 시작과 같은 것(20:00–22:00 다음 22:00–24:00)은 겹침이 아니다.
- * 시각은 schedNormHm_으로 읽는다('9:00'·'21:30:00'도 통과).
+ * 시각은 hmNorm_으로 읽는다('9:00'·'21:30:00'도 통과).
  */
 function validateBlocks_(blocks) {
   var errors = [];
   var groups = {};
   (blocks || []).forEach(function (b, i) {
     if (!b || schedIsCancelled_(b)) return;
-    var termType = schedStr_(b.term_type), dayType = schedStr_(b.day_type);
+    var termType = ruleStr_(b.term_type), dayType = ruleStr_(b.day_type);
     if (termType !== '학기' && termType !== '방학') {
       errors.push({ index: i, message: '기간 유형은 학기 또는 방학이어야 합니다: ' + termType });
     }
     if (!dayType) errors.push({ index: i, message: '요일 유형이 비어 있습니다' });
-    var seq = schedStr_(b.seq);
+    var seq = ruleStr_(b.seq);
     var seqOk = /^[1-9]\d*$/.test(seq);
     if (!seqOk) errors.push({ index: i, message: '순서는 1 이상의 정수여야 합니다: ' + seq });
-    var start = schedNormHm_(b.start), end = schedNormHm_(b.end);
+    var start = hmNorm_(b.start), end = hmNorm_(b.end);
     var timeOk = true;
     if (!start || start === '24:00') {
-      errors.push({ index: i, message: '시작 시각 형식이 아닙니다(HH:mm): ' + schedStr_(b.start) });
+      errors.push({ index: i, message: '시작 시각 형식이 아닙니다(HH:mm): ' + ruleStr_(b.start) });
       timeOk = false;
     }
     if (!end) {
-      errors.push({ index: i, message: '끝 시각 형식이 아닙니다(HH:mm, 24:00 허용): ' + schedStr_(b.end) });
+      errors.push({ index: i, message: '끝 시각 형식이 아닙니다(HH:mm, 24:00 허용): ' + ruleStr_(b.end) });
       timeOk = false;
     }
     if (timeOk && hmToMin_(start) >= hmToMin_(end)) {
@@ -170,19 +158,19 @@ function resolveDayPlan_(ymd, src) {
   var warnings = [];
   var ds = src.daySchedule || null;
   if (ds && schedIsCancelled_(ds)) ds = null;
-  if (ds && schedStr_(ds.date) !== ymd) {
-    warnings.push('다른 날짜(' + schedStr_(ds.date) + ')의 일정 행이 넘어와 무시했습니다');
+  if (ds && ruleStr_(ds.date) !== ymd) {
+    warnings.push('다른 날짜(' + ruleStr_(ds.date) + ')의 일정 행이 넘어와 무시했습니다');
     ds = null;
   }
-  var dayType = (ds && schedStr_(ds.day_type)) || baseDayType_(ymd);
+  var dayType = (ds && ruleStr_(ds.day_type)) || baseDayType_(ymd);
   var operating = true;
   if (ds) {
     var op = schedOperatingParse_(ds.operating);
     operating = op.value;
-    if (!op.known) warnings.push('운영 여부 값을 알 수 없어 운영 안 함으로 보았습니다: ' + schedStr_(ds.operating));
+    if (!op.known) warnings.push('운영 여부 값을 알 수 없어 운영 안 함으로 보았습니다: ' + ruleStr_(ds.operating));
   }
   var memo = ds ? String(ds.memo || '') : '';
-  var termType = schedStr_(src.termType) || '학기';
+  var termType = ruleStr_(src.termType) || '학기';
 
   var rows = schedBlocksFor_(src.blocks, termType, dayType, warnings);
   if (!rows.length && termType === '방학') {
@@ -239,10 +227,10 @@ function resolveDayPlan_(ymd, src) {
 
 /** 시각 값이면 'HH:mm', 빈칸이면 '', 잘못된 값(시작 '24:00' 포함)이면 warnings에 적고 ''. */
 function schedPickHm_(v, what, isStart, warnings) {
-  var hm = schedNormHm_(v);
+  var hm = hmNorm_(v);
   if (hm === '') return '';
   if (hm && !(isStart && hm === '24:00')) return hm;
-  warnings.push(what + ' 시각 형식이 아니라 무시했습니다: ' + schedStr_(v));
+  warnings.push(what + ' 시각 형식이 아니라 무시했습니다: ' + ruleStr_(v));
   return '';
 }
 
@@ -251,18 +239,18 @@ function schedBlocksFor_(rows, termType, dayType, warnings) {
   var bySeq = {};
   (rows || []).forEach(function (r) {
     if (!r || schedIsCancelled_(r)) return;
-    if (schedStr_(r.term_type) !== termType || schedStr_(r.day_type) !== dayType) return;
-    var seq = schedStr_(r.seq);
-    var start = schedNormHm_(r.start), end = schedNormHm_(r.end);
+    if (ruleStr_(r.term_type) !== termType || ruleStr_(r.day_type) !== dayType) return;
+    var seq = ruleStr_(r.seq);
+    var start = hmNorm_(r.start), end = hmNorm_(r.end);
     if (!/^[1-9]\d*$/.test(seq) || !start || start === '24:00' || !end || hmToMin_(start) >= hmToMin_(end)) {
       warnings.push('잘못된 블록을 건너뛰었습니다: ' + termType + ' ' + dayType + ' ' + seq + ' ' +
-        schedStr_(r.start) + '–' + schedStr_(r.end));
+        ruleStr_(r.start) + '–' + ruleStr_(r.end));
       return;
     }
     var prev = bySeq[seq];
     if (prev) warnings.push('같은 순서의 블록이 둘 이상입니다(최근 수정한 것을 씀): ' + termType + ' ' + dayType + ' ' + seq);
-    if (!prev || schedStr_(r.updated_at) >= schedStr_(prev.row.updated_at)) {
-      bySeq[seq] = { row: r, seq: +seq, start: start, end: end, label: schedStr_(r.label) };
+    if (!prev || ruleStr_(r.updated_at) >= ruleStr_(prev.row.updated_at)) {
+      bySeq[seq] = { row: r, seq: +seq, start: start, end: end, label: ruleStr_(r.label) };
     }
   });
   return Object.keys(bySeq).map(function (k) { return bySeq[k]; })
