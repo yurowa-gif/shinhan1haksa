@@ -4,14 +4,18 @@
  * - 공간(spaces)·좌석 칸(seats): 격자 편집은 관리자만(seat.layout). 칸을 좌석·기둥·비상문·창문·빈칸으로 정한다.
  * - 기간별 배정(seat_assignments): 관리자·학사 교사(seat.edit). 담임 등은 보기만(seat.view).
  *   미배정 학생을 자리에 앉히기, 두 자리 맞바꾸기(한쪽이 비면 이동), 배정 풀기.
- * - 지우지 않는다: 칸 삭제·배정 풀기는 status '취소'. 맞바꾸기·이동은 배정 행을 제자리에서 고쳐 audit_log에 남는다.
+ * - 지우지 않는다: 칸 삭제는 status '취소'. 배정 변경(앉히기·맞바꾸기·이동·풀기)은 행을 제자리에서 고치지 않고 옛 행을 기준일 전날로 끝낸 뒤
+ *   새 행을 만든다(바뀐 칸은 audit_log에 남는다). 기준일 이후에야 효력이 생기는 행은 취소한다.
  * - 자동 초안과 규칙 위반 빨간 표시는 3단계. 여기서는 성별 구역이 어긋나면 경고 문구만 돌려준다(막지 않는다).
- * - 이 단계의 배정은 기간 전체(valid_from·valid_to 빈칸). 날짜를 좁힌 배정(방학 날짜별 자리표)은 3단계 — 있으면 고치지 않고 알린다.
- * - 퇴실한 학생의 자리에 새 학생을 앉힐 때는 이전 행을 취소하지 않고 valid_to = (기준일 - 1)로 끝낸 뒤 새 행(valid_from = 기준일)을 만든다.
- *   지난 날짜의 좌석표·출석부가 그때 앉았던 학생을 그대로 보인다. 기준일 전에 끝난 행은 지난 기록이라 다른 배정을 막지 않는다.
+ * - 배정 행: 기준일(적용일) D가 기간 시작일 이하이면 새 행의 valid_from·valid_to는 빈칸(기간 전체 — 나중에 기간 시작일을 앞당겨도 잠기지 않는다),
+ *   시작 뒤이면 valid_from = D. 날짜를 좁힌 배정(방학 날짜별 자리표)은 3단계 — 있으면 고치지 않고 알린다.
+ * - 옛 행은 valid_to = D - 1로 끝내므로 지난 날짜의 좌석표·출석부가 그때 앉았던 학생을 그대로 보인다. 기준일 전에 끝난 행은 다른 배정을 막지 않는다.
+ * - 격자 변경: 이번(또는 앞으로) 운영 기간에 학생이 앉았던 기록이 있는 좌석은 배정을 풀어도 기간이 끝날 때까지 바꿀 수 없다(결정 37).
+ *   지난 기간 배정만 있는 좌석은 경고 후 허용한다.
  * - 동시 편집: 화면이 본 자리의 배정 표(token)를 함께 보내고, 락 안에서 다르면 거부한다("다른 선생님이 먼저 바꿨습니다").
  *   assignSeat는 이미 배정된 학생을 옮기지 않는다(이동은 맞바꾸기 경로로만).
  * - 여러 행 쓰기는 bulkUpdateRecords_ 한 번 + bulkAppend_ 한 번. 수정을 먼저 하고 추가를 나중에 해서, 중간에 멈춰도 한 학생이 두 자리에 있지는 않다.
+ *   공간 이름을 바꿔 번호 방식이 바뀔 때도 번호(seats)를 먼저 쓰고 이름(spaces)을 나중에 쓴다 — 번호 쓰기가 실패해도 이름이 바뀐 채 남지 않는다.
  * - 끝난 운영 기간의 좌석표는 보기만(결정 37).
  * - 좌석 번호(결정 37): 1층 등은 "줄-순번"(좌석이 있는 열을 왼쪽부터 센 줄 번호 + 앞(1행 쪽)에서부터 순번), SA실은 방 안 순번.
  *   ASSUMPTION: 방 이름이 "SA"+숫자로 시작하면 SA실, 그 밖은 줄-순번(시트 구조를 바꾸지 않으려고 이름으로 구분한다).
@@ -43,10 +47,12 @@ function parseSeatGridTsv_(text) {
   var cells = [], seatCount = 0, namedCount = 0, width = 0, skippedHeads = 0, rowOffset = 0;
   var headLike = function (v) { return /^\d+(\/\d+)?$/.test(v); };
   // 맨 윗행이 줄 머리("5/19" 같은 숫자 칸)뿐이면 그 행 전체를 건너뛴다(실제 1층은 세로 줄이라 줄 머리가 윗행에 있다)
-  if (rows.length && rows[0].some(function (v) { return v !== ''; }) && rows[0].every(function (v) { return v === '' || headLike(v); })) {
-    skippedHeads += rows[0].filter(function (v) { return v !== ''; }).length;
-    rows = rows.slice(1);
-    rowOffset = 1;
+  var firstFilled = -1;   // 맨 위 빈 행(탭만 있는 행)은 건너뛰고 첫 채워진 행을 본다
+  rows.some(function (r, i) { if (r.some(function (v) { return v !== ''; })) { firstFilled = i; return true; } return false; });
+  if (firstFilled >= 0 && rows[firstFilled].every(function (v) { return v === '' || headLike(v); })) {
+    skippedHeads += rows[firstFilled].filter(function (v) { return v !== ''; }).length;
+    rows = rows.slice(firstFilled + 1);   // 빈 행과 줄 머리 행을 함께 버린다
+    rowOffset = firstFilled + 1;
   }
   rows.forEach(function (r, i) {
     width = Math.max(width, r.length);
@@ -107,9 +113,9 @@ function seatLabelsFor_(cells, style) {
  * 한 공간의 격자를 새 모양으로 바꾸는 계획(순수).
  * existing = 그 공간의 지금 유효한 seats 행, desired = [{row,col,kind}] (빈칸은 넣지 않는다), rows·cols = 공간 크기,
  * assignedSeatIds = 지금·앞으로의 기간에 배정 행이 하나라도 있는 좌석 id(오늘 끝난 행만 남아도 포함 — 결정 37),
- * historySeatIds = 그중 지금 앉은 학생은 없고 이번 기간 기록만 남은 좌석(안내 문구만 다르다), pastOnlySeatIds = 지난 기간 배정만 있는 좌석 id,
+ * historySeatIds = 그중 지금 앉은 학생은 없고 이번 기간 기록만 남은 좌석(문구는 같다, 호환용), pastOnlySeatIds = 지난 기간 배정만 있는 좌석 id,
  * style = 번호 방식('line'|'room', seatLabelStyle_).
- * 지금·앞으로 배정이 있는 좌석을 좌석이 아닌 것으로 바꾸거나 없애면 거부한다(먼저 배정을 풀어야 한다).
+ * 지금·앞으로 기간에 배정 기록이 있는 좌석을 좌석이 아닌 것으로 바꾸거나 없애면 거부한다(배정을 풀어도 기간이 끝날 때까지).
  * 지난 기간 배정만 있는 좌석은 경고만 하고 허용한다(지난 날짜 출석부를 다시 뽑으면 바뀐 격자로 나온다).
  * @return {{ok, errors:string[], warnings:string[], relabelAssigned:number, create:Object[], update:{id,patch}[], cancel:{id,patch}[]}}
  *   relabelAssigned = 번호가 바뀌는 배정 좌석 수(라벨이 바뀌어도 배정은 좌석 id로 이어진다)
@@ -132,11 +138,9 @@ function seatGridPlan_(existing, desired, assignedSeatIds, rows, cols, style, pa
   (existing || []).forEach(function (s) { have[s.row + ',' + s.col] = s; });
   var labels = seatLabelsFor_(Object.keys(want).map(function (k) { return want[k]; }), style || 'line');
   var create = [], update = [], cancel = [], relabelAssigned = 0, pastWarned = {};
-  // 지금 앉은 학생이 있으면 "배정을 먼저 풀어야" 하고, 이번 기간에 앉았던 기록만 남은 자리(오늘 풀었거나 옮겨 간 자리)는 기간이 끝난 뒤에 바꿀 수 있다
-  var blockMsg = function (s, what) {
-    return history[s.id]
-      ? s.row + '행 ' + s.col + '열은 이번 기간에 학생이 앉았던 기록이 있어 지금은 ' + what + ' 수 없습니다. 기간이 끝난 뒤에 바꿀 수 있습니다.'
-      : s.row + '행 ' + s.col + '열은 학생이 앉아 있어 ' + what + ' 수 없습니다. 먼저 배정을 풀어 주세요.';
+  // 배정을 풀어도 이번 기간 기록(끝난 행)이 남으므로, 앉아 있든 앉았던 기록만 있든 기간이 끝난 뒤에야 바꿀 수 있다(결정 37)
+  var blockMsg = function (s) {
+    return s.row + '행 ' + s.col + '열은 이번 운영 기간에 학생이 앉았던 자리라 기간이 끝난 뒤 바꿀 수 있습니다.';
   };
   var warnPast = function (s, what) {
     if (!pastOnly[s.id] || pastWarned[s.id]) return;
@@ -149,7 +153,7 @@ function seatGridPlan_(existing, desired, assignedSeatIds, rows, cols, style, pa
     var patch = {};
     if (s.kind !== c.kind) {
       if (s.kind === '좌석' && assigned[s.id]) {
-        errors.push(blockMsg(s, '바꿀'));
+        errors.push(blockMsg(s));
         return;
       }
       if (s.kind === '좌석') warnPast(s, '좌석을 다른 칸으로 바꿉니다.');
@@ -168,7 +172,7 @@ function seatGridPlan_(existing, desired, assignedSeatIds, rows, cols, style, pa
     if (want[k]) return;
     var s = have[k];
     if (s.kind === '좌석' && assigned[s.id]) {
-      errors.push(blockMsg(s, '없앨'));
+      errors.push(blockMsg(s));
       return;
     }
     if (s.kind === '좌석') warnPast(s, '좌석을 없앱니다.');
@@ -211,6 +215,9 @@ function seatEndOp_(row, ymd, termStart) {
   return { op: 'update', id: row.id, patch: { valid_to: ymdAddDays_(ymd, -1) } };
 }
 
+/** 새 배정 행의 valid_from: 적용일이 기간 시작일 이하이면 빈칸(기간 전체), 아니면 적용일 */
+function seatFrom_(ymd, termStart) { return termStart && ymd <= termStart ? '' : ymd; }
+
 function seatNewRow_(termId, seatId, studentId, validFrom) {
   return { term_id: termId, seat_id: seatId, student_id: studentId, valid_from: validFrom || '', valid_to: '', status: '배정', memo: '' };
 }
@@ -238,7 +245,7 @@ function planSeatAssign_(live, termId, seatId, studentId, seatKinds, enrolledIds
     }
     ops.push(seatEndOp_(target.row, ymd, termStart));
   }
-  ops.push({ op: 'create', row: seatNewRow_(termId, seatId, studentId, ymd) });
+  ops.push({ op: 'create', row: seatNewRow_(termId, seatId, studentId, seatFrom_(ymd, termStart)) });
   return { ok: true, ops: ops };
 }
 
@@ -260,12 +267,12 @@ function planSeatSwap_(live, a, b, seatKinds, staleSeatIds, ymd, termId, termSta
   if (!ea && !eb) return { ok: true, ops: [], noop: true };
   if (ea && eb) {
     return { ok: true, ops: [seatEndOp_(ea, ymd, termStart), seatEndOp_(eb, ymd, termStart),
-      { op: 'create', row: seatNewRow_(termId, a, eb.student_id, ymd) }, { op: 'create', row: seatNewRow_(termId, b, ea.student_id, ymd) }] };
+      { op: 'create', row: seatNewRow_(termId, a, eb.student_id, seatFrom_(ymd, termStart)) }, { op: 'create', row: seatNewRow_(termId, b, ea.student_id, seatFrom_(ymd, termStart)) }] };
   }
   var from = ea || eb, toId = ea ? b : a, toRow = ea ? rb.row : ra.row;
   var ops = [seatEndOp_(from, ymd, termStart)];
   if (toRow) ops.push(seatEndOp_(toRow, ymd, termStart));   // 퇴실 학생의 자리: 그 행도 기준일부터 끝낸다(지난 기록은 남는다)
-  ops.push({ op: 'create', row: seatNewRow_(termId, toId, from.student_id, ymd) });
+  ops.push({ op: 'create', row: seatNewRow_(termId, toId, from.student_id, seatFrom_(ymd, termStart)) });
   return { ok: true, ops: ops };
 }
 
@@ -433,15 +440,16 @@ function saveSpace(input) {
       });
       if (relabel.length && !input.confirmRelabel) return { ok: false, needsConfirm: true, relabelCount: relabel.length, relabelAssigned: relabelAssigned };
     }
+    bulkUpdateRecords_('seats', relabel, user.email);   // 번호를 먼저(실패하면 이름도 그대로)
     updateRecord_('spaces', id, v.record, user.email);
-    bulkUpdateRecords_('seats', relabel, user.email);
     return { ok: true, id: id, relabeled: relabel.length };
   });
 }
 
 /**
- * 한 공간의 격자 저장 계획(읽기만). 지금·앞으로의 기간에 배정된 좌석은 막고, 지난 기간 배정만 있는 좌석은 경고로 알린다.
- * 배정 행이 지금·앞으로인지: 그 기간이 끝나지 않았고(end_date ≥ 오늘) 행 자체도 오늘 전에 끝나지 않았다.
+ * 좌석별 배정 기록 분류(읽기만). assigned = 끝나지 않은 운영 기간(end_date ≥ 오늘)에 취소 아닌 배정 행이 하나라도 있는 좌석 —
+ * 행이 어제까지 쓰이고 끝났어도 포함한다(결정 37: 배정을 풀어도 기간이 끝날 때까지 격자를 바꿀 수 없다).
+ * history = assigned 중 지금 열려 있는(오늘 효력 있는) 행이 없는 좌석, pastOnly = 지난(끝난) 기간 배정만 있는 좌석(경고 후 허용).
  */
 function seatAssignedInfo_(seatIds) {
   var today = today_();
@@ -457,6 +465,7 @@ function seatAssignedInfo_(seatIds) {
     pastOnly: Object.keys(pastOnly).filter(function (id) { return !assigned[id]; }) };
 }
 
+/** 한 공간의 격자 저장 계획(읽기만): 위 분류로 거부·경고를 정한다. */
 function seatGridPlanFor_(spaceId, cells) {
   seatFresh_();
   var sp = seatActive_(readAll_('spaces')).filter(function (s) { return s.id === String(spaceId || ''); })[0];
