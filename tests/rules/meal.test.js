@@ -110,8 +110,10 @@ test('mealPendingToCancel_: 새 F7 행보다 늦게 적용되고 신청 일시�
   assert.deepStrictEqual(ids('2027-03-04', { requestedAt: '2027-03-04T10:00:00' }), [['2027-03-15', '미실시'], ['2027-03-22', '일반 석식']]);
   // 늦게 입력된 이전 신청서(신청 일시가 더 이름)는 이미 있는 더 새 신청을 취소하지 않는다
   assert.deepStrictEqual(ids('2027-03-04', { requestedAt: '2027-03-03T10:30:00' }), [['2027-03-15', '미실시']]);
-  // 이미 적용된(오늘 이전·오늘) 행은 취소하지 않는다
-  assert.deepStrictEqual(ids('2027-03-04', { requestedAt: '2027-03-04T10:00:00', today: '2027-03-15' }), [['2027-03-22', '일반 석식']]);
+  // 이미 적용된 행이어도(늦은 입력) 신청 일시가 이르고 적용일이 늦으면 취소한다(오늘과 상관없음)
+  assert.deepStrictEqual(ids('2027-03-04', { requestedAt: '2027-03-04T10:00:00', today: '2027-03-30' }), [['2027-03-15', '미실시'], ['2027-03-22', '일반 석식']]);
+  // 같은 값의 행은 덮을 필요가 없어 취소하지 않는다
+  assert.deepStrictEqual(ids('2027-03-04', { requestedAt: '2027-03-04T10:00:00', newValue: '미실시' }), [['2027-03-22', '일반 석식']]);
   assert.deepStrictEqual(ids('2027-03-22'), []);
   assert.throws(() => ctx.mealPendingToCancel_(rows, 's1', '석식', '2027-02-30'));
 });
@@ -132,16 +134,18 @@ test('mealPlanChange_: 후보 적용일의 실제 값과 비교 — 미래에 �
   const r = plan(rows, '조식', '미실시', '2027-03-02T10:00:00', { today: '2027-03-02' });
   assert.deepStrictEqual([r.kind, r.date, r.rule, r.from, r.blocked, r.toCancel], ['stop', '2027-03-08', 'next_monday', '실시', '', []]);
   // 이미 그날 값과 같으면 none
-  assert.deepStrictEqual(plan(rows, '조식', '실시', '2027-03-02T10:00:00').kind, 'none');
+  const n = plan(rows, '조식', '실시', '2027-03-02T10:00:00', { today: '2027-03-02' });
+  assert.deepStrictEqual([n.kind, n.date], ['none', '2027-03-02']);   // none이어도 신청 행은 쓴다(상태는 그대로)
 });
 
 test('mealPlanChange_: 학사 퇴실 적용일 이후에는 조식 실시·학사 석식을 새로 켜지 못한다(일반 석식은 된다)', () => {
   const rows = [CH('학사', '입실', '2027-03-02'), CH('조식', '미실시', '2027-03-02'), CH('석식', '미실시', '2027-03-02'),
     CH('학사', '퇴실', '2027-03-15', { source: 'F6' })];
-  assert.ok(plan(rows, '조식', '실시', '2027-03-16T10:00:00').blocked);
-  assert.ok(plan(rows, '석식', '학사 석식', '2027-03-15T09:00:00').blocked);
-  assert.strictEqual(plan(rows, '조식', '실시', '2027-03-05T10:00:00').blocked, '');      // 퇴실 전 날짜는 된다
-  assert.strictEqual(plan(rows, '석식', '일반 석식', '2027-03-16T10:00:00').blocked, '');
+  const t = { today: '2027-03-16' };
+  assert.ok(plan(rows, '조식', '실시', '2027-03-16T10:00:00', t).blocked);
+  assert.ok(plan(rows, '석식', '학사 석식', '2027-03-15T09:00:00', t).blocked);
+  assert.strictEqual(plan(rows, '조식', '실시', '2027-03-05T10:00:00', t).blocked, '');      // 퇴실 전 날짜는 된다
+  assert.strictEqual(plan(rows, '석식', '일반 석식', '2027-03-16T10:00:00', t).blocked, '');
 });
 
 test('흐름: 퇴실(3/15) 미리 입력 → 3/5 조식 실시 신청 — F6 중단 행은 남아 퇴실 뒤에는 미실시', () => {
@@ -177,7 +181,7 @@ test('mealPlanChange_: 같은 날 대기 실시를 미실시로 되돌리면 대
 });
 
 test('흐름: 처음 미실시를 고르는 학생(기록 없음)은 신청일에 바로 기록(initial)', () => {
-  const r = plan([], '조식', '미실시', '2027-03-03T15:00:00');
+  const r = plan([], '조식', '미실시', '2027-03-03T15:00:00', { today: '2027-03-03' });
   assert.deepStrictEqual([r.kind, r.date, r.rule], ['initial', '2027-03-03', 'initial']);
   // 기록은 없지만 3/8부터 시작할 대기 '실시'가 있으면: 미실시 적용일(3/15)에는 '실시'라 stop + 대기 행 경고(가정과 같음)
   const rows = [CH('조식', '실시', '2027-03-08', { source: 'F7', requested_at: '2027-03-02T10:00:00' })];
@@ -201,3 +205,76 @@ test('흐름: 학사 퇴실(2027-03-03 수 15:00) — 조식은 퇴실일 즉시
   assert.strictEqual(eff(ctx.mealChangeKind_('석식', '학사 석식', '일반 석식'), at).date, '2027-03-04');
   assert.strictEqual(eff(ctx.mealChangeKind_('석식', '학사 석식', '미실시'), at).date, '2027-03-15');
 });
+
+/* ───── 총괄 3차 검토 ───── */
+
+test('none이어도 toCancel: 미실시 대기 중에 다시 학사 석식 → 대기 행을 계획이 직접 취소 대상으로 준다', () => {
+  const rows = [CH('석식', '학사 석식', '2027-03-02'), CH('석식', '미실시', '2027-03-15', { source: 'F7', requested_at: '2027-03-03T10:00:00' })];
+  const r = plan(rows, '석식', '학사 석식', '2027-03-04T10:00:00', { today: '2027-03-04' });
+  assert.deepStrictEqual([r.kind, r.toCancel.map((x) => x.effective_date)], ['none', ['2027-03-15']]);
+});
+
+test('늦게 입력한 이전 신청서는 더 새 신청이 먼저 적용되면 superseded(쓰지 않음)', () => {
+  // 3/5 10:00 신청(미실시 → 3/15)이 이미 있음. 3/12에 3/3 날짜 신청서(학사 석식 → 3/3)를 늦게 입력
+  const rows = [CH('석식', '학사 석식', '2027-03-02'), CH('석식', '미실시', '2027-03-15', { source: 'F7', requested_at: '2027-03-05T10:00:00' })];
+  const r = plan(rows, '석식', '학사 석식', '2027-03-03T10:00:00', { today: '2027-03-12' });
+  assert.deepStrictEqual([r.kind, r.superseded, r.toCancel], ['none', false, []]);   // 더 새 신청의 적용일(3/15)이 더 늦으니 덮이지는 않음
+  // 더 새 신청이 이 신청보다 먼저 적용되면 이 신청은 영영 적용되지 않는다
+  const rows2 = [CH('석식', '학사 석식', '2027-03-02'), CH('석식', '일반 석식', '2027-03-06', { source: 'F7', requested_at: '2027-03-05T10:00:00' })];
+  const r2 = plan(rows2, '석식', '미실시', '2027-03-03T10:00:00', { today: '2027-03-12' });   // 미실시 → 3/15
+  assert.deepStrictEqual([r2.kind, r2.superseded, r2.toCancel], ['none', true, []]);
+  assert.strictEqual(r2.warnings.length, 1);
+});
+
+test('늦게 입력한 신청: 이미 적용된 이전 신청 행이라도 신청 일시가 이르고 적용일이 늦으면 취소', () => {
+  // 3/3 신청(미실시 → 3/15, 오늘 3/20엔 이미 적용) / 3/4 신청서(학사 석식 → 3/4)를 3/20에 늦게 입력
+  const rows = [CH('석식', '학사 석식', '2027-03-02'), CH('석식', '미실시', '2027-03-15', { source: 'F7', requested_at: '2027-03-03T10:00:00' })];
+  const r = plan(rows, '석식', '학사 석식', '2027-03-04T10:00:00', { today: '2027-03-20' });
+  assert.deepStrictEqual(r.toCancel.map((x) => x.effective_date), ['2027-03-15']);
+});
+
+test('퇴실 정리(F6)는 오늘과 상관없이 퇴실일 이상 F7 행 전부: 퇴실일 3/10을 3/12에 입력해도 조식이 끊긴다', () => {
+  const rows = [CH('조식', '미실시', '2027-03-02'), CH('조식', '실시', '2027-03-08', { source: 'F7', requested_at: '2027-03-07T10:00:00' }),
+    CH('조식', '실시', '2027-03-10', { source: 'F7', requested_at: '2027-03-09T10:00:00' }),
+    CH('조식', '실시', '2027-03-11', { source: 'F7', requested_at: '2027-03-10T10:00:00' }),
+    CH('조식', '미실시', '2027-03-22', { source: 'F7', requested_at: '2027-03-10T11:00:00' })];
+  const c = plain(ctx.mealPendingToCancel_(rows, 's1', '조식', '2027-03-10', { source: 'F6' })).map((x) => x.effective_date);
+  assert.deepStrictEqual(c, ['2027-03-10', '2027-03-11']);    // 퇴실일 이상의 '실시'만(미실시 신청은 남김), 3/8 시작분은 퇴실일 정리 행이 끊는다
+});
+
+test('퇴실 뒤 일반 석식 신청은 이전 퇴실 정리의 석식 중단(F6) 행을 취소한다(조용히 덮이지 않게)', () => {
+  const rows = [CH('학사', '입실', '2027-03-02'), CH('석식', '학사 석식', '2027-03-02'), CH('학사', '퇴실', '2027-03-05', { source: 'F6' }),
+    CH('석식', '미실시', '2027-03-15', { source: 'F6', requested_at: '2027-03-03T10:00:00' })];
+  const r = plan(rows, '석식', '일반 석식', '2027-03-08T10:00:00', { today: '2027-03-08' });
+  assert.deepStrictEqual([r.kind, r.date, r.blocked, r.toCancel.map((x) => x.effective_date)], ['to_general', '2027-03-08', '', ['2027-03-15']]);
+});
+
+test('퇴실 전에 켠 학사 급식이 퇴실 뒤까지 이어지면 퇴실 정리 행(followUps)을 함께 준다', () => {
+  // 퇴실(3/15)이 이미 잡혔고 그때 석식이 미실시라 석식 중단 행이 없었다 → 3/5에 학사 석식 신청
+  const rows = [CH('학사', '입실', '2027-03-02'), CH('석식', '미실시', '2027-03-02'), CH('조식', '미실시', '2027-03-02'),
+    CH('학사', '퇴실', '2027-03-15', { source: 'F6' }), CH('조식', '미실시', '2027-03-15', { source: 'F6' })];
+  const r = plan(rows, '석식', '학사 석식', '2027-03-05T10:00:00', { today: '2027-03-05' });
+  assert.deepStrictEqual(r.followUps, [{ item: '석식', value: '미실시', effective_date: '2027-03-15', source: 'F6' }]);
+  // 조식은 이미 퇴실일 중단 행이 있으니 followUps 없음
+  assert.deepStrictEqual(plan(rows, '조식', '실시', '2027-03-05T10:00:00', { today: '2027-03-05' }).followUps, []);
+  // 퇴실이 없으면 없음
+  assert.deepStrictEqual(plan(rows.slice(0, 3), '석식', '학사 석식', '2027-03-05T10:00:00', { today: '2027-03-05' }).followUps, []);
+});
+
+table('mealPlanChange_: 잘못된 입력은 Error', [
+  [{ item: '중식', to: '실시' }], [{ item: '조식', to: '학사 석식' }], [{ item: '석식', to: '' }],
+  [{ at: '2027-03-03' }], [{ at: '2027-02-30T10:00:00' }], [{ today: '' }], [{ today: '2027-3-3' }], [{ today: '2027-02-30' }]
+], ([o]) => {
+  const a = Object.assign({ item: '조식', to: '실시', at: '2027-03-03T10:00:00', today: '2027-03-03' }, o);
+  assert.throws(() => ctx.mealPlanChange_([], 's1', a.item, a.to, a.at, { today: a.today }));
+});
+
+test('적용일 검사는 statusOn_과 같다: 달력에 없는 날짜 행은 둘 다 무시', () => {
+  const rows = [CH('조식', '실시', '2027-03-02'), CH('조식', '미실시', '2027-02-30')];
+  assert.strictEqual(ctx.statusOn_(rows, 's1', '조식', '2027-03-31'), '실시');
+  assert.deepStrictEqual(plain(ctx.mealPendingToCancel_(rows, 's1', '조식', '2027-01-01', {})).map((x) => x.effective_date), ['2027-03-02']);
+});
+
+table('mealChangeKind_: 모르는 항목·값은 Error', [
+  ['중식', '', '실시'], ['조식', '', '학사 석식'], ['석식', '', '실시'], ['석식', '학사', '미실시'], ['조식', '실시', ''], ['', '', '미실시']
+], ([item, from, to]) => assert.throws(() => ctx.mealChangeKind_(item, from, to)));

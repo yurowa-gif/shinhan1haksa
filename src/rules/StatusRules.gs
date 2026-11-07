@@ -19,8 +19,12 @@ function statIso_(v) {
   return statStr_(v).replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T');
 }
 
+/** 'yyyy-MM-dd' 형식이고 달력에 있는 날짜인지(2027-02-30은 false — DateRules.ymdIsValid_와 같은 판정, 이 파일만으로 돈다). */
 function statIsYmd_(s) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(s);
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return false;
+  var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3];
 }
 
 /** status_changes 행이 유효한지: status가 빈칸 또는 '유효'(취소·요청 등은 무시). */
