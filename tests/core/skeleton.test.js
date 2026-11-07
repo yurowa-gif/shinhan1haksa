@@ -8,13 +8,13 @@ const { createGasEnv } = require('../helpers/gas-fakes');
 
 const ctx = loadGs(['src/rules/DateRules.gs', 'src/Schema.gs', 'src/Auth.gs', 'src/Code.gs']);
 
-// 계획 표 + 선생님 답(결정 44·45). 답이 더 오면 이 표와 Auth.gs를 같이 고친다
+// 계획 표 + 선생님 답(결정 44·45·48). 답이 더 오면 이 표와 Auth.gs를 같이 고친다
 const STAGE2_KEYS = {
   'duty.view': { roles: ['admin', 'duty_manager', 'hall_teacher', 'attendance'] },
   'duty.edit': { roles: ['admin', 'duty_manager'] },
   'duty.operating': { roles: ['admin', 'duty_manager'] },
   'duty.swap': { roles: ['admin', 'duty_manager', 'hall_teacher'] },
-  'duty.record': { roles: ['admin'] },
+  'duty.record': { roles: ['admin', 'duty_manager'] },
   'out.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] },
   'out.save': { roles: ['admin', 'hall_teacher'], scope: 'student', dutyWindow: 1 },
   'out.cancel': { roles: ['admin'] },
@@ -29,7 +29,7 @@ const STAGE2_KEYS = {
   'meal.count': { roles: ['admin'] }
 };
 
-test('permissions_: 2단계 키 17개가 계획 표·결정 44·45의 역할·범위·표시 그대로다(학생·학부모 없음)', () => {
+test('permissions_: 2단계 키 17개가 계획 표·결정 44·45·48의 역할·범위·표시 그대로다(학생·학부모 없음)', () => {
   const p = ctx.permissions_();
   for (const [key, want] of Object.entries(STAGE2_KEYS)) {
     assert.ok(p[key], key + ' 없음');
