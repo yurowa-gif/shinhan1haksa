@@ -165,11 +165,14 @@ function excDisplay_(s) { return s.grade + '. ' + s.name; }
 
 function excCanConfirm_(user) { return hasAnyAllowedRole_(user.roles, permissions_()['exception.confirm'].roles); }
 
+/** 끝난 운영 기간인가(끝난 기간은 보기만) */
+function excTermEnded_(term) { return term.end_date < today_(); }
+
 var EXC_ENDED_MSG = '끝난 운영 기간의 특이사항은 볼 수만 있습니다.';
 
 /** 저장할 기간의 오류: 끝난 기간은 보기만, 학생은 그 기간 명단에 있어야 한다(관리자도 마찬가지 — 목록에 안 보여 취소할 수 없는 기록을 막는다) */
 function excTermErrors_(enrollments, studentId, term) {
-  if (term.end_date < today_()) return [{ field: 'from', message: '"' + term.name + '"은(는) 끝난 기간입니다. ' + EXC_ENDED_MSG }];
+  if (excTermEnded_(term)) return [{ field: 'from', message: '"' + term.name + '"은(는) 끝난 기간입니다. ' + EXC_ENDED_MSG }];
   var ok = enrollments.some(function (e) { return e.term_id === term.id && e.student_id === studentId; });
   return ok ? [] : [{ field: 'studentId', message: '"' + term.name + '" 명단에 없는 학생입니다. 명단 올리기에서 먼저 등록해 주세요.' }];
 }
@@ -292,7 +295,7 @@ function excGroupView_(g, term, d, namesByEmail, studentById, user, range) {
   var mine = g.requestedBy === user.email;
   var rangeDates = range ? g.dates.filter(function (x) { return x >= range.from && x <= range.to; }) : [];
   var liveInRange = range ? g.liveDates.filter(function (x) { return x >= range.from && x <= range.to; }) : [];
-  var ended = term.end_date < today_();
+  var ended = excTermEnded_(term);
   return {
     groupId: g.groupId, termId: term.id, termName: term.name, studentId: g.studentId, display: s.name ? excDisplay_(s) : '(알 수 없음)',
     dates: g.dates, canceledDates: g.dates.filter(function (x) { return g.liveDates.indexOf(x) < 0; }), rangeDates: rangeDates,
@@ -391,7 +394,7 @@ function confirmException(termId, groupId, acknowledge) {
   if (!gid) return { ok: false, error: '묶음을 찾을 수 없습니다. 목록을 새로 불러와 주세요.' };   // 빈 id가 group_id가 빈 여러 행과 맞지 않게
   return withLock_(function () {
     var term = excFindTerm_(termId);
-    if (term.end_date < today_()) return { ok: false, error: EXC_ENDED_MSG };
+    if (excTermEnded_(term)) return { ok: false, error: EXC_ENDED_MSG };
     var sheet = termSheetName_('exceptions', term.id);
     invalidate_('db', sheet);
     invalidate_('db', 'enrollments');
@@ -427,7 +430,7 @@ function cancelException(termId, groupId, reason, onlyDate) {
   return withLock_(function () {
     var why = String(reason || '').trim();
     var term = excFindTerm_(termId);
-    if (term.end_date < today_()) return { ok: false, error: EXC_ENDED_MSG };
+    if (excTermEnded_(term)) return { ok: false, error: EXC_ENDED_MSG };
     var sheet = termSheetName_('exceptions', term.id);
     invalidate_('db', sheet);
     var rows = excRows_(term).rows.filter(function (r) { return r.group_id === gid; });
