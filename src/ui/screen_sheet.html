@@ -1,5 +1,5 @@
 <style>
-  /* A4 가로(297×210mm ≈ 1123×794px)를 화면 폭에 맞춰 줄여 보여 준다. 두 손가락 확대는 페이지 확대로 된다. */
+  /* A4 가로 한 장(폭 297mm ≈ 1123px, 높이는 렌더러 실제 높이)을 화면 폭에 맞춰 줄여 보여 준다. 두 손가락 확대는 페이지 확대로 된다. */
   .sheet-box { width: 100%; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
   .sheet-frame { width: 1123px; border: 0; background: #fff; transform-origin: 0 0; display: block; }
   .sheet-warn { background: var(--warn-weak); color: var(--warn); border-radius: 10px; padding: 8px 12px; margin: 8px 0; }
@@ -82,8 +82,8 @@
         frame.setAttribute('sandbox', 'allow-same-origin');   // 스크립트는 못 돌고, 높이만 읽는다
         function fit() {
           var k = Math.min(1, box.clientWidth / 1123);
-          var h = 794 * Math.max(1, r.pageCount || 1);
-          try { h = Math.max(h, frame.contentDocument.documentElement.scrollHeight); } catch (e) { /* 높이를 못 읽으면 쪽 수로 */ }
+          var h = 726 * Math.max(1, r.pageCount || 1);   // A4 가로 한 쪽 ≈ 544pt = 726px(읽을 수 없을 때 대체값)
+          try { var sh = frame.contentDocument.documentElement.scrollHeight; if (sh >= 300) h = sh; } catch (e) { /* 높이를 못 읽으면 쪽 수로 */ }   // 읽은 값을 그대로 쓴다(max하면 아래에 빈칸이 남는다)
           frame.style.height = h + 'px';
           frame.style.transform = 'scale(' + k + ')';
           box.style.height = Math.ceil(h * k) + 'px';
