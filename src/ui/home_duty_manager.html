@@ -1,4 +1,9 @@
 <script>
+  /** 2단계 A 카드(CODING-A: 근무·OUT·면담). 이 함수의 몸통만 고친다(docs/plan/stage2.md 1절) */
+  function renderStage2A(d, root) {
+    return;
+  }
+
   /** 근무표 담당자 홈: 이번 달 근무표 (PRD 8절, F3) */
   function renderHome(d, root) {
     root.appendChild(el('div', { class: 'card' }, [
@@ -10,6 +15,12 @@
       el('div', { class: 'muted', text: '학사생 자리를 확인합니다.' }),
       el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=seats', text: '좌석표 열기' })
     ]));
-    root.appendChild(soonCard('근무 편성 · 교대 이력', '2단계(F3)에서 만듭니다.'));
+    renderStage2A(d, root);
+    renderStage2B(d, root);
+  }
+
+  /** 2단계 B 카드(CODING-B: 입퇴실·급식·서류). 이 함수의 몸통만 고친다(docs/plan/stage2.md 1절) */
+  function renderStage2B(d, root) {
+    return;
   }
 </script>
