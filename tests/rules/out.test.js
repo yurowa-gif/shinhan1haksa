@@ -2,7 +2,7 @@
 const assert = require('assert');
 const { test, loadGs, plain } = require('../helpers/harness');
 
-const ctx = loadGs(['src/rules/DateRules.gs', 'src/rules/AttendanceRules.gs', 'src/rules/OutRules.gs']);
+const ctx = loadGs(['src/rules/DateRules.gs', 'src/rules/AttendanceRules.gs', 'src/rules/StatusRules.gs', 'src/rules/OutRules.gs']);
 
 function table(name, rows, fn) {
   test(name, () => {
@@ -421,4 +421,79 @@ test('OUT의 created_at이 비면 since로 거르지 않는다(유지)', () => {
   const o = { autoTypes: ['미인정결석', '기타'], autoTypeSince: { '기타': '2027-03-08T00:00:00' } };
   const v = [Object.assign({}, run([EX('e1', { type: '기타' })], [], { autoTypes: o.autoTypes }).toCreate[0], { id: 'v1', created_at: '' })];
   assert.deepStrictEqual(run([EX('e1', { type: '기타', confirmed_at: '2027-03-01T09:00:00' })], v, o).toCancel, []);
+});
+
+/* ───── R9: O43 회귀, outAutoSinceNext_, outDismissalGate_ ───── */
+
+test('O43: 같은 묶음의 앞선 자동 OUT이 중복·유형 변경으로 [자동] 취소돼 있어도, since 이전 확정 행만 남으면 since 뒤에 만든 OUT은 취소', () => {
+  const o = { autoTypes: ['미인정결석', '기타'], autoTypeSince: { '기타': '2027-03-05T00:00:00' } };
+  const exc = [EX('e1', { group_id: 'G', type: '기타', confirmed_at: '2027-03-01T09:00:00' }), EX('e2', { group_id: 'G', type: '기타', date: '2027-03-04', status: '취소' })];
+  for (const reason of ['[자동] 같은 특이사항의 자동 OUT이 이미 있습니다(중복)', '[자동] 특이사항 유형이 바뀌었습니다']) {
+    const vio = [{ id: 'v1', term_id: 'T1', student_id: 's1', source: 'F1자동', status: '취소', cancel_reason: reason, source_exception_id: 'e1', rule_name: '무단 지각·결석·이탈(기타)' },
+      { id: 'v2', term_id: 'T1', student_id: 's1', source: 'F1자동', status: '유효', source_exception_id: 'e2', rule_name: '무단 지각·결석·이탈(기타)',
+        occurred_at: '2027-03-04T00:00:00', created_at: '2027-03-06T10:00:00' }];
+    assert.deepStrictEqual(run(exc, vio, o).toCancel.map((c) => c.violationId), ['v2'], reason);
+  }
+});
+
+const snap = (s, cur, now) => plain(ctx.outAutoSinceNext_(s, cur, now, ['미인정지각', '미인정조퇴', '미인정결석']));
+const DEF = ['미인정지각', '미인정조퇴', '미인정결석'];
+test('outAutoSinceNext_: 처음(null) + 기본 3종 → since {}(일괄 생성), 스냅숏 분실(null) + 기타가 이미 설정됨 → 기타 since = now', () => {
+  assert.deepStrictEqual(snap(null, DEF, '2027-03-01T09:00:00'), { snapshot: { types: DEF, since: {} }, since: {}, changed: true });
+  const r = snap(null, DEF.concat(['기타']), '2027-03-01T09:00:00');
+  assert.deepStrictEqual([r.since, r.changed], [{ '기타': '2027-03-01T09:00:00' }, true]);
+});
+
+test('outAutoSinceNext_: 기타 넓힘 T1 → 좁혀도 T1 유지 → 다시 넓히면 T2로 덮음, 그대로면 changed false, 괄호 설명은 떼고 비교', () => {
+  let s = snap(null, DEF, '2027-03-01T09:00:00').snapshot;
+  let r = snap(s, DEF.concat(['기타']), '2027-03-05T09:00:00');
+  assert.deepStrictEqual([r.since, r.changed], [{ '기타': '2027-03-05T09:00:00' }, true]);
+  r = snap(r.snapshot, DEF, '2027-03-07T09:00:00');
+  assert.deepStrictEqual([r.since, r.changed, r.snapshot.types], [{ '기타': '2027-03-05T09:00:00' }, true, DEF]);
+  r = snap(r.snapshot, DEF.concat(['기타']), '2027-03-09 09:00:00');
+  assert.deepStrictEqual(r.since, { '기타': '2027-03-09T09:00:00' });
+  const same = snap(r.snapshot, ['미인정결석(무단)', '미인정지각', '미인정조퇴', '기타'], '2027-03-10T09:00:00');
+  assert.deepStrictEqual([same.changed, same.since], [false, { '기타': '2027-03-09T09:00:00' }]);
+});
+
+test('outAutoSinceNext_: 잘못된 시각은 Error', () => {
+  assert.throws(() => snap(null, DEF.concat(['기타']), '3월 1일'), /일시/);
+});
+
+// 면담 관문: s1의 T1 OUT 2건(o1 3/3, o2 3/10), 면담 n1(o2에 연결)
+const OUT = (id, occurred_at, extra) => Object.assign({ id, term_id: 'T1', student_id: 's1', occurred_at, created_at: occurred_at, status: '유효', source: '직접' }, extra || {});
+const NOTE = (extra) => Object.assign({ id: 'n1', student_id: 's1', type: '2OUT 학부모 면담', linked_violation_id: 'o2', status: '유효', date: '2027-03-11', teacher_email: 'hr@example.com' }, extra || {});
+const HALL_IN = [{ id: 'c1', student_id: 's1', item: '학사', value: '입실', effective_date: '2027-03-01', status: '유효' }];
+const gate = (vio, notes, changes) => plain(ctx.outDismissalGate_(vio, notes, changes || HALL_IN, 's1', 'T1', '2027-03-12'));
+const TWO = () => [OUT('o2', '2027-03-10T21:00:00'), OUT('o1', '2027-03-03T21:00:00')];
+
+table('outDismissalGate_: 면담 기록이 있어야 퇴실 확정(결정 4·PRD F12)', [
+  ['면담 전', TWO(), [], false, '면담 기록 필요'],
+  ['면담 후', TWO(), [NOTE()], true, ''],
+  ['면담 취소', TWO(), [NOTE({ status: '취소' })], false, '면담 기록 필요'],
+  ['면담 날짜 < 둘째 OUT 발생일', TWO(), [NOTE({ date: '2027-03-09' })], false, '면담 기록 필요'],
+  ['면담 날짜 = 둘째 OUT 발생일', TWO(), [NOTE({ date: '2027-03-10' })], true, ''],
+  ['연결 OUT이 관리자 취소로 죽고 다른 2건이 남음(가정, Q9)', TWO().map((v) => (v.id === 'o2' ? Object.assign(v, { status: '취소' }) : v)).concat([OUT('o3', '2027-03-11T21:00:00')]),
+    [NOTE()], false, '면담 기록 필요'],
+  ['다른 학생 면담', TWO(), [NOTE({ student_id: 's2' })], false, '면담 기록 필요'],
+  ['다른 유형 면담', TWO(), [NOTE({ type: '진로 상담' })], false, '면담 기록 필요'],
+  ['지난 기간 OUT에 연결', TWO().concat([OUT('old', '2026-12-01T21:00:00', { term_id: 'T0' })]), [NOTE({ linked_violation_id: 'old' })], false, '면담 기록 필요'],
+  ['OUT 1건', [OUT('o1', '2027-03-03T21:00:00')], [NOTE({ linked_violation_id: 'o1' })], false, '퇴실 대상 아님']
+], ([, vio, notes, ok, reason]) => {
+  const r = gate(vio, notes);
+  assert.deepStrictEqual([r.ok, r.reason], [ok, reason]);
+});
+
+test('outDismissalGate_: 결과 모양 — triggerOutId = 발생 순 둘째(같으면 created_at·id), 면담 칸은 id·날짜·교사만', () => {
+  const r = gate(TWO(), [NOTE({ content: '내용은 넘어오지 않는다' })]);
+  assert.deepStrictEqual(r, { count: 2, level: 2, triggerOutId: 'o2', meetingNote: { id: 'n1', date: '2027-03-11', teacher_email: 'hr@example.com' }, alreadyLeft: false, ok: true, reason: '' });
+  const tie = [OUT('b', '2027-03-03T21:00:00'), OUT('a', '2027-03-03T21:00:00')];
+  assert.strictEqual(gate(tie, []).triggerOutId, 'b');
+});
+
+test('outDismissalGate_: 이미 학사 퇴실이면 "이미 퇴실"(그날 학사 상태)', () => {
+  const left = HALL_IN.concat([{ id: 'c2', student_id: 's1', item: '학사', value: '퇴실', effective_date: '2027-03-12', status: '유효', requested_at: '2027-03-11T10:00:00' }]);
+  const r = gate(TWO(), [NOTE()], left);
+  assert.deepStrictEqual([r.alreadyLeft, r.ok, r.reason], [true, false, '이미 퇴실']);
+  assert.strictEqual(gate([OUT('o1', '2027-03-03T21:00:00')], [], left).reason, '이미 퇴실');   // 이미 퇴실이 먼저(OUT 1건이어도)
 });
