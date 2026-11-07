@@ -78,8 +78,10 @@ function diffRoster_(records, existing, termId, ymd)
 
 // src/rules/OutRules.gs
 function reconcileAutoOuts_(exceptions, violations, opts)
-        // opts = {autoTypes, ruleName:'무단 지각·결석·이탈', per:'group'|'row', dutyByDate:{}}
-        // → {toCreate, toCancel:[{violationId, reason}]}
+        // exceptions·violations는 그 기간의 모든 행(일부만 넘기면 다른 학생의 자동 OUT이 취소된다), violations는 created_at 필수
+        // opts = {autoTypes, ruleName:'무단 지각·결석·이탈', ruleId, per:'group'|'row', dutyByDate:{}, studentIds:[](선택),
+        //         autoTypeSince:{유형:'yyyy-MM-ddTHH:mm:ss'}(선택, 설정을 넓혀 새로 자동 대상이 된 유형과 가장 최근에 넓힌 시각)}
+        // → {toCreate, toCancel:[{violationId, reason}], toUpdate:[{violationId, patch}]}
 function outLevel_(violations, studentId, termId)   // {count, level:0|1|2, label:''|'1OUT'|'퇴실 대상'}
 
 // src/rules/MealRules.gs
@@ -153,3 +155,27 @@ function mealChangeKind_(item, fromValue, toValue)
   - FIXED가 여럿이면 `teacher_confirmed_at` → `updated_at` 최신.
   - END: `endType`(`'23:00:00'`도 읽음) `=== opts.endTime`(기본 `'23:00'`), `dayType`이 `opts.endTypeDayTypes`(기본 `['mon_thu']`, 항목 앞뒤 공백 무시)에 있음, 마지막 블록, **그 블록과 그날 종료(`dayEnd`)가 모두 종료 시각보다 늦게 끝남**. ASSUMPTION: 날짜별 종료를 23:00 이하로 당긴 날(22:00·22:30·23:00)은 모두 그 시각에 귀가하므로 표시하지 않는다. ASSUMPTION: 특별 요일 유형(`exam` 등)으로 바꾼 날은 실제 달력 요일의 기본 유형으로 판정한다(목요일 exam → 표시, 금요일 exam → 표시 안 함).
 - `resolveStudentDay_`: 운영 안 하는 날은 `[]`. `exceptions`는 `date === plan.date`인 행만 쓴다(**날짜가 빈 행은 쓰지 않는다** — 빈 날짜 하나가 모든 날에 찍히지 않게). `plan.end`를 `dayEnd`로 넘긴다. `fixedRows`는 `effectiveFixedRows_` 결과를 넘긴다. 고정 일정 요일은 요일 유형이 아니라 **실제 달력 요일**(`ymdWeekdayKo_`). C7은 결과에서 `seq·code·text`만 sheet-model `marks`로 옮긴다.
+
+## 동작 메모(R5, 2026-11-07, 총괄 검토 3차 반영)
+
+**OutRules** — violations 탭(`violations_<기간>`)은 2단계 F4에서 만든다. 이 함수는 아무것도 쓰지 않는다. 값 글자는 vocabulary.md violations 절. `tests/rules/out_oracle.test.js`가 단순한 오라클 모델과 무작위 시험(시드 고정 300가지)으로 비교한다.
+- **입력 범위:** `exceptions`·`violations`는 **그 기간의 모든 행**. 일부만 넘기면 넘기지 않은 특이사항에 연결된 자동 OUT이 `'[자동] 연결된 특이사항이 없습니다'`로 취소된다. 한 학생만 맞추려면 기간 전체 행을 넘기고 `opts.studentIds`로 좁힌다. `opts.studentIds`는 F1 확정 시 한 학생만 맞출 때 사용한다(2단계).
+- **전제:** 특이사항 행의 `student_id`·`term_id`·`date`는 저장 뒤 바뀌지 않는다(vocabulary.md). 바뀌어도 견디지만, `term_id`가 바뀌면 두 기간의 실행이 서로 취소·생성을 되풀이할 수 있다.
+- **단위:** `per:'group'`(기본, 결정 22 "입력 1건 = 1OUT")이면 (학생, group_id) 묶음, group_id가 비면 행 하나. `per:'row'`면 행마다.
+- **자격 행:** `확정` + 날짜가 달력에 있음(`ymdIsValid_`) + 유형이 `autoTypes`(괄호 설명을 떼고 비교, 비거나 빈 항목뿐이면 기본 3종) + 그 유형이 `opts.autoTypeSince`에 있으면 `confirmed_at >=` 그 시각.
+- **설정 변경은 앞으로만(총괄 결정):** 설정 `exception.auto_out_types`를 넓혀 새로 자동 대상이 된 유형은 `autoTypeSince[유형]` = 넓힌 시각(설정 행 `updated_at`, audit_log로 유형별로 구할 수 있음)으로 넘긴다 — 그 전에 확정된 특이사항에는 소급해 OUT을 만들지 않는다. **처음부터 자동 대상이던 유형은 넣지 않는다**(그래서 `[자동]` 취소됐다가 다시 확정된 특이사항의 OUT은 돌아온다). 좁힐 때는 아래 "만들 때 유형"으로 이미 있는 OUT이 유지된다. 2단계 F4 처음 연결 때 쌓인 특이사항을 한꺼번에 만들 때는 넘기지 않는다.
+- **새로 만들기:** 살아 있는 자동 OUT이 없는 단위에 자격 행이 있으면. 대표 = 자격 행 중 날짜가 가장 이른 행(같으면 id 순). 초안: `source:'F1자동'`, `status:'유효'`, `source_exception_id` = 대표, `occurred_at` = 대표 날짜 + 첫 블록 시작(`parseBlockSpec_` 기준, `ALL`·잘못된 표기는 `00:00`) + `:00`, `entered_by` = 확정자(없으면 요청자), `detected_by` = `dutyByDate[날짜]`(배열은 쉼표, 없으면 빈칸), **`rule_name` = `ruleName + '(만들 때 유형)'`**, `memo` = `'사전 특이사항 자동: 유형'`(자격 행이 여러 날이면 `' 외 N일'`).
+- **유지 행**(이미 있는 OUT 하나에 대해): 자격 행, 또는 확정·날짜 맞음이고 유형이 그 OUT의 `rule_name` 괄호 유형(만들 때 유형)과 같은 행(그 유형의 `autoTypeSince`가 그 OUT의 `created_at` 이전이면 그 시각 이후 확정만 — OUT이 생긴 뒤 다시 넓힌 since로는 거르지 않는다, `created_at`이 비면 거르지 않는다). 유지 행이 있으면 OUT을 유지하고 두 번 실행해도 0건. **설정을 좁혔다가 다시 넓혀도 기존 OUT은 죽지 않는다(결정 40).** 그래서 `violations` 행은 `created_at`까지 넘긴다(필수). 지름길: 다시 넓히면 처음 넓히기 전에 확정된 같은 유형 행도 유지 행이 되어, 대표가 그쪽으로 옮겨질 수 있다(덜 죽일 뿐 거짓 취소는 없음 — 설정이 넓힌 이력을 남기면 고친다).
+  - `rule_name`은 vocabulary 형식일 때만 읽는다: 정확히 `ruleName + '(' + 유형 + ')'` — `ruleName` 바로 뒤의 `(`와 짝이 맞는 `)`가 마지막 글자(유형 안의 짝 맞는 괄호 허용). `'… (학부모 통화)'`처럼 덧붙였거나, 유형이 비었거나(`'( )'`), 통째로 괄호에 싸였으면(`'((x))'`) '알 수 없음'. 알 수 없으면 유지 행 = 자격 행만이고, 자격 행이 없어도 확정·날짜 맞는 행이 남아 있으면 **그대로 둔다**(유형으로 취소하지 않고, 대표를 비자동 행으로 옮기지도, 고치지도 않는다).
+  - **대표 유지:** 지금 `source_exception_id` 행이 유지 행이면 대표를 옮기지 않는다. 아니면 유지 행 중 가장 이른 행.
+- **취소**(`toCancel`, 사유는 `'[자동] '`으로 시작): 특이사항이 모두 취소됨, 확정 행이 없어짐(요청으로 돌아감), 유형이 자동 대상 밖으로 바뀜(만들 때 유형도 아님), 연결된 특이사항 행이 없음, 특이사항의 학생·기간이 바뀜(**바른 쪽에 다시 만든다 — 이때는 지금 설정·`autoTypeSince`와 상관없이**, 그렇게 다시 만든 OUT은 유지 판정에서도 since로 거르지 않는다 — 같은 단위에 이 사유로 취소된 자동 OUT이 있으면), 같은 단위의 두 번째 살아 있는 OUT.
+- **고침**(`toUpdate`, 부르는 쪽은 `updateRecord_`로 저장 → audit_log에 전후 값). 사람이 고친 값은 덮지 않는다:
+  - 대표가 바뀌거나 대표 날짜와 OUT 날짜가 다르면 `source_exception_id`·`occurred_at`. **특이사항 날짜가 원본** — 사람이 OUT 날짜를 고치면 날짜·시각 모두 생성값으로 되돌린다. 날짜가 같으면 사람이 고친 시각은 둔다(같은 대표·같은 날짜에서 블록만 바뀐 것도 고치지 않는다).
+  - `detected_by`: 빈칸인데 그날 근무교사를 알게 되면 채운다. 날짜가 바뀌었고 지금 값이 옛 날짜의 근무교사(생성값)와 같으면 새 날짜 근무교사로, 모르면 빈칸으로. 그래서 `dutyByDate`에는 특이사항 날짜와 OUT들의 지금 `occurred_at` 날짜를 모두 넣는다.
+  - `rule_name`: 생성값이고 대표 유형이 다른 자동 유형으로 바뀌었으면 새 유형으로(묶음 안 유형이 하나인 앱에서는 일어나지 않는다). `memo`는 사람 칸이라 고치지 않는다.
+- 교사가 직접 입력한 OUT(`source`가 `F1자동`이 아님)은 건드리지 않는다.
+- ASSUMPTION: 관리자가 직접 취소한 자동 OUT(`cancel_reason`이 `'[자동] '`으로 시작하지 않음)이 가리키던 특이사항 행, 또는 같은 묶음(**취소된 OUT의 학생** + group_id)의 행이 들어 있는 단위는, 그 OUT과 **학생·기간이 같으면** 다시 만들지 않는다(`per`를 바꿔도 같음).
+- ASSUMPTION(결정 22 적용): 같은 학생·같은 날·겹치는 블록에 다른 묶음의 자동 유형 특이사항 두 건이 확정되면 OUT도 두 건(→ 퇴실 대상이 될 수 있다). C5는 저장·확정 때 겹침 경고 후 확인을 받는다(막지는 않음).
+- `outLevel_`: 같은 학생·같은 `term_id`(학기마다 초기화)에서 status 빈칸·`유효`인 OUT 수(직접·자동 모두). 2개 이상이면 `level:2`, `'퇴실 대상'`.
+- 이 파일은 DateRules(`ymdIsValid_`)·AttendanceRules(`attStr_`·`attTypeBase_`·`parseBlockSpec_`)를 부른다. 테스트는 세 파일을 함께 올린다.
+
