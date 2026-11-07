@@ -128,13 +128,13 @@ test('listTerms: 관리자만 canEdit(화면이 폼을 숨기는 데 쓴다, 서
   assert.throws(() => makeServer('s@example.com', ['student']).c.listTerms(), /권한이 없습니다/);
 });
 
-test('saveTerm: 새 기간을 만들면 그 기간의 기간별 탭(exceptions_…)을 만들고, 고칠 때는 만들지 않는다', () => {
+test('saveTerm: 새 기간을 만들면 그 기간의 기간별 탭(exceptions_·violations_)을 모두 만들고, 고칠 때는 만들지 않는다', () => {
   const s = admin();
   const r = plain(s.c.saveTerm({ name: '2027 2학기', type: '학기', start_date: '2027-08-23', end_date: '2028-02-28' }));
   assert.strictEqual(r.ok, true);
-  assert.deepStrictEqual(s.tabs, ['exceptions:' + r.id]);
+  assert.deepStrictEqual(s.tabs, ['exceptions:' + r.id, 'violations:' + r.id]);
   s.c.saveTerm({ id: r.id, name: '2027 2학기(수정)', type: '학기', start_date: '2027-08-23', end_date: '2028-02-28' });
-  assert.strictEqual(s.tabs.length, 1);
+  assert.strictEqual(s.tabs.length, 2);
   const bad = plain(s.c.saveTerm({ name: '', type: '학기' }));
-  assert.strictEqual(bad.ok, false); assert.strictEqual(s.tabs.length, 1);
+  assert.strictEqual(bad.ok, false); assert.strictEqual(s.tabs.length, 2);
 });

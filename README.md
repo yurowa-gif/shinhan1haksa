@@ -179,6 +179,7 @@ clasp(코드를 Apps Script로 올려 주는 도구)는 Node.js 위에서 돌아
    | `TEST_HOMEROOM_EMAIL` | `시험담임@학교도메인` | 선택. 학생 1번 반의 담임 |
 
    `DB_ID`, `COUNSEL_ID`, `CONFIG_ID`, `DIAG_ENABLED` 처럼 `setup`이 이미 넣어 둔 속성은 건드리지 않습니다.
+   재설치하면 Script Property `AUTO_OUT_SINCE`가 없어진다 — 기본 3종 밖 자동 OUT 유형은 그때부터 자동(결정 40·stage2 R9).
 4. **스크립트 속성 저장**(Save script properties)을 누릅니다.
 5. 왼쪽 **편집기**(Editor, `< >` 아이콘)로 돌아가 파일 목록에서 `dev/FakeData.gs` 를 열고, 함수 선택 칸에서 `seedFakeData` → **실행**.
    실행 로그에 `가짜 데이터: 운영 기간 2, 학생 30, ...` 이 나오면 성공입니다.
