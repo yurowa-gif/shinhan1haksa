@@ -2,7 +2,7 @@
 const assert = require('assert');
 const { test, loadGs, plain } = require('../helpers/harness');
 
-const ctx = loadGs(['src/rules/DateRules.gs', 'src/rules/StatusRules.gs', 'src/rules/MealRules.gs']);
+const ctx = loadGs(['src/rules/DateRules.gs', 'src/rules/StatusRules.gs', 'src/rules/MealRules.gs', 'src/rules/MoveRules.gs']);
 
 function table(name, rows, fn) {
   test(name, () => {
@@ -291,14 +291,11 @@ function saveF7(rows, item, to, at, today) {
   p.followUps.forEach((f) => out.push(CH(f.item, f.value, f.effective_date, { source: 'F6', requested_at: at, created_at: String(++sseq) })));
   return { rows: out, p };
 }
-function saveLeave(rows, L, t) {
-  let out = rows.concat([CH('학사', '퇴실', L, { source: 'F6', requested_at: t, created_at: String(++sseq) })]);
-  for (const item of ['조식', '석식']) {
-    const stop = item === '조식' ? L : plain(ctx.mealEffectiveDate_('stop', t, { leaveDate: L })).date;
-    const ids = plain(ctx.mealPendingToCancel_(out, 's1', item, stop, { source: 'F6' })).map((c) => c.id);
-    out = out.map((r) => (ids.includes(r.id) ? Object.assign({}, r, { status: '취소' }) : r));
-    if (['실시', '학사 석식'].includes(ctx.statusOn_(out, 's1', item, stop))) out.push(CH(item, '미실시', stop, { source: 'F6', requested_at: t, created_at: String(++sseq) }));
-  }
+function saveLeave(rows, L, t) {   // F6 학사 퇴실 = movePlan_(R11a) 계획을 그대로 저장
+  const p = plain(ctx.movePlan_(rows, 's1', { type: '학사 퇴실', effectiveDate: L, requestedAt: t }, { today: t.slice(0, 10) }));
+  assert.deepStrictEqual(p.errors, []);
+  const out = rows.map((r) => (p.toCancel.some((c) => c.id === r.id) ? Object.assign({}, r, { status: '취소' }) : r));
+  p.rows.forEach((r) => out.push(CH(r.item, r.value, r.effective_date, { source: r.source, requested_at: t, created_at: String(++sseq) })));
   return out;
 }
 const daysOf = (rows, item) => plain(ctx.ymdRange_('2027-03-01', '2027-04-10')).map((d) => d + ' ' + ctx.statusOn_(rows, 's1', item, d));

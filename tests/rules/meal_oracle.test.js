@@ -19,7 +19,7 @@
 const assert = require('assert');
 const { test, loadGs, plain } = require('../helpers/harness');
 
-const ctx = loadGs(['src/rules/DateRules.gs', 'src/rules/StatusRules.gs', 'src/rules/MealRules.gs']);
+const ctx = loadGs(['src/rules/DateRules.gs', 'src/rules/StatusRules.gs', 'src/rules/MealRules.gs', 'src/rules/MoveRules.gs']);
 
 function rng(seed) {
   let a = seed >>> 0;
@@ -86,12 +86,11 @@ function simulate(seed, steps) {
       if (L < '2027-03-02') L = '2027-03-02';                 // 기간 시작(입실 3/1) 뒤
       const t = iso(now);
       leave = { L, t };
-      addRow({ item: '학사', value: '퇴실', effective_date: L, source: 'F6', requested_at: t });
-      for (const item of ['조식', '석식']) {
-        const stop = item === '조식' ? L : ctx.mealEffectiveDate_('stop', t, { leaveDate: L }).date;
-        cancel(plain(ctx.mealPendingToCancel_(rows, 's1', item, stop, { source: 'F6' })));
-        if (isHall(item, ctx.statusOn_(rows, 's1', item, stop))) addRow({ item, value: '미실시', effective_date: stop, source: 'F6', requested_at: t });
-      }
+      // F6 학사 퇴실 저장 = movePlan_(R11a) 계획 그대로
+      const mp = plain(ctx.movePlan_(rows, 's1', { type: '학사 퇴실', effectiveDate: L, requestedAt: t }, { today }));
+      assert.deepStrictEqual(mp.errors, [], 'seed ' + seed + ' 퇴실 계획 오류');
+      cancel(mp.toCancel);
+      mp.rows.forEach((r) => addRow({ item: r.item, value: r.value, effective_date: r.effective_date, source: r.source, requested_at: t }));
       log.push(today + ' 퇴실 입력: 퇴실일 ' + L);
     } else {
       const item = pick(['조식', '석식']), to = pick(VALUES[item]);
