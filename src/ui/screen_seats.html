@@ -225,7 +225,7 @@
 
     function gridEditCard(sp) {
       var card = el('div', { class: 'card' }, [el('h2', { text: '격자 그리기 · ' + sp.name })]);
-      card.appendChild(el('div', { class: 'muted', text: '칸을 누를 때마다 좌석 → 기둥 → 비상문 → 창문 → 빈칸 순서로 바뀝니다. 이번 운영 기간에 학생이 앉았던 좌석은 배정을 풀어도 기간이 끝난 뒤에야 바꿀 수 있습니다. 번호는 1층은 줄-순번(예 3-7), SA실은 방 안 순번으로 자동 매겨집니다.' }));
+      card.appendChild(el('div', { class: 'muted', text: '칸을 누를 때마다 좌석 → 기둥 → 비상문 → 창문 → 빈칸 순서로 바뀝니다. 앉은 학생이 있으면 먼저 배정을 풀어야 하고, 기간이 시작된 뒤 오늘 이전부터 앉았던 좌석은 풀어도 기록이 남아 기간이 끝난 뒤에야 바꿀 수 있습니다. 번호는 1층은 줄-순번(예 3-7), SA실은 방 안 순번으로 자동 매겨집니다.' }));
       var kinds = {};
       sp.cells.forEach(function (c) { kinds[c.row + ',' + c.col] = FROM_EN[c.kind]; });
       var table = el('table', { class: 'grid-edit' });
