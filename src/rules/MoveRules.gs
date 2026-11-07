@@ -20,7 +20,8 @@
  *   F6 저장은 연결 행의 linked_change_id = 대표 행 id, toCancel의 cancel_reason 앞에 '[자동] <대표 행 id> '를 붙인다.
  * - 학사 퇴실 정리(rules-api.md R6 순서): 조식 중단일 = 퇴실일, 석식 중단일 = mealEffectiveDate_('stop', 신청 일시, {leaveDate})
  *   (결정 35). 중단일 이상 학사생 값 행을 취소하고, 그래도 중단일 값이 학사생 값이면 그날 '미실시'(source 'F6').
- *   석식 '일반 석식'을 고르면 미실시 대신 일반 석식 신청(source 'F7', 11:30 규칙 — 퇴실일보다 이르지 않게).
+ *   석식 '일반 석식'을 고르면 일반 석식 신청(source 'F7', 11:30 규칙 — 퇴실일보다 이르지 않게, 값이 같아도 쓴다 — 늦게 입력된 옛
+ *   신청서가 덮지 못하게)을 쓰고, 학사 석식 정리는 그 날(쓰지 못했으면 결정 35 중단일)부터 늘 한다.
  * - 기숙사 입실 + 조식: 조식 실시 @입실일(rule entry_date, source 'F7'). 기숙사 퇴실 + 조식 미실시: 미실시 규칙, 기숙사 퇴실일보다
  *   이르지 않게(source 'F7'). 이미 그 값이고 취소할 대기 행도 없으면 급식 행을 쓰지 않는다.
  * - 상태 검사(적용일 기준): 이미 같은 상태, 학사생 아닌 학생의 기숙사 입실, 기숙사생의 '학사 퇴실'(→ '학사 및 기숙사 퇴실').
@@ -37,7 +38,7 @@ function movePlan_(changes, studentId, move, opts) {
   var today = ruleStr_(opts.today);
   if (!ymdIsValid_(today)) throw new Error('today가 필요합니다(yyyy-MM-dd): ' + opts.today);
   var sid = ruleStr_(studentId), type = ruleStr_(move.type), E = ruleStr_(move.effectiveDate), at = ruleStr_(move.requestedAt);
-  var out = { errors: [], warnings: [], rows: [], toCancel: [], summary: { date: E, breakfast: null, dinner: null } };
+  var out = { errors: [], warnings: [], rows: [], toCancel: [], toRestore: [], summary: { date: E, breakfast: null, dinner: null } };
   var types = { '학사 입실': [['학사', '입실']], '학사 퇴실': [['학사', '퇴실']], '기숙사 입실': [['기숙사', '입실']],
     '기숙사 퇴실': [['기숙사', '퇴실']], '학사 및 기숙사 퇴실': [['학사', '퇴실'], ['기숙사', '퇴실']] };
   if (!types[type]) out.errors.push('입퇴실 유형이 아닙니다: ' + type);
@@ -54,6 +55,10 @@ function movePlan_(changes, studentId, move, opts) {
   if (type === '기숙사 입실' && hall !== '입실') out.errors.push('학사생만 기숙사에 입실할 수 있습니다');
   if (type === '기숙사 입실' && dorm === '입실') out.errors.push(E + '에 이미 기숙사 입실 상태입니다');
   if ((type === '기숙사 퇴실' || type === '학사 및 기숙사 퇴실') && dorm !== '입실') out.errors.push(E + '에 기숙사 입실 상태가 아닙니다');
+  // 적용일 뒤의 입퇴실 기록은 이 계획이 뒤집을 수 있어(상태 검사는 그날 하루만 본다) 먼저 취소하게 한다
+  if (live.some(function (c) { return /^(학사|기숙사)$/.test(ruleStr_(c.item)) && ruleStr_(c.effective_date) > E; })) {
+    out.errors.push(E + ' 이후 날짜에 입퇴실 기록이 있습니다 — 먼저 취소해 주세요');
+  }
   if (out.errors.length) return out;
   if (E < today) out.warnings.push('적용일(' + E + ')이 오늘보다 이릅니다: 지난 출석부·식수가 바뀝니다');
 
@@ -68,26 +73,41 @@ function movePlan_(changes, studentId, move, opts) {
       live = live.filter(function (x) { return ruleStr_(x.id) !== c.id; });
     });
   };
-  var meal = function (item, to, mopts, reason, always) {   // 급식 신청(F7)을 같은 계획에 넣는다(always면 값이 같아도 쓴다)
+  var meal = function (item, to, mopts, reason, always) {   // 급식 신청(F7)을 같은 계획에 넣는다 → 쓴 날 또는 ''(always면 값이 같아도 쓴다)
     var p = mealPlanChange_(live, sid, item, to, at, Object.assign({ today: today, cutoff: opts.cutoff }, mopts));
     out.warnings = out.warnings.concat(p.warnings);
-    if (p.blocked || p.superseded) { out.warnings.push(item + ' ' + to + ' 신청은 쓰지 않습니다: ' + (p.blocked || '더 새 신청이 있습니다')); return; }
-    if (!always && p.kind === 'none' && !p.toCancel.length) return;   // 이미 그 값이면 행을 늘리지 않는다
+    if (p.blocked || p.superseded) { out.warnings.push(item + ' ' + to + ' 신청은 쓰지 않습니다: ' + (p.blocked || '더 새 신청이 있습니다')); return ''; }
+    if (!always && p.kind === 'none' && !p.toCancel.length && !p.followUps.length) return '';   // 이미 그 값이면 행을 늘리지 않는다
     cancel(p.toCancel, reason);
     add(item, to, p.date, mopts.effectiveRule === 'entry_date' ? p.date : p.autoDate, reason, 'F7');
+    p.followUps.forEach(function (f) { add(f.item, f.value, f.effective_date, f.effective_date, reason, f.source); });
     out.summary[item === '조식' ? 'breakfast' : 'dinner'] = { value: to, from: p.date };
+    return p.date;
   };
-  var stopHall = function (item, stop, reason) {     // 퇴실 정리(F6): 중단일 이상 학사생 값 취소, 그래도 학사생 값이면 미실시
-    cancel(mealPendingToCancel_(live, sid, item, stop, { source: 'F6' }), reason);
-    if (mealIsHallOnly_(item, statusOn_(live, sid, item, stop))) add(item, '미실시', stop, stop, reason, 'F6');
-    out.summary[item === '조식' ? 'breakfast' : 'dinner'] = { value: '미실시', from: stop };
+  // 퇴실 정리(F6): 중단일 이상 학사생 값 취소 → 그 행들이 '[자동] <그 행 id>'로 취소했던 행 중 더 새 신청에 덮이지 않는 것을
+  // 되살린다(입력 순서와 무관하게, 총괄 결정 (a)) → 그래도 중단일 값이 학사생 값이면 미실시
+  var stopHall = function (item, stop, reason) {
+    var gone = mealPendingToCancel_(live, sid, item, stop, { source: 'F6' });
+    cancel(gone, reason);
+    gone.forEach(function (x) {
+      moveRestorable_(changes, live, x.id).forEach(function (r) {
+        if (mealIsHallOnly_(item, ruleStr_(r.value)) && ruleStr_(r.effective_date) >= stop) return;   // 되살려도 이 정리가 다시 취소할 행
+        out.toRestore.push({ id: ruleStr_(r.id) });
+        live.push(Object.assign({}, r, { status: '유효' }));
+      });
+    });
+    if (mealIsHallOnly_(item, statusOn_(live, sid, item, stop))) {
+      add(item, '미실시', stop, stop, reason, 'F6');
+      out.summary[item === '조식' ? 'breakfast' : 'dinner'] = { value: '미실시', from: stop };
+    }
   };
 
   types[type].forEach(function (s) { add(s[0], s[1], E, E, type, 'F6'); });
   if (type === '학사 퇴실' || type === '학사 및 기숙사 퇴실') {
     stopHall('조식', E, '학사 퇴실 조식 중단');
-    if (ruleStr_(move.dinner) === '일반 석식') meal('석식', '일반 석식', { leaveDate: E }, '학사 퇴실 일반 석식으로');
-    else stopHall('석식', mealEffectiveDate_('stop', at, { leaveDate: E }).date, '학사 퇴실 석식 중단');
+    // 일반 석식을 골라도 학사 석식 정리는 늘 한다(일반 석식 신청이 막히거나 더 새 학사 석식이 있으면 끝없이 학사 석식으로 남는다)
+    var general = ruleStr_(move.dinner) === '일반 석식' ? meal('석식', '일반 석식', { leaveDate: E }, '학사 퇴실 일반 석식으로', true) : '';   // 고른 값은 그날부터의 의도라 늘 쓴다
+    stopHall('석식', general || mealEffectiveDate_('stop', at, { leaveDate: E }).date, '학사 퇴실 석식 중단');
   }
   if (type === '학사 입실') {
     var lastLeave = live.filter(function (c) { return ruleStr_(c.item) === '학사' && ruleStr_(c.value) === '퇴실' && ruleStr_(c.effective_date) < E; })
@@ -173,4 +193,20 @@ function moveUndoPlan_(changes, headId, opts) {
   out.toRestore = Object.keys(back).map(function (id) { return { id: id }; });
   out.toCancel = Object.keys(gone).map(function (id) { return { id: id }; });
   return out;
+}
+
+/**
+ * 행 tagId가 '[자동] <tagId>'로 취소했던 행(cancel_reason, 없으면 memo) 중 되살려도 더 새 신청에 덮이지 않는 것.
+ * 덮임 = 같은 학생·항목의 살아 있는 신청 행(F6 제외)이 신청 일시가 더 늦고 적용일이 그 행 이하. live = 지금 살아 있는 행(계획 반영).
+ */
+function moveRestorable_(changes, live, tagId) {
+  var tag = '[자동] ' + ruleStr_(tagId);
+  return (changes || []).filter(function (c) {
+    if (!c || ruleRowLive_(c) || (ruleStr_(c.cancel_reason).indexOf(tag) !== 0 && ruleStr_(c.memo).indexOf(tag) < 0)) return false;
+    var req = ruleIso_(c.requested_at), e = ruleStr_(c.effective_date);
+    return !live.some(function (x) {
+      return ruleRowLive_(x) && ruleStr_(x.student_id) === ruleStr_(c.student_id) && ruleStr_(x.item) === ruleStr_(c.item) && ruleStr_(x.source) !== 'F6' &&
+        ruleIso_(x.requested_at) > req && ruleStr_(x.effective_date) <= e;
+    });
+  });
 }

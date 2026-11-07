@@ -60,6 +60,7 @@ function simulate(seed, steps) {
     assert.deepStrictEqual(mp.errors, [], 'seed ' + seed + ' 입퇴실 계획 오류 ' + JSON.stringify(move));
     const head = 'r' + (rid + 1);
     cancel(mp.toCancel, '[자동] ' + head + ' 입퇴실 정리');
+    mp.toRestore.forEach((c) => Object.assign(rows.find((r) => r.id === c.id), { status: '유효', cancel_reason: '' }));
     mp.rows.forEach((r, i) => addRow({ item: r.item, value: r.value, effective_date: r.effective_date, source: r.source, requested_at: move.requestedAt, linked_change_id: i ? head : '' }));
     return head;
   }
@@ -97,8 +98,11 @@ function simulate(seed, steps) {
       let L = ctx.ymdAddDays_(today, Math.floor(R() * 14) - 3);
       if (L < '2027-03-02') L = '2027-03-02';                 // 기간 시작(입실 3/1) 뒤
       const t = iso(now);
-      leave = { L, t, E: null, head: saveMove({ type: '학사 퇴실', effectiveDate: L, requestedAt: t }, today) };
-      log.push(today + ' 퇴실 입력: 퇴실일 ' + L);
+      // F6 학사 퇴실 저장(되살림 포함). 넷에 하나는 석식 '일반 석식으로' — 퇴실 입력 일시의 일반 석식 신청(의도)
+      const general = R() < 0.25;
+      leave = { L, t, E: null, head: saveMove({ type: '학사 퇴실', effectiveDate: L, requestedAt: t, dinner: general ? '일반 석식' : '중단' }, today) };
+      if (general) intents.push({ item: '석식', value: '일반 석식', eff: ctx.mealEffectiveDate_('to_general', t, { leaveDate: L }).date, req: t, seq: ++seq });
+      log.push(today + ' 퇴실 입력: 퇴실일 ' + L + (general ? ' 일반 석식으로' : ''));
     } else if (leave && !leave.E && R() < 0.15) {
       if (R() < 0.5) {
         // R11b 퇴실 취소: 퇴실이 없었던 것처럼(막힌 신청은 처음부터 쓰이지 않았으므로 그대로 무효)
@@ -133,7 +137,7 @@ function simulate(seed, steps) {
       assert.strictEqual(!!p.blocked, !!voidHall, 'seed ' + seed + ' blocked 판정\n' + log.slice(-6).join('\n'));
       if (!voidHall) intents.push({ item, value: to, eff, req, seq: ++seq });
       if (p.blocked) { check(step); continue; }
-      cancel(p.toCancel);
+      cancel(p.toCancel, '[자동] r' + (rid + 1) + ' 새 신청으로 대체');   // 신청 행 id = 다음 addRow
       if (!p.superseded) {
         assert.strictEqual(p.date, eff, 'seed ' + seed + ' 적용일\n' + log.slice(-4).join('\n'));
         addRow({ item, value: to, effective_date: p.date, source: 'F7', requested_at: req });
