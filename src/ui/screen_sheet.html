@@ -1,6 +1,6 @@
 <style>
   /* A4 가로 한 장(폭 297mm ≈ 1123px, 높이는 렌더러 실제 높이)을 화면 폭에 맞춰 줄여 보여 준다. 두 손가락 확대는 페이지 확대로 된다. */
-  .sheet-box { width: 100%; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+  .sheet-box { width: 100%; overflow: hidden; border: 1px solid var(--line); background: #fff; }   /* 둥근 모서리는 쓰지 않는다: 가장자리 글자가 깎인다 */
   .sheet-frame { width: 1123px; border: 0; background: #fff; transform-origin: 0 0; display: block; }
   .sheet-warn { background: var(--warn-weak); color: var(--warn); border-radius: 10px; padding: 8px 12px; margin: 8px 0; }
   .sheet-link { display: inline-block; margin-top: 8px; }
@@ -82,11 +82,12 @@
         frame.setAttribute('sandbox', 'allow-same-origin');   // 스크립트는 못 돌고, 높이만 읽는다
         function fit() {
           var k = Math.min(1, box.clientWidth / 1123);
-          var h = 726 * Math.max(1, r.pageCount || 1);   // A4 가로 한 쪽 ≈ 544pt = 726px(읽을 수 없을 때 대체값)
-          try { var sh = frame.contentDocument.documentElement.scrollHeight; if (sh >= 300) h = sh; } catch (e) { /* 높이를 못 읽으면 쪽 수로 */ }   // 읽은 값을 그대로 쓴다(max하면 아래에 빈칸이 남는다)
+          // 대체값 726(= 544pt 한 쪽). scrollHeight는 iframe 높이보다 작게 안 나오므로 대체값이 쪽 높이보다 크면 빈칸이 남는다
+          var h = 726 * Math.max(1, r.pageCount || 1);
+          try { var sh = frame.contentDocument.documentElement.scrollHeight; if (sh >= 300) h = sh; } catch (e) { /* 높이를 못 읽으면 쪽 수로 */ }
           frame.style.height = h + 'px';
           frame.style.transform = 'scale(' + k + ')';
-          box.style.height = Math.ceil(h * k) + 'px';
+          box.style.height = (Math.ceil(h * k) + 2) + 'px';   // border-box라 테두리 2px를 더한다
         }
         frame.addEventListener('load', fit);
         state.fit = fit;

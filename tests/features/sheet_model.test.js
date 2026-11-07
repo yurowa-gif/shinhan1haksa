@@ -229,6 +229,7 @@ test('응답에 실제 오늘(today)이 있다 — ?date=로 들어와도 "오�
 test('예비 감독: 금요일은 미리보기·PDF 직전 HTML 머리말에 "예비 박선생", 월~목은 예비 칸이 없다', () => {
   const FRI_ = '2027-03-05';
   const names = { dutyNames: '김선생', standbyNames: '박선생' };
+  env.asOwner((c) => c.appendRecord_('settings', { key: 'print.vacant_label', value: '빈자리', memo: '' }, ADMIN, 'config'));   // 기본값이 아닌 설정: PDF도 같은 설정을 쓰는지
   const pv = plain(env.call(ATT, 'getAttendanceSheet', FRI_, names));
   assert.ok(pv.html.includes('예비 박선생') && pv.html.includes('김선생'), '미리보기 머리말');
   let pdfHtml = '';
@@ -237,7 +238,8 @@ test('예비 감독: 금요일은 미리보기·PDF 직전 HTML 머리말에 "�
     return c.getAttendanceSheetPdf(FRI_, names);
   }));
   assert.ok(pdf.ok); assert.ok(pdfHtml.includes('예비 박선생') && pdfHtml.includes('김선생'), 'PDF로 바꾸기 직전 HTML 머리말');
-  assert.strictEqual(pdfHtml, pv.html, 'PDF는 미리보기와 같은 HTML');
+  assert.strictEqual(pdfHtml, pv.html, 'PDF는 미리보기와 같은 HTML(설정 포함)');
+  assert.ok(pv.html.includes('빈자리'), '설정한 공석 글자가 인쇄 HTML에 나온다');
   const wed = plain(env.call(ATT, 'getAttendanceSheet', WED, { dutyNames: '김선생' }));
   assert.ok(!wed.html.includes('예비'), '월~목에는 예비 칸이 없다');
   assert.ok(plain(env.call(ATT, 'getAttendanceSheet', FRI_)).html.includes('예비 ________'), '금요일 이름이 없으면 빈칸');
