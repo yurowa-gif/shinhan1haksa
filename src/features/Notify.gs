@@ -9,27 +9,29 @@
  * - notified = 모두 보냈다. false이면 화면이 "상대 선생님께 직접 알려 주세요"를 보여 준다.
  */
 function notifyMail_(toEmails, subject, body, actorEmail) {
+  if (_lockDepth > 0) throw new Error('notifyMail_은 락 밖에서 불러야 합니다');   // 락 안에서 메일을 보내면 락을 오래 잡는다(부르는 쪽 실수를 바로 드러냄)
   var none = { notified: false, sent: 0, failed: 0 };
   if (PropertiesService.getScriptProperties().getProperty('MAIL_ENABLED') !== 'true') return none;
   var seen = {}, to = [];
   (toEmails || []).forEach(function (e) {
     var m = normalizeEmail_(e);
-    if (!m || m.indexOf('@') < 1 || /@example\.com$/.test(m) || seen[m]) return;
+    // 쉼표·세미콜론·공백·꺾쇠가 든 값(여러 주소 한 칸)과 example.com·그 하위 도메인(가짜 주소)은 뺀다
+    if (!m || m.indexOf('@') < 1 || /[\s,;<>]/.test(m) || /@([^@]*\.)?example\.com$/.test(m) || seen[m]) return;
     seen[m] = true;
     to.push(m);
   });
   if (!to.length) return none;
-  var quota = -1;
-  try { quota = MailApp.getRemainingDailyQuota(); } catch (e) { /* 한도를 못 읽으면 보내지 않는다 */ }
+  var quota = -1, quotaErr = '';
+  try { quota = MailApp.getRemainingDailyQuota(); } catch (e) { quotaErr = notifyErrText_(e); }   // 한도를 못 읽으면 보내지 않는다(원인은 기록)
   if (!(quota >= to.length)) {
-    notifyAudit_('notify:quota', '받는 사람 ' + to.length + '명, 남은 한도 ' + quota, actorEmail);
+    notifyAudit_('notify:quota', '받는 사람 ' + to.length + '명, ' + (quotaErr ? '한도를 읽지 못함: ' + quotaErr : '남은 한도 ' + quota), actorEmail);
     return none;
   }
-  var sent = 0, failed = 0;
+  var sent = 0, failed = 0, firstErr = '';
   to.forEach(function (addr) {
-    try { MailApp.sendEmail(addr, subject, body); sent++; } catch (e) { failed++; }
+    try { MailApp.sendEmail(addr, subject, body); sent++; } catch (e) { failed++; if (!firstErr) firstErr = notifyErrText_(e); }
   });
-  if (failed) notifyAudit_('notify:failed', '받는 사람 ' + to.length + '명 중 ' + failed + '명 실패', actorEmail);
+  if (failed) notifyAudit_('notify:failed', '받는 사람 ' + to.length + '명 중 ' + failed + '명 실패: ' + firstErr, actorEmail);
   return { notified: failed === 0 && sent > 0, sent: sent, failed: failed };
 }
 
@@ -40,4 +42,9 @@ function notifyAudit_(action, detail, actorEmail) {
   } catch (e) {
     console.warn('알림 기록 생략: ' + e.message);
   }
+}
+
+/** 오류 문구를 기록용으로: 이메일 주소는 '(이메일)'로 지우고 200자까지 */
+function notifyErrText_(e) {
+  return String((e && e.message) || e || '').replace(/[^\s@,;<>"']+@[^\s,;<>"']+/g, '(이메일)').slice(0, 200);
 }
