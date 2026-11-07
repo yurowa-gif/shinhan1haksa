@@ -44,13 +44,13 @@ function permissions_() {
     'seat.edit': { roles: ['admin', 'hall_teacher'] },
     'seat.layout': { roles: ['admin'] },
     // ── 2단계(docs/plan/stage2.md 2절 "2단계 권한 키"). 학생·학부모는 3단계(F14)에서 연다 ──
-    // 근무표(F3): 보기는 교사 역할, 편성은 관리자·근무표 담당자, 교대는 본인 칸(함수 안에서 확인), 기록표 파일은 관리자
+    // 근무표(F3): 보기는 1학사 교사(담임만인 계정 제외), 편성은 관리자·근무표 담당자, 교대는 본인 칸(함수 안에서 확인), 기록표 파일은 관리자·근무표 담당자
     'duty.view': { roles: ['admin', 'duty_manager', 'hall_teacher', 'attendance'] },
     'duty.edit': { roles: ['admin', 'duty_manager'] },
     // 그날 "운영 안 함" 켜고 끄기(운영 여부·메모만): 관리자는 자습 일정에서, 근무표 담당자는 근무표에서(결정 44)
     'duty.operating': { roles: ['admin', 'duty_manager'] },
     'duty.swap': { roles: ['admin', 'duty_manager', 'hall_teacher'] },
-    'duty.record': { roles: ['admin'] },
+    'duty.record': { roles: ['admin', 'duty_manager'] },   // 기록표 파일(엑셀): 관리자·근무표 담당자(결정 48)
     // OUT(F4): 보기 범위는 함수 안(vioVisibleIds_). 1학사 교사(학사 교사·출결 담당)는 학사생 전체, 담임은 자기 반(결정 45)
     'out.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] },
     // dutyWindow: 발생일(ymd)의 실제 근무자가 ymd ≤ 오늘 ≤ ymd+N 동안 통과(값은 Q2 답) — C8s(isOnDutyFor_) 전까지 쓰이지 않는다
