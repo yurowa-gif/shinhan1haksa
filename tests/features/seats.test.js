@@ -112,7 +112,7 @@ test('가짜 좌석표의 번호가 결정 37 규칙과 같다(1층 줄-순번 3
 /* ───── 격자 저장 계획 ───── */
 
 const ex = (id, row, col, kind, label) => ({ id, row, col, kind, label });
-const gp = (existing, desired, assigned, rows, cols, style, past) => plain(pure.seatGridPlan_(existing, desired, assigned || [], rows || 3, cols || 3, style || 'room', past || []));
+const gp = (existing, desired, assigned, rows, cols, style, past, kept) => plain(pure.seatGridPlan_(existing, desired, assigned || [], rows || 3, cols || 3, style || 'room', past || [], kept || assigned || []));
 
 test('seatGridPlan_: 새 칸·바뀐 종류·없앤 칸을 만들고 번호를 다시 매긴다', () => {
   const existing = [ex('a', 1, 1, '좌석', '1'), ex('b', 1, 2, '좌석', '2'), ex('c', 1, 3, '기둥', '')];
@@ -557,6 +557,30 @@ test('saveSpace: 번호 쓰기가 실패하면 이름도 바뀌지 않는다(번
   assert.strictEqual(JSON.stringify([s.db.spaces.find((x) => x.id === sa.id), s.db.seats.filter((x) => x.space_id === sa.id)]), before);
   s.flags.failUpdate = false;
   assert.strictEqual(plain(s.c.saveSpace({ id: sa.id, name: '자습 3호', gender: sa.gender, rows: sa.rows, cols: sa.cols, confirmRelabel: true })).ok, true, '다시 하면 된다');
+});
+
+/* ───── 격자 거부 문구는 막힌 이유대로 ───── */
+
+test('오늘 앉힌 자리·기간 시작 전에 앉힌 자리는 풀면 바로 바꿀 수 있으므로 "먼저 배정을 풀어 주세요", 이전부터 앉았던 자리는 "기간이 끝난 뒤"', () => {
+  const FREE = '먼저 배정을 풀어 주세요';
+  for (const today of ['2027-03-20', '2027-02-20']) {   // 기간 시작 뒤(오늘 앉힘) / 시작 전(적용일 = 시작일)
+    const s = admin(today);
+    const d = data(s);
+    const sp = d.spaces.find((x) => x.name === 'SA3실');
+    const seat = emptySeat(d, 'SA3실');
+    s.db.seat_assignments = s.db.seat_assignments.filter((a) => a.seat_id !== seat.id);   // 배정 기록이 전혀 없는 자리에서 시작
+    assert.strictEqual(asgn(s, seat.id, s1.lateEntrantId).ok, true);
+    const without = () => gridOf(data(s).spaces.find((x) => x.id === sp.id)).filter((c) => !(c.row === seat.row && c.col === seat.col));
+    const blocked = plain(s.c.previewSpaceGrid(sp.id, without()));
+    assert.strictEqual(blocked.ok, false, today);
+    assert.ok(blocked.errors[0].includes(FREE) && !blocked.errors[0].includes('끝난 뒤'), today + ' ' + blocked.errors[0]);
+    assert.strictEqual(unassign(s, seat.id).ok, true);   // 오늘 시작한(또는 기간 시작 전) 행은 취소되어 기록이 남지 않는다
+    assert.strictEqual(plain(s.c.previewSpaceGrid(sp.id, without())).ok, true, today + ' 풀면 바로 바꿀 수 있다');
+  }
+  const s = admin();   // 가짜 데이터: 기간 시작부터 앉은 학생 → 풀어도 기록이 남는다
+  const floor = data(s).spaces[0], seated = floor.cells.find((c) => c.studentId);
+  const kept = plain(s.c.previewSpaceGrid(floor.id, gridOf(floor).filter((c) => !(c.row === seated.row && c.col === seated.col))));
+  assert.ok(kept.errors[0].includes(TRUE_MSG) && !kept.errors[0].includes(FREE), kept.errors[0]);
 });
 
 /* ───── 동시 편집·원자성·끝난 기간 ───── */
