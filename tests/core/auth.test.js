@@ -25,6 +25,19 @@ test('학사 교사: 담당 학생 또는 근무일만', () => {
   assert.ok(can(['hall_teacher'], { isOnDuty: true }));
   assert.ok(!can(['hall_teacher'], {}));
 });
+test('wideView(보기 키): 학사 교사도 이번 기간 학사생 전체, 미등록은 제외 · 기본(쓰기)은 그대로', () => {
+  const wide = (roles, facts) => ctx.canAccessStudentByFacts_(roles, Object.assign({}, NONE, facts), VIEW, true);
+  assert.ok(wide(['hall_teacher'], { isEnrolled: true }));
+  assert.ok(!wide(['hall_teacher'], {}));
+  assert.ok(!can(['hall_teacher'], { isEnrolled: true }), 'wide 표시가 없으면 담당·근무일만');
+  assert.ok(!wide(['homeroom'], { isEnrolled: true }), '담임은 wide여도 자기 반만');
+  assert.ok(!wide(['parent'], { isEnrolled: true }) && !wide(['student'], { isEnrolled: true }));
+});
+test('permissions_: wideView는 보기 키 3개에만(student.view·status.view·exception.view), 쓰기·면담 키는 없다', () => {
+  const p = ctx.permissions_();
+  const wideKeys = Object.keys(p).filter((k) => p[k].wideView).sort();
+  assert.deepStrictEqual(wideKeys, ['exception.view', 'status.view', 'student.view']);
+});
 test('담임: 자기 반만', () => {
   assert.ok(can(['homeroom'], { inHomeroom: true }));
   assert.ok(!can(['homeroom'], { isAssigned: true }));

@@ -177,6 +177,15 @@ test('범위 판정: 출결 담당만 가진 계정은 이번 기간 학사생 �
   env.expectDenied(acc.soloAccounts.duty_manager, 'student.view', 'getStudentSummary', enrolled.id);
 });
 
+test('범위 판정(wideView): 학사 교사는 담당 아닌 학사생도 getStudentSummary 가능, 미등록 학생은 거부', () => {
+  const env = createGasEnv();
+  const acc = env.seedFake();
+  const T = acc.TEST_TEACHER_EMAIL;
+  const notMine = env.rows('enrollments').find((e) => e.teacher_email !== T && e.student_id !== acc.unenrolledStudentId);
+  env.expectAllowed(T, 'getStudentSummary', notMine.student_id);
+  env.expectDenied(T, 'student.view', 'getStudentSummary', acc.unenrolledStudentId);
+});
+
 test('접속자 이메일을 받지 못하면(빈 값) 거부, 임시 사용자 키는 빈 값이 아님', () => {
   const env = createGasEnv();
   env.seedFake();
