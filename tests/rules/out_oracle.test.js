@@ -1,11 +1,13 @@
 /**
  * R5 OutRules 오라클 + 무작위 시험(시드 고정).
  *
- * 오라클 = PRD F1·F4, 결정 10·22, 총괄 결정(설정 변경은 앞으로만)을 그대로 옮긴 아주 단순한 모델. 규칙 함수와 다르게
- * "단위(학생, 묶음)마다 OUT이 살아 있어야 하는가"만 장부로 들고 다닌다:
- *   - 자격 행 = 확정 + 달력 날짜 + 유형이 지금 자동 대상 + (그 유형을 넓힌 시각 이후 확정)
- *   - 살아 있는 OUT은 그 단위에 "자격 행이거나 만들 때 유형과 같은 확정 행"이 남아 있는 동안 유지, 없으면 사라진다.
+ * 오라클 = PRD F1·F4, 결정 10·22·40을 사건 기록으로 옮긴 아주 단순한 모델. 규칙 함수(rule_name·since·created_at 비교)와 다르게
+ * "단위(학생, 묶음)마다 OUT이 살아 있어야 하는가"를 사건마다 장부로 들고 다닌다:
+ *   - 자격 행 = 확정 + 달력 날짜 + 유형이 지금 자동 대상 + (그 유형을 넓힌 시각 이후 확정). 새로 만들 때만 쓴다.
+ *   - OUT의 근거 행 = 만들 때 센 자격 행 + 만든 뒤 확정된 행 + (OUT이 있는 동안 그 유형을 다시 넓혔으면 모든 행).
+ *     근거 행 중 확정이 하나도 안 남을 때(특이사항 취소·확정 해제)만 OUT이 사라진다. 설정 변경은 기존 OUT을 죽이지 않는다(결정 40).
  *   - 살아 있는 OUT이 없고 자격 행이 있으면 생긴다. 단 관리자가 직접 취소한 단위는 다시 생기지 않는다.
+ *   - 대표 유지: 지금 대표 행이 근거로 남아 있으면 대표를 옮기지 않는다.
  * 사건(무작위): 특이사항 입력(하루~사흘 묶음, 확정/요청), 확정, 취소, 요청으로 되돌림, 설정 넓힘·좁힘, 관리자 취소,
  * 사람이 메모 고침, 같은 OUT 중복 저장, 맞추기 실행. 실행마다 (1) 결과를 저장한 뒤 다시 실행하면 0건(수렴) (2) 살아 있는 OUT 단위가 오라클과
  * 같음 (3) 단위마다 OUT은 하나, 학생·기간이 특이사항과 같음 (4) 직접 OUT·사람이 고친 메모는 그대로 를 확인한다.
@@ -33,7 +35,8 @@ function simulate(seed, steps) {
   const violations = [{ id: 'direct1', term_id: 'T1', student_id: 's1', source: '직접', status: '유효', memo: '직접 입력', rule_name: '휴대폰' }];
   let autoTypes = BASE_TYPES.slice();
   const since = {};
-  const oracle = {};                     // unitKey → {live, createdType, blocked}
+  const oracle = {};                     // unitKey → {live, createdType, createdAt, basis:{id:true}, sticky, blocked}
+  const lastSrc = {};                    // violationId → 지난 확인 때 source_exception_id
   const humanMemo = {};                  // violationId → memo
   const log = [];
 
@@ -45,9 +48,11 @@ function simulate(seed, steps) {
 
   function apply(r) {
     for (const c of r.toCancel) Object.assign(violations.find((v) => v.id === c.violationId), { status: '취소', cancel_reason: c.reason });
-    for (const c of r.toCreate) violations.push(Object.assign({ id: 'v' + (++vseq) }, c));
+    for (const c of r.toCreate) violations.push(Object.assign({ id: 'v' + (++vseq), created_at: iso(now) }, c));
     for (const u of r.toUpdate) Object.assign(violations.find((v) => v.id === u.violationId), u.patch);
   }
+
+  const supports = (ent, e) => e.status === '확정' && ctx.ymdIsValid_(e.date) && (ent.basis[e.id] || e.confirmed_at > ent.createdAt || ent.sticky);
 
   function oracleStep() {
     const units = {};
@@ -55,13 +60,13 @@ function simulate(seed, steps) {
     for (const k of Object.keys(units)) {
       const rows = units[k];
       const ent = oracle[k];
-      if (ent && ent.live) {
-        const keep = rows.filter((e) => e.status === '확정' && ctx.ymdIsValid_(e.date) &&
-          (eligible(e) || (base(e.type) === ent.createdType && sinceOk(e, ent.createdType))));
-        if (!keep.length) ent.live = false;
-      }
+      if (ent && ent.live && !rows.some((e) => supports(ent, e))) ent.live = false;
       const E = rows.filter(eligible).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id < b.id ? -1 : 1));
-      if ((!ent || !ent.live) && E.length && !(ent && ent.blocked)) oracle[k] = { live: true, createdType: base(E[0].type), blocked: false };
+      if ((!ent || !ent.live) && E.length && !(ent && ent.blocked)) {
+        const basis = {};
+        E.forEach((e) => { basis[e.id] = true; });
+        oracle[k] = { live: true, createdType: base(E[0].type), createdAt: iso(now), basis, sticky: false, blocked: false };
+      }
     }
   }
 
@@ -78,6 +83,9 @@ function simulate(seed, steps) {
       assert.ok(!implKeys[k], where + '\n같은 단위에 OUT 둘: ' + k);
       implKeys[k] = true;
       if (humanMemo[v.id] !== undefined) assert.strictEqual(v.memo, humanMemo[v.id], where + '\n사람 메모가 바뀜');
+      const prev = exceptions.find((e) => e.id === lastSrc[v.id]);
+      if (prev && supports(oracle[k], prev)) assert.strictEqual(v.source_exception_id, prev.id, where + '\n대표가 옮겨짐 ' + v.id);
+      lastSrc[v.id] = v.source_exception_id;
     }
     const oracleKeys = Object.keys(oracle).filter((k) => oracle[k].live).sort();
     assert.deepStrictEqual(Object.keys(implKeys).sort(), oracleKeys, where);
@@ -108,7 +116,10 @@ function simulate(seed, steps) {
     } else if (x < 0.62) {
       const t = pick(['기타', '미인정지각']);
       if (autoTypes.includes(t)) { autoTypes = autoTypes.filter((y) => y !== t); log.push('설정 좁힘 -' + t); }
-      else { autoTypes.push(t); since[t] = iso(now); log.push('설정 넓힘 +' + t + ' ' + since[t]); }
+      else {
+        autoTypes.push(t); since[t] = iso(now); log.push('설정 넓힘 +' + t + ' ' + since[t]);
+        Object.keys(oracle).forEach((k) => { if (oracle[k].live && oracle[k].createdType === t) oracle[k].sticky = true; });
+      }
     } else if (x < 0.67) {
       const live = violations.filter((v) => v.source === 'F1자동' && v.status === '유효');
       if (live.length) {

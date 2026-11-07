@@ -87,7 +87,8 @@ function outDutyText_(dutyByDate, date) {
  *   (없으면 요청자), detected_by = dutyByDate[날짜](없으면 빈칸), rule_name = ruleName + '(만들 때 유형)',
  *   memo = '사전 특이사항 자동: 유형'(자격 행이 여러 날이면 ' 외 N일').
  * - 유지 행(이미 있는 OUT 하나에 대해): 자격 행, 또는 확정·날짜 맞음이고 유형이 그 OUT의 rule_name 괄호 유형(만들 때 유형)과
- *   같은 행(그 유형이 autoTypeSince에 있으면 그 시각 이후 확정만). → 설정을 좁혀도 이미 있는 OUT은 유지된다.
+ *   같은 행(그 유형의 autoTypeSince가 OUT의 created_at 이전이면 그 시각 이후 확정만 — OUT이 생긴 뒤 다시 넓힌 since로는
+ *   거르지 않는다). → 설정을 좁혔다가 다시 넓혀도 이미 있는 OUT은 유지된다(결정 40). created_at이 비면 거르지 않는다.
  *   rule_name을 읽지 못하면(알 수 없음) 유지 행 = 자격 행만이고, 자격 행이 없어도 확정·날짜 맞는 행이 남아 있으면
  *   **그대로 둔다**(유형으로는 취소하지 않고 대표도 옮기지 않는다 — 거짓 사유 취소·비자동 행으로 대표 이동 방지).
  * - 대표 유지: 지금 source_exception_id 행이 유지 행이면 대표를 옮기지 않는다(두 번째 실행 0건). 아니면 유지 행 중 가장 이른 것.
@@ -177,7 +178,10 @@ function reconcileAutoOuts_(exceptions, violations, opts) {
     var u = units[key];
     var recorded = outRecordedType_(v.rule_name, opts.ruleName);
     var keepers = u.confirmed.filter(function (e) {
-      return eligible(e) || (recorded !== null && attTypeBase_(e.type) === recorded && sinceOk(e, recorded));
+      // since가 이 OUT보다 늦으면 OUT이 있은 뒤의 설정 변경이다 → 그 since로 거르지 않는다(결정 40)
+      // shortcut: 다시 넓히면 처음 넓히기 전에 확정된 같은 유형 행도 유지 행이 된다(덜 죽일 뿐 거짓 취소는 없음), 설정이 넓힌 이력을 남기면 고친다
+      return eligible(e) || (recorded !== null && attTypeBase_(e.type) === recorded &&
+        (sinceOk(e, recorded) || attIso_(v.created_at) < sinceMap[recorded]));
     });
     if (!keepers.length) {
       if (recorded === null && u.confirmed.length) {   // 알 수 없음: 유형으로는 취소하지 않고 그대로 둔다
@@ -196,7 +200,6 @@ function reconcileAutoOuts_(exceptions, violations, opts) {
     }
     if (live[key]) { toCancel.push({ violationId: vid, reason: prefix + '같은 특이사항의 자동 OUT이 이미 있습니다(중복)' }); return; }
     live[key] = vid;
-    if (!keepers.length) return;   // 알 수 없음 + 자격 없음: 고치지도 않는다
     var patch = outUpdatePatch_(v, rep, opts);
     if (Object.keys(patch).length) toUpdate.push({ violationId: vid, patch: patch });
   });

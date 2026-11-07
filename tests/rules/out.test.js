@@ -363,3 +363,37 @@ test('사람이 OUT의 날짜와 시각을 함께 고치면 날짜·시각 모�
   const edited = v1.map((v) => Object.assign({}, v, { occurred_at: '2027-03-04T21:10:00' }));
   assert.deepStrictEqual(run([EX('e1', { blocks: '18:00-20:00' })], edited).toUpdate[0].patch.occurred_at, '2027-03-03T18:00:00');
 });
+
+/* ───── 총괄 오라클 감사(변이 생존분) ───── */
+
+test('설정을 좁혔다가 다시 넓혀도 이미 있는 자동 OUT은 그대로(결정 40: 설정 변경은 기존 OUT을 죽이지 않는다)', () => {
+  const exc = [EX('e1', { type: '기타', confirmed_at: '2027-03-06T09:00:00' })];
+  const wide1 = { autoTypes: ['미인정결석', '기타'], autoTypeSince: { '기타': '2027-03-05T00:00:00' } };
+  let v = settle(exc, [], wide1).map((x) => Object.assign({ created_at: '2027-03-06T10:00:00' }, x));
+  v = settle(exc, v, { autoTypes: ['미인정결석'], autoTypeSince: wide1.autoTypeSince });            // 좁힘: 유지
+  v = settle(exc, v, { autoTypes: ['미인정결석', '기타'], autoTypeSince: { '기타': '2027-03-08T00:00:00' } });   // 다시 넓힘
+  assert.deepStrictEqual(v.filter((x) => x.status === '유효').map((x) => x.source_exception_id), ['e1']);
+  // 처음 넓힌 시각 이전에 확정된 행만 남으면(그 OUT을 만들 때 세지 않은 행) 지금처럼 취소
+  const v2 = settle([EX('e0', { group_id: 'G', type: '기타', confirmed_at: '2027-03-01T09:00:00' }), EX('e1', { group_id: 'G', type: '기타', date: '2027-03-04', confirmed_at: '2027-03-06T09:00:00' })], [], wide1)
+    .map((x) => Object.assign({ created_at: '2027-03-06T10:00:00' }, x));
+  const r = run([EX('e0', { group_id: 'G', type: '기타', confirmed_at: '2027-03-01T09:00:00' }), EX('e1', { group_id: 'G', type: '기타', date: '2027-03-04', status: '취소' })], v2, wide1);
+  assert.strictEqual(r.toCancel.length, 1);
+});
+
+test('대표 유지: 지금 대표가 유지 행이면 더 이른 행이 나중에 확정돼도 옮기지 않는다', () => {
+  const exc = [EX('g1', { group_id: 'G', date: '2027-03-03', status: '요청' }), EX('g2', { group_id: 'G', date: '2027-03-04' })];
+  const v = settle(exc, []);
+  assert.strictEqual(v[0].source_exception_id, 'g2');
+  const later = [Object.assign({}, exc[0], { status: '확정' }), exc[1]];
+  assert.deepStrictEqual(run(later, v), NOTHING);
+});
+
+test('대표: 같은 날짜면 id가 앞선 행', () => {
+  const exc = [EX('b', { group_id: 'G' }), EX('a', { group_id: 'G' })];
+  assert.strictEqual(run(exc).toCreate[0].source_exception_id, 'a');
+});
+
+test('rule_name을 못 읽고 자격 행도 없으면 취소도 고침도 없다(대표·날짜·근무교사 그대로)', () => {
+  const v = [Object.assign({}, run([EX('e1')]).toCreate[0], { id: 'v1', rule_name: '직접 고친 이름', occurred_at: '2027-03-09T00:00:00', detected_by: '' })];
+  assert.deepStrictEqual(run([EX('e1', { type: '병결' })], v), NOTHING);
+});
