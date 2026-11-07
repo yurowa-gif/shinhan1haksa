@@ -30,7 +30,8 @@ const fs = require('fs');
 const path = require('path');
 
 const PLAN5 = {
-  status_changes: ['student_id', 'item', 'value', 'requested_at', 'effective_date', 'effective_date_auto', 'reason', 'doc_submitted', 'linked_change_id', 'source', 'status', 'memo'],
+  // cancel_reason은 2단계 승인 추가(결정 41)
+  status_changes: ['student_id', 'item', 'value', 'requested_at', 'effective_date', 'effective_date_auto', 'reason', 'doc_submitted', 'linked_change_id', 'source', 'status', 'memo', 'cancel_reason'],
   day_schedules: ['date', 'operating', 'start', 'end', 'day_type', 'memo', 'status'],
   blocks: ['term_type', 'day_type', 'seq', 'start', 'end', 'label', 'status'],
   fixed_schedules: ['student_id', 'month', 'weekday', 'blocks', 'code', 'submitted_at', 'parent_agreed_at', 'teacher_confirmed_at', 'status'],
@@ -97,11 +98,56 @@ test('setup: 기간별 탭을 만들고 id 앞 8자가 겹치면 멈춘다 / 이
   sctx.openFile_ = () => ({});
   sctx.ensureSheet_ = (ss, kind, name) => { const had = made.has(name); made.add(name); return (had ? '[탭 유지] ' : '[탭 생성] ') + name; };
   const r1 = []; sctx.ensureTermSheets_(r1);
-  assert.deepStrictEqual(r1.map((x) => x.trim()), ['[탭 생성] exceptions_a1a1a1a1', '[탭 생성] exceptions_a2a2a2a2']);
+  assert.deepStrictEqual(r1.map((x) => x.trim()), ['[탭 생성] exceptions_a1a1a1a1', '[탭 생성] violations_a1a1a1a1',
+    '[탭 생성] exceptions_a2a2a2a2', '[탭 생성] violations_a2a2a2a2']);
   const r2 = []; sctx.ensureTermSheets_(r2);
   assert.ok(r2.every((x) => x.includes('[탭 유지]')), '두 번째 실행은 유지');
   sctx.readAll_ = () => [{ id: 'aaaaaaaa-0001', name: 'A' }, { id: 'aaaaaaaa-0002', name: 'B' }];
   assert.throws(() => sctx.ensureTermSheets_([]), /탭 이름이 겹칩니다/);
+});
+
+/* ───── 2단계(docs/plan/stage2.md 5절, 결정 41) ───── */
+
+const TAIL = ['created_at', 'created_by', 'updated_at', 'updated_by'];
+const full = (body) => ['id'].concat(body, TAIL);
+
+test('2단계: 바뀐 탭의 전체 헤더가 5절 승인안 그대로(새 탭 3개, 열 추가 2개)', () => {
+  const want = {
+    'db/duty_slots': full(['date', 'slot', 'end_time', 'original_email', 'actual_email', 'swapped_at', 'swapped_by', 'status', 'memo']),
+    'db/violation_rules': full(['name', 'description', 'active', 'sort_order']),
+    'db/violations_a1b2c3d4': full(['term_id', 'student_id', 'occurred_at', 'rule_id', 'rule_name', 'memo', 'detected_by', 'entered_by',
+      'status', 'source', 'source_exception_id', 'cancel_reason']),
+    'counsel/counsel_notes': full(['student_id', 'date', 'teacher_email', 'type', 'target', 'linked_violation_id', 'content',
+      'show_to_parent', 'status', 'cancel_reason']),
+    'db/status_changes': full(['student_id', 'item', 'value', 'requested_at', 'effective_date', 'effective_date_auto', 'reason',
+      'doc_submitted', 'linked_change_id', 'source', 'status', 'memo', 'cancel_reason'])
+  };
+  for (const [key, cols] of Object.entries(want)) {
+    const [kind, sheet] = key.split('/');
+    assert.deepStrictEqual(plain(ctx.headersFor_(kind, sheet)), cols, key);
+  }
+  assert.strictEqual(ctx.termTabBase_('violations_a1b2c3d4'), 'violations');
+  assert.strictEqual(ctx.termTabBase_('violation_rules'), '', 'violation_rules는 기간별 탭이 아니다');
+  assert.deepStrictEqual(Object.keys(ctx.SCHEMA_TERM_TABS), ['exceptions', 'violations']);
+  // 탭 목록: 2단계에 더한 것은 duty_slots·violation_rules뿐(duty_swaps·meal_counts·out_dismissals는 만들지 않는다)
+  assert.deepStrictEqual(Object.keys(ctx.SCHEMA.db), ['users', 'terms', 'students', 'enrollments', 'guardian_links', 'audit_log',
+    'status_changes', 'day_schedules', 'blocks', 'fixed_schedules', 'spaces', 'seats', 'seat_assignments', 'duty_slots', 'violation_rules']);
+  assert.deepStrictEqual(Object.keys(ctx.SCHEMA.counsel), ['counsel_notes']);
+});
+
+test('2단계: violations 열 = R5 초안(outDraft_)이 만드는 행의 열 그대로', () => {
+  const rctx = loadGs(['src/rules/DateRules.gs', 'src/rules/AttendanceRules.gs', 'src/rules/OutRules.gs']);
+  const draft = plain(rctx.outDraft_({ id: 'e1', term_id: 't', student_id: 's', date: '2027-03-03', blocks: 'ALL', type: '미인정결석' }, 1, {}));
+  assert.deepStrictEqual(Object.keys(draft), plain(ctx.SCHEMA_TERM_TABS.violations));
+});
+
+test('2단계: violation_rules 기본 항목 = PRD F4 4항목(자동 항목 이름은 R5 기본 이름과 같다)', () => {
+  assert.deepStrictEqual(plain(ctx.DEFAULT_VIOLATION_RULES), [
+    ['무단 지각·결석·이탈', '미인정 특이사항이 확정되면 자동'],
+    ['휴대폰·전자기기', ''],
+    ['자습 분위기 방해(과도한 수면, 교사 지시 불이행 포함)', ''],
+    ['기숙사 생활 위반', '']
+  ]);
 });
 
 test('src의 모든 시트 접근은 SCHEMA에 있는 탭 이름만 쓴다(오타 방지)', () => {

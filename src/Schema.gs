@@ -33,6 +33,7 @@ var ROLE_PRIORITY = ['admin', 'attendance', 'hall_teacher', 'duty_manager', 'hom
  * 탭별 본문 열(id·공통 꼬리 열 제외).
  * 0단계: users, terms, students, enrollments, guardian_links + audit_log(권한 거부 기록용, 9절).
  * 1단계: status_changes, day_schedules, blocks, fixed_schedules, spaces, seats, seat_assignments + 기간별 탭(SCHEMA_TERM_TABS).
+ * 2단계(결정 41): duty_slots, violation_rules, 기간별 violations, counsel_notes·status_changes 열 추가.
  */
 var SCHEMA = {
   db: {
@@ -50,7 +51,7 @@ var SCHEMA = {
     // 학사·기숙사·조식·석식 상태 변경 기록. 기간별로 나누지 않는다(상태는 학기를 넘어 누적).
     // item: 학사·기숙사·조식·석식, status: 유효·취소, source: 명단업로드·F6·F7
     status_changes: ['student_id', 'item', 'value', 'requested_at', 'effective_date', 'effective_date_auto',
-      'reason', 'doc_submitted', 'linked_change_id', 'source', 'status', 'memo'],
+      'reason', 'doc_submitted', 'linked_change_id', 'source', 'status', 'memo', 'cancel_reason'],   // cancel_reason: 결정 41
     // 날짜별 자습 일정. operating: TRUE/FALSE, status: 유효·취소
     day_schedules: ['date', 'operating', 'start', 'end', 'day_type', 'memo', 'status'],
     // 요일 유형별 출석 블록. term_type: 학기·방학, day_type: mon_thu·fri·sat·sun·특별 코드, status: 유효·취소
@@ -62,10 +63,18 @@ var SCHEMA = {
     spaces: ['name', 'gender', 'rows', 'cols', 'sort_order', 'status', 'memo'],
     seats: ['space_id', 'row', 'col', 'label', 'kind', 'status'],
     // 기간별 좌석 배정. valid_from·valid_to가 비면 기간 전체. status: 배정·취소
-    seat_assignments: ['term_id', 'seat_id', 'student_id', 'valid_from', 'valid_to', 'status', 'memo']
+    seat_assignments: ['term_id', 'seat_id', 'student_id', 'valid_from', 'valid_to', 'status', 'memo'],
+
+    /* ───── 2단계(docs/plan/stage2.md 5절, decisions.md 41 승인) ───── */
+    // 근무 칸. 기간별로 나누지 않는다(방학에도 근무, 집계는 달 단위). 근무자는 이메일. 마지막 교대만 남고 중간 단계는 audit_log
+    duty_slots: ['date', 'slot', 'end_time', 'original_email', 'actual_email', 'swapped_at', 'swapped_by', 'status', 'memo'],
+    // F4 위반 항목. 자동 항목 이름 '무단 지각·결석·이탈'은 바꾸지 않는다(R5가 이 이름으로 읽는다)
+    violation_rules: ['name', 'description', 'active', 'sort_order']
   },
   counsel: {
-    counsel_notes: ['student_id', 'date', 'teacher_email', 'type', 'content', 'show_to_parent', 'status']
+    // target·linked_violation_id·cancel_reason은 2단계(결정 41). 6단계 열은 그때 setup이 제자리에 끼운다
+    counsel_notes: ['student_id', 'date', 'teacher_email', 'type', 'target', 'linked_violation_id', 'content',
+      'show_to_parent', 'status', 'cancel_reason']
   },
   config: {
     settings: ['key', 'value', 'description']
@@ -115,7 +124,10 @@ var SCHEMA_TERM_TABS = {
   // status: 요청·확정·취소. 기간 입력은 날짜마다 1행, group_id로 묶는다.
   // blocks: 'ALL' 또는 'HH:mm-HH:mm;…'(블록 설정이 바뀌어도 기록의 뜻이 유지되도록 시각 범위로 쓴다)
   exceptions: ['term_id', 'group_id', 'student_id', 'date', 'blocks', 'type', 'reason', 'status',
-    'requested_by', 'requested_at', 'confirmed_by', 'confirmed_at', 'cancel_reason']
+    'requested_by', 'requested_at', 'confirmed_by', 'confirmed_at', 'cancel_reason'],
+  // F4 OUT(결정 41). 학기마다 초기화되므로 기간별. 열은 R5(OutRules.gs)·vocabulary.md violations와 같다
+  violations: ['term_id', 'student_id', 'occurred_at', 'rule_id', 'rule_name', 'memo', 'detected_by', 'entered_by',
+    'status', 'source', 'source_exception_id', 'cancel_reason']
 };
 
 /** 기간별 탭 이름. 예: termSheetName_('exceptions', 'a1b2c3d4-…') → 'exceptions_a1b2c3d4' */
@@ -148,6 +160,14 @@ var DEFAULT_BLOCKS = {
   sun: [['14:00', '15:30'], ['15:30', '17:00'], ['19:00', '20:30'], ['20:30', '22:00']]
 };
 var DEFAULT_BLOCK_DAY_ORDER = ['mon_thu', 'fri', 'sat', 'sun'];
+
+/** violation_rules 기본 항목(PRD F4, 결정 41) [name, description]. 이 순서가 sort_order 1~4 */
+var DEFAULT_VIOLATION_RULES = [
+  ['무단 지각·결석·이탈', '미인정 특이사항이 확정되면 자동'],
+  ['휴대폰·전자기기', ''],
+  ['자습 분위기 방해(과도한 수면, 교사 지시 불이행 포함)', ''],
+  ['기숙사 생활 위반', '']
+];
 
 /** '18:00'→'18', '09:00'→'09', '19:30'→'19:30', '24:00'→'24' (머리말 표기, R1 schedBlockLabel_과 같다) */
 function schemaHmShort_(hm) {

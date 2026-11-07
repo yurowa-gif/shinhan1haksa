@@ -49,9 +49,9 @@
 | rule_name | `직접`이면 F4 항목 이름. `F1자동`이면 **`무단 지각·결석·이탈(<만들 때 특이사항 유형>)`** 형식(R5가 이 괄호 유형으로 "설정 변경은 앞으로만"을 판정한다). F4 화면은 `F1자동` 행의 rule_name을 고치지 못하게 한다 |
 | cancel_reason | 자유 입력. 단, 규칙이 자동으로 취소한 행은 **`[자동] `**(대괄호·공백 포함)으로 시작한다. 이 머리말이 없는 `F1자동` 취소 행은 관리자가 직접 취소한 것으로 보고 다시 만들지 않는다(R5) |
 
-## 새 탭·열 어휘 (승인 대기, 2단계)
+## 새 탭·열 어휘 (2단계, 결정 41 승인)
 
-`docs/plan/stage2.md` 5절 구조 변경안(T0a)의 초안이다. 승인되면 S2-0b에서 "(승인 대기)"를 지우고 확정한다. 승인 전에는 브랜치에서 이 값으로 개발할 수 있지만, 새 탭·열을 쓰는 PR은 S2-0b 병합 뒤에 병합한다(stage2.md 0절 2).
+`docs/plan/stage2.md` 5절 구조 변경안 1~7은 2026-11-07 선생님이 모두 승인했다(결정 41). 열은 `src/Schema.gs`(S2-0b)에 있다: 새 탭 `duty_slots`·`violation_rules`·`violations_<기간>`(열은 위 violations 절), `counsel_notes`에 target·linked_violation_id·cancel_reason, `status_changes`에 cancel_reason(memo 뒤).
 
 | 탭 | 열 | 값 |
 | --- | --- | --- |
