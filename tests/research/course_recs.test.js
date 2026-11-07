@@ -39,12 +39,12 @@ const U = 'https://admission.snu.ac.kr/example';
 const fakeRef = { standard: new Set(['물리학', '화학', '기하', '확률과 통계']), map: { '확률과통계': '확률과 통계' }, sources: { [T]: U } };
 function row(o, line) {
   return Object.assign({ _line: line || 2, base_year: '2028', university: '가짜대', unit: '물리학과',
-    core_courses: '물리학', recommended_courses: '화학;기하', source_url: U, source_title: T }, o);
+    core_courses: '물리학', recommended_courses: '화학;기하', source_url: U, source_title: T, note: '' }, o);
 }
 function errsOf(rows) { return C.checkRecommendations(rows, fakeRef).join('\n'); }
 
-test('검사기: 맞는 행·미제시 행(두 과목 칸 빈칸)·대응표 과목은 통과', () => {
-  assert.strictEqual(errsOf([row({}), row({ unit: '자유전공', core_courses: '', recommended_courses: '' }, 3),
+test('검사기: 맞는 행·미제시 행(두 과목 칸 빈칸)·조건 note·대응표 과목은 통과', () => {
+  assert.strictEqual(errsOf([row({ note: '과학 진로선택 3과목 이상' }), row({ unit: '자유전공', core_courses: '', recommended_courses: '' }, 3),
     row({ unit: '수학과', core_courses: '', recommended_courses: '확률과통계' }, 4)]), '');
 });
 
@@ -64,7 +64,8 @@ test('검사기: 잡아야 할 것을 잡는다', () => {
     [{ recommended_courses: '화학;' }, /빈 과목/],
     [{ unit: ' 물리학과' }, /앞뒤 공백/],
     [{ unit: '문의 010-1234-5678' }, /전화번호/],
-    [{ unit: 'a@b.kr' }, /이메일/]
+    [{ unit: 'a@b.kr' }, /이메일/],
+    [{ note: '문의 02-123-4567' }, /note 이메일·전화번호/]
   ];
   for (const c of cases) assert.match(errsOf([row(c[0])]), c[1], JSON.stringify(c[0]));
   assert.match(errsOf([row({}), row({}, 3)]), /중복\(2번째 줄\)/);
@@ -75,6 +76,8 @@ test('검사기: sources.csv·대응표', () => {
   assert.deepStrictEqual(C.checkSources([s({})]), []);
   assert.match(C.checkSources([s({ url: 'https://cafe.naver.com/x' })]).join(), /공식 도메인/);
   assert.match(C.checkSources([s({ retrieved_at: '2026/11/06' })]).join(), /YYYY-MM-DD/);
+  assert.deepStrictEqual(C.checkSources([s({ published_date: '2026-04' })]), []);
+  assert.match(C.checkSources([s({ retrieved_at: '2026-11' })]).join(), /retrieved_at/);
   assert.match(C.checkSources([s({}), s({}, 3)]).join(), /문서명 중복/);
   const st = fakeRef.standard;
   assert.deepStrictEqual(C.checkNameMap([{ _line: 2, source_name: '확률과통계', standard_name: '확률과 통계' }], st), []);

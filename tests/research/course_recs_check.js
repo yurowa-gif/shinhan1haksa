@@ -2,7 +2,7 @@
  * 권장 이수 과목 CSV 검사(소유: RESEARCH). 순수 함수: 레코드 배열을 받아 오류 문장 배열을 돌려준다.
  * course_recs.test.js 가 실제 파일과 일부러 틀린 예시 둘 다에 쓴다.
  */
-const HEADER = ['base_year', 'university', 'unit', 'core_courses', 'recommended_courses', 'source_url', 'source_title'];
+const HEADER = ['base_year', 'university', 'unit', 'core_courses', 'recommended_courses', 'source_url', 'source_title', 'note'];
 const SOURCES_HEADER = ['source_title', 'publisher', 'url', 'published_date', 'retrieved_at', 'page'];
 const MAP_HEADER = ['source_name', 'standard_name'];
 
@@ -76,9 +76,8 @@ function checkSources(srcs) {
     const at = 'sources.csv ' + s._line + '번째 줄: ';
     for (const h of ['source_title', 'publisher', 'url', 'retrieved_at']) if (s[h] === '') errs.push(at + h + ' 빈칸');
     if (s.url !== '' && !isAllowedUrl(s.url)) errs.push(at + 'url이 https 공식 도메인이 아님: ' + s.url);
-    for (const h of ['published_date', 'retrieved_at']) {
-      if (s[h] !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(s[h])) errs.push(at + h + ' 형식은 YYYY-MM-DD');
-    }
+    if (s.published_date !== '' && !/^\d{4}-\d{2}(-\d{2})?$/.test(s.published_date)) errs.push(at + 'published_date 형식은 YYYY-MM-DD 또는 YYYY-MM');
+    if (s.retrieved_at !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(s.retrieved_at)) errs.push(at + 'retrieved_at 형식은 YYYY-MM-DD');
     if (seen[s.source_title]) errs.push(at + '문서명 중복');
     seen[s.source_title] = true;
   }
