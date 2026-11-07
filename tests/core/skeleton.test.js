@@ -8,13 +8,14 @@ const { createGasEnv } = require('../helpers/gas-fakes');
 
 const ctx = loadGs(['src/rules/DateRules.gs', 'src/Schema.gs', 'src/Auth.gs', 'src/Code.gs']);
 
-// 계획 표 그대로(4-1 답이 오면 이 표와 Auth.gs를 같이 고친다)
+// 계획 표 + 선생님 답(결정 44·45). 답이 더 오면 이 표와 Auth.gs를 같이 고친다
 const STAGE2_KEYS = {
   'duty.view': { roles: ['admin', 'duty_manager', 'hall_teacher', 'attendance'] },
   'duty.edit': { roles: ['admin', 'duty_manager'] },
+  'duty.operating': { roles: ['admin', 'duty_manager'] },
   'duty.swap': { roles: ['admin', 'duty_manager', 'hall_teacher'] },
   'duty.record': { roles: ['admin'] },
-  'out.view': { roles: ['admin', 'hall_teacher', 'homeroom'] },
+  'out.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] },
   'out.save': { roles: ['admin', 'hall_teacher'], scope: 'student', dutyWindow: 1 },
   'out.cancel': { roles: ['admin'] },
   'out.rules': { roles: ['admin'] },
@@ -22,13 +23,13 @@ const STAGE2_KEYS = {
   'counsel.view': { roles: ['admin', 'hall_teacher', 'homeroom'], scope: 'student', noDuty: true },
   'counsel.save': { roles: ['hall_teacher'], scope: 'student', noDuty: true },
   'counsel.cancel': { roles: ['hall_teacher'] },
-  'status.list': { roles: ['admin', 'hall_teacher', 'homeroom'] },
-  'status.view': { roles: ['admin', 'hall_teacher', 'homeroom'], scope: 'student' },
+  'status.list': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] },
+  'status.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'], scope: 'student' },
   'status.edit': { roles: ['admin', 'hall_teacher'], scope: 'student', noDuty: true },
   'meal.count': { roles: ['admin'] }
 };
 
-test('permissions_: 2단계 키 16개가 계획 표의 역할·범위·표시 그대로다(학생·학부모 없음)', () => {
+test('permissions_: 2단계 키 17개가 계획 표·결정 44·45의 역할·범위·표시 그대로다(학생·학부모 없음)', () => {
   const p = ctx.permissions_();
   for (const [key, want] of Object.entries(STAGE2_KEYS)) {
     assert.ok(p[key], key + ' 없음');
@@ -45,7 +46,8 @@ test('SCREENS: 2단계 화면 4개의 파일·제목·보기 키, 열 수 있는
   }
   const ok = (page, role) => plain(ctx.screenResolve_(page, [role])).ok;
   assert.strictEqual(ok('duty', 'attendance'), true);
-  assert.strictEqual(ok('outs', 'attendance'), false, '출결 담당은 OUT 화면 없음(Q7)');
+  assert.strictEqual(ok('outs', 'attendance'), true, '출결 담당도 OUT 화면(결정 45)');
+  assert.strictEqual(ok('duty', 'homeroom'), false, '담임은 근무표 없음(결정 45)');
   assert.strictEqual(ok('moves', 'homeroom'), true);
   assert.strictEqual(ok('mealcount', 'hall_teacher'), false);
   for (const page of Object.keys(want)) {
@@ -71,7 +73,7 @@ test('getHomeData: 홈 역할이 보기 키(duty.view·out.view·status.list)를
   env.seedFake();
   // 값은 각 CODING 세션이 시험한다. 여기서는 어느 홈에 어느 키가 있는지만 본다
   const teachers = [['test.admin@example.com', 'admin', 'counts', ['duty', 'food', 'out']],
-    ['test.attendance@example.com', 'attendance', 'exc', ['duty']],
+    ['test.attendance@example.com', 'attendance', 'exc', ['duty', 'food', 'out']],
     ['test.duty@example.com', 'duty_manager', 'month', ['duty']],
     ['test.teacher@example.com', 'hall_teacher', 'students', ['duty', 'food', 'out']],
     ['test.homeroom@example.com', 'homeroom', 'students', ['food', 'out']]];
@@ -84,13 +86,12 @@ test('getHomeData: 홈 역할이 보기 키(duty.view·out.view·status.list)를
     }
     assert.ok(d[kept] !== undefined, role + ': 기존 값 ' + kept);
   }
-  // 출결 담당 홈에는 OUT·급식 훅이 데이터를 돌려줘도 실리지 않는다(부르지 않는다)
-  const att = plain(env.as('test.attendance@example.com', (c) => {
-    c.vioHomeInfo_ = () => ({ twoOut: ['s1'] });
-    c.foodHomeInfo_ = () => ({ docMissing: 1 });
-    return c.getHomeData('attendance');
+  // 담임 홈에는 근무표 훅이 데이터를 돌려줘도 실리지 않는다(1학사 교사만 근무표, 결정 45)
+  const hr = plain(env.as('test.homeroom@example.com', (c) => {
+    c.dtyHomeInfo_ = () => ({ today: '21:30조' });
+    return c.getHomeData('homeroom');
   }));
-  assert.ok(!('out' in att) && !('food' in att), '출결 담당 홈에 OUT·급식 없음');
+  assert.ok(!('duty' in hr), '담임 홈에 근무 없음');
   // 훅 하나가 던져도 홈은 열리고 그 키만 {error}, 다른 훅·1단계 값은 그대로
   const broken = plain(env.as('test.teacher@example.com', (c) => {
     c.foodHomeInfo_ = () => { throw new Error('탭이 없습니다: meal_requests'); };
