@@ -197,17 +197,14 @@ function sheetRender_(ymd, names, timer) {
     return Object.assign(base, { ok: false, operating: true, error: '이 날은 출석 블록이 없어 출석부를 만들 수 없습니다. 자습 일정·블록에서 블록을 확인해 주세요.' });
   }
   var opts = { vacantLabel: built.settings.vacantLabel };
-  var plan = printSheetPlan_(model, opts);
-  var warnings = model.warnings.slice();
-  plan.forEach(function (p) {
-    (p.warnings || []).forEach(function (w) { warnings.push(p.name + ': ' + w); });   // 렌더러의 크기 경고(예: 표시 칸이 손글씨 하한보다 좁음)
-  });
+  var plan = printSheetPlan_(model, opts) || { pages: 1, warnings: [] };   // 공간이 없으면 null(안내 한 쪽)
+  var warnings = model.warnings.concat(plan.warnings);   // 렌더러의 크기·넘침 경고(예: 표시 칸이 손글씨 하한보다 좁음, 앞면에 안 들어간 것)
   var seats = 0, vacant = 0;
   model.spaces.forEach(function (sp) { sp.cells.forEach(function (c) { if (c.kind === 'seat') { seats++; if (c.vacant) vacant++; } }); });
   var html = printRenderSheet_(model, opts);
   if (timer) timer.lap('renderMs');
   return Object.assign(base, {
-    ok: true, operating: true, warnings: warnings, html: html, pageCount: plan.length,
+    ok: true, operating: true, warnings: warnings, html: html, pageCount: plan.pages,
     spaces: model.spaces.map(function (s) { return s.name; }), seatCount: seats, vacantCount: vacant, unseatedCount: model.unseated.length,
     blockLabels: model.blocks.map(function (b) { return b.label; })
   });
