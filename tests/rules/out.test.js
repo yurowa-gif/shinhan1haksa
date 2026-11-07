@@ -397,3 +397,28 @@ test('rule_name을 못 읽고 자격 행도 없으면 취소도 고침도 없다
   const v = [Object.assign({}, run([EX('e1')]).toCreate[0], { id: 'v1', rule_name: '직접 고친 이름', occurred_at: '2027-03-09T00:00:00', detected_by: '' })];
   assert.deepStrictEqual(run([EX('e1', { type: '병결' })], v), NOTHING);
 });
+
+/* ───── 총괄 4차 검증 ───── */
+
+test('좁혔다 다시 넓힌 뒤 특이사항 학생을 바로잡아 다시 만든 OUT은 다음 실행에서 취소되지 않는다(수렴)', () => {
+  const ex = (sid) => [EX('e1', { student_id: sid, type: '기타', confirmed_at: '2027-03-06T09:00:00' })];
+  const o = { autoTypes: ['미인정결석', '기타'], autoTypeSince: { '기타': '2027-03-08T00:00:00' } };   // 다시 넓힌 since
+  const old = [Object.assign({}, run(ex('s1'), [], { autoTypes: o.autoTypes }).toCreate[0], { id: 'v1', created_at: '2027-03-06T10:00:00' })];
+  // 학생을 s2로 바로잡음 → s1 OUT 취소 + s2에 새로 만듦(새 created_at은 since보다 늦다)
+  let v = save(old, run(ex('s2'), old, o)).map((x) => Object.assign({ created_at: '2027-03-09T10:00:00' }, x));
+  assert.deepStrictEqual(v.filter((x) => x.status === '유효').map((x) => x.student_id), ['s2']);
+  assert.deepStrictEqual(run(ex('s2'), v, o), NOTHING);
+});
+
+test('대표를 옮길 때는 남은 유지 행 중 가장 이른 날(3일 묶음에서 첫날 취소 → 둘째 날)', () => {
+  const exc = [EX('e1', { group_id: 'G', date: '2027-03-03' }), EX('e2', { group_id: 'G', date: '2027-03-04' }), EX('e3', { group_id: 'G', date: '2027-03-05' })];
+  const v = settle(exc);
+  const r = run([Object.assign({}, exc[0], { status: '취소' }), exc[1], exc[2]], v);
+  assert.strictEqual(r.toUpdate[0].patch.source_exception_id, 'e2');
+});
+
+test('OUT의 created_at이 비면 since로 거르지 않는다(유지)', () => {
+  const o = { autoTypes: ['미인정결석', '기타'], autoTypeSince: { '기타': '2027-03-08T00:00:00' } };
+  const v = [Object.assign({}, run([EX('e1', { type: '기타' })], [], { autoTypes: o.autoTypes }).toCreate[0], { id: 'v1', created_at: '' })];
+  assert.deepStrictEqual(run([EX('e1', { type: '기타', confirmed_at: '2027-03-01T09:00:00' })], v, o).toCancel, []);
+});

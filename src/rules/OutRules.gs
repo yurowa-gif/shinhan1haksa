@@ -6,7 +6,7 @@
  *   exceptions_<기간>:  id, term_id, group_id, student_id, date, blocks, type, status(요청·확정·취소),
  *                      requested_by, confirmed_by, confirmed_at …
  *   violations_<기간>:  id, term_id, student_id, occurred_at, rule_id, rule_name, memo, detected_by, entered_by,
- *                      status(유효·취소), source(직접·F1자동), source_exception_id, cancel_reason …
+ *                      status(유효·취소), source(직접·F1자동), source_exception_id, cancel_reason …, created_at(필수 — 결정 40 판정)
  * tests/rules/out_oracle.test.js가 이 규칙을 단순한 모델과 무작위 시험으로 비교한다.
  */
 
@@ -70,7 +70,7 @@ function outDutyText_(dutyByDate, date) {
  *   '연결된 특이사항이 없습니다'로 취소된다). 한 학생만 맞추려면 그래도 기간 전체 행을 넘기고 opts.studentIds로 좁힌다.
  * opts = {autoTypes:['미인정지각','미인정조퇴','미인정결석'](비면 이 기본값), ruleName:'무단 지각·결석·이탈', ruleId:'',
  *         per:'group'|'row', dutyByDate:{'yyyy-MM-dd': 이메일 또는 [이메일]}, studentIds:[…](선택),
- *         autoTypeSince:{유형: 'yyyy-MM-ddTHH:mm:ss'}(선택)}
+ *         autoTypeSince:{유형: 그 유형을 가장 최근에 넓힌 시각 'yyyy-MM-ddTHH:mm:ss'}(선택)}
  * → {toCreate:[violations 행 초안(id·공통 열 없음)], toCancel:[{violationId, reason}], toUpdate:[{violationId, patch}]}
  *
  * 용어(행 = 특이사항 행)
@@ -93,7 +93,8 @@ function outDutyText_(dutyByDate, date) {
  *   **그대로 둔다**(유형으로는 취소하지 않고 대표도 옮기지 않는다 — 거짓 사유 취소·비자동 행으로 대표 이동 방지).
  * - 대표 유지: 지금 source_exception_id 행이 유지 행이면 대표를 옮기지 않는다(두 번째 실행 0건). 아니면 유지 행 중 가장 이른 것.
  * - 취소(사유 '[자동] …'): 특이사항이 모두 취소됨, 확정 행이 없어짐(요청으로 돌아감), 특이사항 유형이 자동 대상 밖으로 바뀜,
- *   연결된 특이사항 행이 없음, 특이사항의 학생·기간이 바뀜(바른 쪽에 새로 만든다 — 이때는 autoTypeSince와 상관없이),
+ *   연결된 특이사항 행이 없음, 특이사항의 학생·기간이 바뀜(바른 쪽에 새로 만든다 — 이때는 autoTypeSince와 상관없이,
+ *   그렇게 다시 만든 OUT은 유지 판정에서도 since로 거르지 않는다),
  *   같은 단위의 두 번째 살아 있는 OUT.
  * - toUpdate(사람이 고친 값은 덮지 않는다): 대표가 바뀌거나 대표 날짜와 OUT 날짜가 다르면 source_exception_id·occurred_at
  *   (**특이사항 날짜가 원본** — 사람이 OUT 날짜를 고치면 날짜·시각 모두 생성값으로 되돌리고, 날짜가 같으면 사람이 고친 시각은 둔다).
@@ -152,8 +153,12 @@ function reconcileAutoOuts_(exceptions, violations, opts) {
   });
 
   // 관리자가 직접 취소한 자동 OUT: 가리키던 특이사항 행·묶음(취소된 OUT의 학생 기준) + 그 OUT의 학생·기간
+  // 학생·기간을 바로잡아 다시 만든 OUT의 단위: since로 거르지 않는다(다시 만들 때도 since와 상관없이 만들었으므로)
+  var moved = {};
+  var movedReason = prefix + '특이사항의 학생 또는 기간이 바뀌었습니다';
   var manual = [];
   (violations || []).forEach(function (v) {
+    if (v && outIsAuto_(v) && attStr_(v.cancel_reason) === movedReason) moved[unitOfException[attStr_(v.source_exception_id)]] = true;
     if (!v || !outIsAuto_(v) || outIsLive_(v) || attStr_(v.cancel_reason).indexOf(prefix) === 0) return;
     var ex = exById[attStr_(v.source_exception_id)];
     manual.push({ exId: attStr_(v.source_exception_id), group: ex && attStr_(ex.group_id) ? attStr_(v.student_id) + '|' + attStr_(ex.group_id) : '',
@@ -179,9 +184,9 @@ function reconcileAutoOuts_(exceptions, violations, opts) {
     var recorded = outRecordedType_(v.rule_name, opts.ruleName);
     var keepers = u.confirmed.filter(function (e) {
       // since가 이 OUT보다 늦으면 OUT이 있은 뒤의 설정 변경이다 → 그 since로 거르지 않는다(결정 40)
-      // shortcut: 다시 넓히면 처음 넓히기 전에 확정된 같은 유형 행도 유지 행이 된다(덜 죽일 뿐 거짓 취소는 없음), 설정이 넓힌 이력을 남기면 고친다
+      // shortcut: 다시 넓히면 처음 넓히기 전에 확정된 같은 유형 행도 유지 행이 되어 대표가 그쪽으로 옮겨질 수 있다(덜 죽일 뿐 거짓 취소는 없음), 설정이 넓힌 이력을 남기면 고친다
       return eligible(e) || (recorded !== null && attTypeBase_(e.type) === recorded &&
-        (sinceOk(e, recorded) || attIso_(v.created_at) < sinceMap[recorded]));
+        (sinceOk(e, recorded) || attIso_(v.created_at) < sinceMap[recorded] || moved[key]));
     });
     if (!keepers.length) {
       if (recorded === null && u.confirmed.length) {   // 알 수 없음: 유형으로는 취소하지 않고 그대로 둔다
@@ -194,7 +199,7 @@ function reconcileAutoOuts_(exceptions, violations, opts) {
     var cur = exById[attStr_(v.source_exception_id)];
     var rep = keepers.length ? (keepers.indexOf(cur) >= 0 ? cur : keepers[0]) : cur;
     if (attStr_(v.student_id) !== attStr_(rep.student_id) || attStr_(v.term_id) !== attStr_(rep.term_id)) {
-      toCancel.push({ violationId: vid, reason: prefix + '특이사항의 학생 또는 기간이 바뀌었습니다' });
+      toCancel.push({ violationId: vid, reason: movedReason });
       if (keepers.length && !force[key]) force[key] = { rep: rep, n: keepers.length };
       return;
     }
