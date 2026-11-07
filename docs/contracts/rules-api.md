@@ -100,6 +100,9 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts)  
         //   → {kind, date, rule, autoDate(R10), from, blocked, superseded, toCancel:[…], followUps:[…], warnings:[]}
 function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)     // 새 행이 덮어야 할 행(R6 추가)
         // opts = {source:'F7'|'F6', requestedAt, newValue} → [{id, effective_date, value}]
+function mealCountsOn_(students, enrollments, changes, termId, ymd)
+        // (R12) → {groups:{'여1':{hall, dorm, nonDorm, breakfast, hallDinner, generalDinner}, …, '여 합계','남 합계','1학년'…'전체'},
+        //    afterLeaveHallDinner, unknownGroup:[studentId], warnings}
 ```
 
 ## 동작 메모(R1, 2026-11-06)
@@ -219,3 +222,7 @@ function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)    
 - **고친 적용일(R10):** `opts.effectiveDate`(yyyy-MM-dd)를 주면 그 날을 적용일로 계산한다 — `kind`·`blocked`·`superseded`·`toCancel`·`followUps`·경고 모두 고친 날 기준. `rule` = `opts.effectiveRule`(`'manual'` 기본, 기숙사 입실 조식은 `'entry_date'`). 결과 `autoDate` = 규칙 계산값(고치지 않았으면 `date`와 같다, blocked·superseded여도 들어 있다). F7은 `autoDate`를 `effective_date_auto`에, 쓴 날짜를 `effective_date`에 저장한다(stage2.md 5절). 고친 날짜는 자동보다 이르거나 늦거나 오늘 이전이어도 되지만 신청일보다 이르면 Error, 날짜가 아니거나 모르는 `effectiveRule`도 Error.
 - 퇴실 기록보다 먼저 신청한 학사 석식도 고친 적용일이 결정 35 중단일 이후면 `blocked`(F6 정리가 중단일 이후 학사생 값 행을 취소하는 것과 같다).
 - StatusRules: `statusOn_`의 적용일 검사는 이제 달력 검사(`2027-02-30` 행 무시)로 `ymdIsValid_`와 같다(R6에서 고침).
+
+## 동작 메모(R12, 2026-11-07)
+
+- `mealCountsOn_`: termId 기간에 등록된 학생을 그날 상태 그대로 센다(결석·외박은 빼지 않는다, 같은 학생 두 번 등록은 한 번). 학사 = 학사 `입실`, 기숙 = 학사 입실이면서 기숙사 `입실`, 비기숙 = 학사 입실이면서 기숙 아님. **조식·석식은 학사 상태로 거르지 않는다**(결정 35 — 퇴실 학생도 석식 중단일 전까지 학사 석식, `afterLeaveHallDinner`로 따로 센다). 줄은 '여1'…'남3'(학년 3 밖도 있으면 줄을 만든다), '여 합계'·'남 합계', 'N학년', '전체'이고 합계 줄 = 부분 합. ASSUMPTION: 성별(남·여)·학년(숫자)이 비었거나 다른 학생, 학생 행이 없는 등록은 어느 줄에도 넣지 않고 `unknownGroup` + 경고. 잘못된 날짜는 Error.

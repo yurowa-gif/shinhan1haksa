@@ -182,14 +182,22 @@ function updateRecord_(sheetName, id, patch, actorEmail, kind) {
   });
 }
 
-/** audit_log 기록. 락 안에서 부른다(appendRecord_가 바깥 락을 그대로 쓴다). */
+/**
+ * audit_log 기록. 락 안에서 부른다(appendRecord_가 바깥 락을 그대로 쓴다).
+ * 상담일지(kind 'counsel')의 content·agreement는 글자 수만 남긴다 — 상담 내용이 운영 DB로 복사되지 않게(CLAUDE.md 6).
+ * JSON.stringify의 replacer라 행 객체와 bulk_update의 {id: {열: 값}} 모양 모두 가려진다.
+ * 그래서 옛 상담 글은 어디에도 남지 않는다: 상담 content·agreement는 제자리에서 고치지 말고 '취소' + 새 행으로 바로잡는다(결정 42).
+ */
 function writeAudit_(sheetName, rowId, action, before, after, actorEmail, kind, detail) {
+  var mask = kind === 'counsel' ? function (k, v) {
+    return (k === 'content' || k === 'agreement') && v ? '(내용 생략, ' + String(v).length + '자)' : v;
+  } : null;
   appendRecord_('audit_log', {
     sheet: (kind && kind !== 'db' ? kind + '/' : '') + sheetName,
     row_id: rowId || '',
     action: action,
-    before: before ? JSON.stringify(before) : '',
-    after: after ? JSON.stringify(after) : '',
+    before: before ? JSON.stringify(before, mask) : '',
+    after: after ? JSON.stringify(after, mask) : '',
     detail: detail || ''
   }, actorEmail, 'db', { skipAudit: true });
 }
@@ -216,19 +224,25 @@ function logDenied_(actorEmail, action, detail) {
   }
 }
 
-/** 여러 행을 한 번에 쓴다(가짜 데이터·기본값 시드용). audit_log에는 한 줄로 요약해 남긴다. */
+/**
+ * 여러 행을 한 번에 쓴다(가짜 데이터·기본값 시드, 명단·좌석·특이사항 저장).
+ * audit_log after에는 새 행 id 목록(JSON 배열)만 남긴다(행 값은 행의 created_*와 이후 수정 기록으로 본다).
+ * 칸 한도를 넘지 않게 AUDIT_CHUNK_CHARS 단위로 나눠 여러 줄로 쓴다.
+ */
 function bulkAppend_(sheetName, rows, actorEmail) {
   if (!rows.length) return;
   withLock_(function () {
     var sh = getSheet_('db', sheetName);
     var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(cellToString_);
     var now = nowIso_();
+    var ids = [];
     var values = rows.map(function (r) {
       var rec = {};
       Object.keys(r).forEach(function (k) { rec[k] = r[k]; });
       rec.id = rec.id || Utilities.getUuid();
       rec.created_at = rec.updated_at = now;
       rec.created_by = rec.updated_by = actorEmail;
+      ids.push(String(rec.id));
       return toRowArray_(headers, rec);
     });
     var firstRow = sh.getLastRow() + 1;
@@ -237,7 +251,17 @@ function bulkAppend_(sheetName, rows, actorEmail) {
     range.setNumberFormat('@');
     range.setValues(values);
     invalidate_('db', sheetName);
-    writeAudit_(sheetName, '', 'bulk_create', null, null, actorEmail, 'db', rows.length + '행 (일괄 추가)');
+    // 감사 기록: JSON 배열 길이 = 1 + Σ(JSON 문자열 길이 + 쉼표 1)
+    var chunks = [[]], size = 1;
+    ids.forEach(function (id) {
+      var add = JSON.stringify(id).length + 1;
+      if (chunks[chunks.length - 1].length && size + add > AUDIT_CHUNK_CHARS) { chunks.push([]); size = 1; }
+      chunks[chunks.length - 1].push(id); size += add;
+    });
+    chunks.forEach(function (ch, i) {
+      writeAudit_(sheetName, '', 'bulk_create', null, ch, actorEmail, 'db',
+        rows.length + '행 (일괄 추가' + (chunks.length > 1 ? ' ' + (i + 1) + '/' + chunks.length : '') + ')');
+    });
   });
 }
 
