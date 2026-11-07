@@ -135,3 +135,34 @@ test('saveTerm: 새 기간을 만들면 exceptions_·violations_ 탭이 모두 �
     assert.deepStrictEqual(plain(env.sheetValues(name)[0]), codeHeaders(env, 'db', name), name);
   }
 });
+
+test('setup(옛 시트, 폭이 옛 헤더만큼 좁음): 시트를 넓힌 뒤 [열 추가] — setup이 중간에 멈추지 않고 뒤 탭도 만든다', () => {
+  const env = createGasEnv();
+  setupReport(env);
+  const old = writeOld(env, 'db', 'status_changes', OLD_STATUS, 2);
+  env.file('db').getSheetByName('status_changes')._maxCols = OLD_STATUS.length;   // 손으로 빈 열을 지운 탭
+  const r = setupReport(env);
+  assert.strictEqual(lineOf(r, 'status_changes'), '[열 추가] status_changes: cancel_reason');
+  assert.strictEqual(lineOf(r, 'violation_rules'), '[탭 유지] violation_rules', '뒤 탭까지 돈다');
+  assert.strictEqual(env.rows('status_changes')[1].memo, old[1].memo);
+});
+
+test('setupInsertMissingCols_: 이미 코드 헤더 그대로면(다른 setup이 먼저 고침) 다시 쓰지 않고 [] — 보고는 [탭 유지]', () => {
+  const env = createGasEnv();
+  setupReport(env);
+  writeOld(env, 'db', 'status_changes', codeHeaders(env, 'db', 'status_changes'), 2);
+  const sh = env.file('db').getSheetByName('status_changes');
+  let writes = 0;
+  const orig = sh.getRange.bind(sh);
+  sh.getRange = (...a) => { const rg = orig(...a); const sv = rg.setValues.bind(rg); rg.setValues = (v) => { writes++; return sv(v); }; return rg; };
+  const added = plain(env.asOwner((c) => c.withLock_(() => c.setupInsertMissingCols_(sh, c.headersFor_('db', 'status_changes')))));
+  assert.deepStrictEqual(added, []);
+  assert.strictEqual(writes, 0, '다시 쓰지 않는다');
+});
+
+test('appsscript.json: 메일 보내기 범위(script.send_mail)가 있다(결정 41)', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const scopes = JSON.parse(fs.readFileSync(path.join(__dirname, '../../src/appsscript.json'), 'utf8')).oauthScopes;
+  assert.ok(scopes.includes('https://www.googleapis.com/auth/script.send_mail'), JSON.stringify(scopes));
+});

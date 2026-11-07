@@ -14,7 +14,7 @@
 | value (석식) | `학사 석식` · `일반 석식` · `미실시` |
 | status | `유효` · `취소` |
 | source | `명단업로드` · `F6` · `F7` |
-| doc_submitted | `TRUE` · `FALSE` · `''`(해당 없음 — source가 `명단업로드`인 초기값만. 서류 미제출 표시 대상이 아니다) |
+| doc_submitted | `TRUE` · `FALSE` · `''`(해당 없음 — `명단업로드` 초기값과 2단계 연결 행, 아래 2단계 표. 서류 미제출 표시 대상이 아니다) |
 
 상태 계산은 같은 학생·같은 item에서 status `유효`인 행을 effective_date 순으로 누적한다(같은 날이면 requested_at이 늦은 행). 행이 없으면 값은 `''`.
 
@@ -51,7 +51,7 @@
 
 ## 새 탭·열 어휘 (2단계, 결정 41 승인)
 
-`docs/plan/stage2.md` 5절 구조 변경안 1~7은 2026-11-07 선생님이 모두 승인했다(결정 41). 열은 `src/Schema.gs`(S2-0b)에 있다: 새 탭 `duty_slots`·`violation_rules`·`violations_<기간>`(열은 위 violations 절), `counsel_notes`에 target·linked_violation_id·cancel_reason, `status_changes`에 cancel_reason(memo 뒤).
+`docs/plan/stage2.md` 5절 구조 변경안 1~7은 2026-11-07 선생님이 모두 승인했다(결정 41). 열은 `src/Schema.gs`(S2-0b)에 있다: 새 탭 `duty_slots`·`violation_rules`·`violations_<기간>`(값은 위 violations 절), `counsel_notes`에 target·linked_violation_id·cancel_reason, `status_changes`에 cancel_reason(memo 뒤).
 
 | 탭 | 열 | 값 |
 | --- | --- | --- |
@@ -64,7 +64,7 @@
 | counsel_notes | show_to_parent / status | `TRUE`(기본, 2단계는 늘 TRUE) · `FALSE` / `유효` · `취소` |
 | status_changes | requested_at | source `명단업로드`이면 `''`(C16). F6·F7은 날짜+시각 필수 |
 | status_changes | linked_change_id | 한 번의 F6·F7 입력에서 대표 행 id. 대표 행은 `''`. "학사 및 기숙사 퇴실"의 기숙사 행, 퇴실 정리 급식 행, 퇴실과 함께 만든 일반 석식 행, F7 신청의 followUps가 대표를 가리킨다 |
-| status_changes | source(연결 행) | 퇴실 정리 급식 행과 F7 followUps는 `F6`. **F6 화면이 퇴실과 함께 만든 일반 석식 행은 `F7`**(신청이다 — MealRules.gs:168·183·261은 F6 행을 정리 행으로 보고 superseded·퇴실 취소 대상에서 뺀다) |
+| status_changes | source(연결 행) | 퇴실 정리 급식 행(미실시 중단 행)은 `F6`. F7 신청의 followUps는 **규칙이 준 `source`를 그대로** 쓴다(미실시 중단 행 = `F6`, 재입실 뒤 값 행 = `F7`, rules-api.md R11b). **F6 화면이 퇴실과 함께 만든 일반 석식 행은 `F7`**(신청이다 — MealRules.gs:168·183·261은 F6 행을 정리 행으로 보고 superseded·퇴실 취소 대상에서 뺀다) |
 | status_changes | doc_submitted | 대표 행 `TRUE`·`FALSE`. 연결 행(일반 석식 행 포함)과 명단업로드 행은 `''`. 서류 미제출 목록은 `FALSE`만 센다 |
 | status_changes | effective_date_auto | 규칙 계산값. effective_date와 다르면 교사가 고친 행(사유는 reason) |
 | status_changes | reason(자동) | 퇴실 정리 행 `학사 퇴실 정리`, 2OUT 퇴실 대표 행 `2OUT 퇴실`(날짜·면담 정보 없음) |

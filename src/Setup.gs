@@ -117,6 +117,8 @@ function ensureSheet_(ss, kind, sheetName) {
   if (!sh) {
     sh = ss.insertSheet(sheetName);
   }
+  // 열을 더한 뒤 시트 폭이 모자라면(손으로 열을 지운 탭) 먼저 넓힌다 — 아래 범위가 시트 밖이면 setup이 중간에 멈춘다
+  if (sh.getMaxColumns() < headers.length) sh.insertColumnsAfter(sh.getMaxColumns(), headers.length - sh.getMaxColumns());
   // 모든 칸을 "일반 텍스트"로: 날짜·학번이 자동 변환되지 않게
   sh.getRange(1, 1, sh.getMaxRows(), Math.max(sh.getMaxColumns(), headers.length)).setNumberFormat('@');
 
@@ -130,7 +132,7 @@ function ensureSheet_(ss, kind, sheetName) {
   if (current.join('|') === headers.join('|')) return '[탭 유지] ' + sheetName;
   // 웹앱이 쓰는 도중에 행이 어긋나지 않게 락 안에서 다시 읽고 한 번에 쓴다(withLock_은 중첩되면 바깥 락을 쓴다 — saveTerm)
   var added = withLock_(function () { return setupInsertMissingCols_(sh, headers); });
-  if (added) return '[열 추가] ' + sheetName + ': ' + added.join(', ');
+  if (added) return added.length ? '[열 추가] ' + sheetName + ': ' + added.join(', ') : '[탭 유지] ' + sheetName;
   return '[경고] ' + sheetName + ' 헤더가 코드와 다릅니다. 자동으로 고치지 않았습니다.\n' +
     '    시트: ' + current.join(', ') + '\n    코드: ' + headers.join(', ');
 }
@@ -147,6 +149,7 @@ function setupInsertMissingCols_(sh, headers) {
   var pos = [], j = 0;
   headers.forEach(function (h) { pos.push(current[j] === h ? j++ : -1); });
   if (j !== current.length || current[0] !== 'id' || current.slice(-COMMON_TAIL.length).join('|') !== COMMON_TAIL.join('|')) return null;
+  if (pos.indexOf(-1) < 0) return [];   // 락을 기다리는 동안 다른 setup이 이미 고쳤다: 다시 쓰지 않는다
   var out = values.map(function (row, r) {
     return headers.map(function (h, c) { return r === 0 ? h : pos[c] < 0 ? '' : row[pos[c]]; });
   });
