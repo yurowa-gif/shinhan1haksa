@@ -281,15 +281,72 @@ table('mealChangeKind_: 모르는 항목·값은 Error', [
 
 /* ───── 총괄 오라클 감사(변이 생존분) ───── */
 
-test('퇴실 뒤 석식 중단일은 퇴실 기록(입력 일시·퇴실일)으로 정한다 — 늦게 입력한 학사 석식 신청서와 입력 순서가 바뀌어도 같다(결정 35)', () => {
-  // 퇴실 입력 3/8(월) 10:00, 퇴실일 3/10 → 석식 중단일 = 3/15(다음 주 월요일). 학사 석식 신청서는 3/1 09:00에 썼다.
-  const base = () => [CH('학사', '입실', '2027-03-01'), CH('석식', '미실시', '2027-03-01')];
-  const leave = () => CH('학사', '퇴실', '2027-03-10', { source: 'F6', requested_at: '2027-03-08T10:00:00' });
-  // 순서 A: 퇴실 먼저(그때 석식 미실시라 정리 행 없음) → 신청서를 3/9에 늦게 입력
-  const a = plan(base().concat([leave()]), '석식', '학사 석식', '2027-03-01T09:00:00', { today: '2027-03-09' });
-  assert.deepStrictEqual(a.followUps, [{ item: '석식', value: '미실시', effective_date: '2027-03-15', source: 'F6' }]);
-  // 순서 B: 신청서 먼저 → 퇴실 입력 때 F6 정리가 쓰는 중단일
-  assert.strictEqual(plain(ctx.mealEffectiveDate_('stop', '2027-03-08T10:00:00', { leaveDate: '2027-03-10' })).date, '2027-03-15');
+// 저장 흉내: F7 신청 계획 저장 / F6 학사 퇴실 정리(rules-api.md 순서)
+let sseq = 0;
+function saveF7(rows, item, to, at, today) {
+  const p = plan(rows, item, to, at, { today });
+  if (p.blocked) return { rows, p };
+  const out = rows.map((r) => (p.toCancel.some((c) => c.id === r.id) ? Object.assign({}, r, { status: '취소' }) : r));
+  if (!p.superseded) out.push(CH(item, to, p.date, { source: 'F7', requested_at: at, created_at: String(++sseq) }));
+  p.followUps.forEach((f) => out.push(CH(f.item, f.value, f.effective_date, { source: 'F6', requested_at: at, created_at: String(++sseq) })));
+  return { rows: out, p };
+}
+function saveLeave(rows, L, t) {
+  let out = rows.concat([CH('학사', '퇴실', L, { source: 'F6', requested_at: t, created_at: String(++sseq) })]);
+  for (const item of ['조식', '석식']) {
+    const stop = item === '조식' ? L : plain(ctx.mealEffectiveDate_('stop', t, { leaveDate: L })).date;
+    const ids = plain(ctx.mealPendingToCancel_(out, 's1', item, stop, { source: 'F6' })).map((c) => c.id);
+    out = out.map((r) => (ids.includes(r.id) ? Object.assign({}, r, { status: '취소' }) : r));
+    if (['실시', '학사 석식'].includes(ctx.statusOn_(out, 's1', item, stop))) out.push(CH(item, '미실시', stop, { source: 'F6', requested_at: t, created_at: String(++sseq) }));
+  }
+  return out;
+}
+const daysOf = (rows, item) => plain(ctx.ymdRange_('2027-03-01', '2027-04-10')).map((d) => d + ' ' + ctx.statusOn_(rows, 's1', item, d));
+
+table('퇴실과 학사생 값 신청서는 입력 순서가 아니라 신청 일시 순서로 정한다(결정 35) — 두 순서를 실제로 저장해 매일 값 비교', [
+  // [항목, 신청 값, 신청 일시, 퇴실일, 퇴실 입력 일시, 퇴실 뒤 입력이면 막힘?]
+  ['석식', '학사 석식', '2027-03-04T09:00:00', '2027-03-06', '2027-03-08T10:00:00', false],   // 퇴실 기록보다 먼저 신청 → 3/15(결정 35)까지 유지
+  ['석식', '학사 석식', '2027-03-08T09:00:00', '2027-03-06', '2027-03-08T10:00:00', false],   // 적용일이 퇴실일 뒤여도 먼저 신청이면 유지
+  ['조식', '실시', '2027-03-04T09:00:00', '2027-03-06', '2027-03-08T10:00:00', false],         // 조식은 퇴실일부터 중단
+  ['조식', '실시', '2027-03-08T09:00:00', '2027-03-06', '2027-03-08T10:00:00', true]           // 조식은 퇴실일 뒤 적용이면 늘 막힘
+], ([item, to, at, L, t, blockedLater]) => {
+  const base = [CH('학사', '입실', '2027-03-01'), CH(item, '미실시', '2027-03-01')];
+  const first = saveLeave(saveF7(base, item, to, at, at.slice(0, 10)).rows, L, t);   // 신청서 먼저 입력
+  const late = saveF7(saveLeave(base, L, t), item, to, at, '2027-03-09');             // 퇴실 먼저, 신청서는 늦게 입력
+  assert.strictEqual(!!late.p.blocked, blockedLater);
+  assert.deepStrictEqual(daysOf(late.rows, item), daysOf(first, item));
+});
+
+test('퇴실 기록보다 뒤에 신청한 학사 석식은 막는다', () => {
+  const rows = saveLeave([CH('학사', '입실', '2027-03-01'), CH('석식', '미실시', '2027-03-01')], '2027-03-06', '2027-03-08T10:00:00');
+  assert.ok(plan(rows, '석식', '학사 석식', '2027-03-08T11:00:00', { today: '2027-03-08' }).blocked);
+  assert.ok(plan(rows, '석식', '학사 석식', '2027-03-09T09:00:00', { today: '2027-03-09' }).blocked);
+});
+
+test('퇴실 정리(F6) 행은 superseded 판정의 "더 새 신청"이 아니다', () => {
+  const rows = saveLeave([CH('학사', '입실', '2027-03-01'), CH('조식', '실시', '2027-03-01')], '2027-03-10', '2027-03-08T10:00:00');
+  const p = plan(rows, '조식', '미실시', '2027-03-03T09:00:00', { today: '2027-03-09' });   // 늦게 입력한 3/3(수) 미실시 → 3/15
+  assert.strictEqual(p.superseded, false);
+  assert.strictEqual(p.date, '2027-03-15');
+});
+
+table('followUps: 퇴실 찾기(같은 날 재입실·퇴실 둘·중단일 전 재입실)·퇴실 신청 일시 형식 오류', [
+  // M20 같은 날 다시 입실(나중 신청)한 3/10 퇴실은 퇴실이 아니다 → 그 뒤 4/5 퇴실(4/1 목 입력) 기준 석식 4/12
+  ['same-day-reentry', [CH('학사', '퇴실', '2027-03-10', { source: 'F6', requested_at: '2027-03-08T10:00:00' }),
+    CH('학사', '입실', '2027-03-10', { source: 'F6', requested_at: '2027-03-08T11:00:00' }),
+    CH('학사', '퇴실', '2027-04-05', { source: 'F6', requested_at: '2027-04-01T10:00:00' })], ['2027-04-12']],
+  // M32 퇴실이 둘이면 가장 이른 퇴실 기준(3/10 → 석식 3/15)
+  ['two-leaves', [CH('학사', '퇴실', '2027-03-10', { source: 'F6', requested_at: '2027-03-08T10:00:00' }),
+    CH('학사', '입실', '2027-03-20', { source: 'F6', requested_at: '2027-03-18T10:00:00' }),
+    CH('학사', '퇴실', '2027-04-05', { source: 'F6', requested_at: '2027-04-01T10:00:00' })], ['2027-03-15']],
+  // 중단일(3/15) 전에 다시 입실 → 정리 행 없음
+  ['reentry-before-stop', [CH('학사', '퇴실', '2027-03-10', { source: 'F6', requested_at: '2027-03-08T10:00:00' }),
+    CH('학사', '입실', '2027-03-12', { source: 'F6', requested_at: '2027-03-11T10:00:00' })], []],
+  // 퇴실 기록 신청 일시가 틀려도 throw하지 않는다(이 신청 일시 3/5 금 → 다다음 주 월 3/15)
+  ['bad-leave-time', [CH('학사', '퇴실', '2027-03-10', { source: 'F6', requested_at: '3월 8일' })], ['2027-03-15']]
+], ([, extra, want]) => {
+  const rows = [CH('학사', '입실', '2027-03-01'), CH('석식', '미실시', '2027-03-01')].concat(extra);
+  assert.deepStrictEqual(plan(rows, '석식', '학사 석식', '2027-03-05T09:00:00', { today: '2027-03-05' }).followUps.map((f) => f.effective_date), want);
 });
 
 table('표: 신청 일시 동점·학생 거르기·재입실·빈칸 status', [

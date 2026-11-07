@@ -116,17 +116,17 @@ function mealIsHallOnly_(item, value) {
  *   미실시 대기 행을 toCancel로 취소한다). 미실시인데 그날 먹는 급식이 없으면 'initial'(신청일).
  * - **저장:** blocked·superseded가 아니면 kind가 'none'이어도 신청 행(date, 값)을 쓴다 — 신청서 기록이고, 나중에 늦게 입력되는
  *   이전 신청서가 이 신청을 덮지 못하게 한다(값이 같아 상태는 바뀌지 않는다). blocked·superseded면 date·rule은 ''이고 쓰지 않는다.
- * - superseded: 이 신청보다 신청 일시가 늦은 행이 이미 있고 그 적용일이 이 신청의 적용일 이하이면, 이 신청은 영영 적용되지 않는다
- *   (늦게 입력한 이전 신청서). kind 'none' + 경고, 아무것도 쓰지 않는다.
- * - blocked: 후보 적용일에 학사 상태가 '퇴실'이면 조식 '실시'·석식 '학사 석식'을 새로 켜지 못한다(학사생 아님, 일반 석식은 된다).
- *   결정 35의 "퇴실 뒤 미실시 규칙까지 석식 유지"는 이미 있던 학사 석식이 이어지는 것이지 새로 켜는 것이 아니다.
+ * - superseded: 이 신청보다 신청 일시가 늦은 신청 행(퇴실 정리 F6 행 제외)이 이미 있고 그 적용일이 이 신청의 적용일 이하이면,
+ *   이 신청은 영영 적용되지 않는다(늦게 입력한 이전 신청서). kind 'none' + 경고, 아무것도 쓰지 않는다.
+ * - blocked: 후보 적용일에 학사 상태가 '퇴실'이면 조식 '실시'는 늘, 석식 '학사 석식'은 그 퇴실 기록(requested_at)보다 뒤에 신청했으면
+ *   켜지 못한다(일반 석식은 된다). **입력 순서가 아니라 신청 일시 순서:** 퇴실 기록보다 먼저 신청한 학사 석식은 늦게 입력해도
+ *   이미 있던 것으로 보고 결정 35 중단일까지 유지한다(아래 followUps가 중단일에 끝낸다).
  * - toCancel = mealPendingToCancel_(…, date, {source:'F7', requestedAt, newValue}): 신청 일시가 이 신청 이전이고 적용일이
  *   더 늦은 F6 아닌 행(오늘 이전에 이미 적용된 행이어도) + 뜻이 없어진 퇴실 정리(F6) 행: 이 신청을 저장한 뒤 그 행이 없어도
  *   그날 값이 학사생 값이 아니고 그 행 값과 다르면(퇴실 뒤 일반 석식 신청 등) 함께 취소한다.
- * - followUps: 학사생 값을 켜는데 그 뒤로 학사 퇴실이 잡혀 있고, 저장 뒤 중단일(조식은 퇴실일, 석식은 결정 35 중단일)의 값이
- *   학사생 값이면 함께 쓸 퇴실 정리 행
- *   (조식: 퇴실일 '미실시', 석식: 이 신청 일시로 계산한 미실시 적용일(퇴실일 이후) '미실시', source 'F6'). 퇴실 전에 켠 학사 급식이
- *   퇴실 뒤에도 영원히 이어지지 않게 한다.
+ * - followUps: 학사생 값 신청이 닿는 학사 퇴실(적용일에 퇴실 상태면 그 퇴실, 아니면 그 뒤 가장 이른 퇴실 — 같은 날 다시 입실한
+ *   퇴실은 빼고)이 있고, 중단일(조식 = 퇴실일, 석식 = mealEffectiveDate_('stop', 퇴실 행 requested_at, {leaveDate}) — F6 정리와 같은 날)에
+ *   아직 퇴실 상태이며 저장 뒤 그날 값이 학사생 값이면 그날 '미실시'(source 'F6'). 중단일 전에 다시 입실했으면 쓰지 않는다.
  * - warnings: 취소하지 않는 행 중 이 신청보다 늦게 적용되며 값이 다른 행(더 새 신청·퇴실 정리)이 있으면 "X일부터 Y로 덮인다"고
  *   알린다. ASSUMPTION: 이 신청보다 먼저 적용되는(적용일이 오늘 이후·이 신청 전) 다른 값의 대기 행은 취소하지 않고 경고만 한다
  *   (예: 내일부터 '실시' 대기 중에 오늘 '미실시' 신청 → 미실시는 다다음 주 월요일. 미실시 규칙의 준비 기간을 지키려고).
@@ -156,13 +156,18 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
   var out = { kind: mealChangeKind_(it, from, to), date: cand.date, rule: cand.rule, from: from, blocked: '', superseded: false,
     toCancel: [], followUps: [], warnings: [] };
 
-  if (mealIsHallOnly_(it, to) && statusOn_(rows, sid, '학사', cand.date) === '퇴실') {
+  // 퇴실 상태인 날의 학사생 값: 퇴실 기록보다 뒤에 신청했으면 막는다(신청 일시 순서 — 입력 순서와 무관). 조식은 늘 막는다(즉시 중단).
+  // 먼저 신청한 석식은 중단일 전에 적용되므로(신청 다음 날까지 < 퇴실 입력 + 1주) 그대로 두고 아래 followUps가 중단일에 끝낸다.
+  var leave = mealIsHallOnly_(it, to) ? mealLeaveFor_(rows, sid, it, cand.date, req) : null;
+  if (leave && leave.date <= cand.date && (it === '조식' || leave.at <= req)) {
     out.kind = 'none'; out.date = ''; out.rule = '';
     out.blocked = cand.date + '에는 학사 퇴실 상태라 ' + it + ' ' + to + '을(를) 새로 신청할 수 없습니다';
     return out;
   }
   // 늦게 입력한 이전 신청서: 더 새 신청이 이미 그 전에 적용되면 이 신청은 영영 적용되지 않는다
-  var newer = mine.filter(function (c) { return statIso_(c.requested_at) > req && String(c.effective_date).trim() <= cand.date; });
+  var newer = mine.filter(function (c) {   // 퇴실 정리(F6) 행은 신청이 아니다
+    return String(c.source || '').trim() !== 'F6' && statIso_(c.requested_at) > req && String(c.effective_date).trim() <= cand.date;
+  });
   if (newer.length) {
     out.kind = 'none'; out.date = ''; out.rule = ''; out.superseded = true;
     out.warnings.push('더 새 신청(' + newer.map(function (c) { return String(c.effective_date).trim() + ' ' + String(c.value).trim(); }).join(', ') +
@@ -195,26 +200,36 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
     else if (e > today && e < cand.date) out.warnings.push(e + '부터 ' + v + '(으)로 바뀌는 대기 중인 신청이 먼저 적용됩니다(필요하면 직접 취소)');
   });
 
-  // 퇴실 전에 켠 학사생 값이 퇴실 뒤까지 이어지면 퇴실 정리 행을 함께 쓴다
-  if (mealIsHallOnly_(it, to)) {   // none이어도: 이전 미실시 대기 행을 취소하면 학사생 값이 퇴실 뒤까지 이어질 수 있다
-    var leaveRow = null;
-    rows.forEach(function (c) {
-      var e = String(c.effective_date).trim();
-      if (String(c.item || '').trim() === '학사' && String(c.value || '').trim() === '퇴실' && e > cand.date &&
-          statusOn_(rows, sid, '학사', e) === '퇴실' && (!leaveRow || e < String(leaveRow.effective_date).trim())) leaveRow = c;
-    });
-    if (leaveRow) {
-      var leave = String(leaveRow.effective_date).trim();
-      var after = rows.filter(function (c) { return !cancelled[String(c.id || '').trim()]; }).concat([newRow]);
-      // 석식 중단일은 퇴실 기록의 입력 일시로(결정 35, F6 정리와 같은 날 — 입력 순서와 무관)
-      // shortcut: 퇴실 행에 requested_at이 없으면 이 신청 일시로 계산한다, F6 아닌 경로(명단 등)로 퇴실을 쓰게 되면 고친다
-      var stop = it === '조식' ? leave : mealEffectiveDate_('stop', statStr_(leaveRow.requested_at) || requestedAt, { leaveDate: leave }).date;
-      if (mealIsHallOnly_(it, statusOn_(after, sid, it, stop))) {
-        out.followUps.push({ item: it, value: '미실시', effective_date: stop, source: 'F6' });
-      }
+  // 학사생 값이 퇴실 뒤 중단일까지 이어지면 퇴실 정리 행을 함께 쓴다(none이어도 — 이전 미실시 대기 행을 취소한 경우).
+  // 중단일에 다시 입실해 있으면 쓰지 않는다.
+  if (leave && statusOn_(rows, sid, '학사', leave.stop) === '퇴실') {
+    var after = rows.filter(function (c) { return !cancelled[String(c.id || '').trim()]; }).concat([newRow]);
+    if (mealIsHallOnly_(it, statusOn_(after, sid, it, leave.stop))) {
+      out.followUps.push({ item: it, value: '미실시', effective_date: leave.stop, source: 'F6' });
     }
   }
   return out;
+}
+
+/**
+ * date의 학사생 값 신청이 닿는 학사 퇴실: date에 퇴실 상태면 그 퇴실(date 이전 가장 늦은 퇴실 행), 아니면 date 뒤 가장 이른 퇴실 행.
+ * → {date: 퇴실일, at: 퇴실 기록의 신청 일시, stop: 중단일(조식 = 퇴실일, 석식 = 결정 35 미실시 규칙)} 또는 null
+ */
+function mealLeaveFor_(rows, sid, item, date, req) {
+  var inLeave = statusOn_(rows, sid, '학사', date) === '퇴실', row = null, e0 = '';
+  rows.forEach(function (c) {
+    var e = statStr_(c.effective_date);
+    if (statStr_(c.item) !== '학사' || statStr_(c.value) !== '퇴실' || statusOn_(rows, sid, '학사', e) !== '퇴실') return;
+    if (inLeave ? e <= date && (!row || e > e0) : e > date && (!row || e < e0)) { row = c; e0 = e; }
+  });
+  if (!row) return null;
+  var at = statIso_(row.requested_at);
+  try {
+    return { date: e0, at: at, stop: item === '조식' ? e0 : mealEffectiveDate_('stop', at, { leaveDate: e0 }).date };
+  } catch (err) {
+    // shortcut: 퇴실 기록의 신청 일시가 비었거나 형식이 틀리면 이 신청 일시로 본다(막힘·중단일이 입력 순서를 따른다), F6 아닌 경로로 퇴실을 쓰게 되면 고친다
+    return { date: e0, at: req, stop: item === '조식' ? e0 : mealEffectiveDate_('stop', req, { leaveDate: e0 }).date };
+  }
 }
 
 /**
