@@ -65,7 +65,8 @@ test('검사기: 잡아야 할 것을 잡는다', () => {
     [{ unit: ' 물리학과' }, /앞뒤 공백/],
     [{ unit: '문의 010-1234-5678' }, /전화번호/],
     [{ unit: 'a@b.kr' }, /이메일/],
-    [{ note: '문의 02-123-4567' }, /note 이메일·전화번호/]
+    [{ note: '문의 02-123-4567' }, /note 이메일·전화번호/],
+    [{ note: '반영과목(원문, 핵심·권장 구분 없음): 물리학' }, /구분 없음 행인데 core_courses/]
   ];
   for (const c of cases) assert.match(errsOf([row(c[0])]), c[1], JSON.stringify(c[0]));
   assert.match(errsOf([row({}), row({}, 3)]), /중복\(2번째 줄\)/);

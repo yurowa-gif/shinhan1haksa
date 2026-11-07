@@ -25,6 +25,7 @@ function isAllowedUrl(s) {
 }
 
 const TWO_ROWS = '공식 자료에 유형이 다른 두 행';
+const NO_SPLIT = '반영과목(원문, 핵심·권장 구분 없음)';
 
 /**
  * note에서 'A 또는 B', 'A, B 중 N과목', 'A, B를 포함하여'로 이름이 나온 표준 과목.
@@ -90,6 +91,7 @@ function checkRecommendations(recs, ref) {
         errs.push(at + '표준 목록·대응표에 없는 과목명: ' + c);
       }
     }
+    if (r.note.indexOf(NO_SPLIT) === 0 && r.core_courses !== '') errs.push(at + '핵심·권장 구분 없음 행인데 core_courses가 있음');
     for (const c of namedInNote(r.note, ref.standard)) {
       if (!seen[c]) errs.push(at + 'note의 조건(또는·중 N과목·포함)에 이름이 나온 과목이 과목 칸에 없음: ' + c);
     }
