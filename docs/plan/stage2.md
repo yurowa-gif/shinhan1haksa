@@ -1,7 +1,13 @@
 # 2단계(근무·생활 기록) 병렬 작업 분담안
 
 > 2026-11-07 총괄 초안(영역별 독자 5명 → 종합 → 비평 2명 50건 반영 → 총괄 검토). 작성 기준 main `c7de125`(지금 main은 R7 #48까지 병합, `npm test` 601개).
-> **확정 전 초안.** 승인 없이 시작해도 되는 것(3절 "지금" 줄: S2-0a·S2-0c, R8~, D6~, C9a, C16)만 지금 한다. 5절 구조는 T0a에서 한 번에, 4-1 질문은 T0b에서 하나씩 답을 받는다. 답을 받으면 `docs/decisions.md` 41번부터 적고 이 문서의 "확정 전"을 지운다.
+> **확정 전 초안.** 승인 없이 시작해도 되는 것(3절 "지금" 줄: S2-0a·S2-0c, R8~, D6~, C9a, C16)만 지금 한다. **5절 구조는 2026-11-07 선생님 승인(결정 41)** — S2-0b를 진행한다. 4-1 질문은 T0b에서 하나씩 답을 받는다. 답을 받으면 `docs/decisions.md` 41번부터 적고 이 문서의 "확정 전"을 지운다.
+>
+> **선생님 답 반영(2026-11-07, 결정 44~47).** 아래 본문보다 이 상자가 앞선다.
+> - **Q1 → 결정 44:** 근무표 담당자도 근무표 화면에서 그날 "운영 안 함"을 켜고 끈다(권한 키 `duty.operating`, day_schedules의 operating·memo만). C8a에 넣는다. D6 시안·screens.md를 고친다.
+> - **Q2·Q7 → 결정 45:** 보기는 1학사 교사(학사 교사·출결 담당·관리자) = 학사생 전체, 담임 = 자기 반. 그래서 **C8v(새, CODING-A, C8s 앞)**: 보기 키(`student.view`·`exception.view` 목록·`status.view`·`out.view` 목록)에서 학사 교사도 이번 기간 등록 학생 전체를 통과시킨다(규칙 표시 `wideView`). 쓰기 키(`exception.save`·`out.save`·`status.edit`·`counsel.*`)는 그대로 담당·근무·관리자. 면담 칸(`counsel.view`)은 넓히지 않는다. **C8s**는 보기에서 근무교사 판정이 필요 없어져 `out.save`의 `dutyWindow`(발생일 근무자, 다음 날까지)만 남는다. `out.view`·`status.list`·`status.view`에 attendance를 넣었다(S2-0a).
+> - **Q3 → 결정 46:** `dutyRecord_`는 예비 지정을 따로 센다(대신 근무한 날은 빼고). R8 기본값을 바꾼다.
+> - **Q4 → 결정 47:** 기록표(D7·C14)는 근무 합계를 크게, 조별 횟수는 참고로.
 > 근거: CLAUDE.md, PRD §3·4·5(F3·F4·F6·F7·F12)·6·7·8·9·11·13, decisions.md 1~40, `docs/plan/stage1.md`, `docs/plan/followups.md`, `docs/contracts/*`, `docs/design/screens.md` 5-2. 코드는 읽기만 했다.
 
 ## 0. 시작 전에
@@ -88,7 +94,7 @@ S2-0a 병합 이후 기준이다. "소유"는 그 세션만 그 파일을 고친
 | `tests/features/{duty,duty_record,notify,outs,counsel_gate,exceptions,sheet_model*}.test.js`, `tests/core/auth.test.js`, `tests/public-api.d/coding-a.json` | CODING-A | |
 | `tests/features/{meals,moves,mealcount,roster_commit}.test.js`, `tests/public-api.d/coding-b.json` | CODING-B | |
 | `tests/public-api.d/test.json` | TEST | |
-| `tests/core/{security,schema}.test.js`, `tests/run.js`, `docs/contracts/{vocabulary,sheet-model}.md`, `docs/plan/**`, `docs/decisions.md`, `CLAUDE.md`, `PRD.md`, `README.md` | 총괄 | |
+| `tests/core/{security,schema,skeleton}.test.js`, `tests/run.js`, `docs/contracts/{vocabulary,sheet-model}.md`, `docs/plan/**`, `docs/decisions.md`, `CLAUDE.md`, `PRD.md`, `README.md` | 총괄 | |
 
 **전역 이름 접두어** (Apps Script는 같은 이름을 경고 없이 덮는다. 전역 이름 중복 테스트가 막는다, stage1.md:55)
 

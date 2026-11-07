@@ -42,7 +42,32 @@ function permissions_() {
     // 좌석: 보기는 교사 역할, 학생 배정은 관리자·학사 교사, 격자(공간 구조) 편집은 관리자
     'seat.view': { roles: ['admin', 'attendance', 'hall_teacher', 'duty_manager', 'homeroom'] },
     'seat.edit': { roles: ['admin', 'hall_teacher'] },
-    'seat.layout': { roles: ['admin'] }
+    'seat.layout': { roles: ['admin'] },
+    // ── 2단계(docs/plan/stage2.md 2절 "2단계 권한 키"). 학생·학부모는 3단계(F14)에서 연다 ──
+    // 근무표(F3): 보기는 교사 역할, 편성은 관리자·근무표 담당자, 교대는 본인 칸(함수 안에서 확인), 기록표 파일은 관리자
+    'duty.view': { roles: ['admin', 'duty_manager', 'hall_teacher', 'attendance'] },
+    'duty.edit': { roles: ['admin', 'duty_manager'] },
+    // 그날 "운영 안 함" 켜고 끄기(운영 여부·메모만): 관리자는 자습 일정에서, 근무표 담당자는 근무표에서(결정 44)
+    'duty.operating': { roles: ['admin', 'duty_manager'] },
+    'duty.swap': { roles: ['admin', 'duty_manager', 'hall_teacher'] },
+    'duty.record': { roles: ['admin'] },
+    // OUT(F4): 보기 범위는 함수 안(vioVisibleIds_). 1학사 교사(학사 교사·출결 담당)는 학사생 전체, 담임은 자기 반(결정 45)
+    'out.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] },
+    // dutyWindow: 발생일(ymd)의 실제 근무자가 ymd ≤ 오늘 ≤ ymd+N 동안 통과(값은 Q2 답) — C8s(isOnDutyFor_) 전까지 쓰이지 않는다
+    'out.save': { roles: ['admin', 'hall_teacher'], scope: 'student', dutyWindow: 1 },
+    'out.cancel': { roles: ['admin'] },
+    'out.rules': { roles: ['admin'] },
+    'out.dismiss': { roles: ['admin'] },
+    // 2OUT 학부모 면담(F12): 출결 담당은 넣지 않는다(넣으면 canAccessStudentByFacts_가 학사생 전체를 허용한다)
+    'counsel.view': { roles: ['admin', 'hall_teacher', 'homeroom'], scope: 'student', noDuty: true },
+    'counsel.save': { roles: ['hall_teacher'], scope: 'student', noDuty: true },
+    'counsel.cancel': { roles: ['hall_teacher'] },   // 행 id만 받는 첫 줄(역할만), 범위는 락 안에서 counsel.save로 다시
+    // 입퇴실·급식(F6·F7): list는 화면 열기·행 id 함수 첫 줄(역할만), 저장은 근무일 제외
+    // 보기: 1학사 교사(학사 교사·출결 담당)는 학사생 전체, 담임은 자기 반(결정 45). 저장은 담당·관리자
+    'status.list': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] },
+    'status.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'], scope: 'student' },
+    'status.edit': { roles: ['admin', 'hall_teacher'], scope: 'student', noDuty: true },
+    'meal.count': { roles: ['admin'] }
   };
 }
 

@@ -1,12 +1,30 @@
 /**
  * 배포 안전 검사(소유: 총괄). src 전체를 읽어 규칙 위반을 찾는다.
- * 공개 함수 허용 목록과 첫 줄 권한 검사 표는 tests/public-api.json.
+ * 공개 함수 허용 목록과 첫 줄 권한 검사 표는 tests/public-api.json + tests/public-api.d/*.json(세션별, 합쳐 읽는다).
  */
 const assert = require('assert');
 const vm = require('vm');
 const { test, listFiles, readFile } = require('../helpers/harness');
 const checks = require('../helpers/source-checks');
-const PUBLIC_API = require('../public-api.json').functions;
+
+/** [[파일, JSON]…]의 functions를 합친다. 같은 이름이 두 파일에 있으면 dups에 남긴다(먼저 읽은 것을 쓴다) */
+function mergePublicApi(sources) {
+  const functions = {};
+  const from = {};
+  const dups = [];
+  for (const [file, json] of sources) {
+    if (!json || typeof json.functions !== 'object' || json.functions === null) throw new Error(file + ': "functions" 객체가 없습니다');
+    for (const [name, spec] of Object.entries(json.functions)) {
+      if (from[name]) dups.push(name + ' ← ' + from[name] + ', ' + file);
+      else { functions[name] = spec; from[name] = file; }
+    }
+  }
+  return { functions, dups };
+}
+
+const API_FILES = ['tests/public-api.json'].concat(listFiles('tests/public-api.d', ['.json']));
+const API = mergePublicApi(API_FILES.map((f) => [f, JSON.parse(readFile(f))]));
+const PUBLIC_API = API.functions;
 
 const SRC_FILES = listFiles('src', ['.gs']);
 const srcMap = {};
@@ -29,7 +47,7 @@ test('공개 함수(이름 끝 _ 없음)는 허용 목록에 있는 것만', () 
       const name = m[1];
       if (name.endsWith('_')) continue;
       assert.ok(Object.prototype.hasOwnProperty.call(PUBLIC_API, name),
-        f + ': ' + name + ' 이(가) 공개 함수입니다(tests/public-api.json에 등록하거나 이름 끝에 _)');
+        f + ': ' + name + ' 이(가) 공개 함수입니다(tests/public-api.d/<세션>.json에 등록하거나 이름 끝에 _)');
     }
   }
 });
@@ -45,6 +63,16 @@ test('허용된 공개 함수는 첫 문장에서 권한·소유자를 확인한
 });
 
 /* ───────── public-api.json 자체 ───────── */
+
+test('public-api: public-api.json과 public-api.d/*.json을 합쳐 읽고, 같은 이름이 두 파일에 있으면 실패한다', () => {
+  for (const f of ['coding-a', 'coding-b', 'test']) assert.ok(API_FILES.includes('tests/public-api.d/' + f + '.json'), f);
+  assert.deepStrictEqual(API.dups, []);
+  const spec = { use: '화면', guard: 'requirePermission_' };
+  const m = mergePublicApi([['a.json', { functions: { foo: spec } }], ['d/x.json', { functions: { bar: spec, foo: spec } }]]);
+  assert.deepStrictEqual(m.dups, ['foo ← a.json, d/x.json'], '임시 중복을 잡는다(나쁜 입력)');
+  assert.deepStrictEqual(Object.keys(m.functions), ['foo', 'bar']);
+  assert.throws(() => mergePublicApi([['d/y.json', { function: {} }]]), /d\/y\.json: "functions"/);
+});
 
 test('public-api.json: 등록된 함수가 src에 실제로 있다(지운 함수는 목록에서도 뺀다)', () => {
   const defined = new Set();
