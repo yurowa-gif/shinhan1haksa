@@ -27,11 +27,11 @@
       return d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + d.getUTCDate()).slice(-2);
     }
 
-    function buildHead(today) {
+    function buildHead(date, today) {
       clear(head);
       head.appendChild(el('h2', { text: '출석부' }));
       dateField = UI.dateField({
-        label: '날짜', value: today, name: 'date',
+        label: '날짜', value: date, name: 'date',
         shortcuts: [{ label: '오늘', value: today }, { label: '내일', value: addDays(today, 1) }],
         onchange: function (v) { load(v); }
       });
@@ -52,7 +52,7 @@
       function changed() {
         state.duty = duty.value; state.standby = standby.value;
         clearTimeout(timer);
-        timer = setTimeout(function () { if (state.date) load(state.date); }, 500);
+        timer = setTimeout(function () { var d = dateField && dateField.getValue(); if (d) load(d); }, 500);   // 늘 날짜 칸의 현재 값으로
       }
       duty.addEventListener('input', changed); standby.addEventListener('input', changed);
     }
@@ -67,7 +67,7 @@
       call('getAttendanceSheet', date || '', names()).then(function (r) {
         if (mine !== state.seq) return;
         state.busy = false; state.data = r; clear(preview);
-        if (!dateField) { buildHead(r.date); buildNames(); }
+        if (!dateField) { buildHead(r.date, r.today || r.date); buildNames(); }
         state.date = r.date;
         if (r.warnings && r.warnings.length) r.warnings.forEach(function (w) { info.appendChild(el('div', { class: 'sheet-warn', text: w })); });
         if (!r.ok) { preview.appendChild(el('div', { class: 'error', text: r.error })); return; }
@@ -107,9 +107,11 @@
     function onPdf() {
       if (state.busy || !state.data || !state.data.ok || !state.data.operating) return;
       pdfBtn.disabled = true;
+      var mine = state.seq;   // 만드는 동안 미리보기가 다시 불러와지면 이 PDF는 버린다(날짜·이름이 달라졌다)
       var old = pdfBtn.textContent; pdfBtn.textContent = 'PDF 만드는 중…';
       call('getAttendanceSheetPdf', state.data.date, names()).then(function (r) {
-        pdfBtn.textContent = old; pdfBtn.disabled = false;
+        pdfBtn.textContent = old; pdfBtn.disabled = state.busy;
+        if (mine !== state.seq) { UI.toast('미리보기가 바뀌어 이 PDF는 쓰지 않았습니다. 다시 눌러 주세요.', { kind: 'warn', ms: 5000 }); return; }
         if (!r.ok) { UI.toast(r.error || 'PDF를 만들지 못했습니다.', { kind: 'warn', ms: 5000 }); return; }
         var url = URL.createObjectURL(b64Blob(r.base64));
         var a = el('a', { class: 'btn sheet-link', href: url, download: r.name, text: r.name + ' 열기' });
@@ -118,7 +120,7 @@
         a.click();
         UI.toast('PDF를 만들었습니다. 받아지지 않으면 아래 링크를 누르세요.', { kind: 'ok', ms: 5000 });
       }).catch(function (err) {
-        pdfBtn.textContent = old; pdfBtn.disabled = false;
+        pdfBtn.textContent = old; pdfBtn.disabled = state.busy;
         UI.toast(err.message || String(err), { kind: 'warn', ms: 5000 });
       });
     }

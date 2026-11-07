@@ -292,6 +292,7 @@ function excGroupView_(g, term, d, namesByEmail, studentById, user, range) {
   var mine = g.requestedBy === user.email;
   var rangeDates = range ? g.dates.filter(function (x) { return x >= range.from && x <= range.to; }) : [];
   var liveInRange = range ? g.liveDates.filter(function (x) { return x >= range.from && x <= range.to; }) : [];
+  var ended = term.end_date < today_();
   return {
     groupId: g.groupId, termId: term.id, termName: term.name, studentId: g.studentId, display: s.name ? excDisplay_(s) : '(알 수 없음)',
     dates: g.dates, canceledDates: g.dates.filter(function (x) { return g.liveDates.indexOf(x) < 0; }), rangeDates: rangeDates,
@@ -299,8 +300,9 @@ function excGroupView_(g, term, d, namesByEmail, studentById, user, range) {
     blocks: g.blocks, blocksText: excBlocksText_(g.blocks),
     type: g.type, short: chip ? chip.short : g.type, auto: !!chip && chip.auto, reason: g.reason, status: g.status,
     requestedByName: namesByEmail[g.requestedBy] || g.requestedBy, mine: mine, cancelReason: g.cancelReason,
-    canConfirm: g.status === '요청' && excCanConfirm_(user),
-    canCancel: g.status !== '취소' && (excCanConfirm_(user) || (mine && g.status === '요청'))
+    // 끝난 기간은 보기만 — 눌러도 늘 거부되는 버튼은 보이지 않게 한다
+    canConfirm: !ended && g.status === '요청' && excCanConfirm_(user),
+    canCancel: !ended && g.status !== '취소' && (excCanConfirm_(user) || (mine && g.status === '요청'))
   };
 }
 

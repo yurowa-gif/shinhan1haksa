@@ -564,21 +564,29 @@ test('공백·제어문자·다른 자료형 날짜로도 권한 판정을 우�
   assert.strictEqual(termTab(x, x.term).length, w);
 });
 
-test('"오늘 N명": 목록이 돌려주는 liveStudentCount가 홈 "오늘 N명"과 늘 같다(취소한 묶음·날은 빠진다)', () => {
+test('"오늘 N명": 하루만 취소하면 목록(liveStudentCount)과 홈이 정확히 같은 숫자로 줄어든다(가짜 시드 3/3 = 3명)', () => {
   const x = makeEnv();
   const lst = () => x.env.call(ATT, 'listExceptions', { scope: 'range', from: '2027-03-03', to: '2027-03-03' }).liveStudentCount;
   const home = () => x.env.call(ATT, 'getHomeData', 'attendance').exc.today;
-  assert.strictEqual(lst(), home());
-  const r = x.env.call(ATT, 'saveException', { studentId: x.first.id, from: '2027-03-03', to: '2027-03-04', blocks: '20:00-22:00', type: '병결', confirmOverlap: true });
-  assert.strictEqual(lst(), home());
-  const base = lst();
-  x.env.call(ATT, 'cancelException', x.term.id, r.groupId, '그날만', '2027-03-03');
-  assert.strictEqual(lst(), home());
-  const cancelledAll = x.env.call(ATT, 'saveException', { studentId: x.mine[2].id, from: '2027-03-03', blocks: 'ALL', type: '병결' });
-  assert.strictEqual(lst(), home());
-  x.env.call(ATT, 'cancelException', x.term.id, cancelledAll.groupId, '전체 취소');
-  assert.strictEqual(lst(), home());
-  assert.ok(base >= lst(), '취소하면 줄어든다');
+  assert.deepStrictEqual([lst(), home()], [3, 3]);
+  const other = x.students.find((s) => !x.tab().some((q) => q.student_id === s.id && q.date === '2027-03-03') && x.enr.some((e) => e.student_id === s.id) && s.id !== x.late);
+  const r = x.env.call(ATT, 'saveException', { studentId: other.id, from: '2027-03-03', to: '2027-03-04', blocks: '20:00-22:00', type: '병결' });
+  assert.deepStrictEqual([lst(), home()], [4, 4], '다른 학생이 3/3~3/4 저장 → 4명');
+  x.env.call(ATT, 'cancelException', x.term.id, r.groupId, '3/3만 취소', '2027-03-03');
+  assert.deepStrictEqual([lst(), home()], [3, 3], '3/3만 취소 → 묶음은 살아 있어도 3/3은 3명');
+  assert.strictEqual(x.env.call(ATT, 'listExceptions', { scope: 'range', from: '2027-03-04', to: '2027-03-04' }).liveStudentCount, x.env.call(ATT, 'getHomeData', 'attendance').exc.tomorrow);
+  x.env.call(ATT, 'cancelException', x.term.id, r.groupId, '나머지도 취소');
+  assert.deepStrictEqual([lst(), home()], [3, 3]);
+});
+
+test('끝난 기간 묶음 카드는 확정·취소 버튼이 꺼진다(canConfirm·canCancel false) — 눌러도 늘 거부되는 버튼을 보이지 않는다', () => {
+  const x = makeEnv();
+  const req = x.env.call(TEACHER, 'saveException', { studentId: x.mine[0].id, from: '2027-03-12', blocks: 'ALL', type: '병결' });
+  x.env.setNow('2027-08-01T10:00:00');
+  const g = x.env.call(ATT, 'listExceptions', { scope: 'student', studentId: x.mine[0].id, termId: x.term.id }).groups.find((q) => q.groupId === req.groupId);
+  assert.ok(g && g.status === '요청'); assert.deepStrictEqual([g.canConfirm, g.canCancel], [false, false]);
+  const mine = x.env.call(TEACHER, 'listExceptions', { scope: 'student', studentId: x.mine[0].id, termId: x.term.id }).groups.find((q) => q.groupId === req.groupId);
+  assert.deepStrictEqual([mine.canConfirm, mine.canCancel], [false, false]);
 });
 
 test('끝난 운영 기간은 보기만: 저장·미리보기·확정·취소 모두 거부 안내(쓰기 0건)', () => {

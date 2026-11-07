@@ -201,6 +201,7 @@ function sheetRender_(ymd, names, timer) {
   var warnings = model.warnings.slice();
   plan.forEach(function (p) {
     if (!p.fits) warnings.push('"' + p.name + '"이(가) 한 쪽에 다 들어가지 않을 수 있습니다. 인쇄 전에 미리보기를 확인해 주세요.');
+    (p.warnings || []).forEach(function (w) { warnings.push(p.name + ': ' + w); });   // 렌더러의 크기 경고(예: 표시 칸이 손글씨 하한보다 좁음)
   });
   var seats = 0, vacant = 0;
   model.spaces.forEach(function (sp) { sp.cells.forEach(function (c) { if (c.kind === 'seat') { seats++; if (c.vacant) vacant++; } }); });
@@ -223,6 +224,7 @@ function getAttendanceSheet(date, names) {
   requirePermission_('sheet.view');
   var timer = sheetTimer_();
   var r = sheetRender_(sheetDateArg_(date), names, timer);
+  r.today = today_();   // 화면의 "오늘" 칩은 ?date=로 들어와도 실제 오늘을 가리킨다
   r.timings = timer.result();
   Logger.log('[출석부 미리보기 ms] ' + JSON.stringify(r.timings));
   return r;

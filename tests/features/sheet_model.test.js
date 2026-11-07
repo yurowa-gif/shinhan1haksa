@@ -210,3 +210,18 @@ test('단계별 소요 시간(timings)이 응답에 있다 — 캐시 없이 실
   }));
   assert.ok(pdf.ok && typeof pdf.timings.pdfMs === 'number');
 });
+
+test('렌더러 쪽지 경고(printSheetPlan_ warnings)가 미리보기 경고 목록에 나온다(공간 이름과 함께)', () => {
+  const e = createGasEnv({ now: '2027-03-03T20:00:00' }); e.seedFake({ stage1: true });
+  const r = plain(e.as(ATT, (c) => {
+    c.printSheetPlan_ = () => [{ name: '1층 자습실', fits: true, warnings: ['표시 칸이 손글씨 하한(4.5mm)보다 좁음'] },
+      { name: 'SA1실', fits: true, warnings: ['표시 칸이 손글씨 하한(4.5mm)보다 좁음'] }, { name: 'SA2실', fits: true, warnings: [] }];
+    return c.getAttendanceSheet(WED);
+  }));
+  assert.deepStrictEqual(r.warnings.filter((w) => w.includes('4.5mm')), ['1층 자습실: 표시 칸이 손글씨 하한(4.5mm)보다 좁음', 'SA1실: 표시 칸이 손글씨 하한(4.5mm)보다 좁음']);
+});
+
+test('응답에 실제 오늘(today)이 있다 — ?date=로 들어와도 "오늘" 칩이 오늘을 가리키게', () => {
+  assert.strictEqual(preview(ATT, '2027-03-12').today, WED);
+  assert.strictEqual(preview(ATT, '2027-03-12').date, '2027-03-12');
+});
