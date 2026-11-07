@@ -123,17 +123,16 @@ test('dutyRecord_: 교대 3건(일반·교대의 교대·예비 대신 근무)�
   assert.deepStrictEqual(r.swaps.map((s) => [s.date, s.slot, s.from, s.to, s.by]), [
     ['2027-03-02', '21:30조', 'a@example.com', 'b@example.com', 'a@example.com'], ['2027-03-02', '23:00조', 'c@example.com', 'a@example.com', 'mgr@example.com'],
     ['2027-03-05', '단독', 'c@example.com', 'p@example.com', 'mgr@example.com']]);
-  assert.deepStrictEqual(r.standby, [{ email: 'b@example.com', count: 1 }, { email: 'p@example.com', count: 1 }]);
+  assert.deepStrictEqual(r.standby, [{ email: 'b@example.com', count: 1 }]);   // p는 3/5에 대신 근무 → 예비 칸에서 뺌(결정 46)
   assert.deepStrictEqual(r.teachers.find((x) => x.email === 'c@example.com').dates, [{ date: '2027-03-06', slot: '단독', end: '', swappedFrom: '' }]);
 });
 
-test('dutyRecord_: 예비 지정만은 기본 미포함(가정, Q3), includeStandby면 포함 — 그날 대신 근무한 예비는 두 번 세지 않는다', () => {
+test('dutyRecord_: 예비 지정은 근무 합계와 따로 센다, 그날 대신 근무한 예비는 근무로만 세고 예비 칸에서는 뺀다(결정 46)', () => {
   const rows = [ROW('2027-03-05', '단독', 'c@example.com', { actual_email: 'p@example.com' }), ROW('2027-03-05', '예비', 'p@example.com'),
-    ROW('2027-03-06', '단독', 'c@example.com'), ROW('2027-03-06', '예비', 'b@example.com')];
-  const base = plain(ctx.dutyRecord_(rows, '2027-03'));
-  assert.deepStrictEqual(base.teachers.map((x) => [x.email, x.total]), [['c@example.com', 1], ['p@example.com', 1]]);
-  const withS = plain(ctx.dutyRecord_(rows, '2027-03', { includeStandby: true }));
-  assert.deepStrictEqual(withS.teachers.map((x) => [x.email, x.total, x.bySlot['예비'] || 0]), [['b@example.com', 1, 1], ['c@example.com', 1, 0], ['p@example.com', 1, 0]]);
+    ROW('2027-03-06', '단독', 'c@example.com'), ROW('2027-03-06', '예비', 'b@example.com'), ROW('2027-03-07', '예비', 'b@example.com')];
+  const r = plain(ctx.dutyRecord_(rows, '2027-03'));
+  assert.deepStrictEqual(r.teachers.map((x) => [x.email, x.total]), [['c@example.com', 1], ['p@example.com', 1]]);
+  assert.deepStrictEqual(r.standby, [{ email: 'b@example.com', count: 2 }]);
 });
 
 test('dutyRecord_: 같은 칸 중복이면 교대 목록도 그날 근무자로 쓴 행(최신 수정)의 교대 일시·누른 사람', () => {

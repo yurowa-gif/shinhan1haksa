@@ -74,11 +74,11 @@ function dutyIsOn_(rows, email, ymd, today, windowDays) {
 }
 
 /**
- * 월말 근무 기록(수당 근거, PRD F3). month 'yyyy-MM', opts = {includeStandby:false, operatingByDate:{date:false}}
- * → {teachers:[{email, total, bySlot:{'21:30조','23:00조','단독'(,'예비')}, dates:[{date,slot,end,swappedFrom}]}],
- *    standby:[{email, count}], swaps:[{date, slot, from, to, at, by}], warnings}   금액은 계산하지 않는다(Q4).
+ * 월말 근무 기록(수당 근거, PRD F3). month 'yyyy-MM', opts = {operatingByDate:{date:false}}
+ * → {teachers:[{email, total, bySlot:{'21:30조','23:00조','단독'}, dates:[{date,slot,end,swappedFrom}]}],
+ *    standby:[{email, count}], swaps:[{date, slot, from, to, at, by}], warnings}   금액은 계산하지 않는다(결정 47).
  * 교사별 합계 = 그날 칸의 실제 근무자(원래 근무자에게는 세지 않음). swaps = 칸마다 마지막 교대.
- * ASSUMPTION(Q3): 예비 지정만은 기본 미포함. includeStandby면 bySlot '예비'로 세되, 그날 이미 근무한 예비는 두 번 세지 않는다.
+ * 예비 지정은 standby로 따로 센다(결정 46). 그날 대신 근무한 예비는 근무로만 세고 standby에서는 뺀다(두 번 세지 않음).
  * ASSUMPTION: 운영 안 하는 날(operatingByDate[date] === false)의 행도 센다 + 경고(조용히 빼면 실제 근무를 놓친다).
  */
 function dutyRecord_(rows, month, opts) {
@@ -108,11 +108,7 @@ function dutyRecord_(rows, month, opts) {
       }
     });
     day.standby.forEach(function (email) {
-      standby[email] = (standby[email] || 0) + 1;
-      if (!opts.includeStandby || day.duty.some(function (d) { return d.email === email; })) return;
-      var t = teacher(email);
-      t.total++; t.bySlot['예비'] = (t.bySlot['예비'] || 0) + 1;
-      t.dates.push({ date: date, slot: '예비', end: '', swappedFrom: '' });
+      if (!day.duty.some(function (d) { return d.email === email; })) standby[email] = (standby[email] || 0) + 1;
     });
   });
   return {
