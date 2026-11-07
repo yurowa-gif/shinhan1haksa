@@ -135,6 +135,21 @@ test('2단계: 바뀐 탭의 전체 헤더가 5절 승인안 그대로(새 탭 3
   assert.deepStrictEqual(Object.keys(ctx.SCHEMA.counsel), ['counsel_notes']);
 });
 
+test('2단계: 승인안 밖 기존 탭(0단계·설정) 열은 그대로', () => {
+  const want = {
+    'db/users': full(['email', 'name', 'roles', 'homeroom_class', 'active', 'memo']),
+    'db/students': full(['student_no', 'name', 'gender', 'grade', 'class_no', 'number', 'track', 'email', 'memo']),
+    'db/guardian_links': full(['parent_email', 'student_id', 'relation', 'memo']),
+    'db/audit_log': full(['sheet', 'row_id', 'action', 'before', 'after', 'detail']),
+    'config/settings': full(['key', 'value', 'description'])
+  };
+  for (const [key, cols] of Object.entries(want)) {
+    const [kind, sheet] = key.split('/');
+    assert.deepStrictEqual(plain(ctx.headersFor_(kind, sheet)), cols, key);
+  }
+  assert.deepStrictEqual(Object.keys(ctx.SCHEMA.config), ['settings']);
+});
+
 test('2단계: violations 열 = R5 초안(outDraft_)이 만드는 행의 열 그대로', () => {
   const rctx = loadGs(['src/rules/DateRules.gs', 'src/rules/AttendanceRules.gs', 'src/rules/OutRules.gs']);
   const draft = plain(rctx.outDraft_({ id: 'e1', term_id: 't', student_id: 's', date: '2027-03-03', blocks: 'ALL', type: '미인정결석' }, 1, {}));
