@@ -129,7 +129,6 @@ test('입력 검사: 유형·학생·날짜·시간·기간 길이·운영 기�
   assert.deepStrictEqual(fields(bad({ type: '없는유형' })), ['type']);
   assert.deepStrictEqual(fields(bad({ blocks: '25:00-26:00' })), ['blocks']);
   assert.deepStrictEqual(fields(bad({ blocks: '20:00-18:00' })), ['blocks']);
-  assert.deepStrictEqual(fields(bad({ from: '2027-02-30' })), ['from']);
   assert.deepStrictEqual(fields(bad({ to: '2027-03-01' })), ['to']);
   assert.ok(bad({ to: '2027-03-01' }).errors[0].message.includes('종료일을 같은 날이나 뒤로'));
   assert.deepStrictEqual(fields(bad({ to: '2027-06-30' })), ['to'], '62일 초과');
@@ -138,9 +137,10 @@ test('입력 검사: 유형·학생·날짜·시간·기간 길이·운영 기�
   assert.deepStrictEqual(fields(bad({ reason: 'ㄱ'.repeat(201) })), ['reason']);
   assert.strictEqual(x.tab().length, w, '아무것도 쓰지 않았다');
   assert.ok(x.env.errorOf(ATT, (c) => c.saveException({ from: '2027-03-04' })), '학생 없이 부르면 권한 검사에서 막힌다');
+  // 없는 날짜(2/30)는 입력 검사까지 가지 못하고 권한 검사에서 거부된다("날짜 형식이 아닌 값" 시험 참고)
 });
 
-test('previewException: 겹치면 경고(저장은 가능, 두 건이 된다), 미인정 유형은 autoOut 안내, 아무것도 쓰지 않음', () => {
+test('previewException: 겹치면 경고(확인하면 저장되어 두 건이 된다), 미인정 유형은 autoOut 안내, 아무것도 쓰지 않음', () => {
   const x = makeEnv();
   // 가짜 시드: 첫 학생에게 2027-03-03 전체 병결(확정)이 있다
   const stu = x.students.find((s) => x.tab().some((q) => q.date === '2027-03-03' && q.student_id === s.id && q.blocks === 'ALL'));
@@ -152,7 +152,7 @@ test('previewException: 겹치면 경고(저장은 가능, 두 건이 된다), �
   const u = x.env.call(ATT, 'previewException', { studentId: x.first.id, from: '2027-03-30', blocks: 'ALL', type: '미인정결석' });
   assert.strictEqual(u.autoOut, true); assert.deepStrictEqual(u.warnings, []);
   assert.strictEqual(x.tab().length, w);
-  // 겹쳐도 저장은 된다
+  // 겹쳐도 확인(confirmOverlap)하면 저장된다
   const s = x.env.call(ATT, 'saveException', { studentId: stu.id, from: '2027-03-03', blocks: '18:00-20:00', type: '학원(보강 포함)', confirmOverlap: true });
   assert.strictEqual(s.ok, true); assert.strictEqual(s.warnings.length, 1);
   assert.strictEqual(x.tab().filter((q) => q.student_id === stu.id && q.date === '2027-03-03' && q.status !== '취소').length, 2);
@@ -267,7 +267,7 @@ test('새 기간(등록 전)은 학생 목록이 비어 있고 목록 조회도 
   const x = makeEnv();
   x.env.call(ADMIN, 'saveTerm', { name: '2027 2학기', type: '학기', start_date: '2027-08-23', end_date: '2028-02-28' });
   const t3 = x.env.rows('terms').find((t) => t.name === '2027 2학기');
-  // 새 기간에는 등록이 없어 학생 범위 판정이 되지 않으므로, 입력 화면 시작값은 오늘 기준 기간을 쓴다
+  // 입력 화면 시작값은 입력한 날짜가 속한 기간을 쓴다(오늘 기준 기간이 아니라)
   const c = x.env.call(ATT, 'getExceptionContext', '2027-09-01');
   assert.strictEqual(c.term.id, t3.id);
   assert.deepStrictEqual(c.students, [], '등록이 없는 기간은 학생 목록이 비어 있다(이어받기·명단 올리기 먼저)');
@@ -463,4 +463,86 @@ test('홈 요약·화면 값: 담임 홈은 학생별 요청 수(perStudent), �
   assert.strictEqual(run({ tab: 'list', student: own.id }), JSON.stringify({ tab: 'list', student: own.id }));
   assert.strictEqual(run({ student: '<b>x</b>' }), '{}');
   assert.strictEqual(x.env.call(ATT, 'getExceptionContext', '2027-03-22').date, '2027-03-22', '?date=가 입력 날짜가 된다');
+});
+
+/* ───── 총괄 2차 검토 반영(재현 → 수정) ───── */
+
+const termTab = (x, term) => x.env.rows('exceptions_' + term.id.slice(0, 8));
+const prevTermOf = (x) => x.env.rows('terms').find((t) => t.name.startsWith('2026'));
+const setEnr = (x, studentId, termId, patch) => {
+  const e = x.env.rows('enrollments').find((q) => q.student_id === studentId && q.term_id === termId);
+  x.env.asOwner((c) => c.updateRecord_('enrollments', e.id, patch, ADMIN));
+};
+
+test('공백 우회 차단: 날짜에 공백을 붙여도 저장과 같은 날짜(trim)로 범위를 판정한다 — 다음 기간 담당이 바뀐 학생은 거부', () => {
+  const x = makeEnv('2027-02-26T20:00:00');
+  const sid = x.mine[0].id;
+  setEnr(x, sid, x.term.id, { teacher_email: 'someone.else@example.com' });   // 오늘 기준 기간(2026 2학기)에는 담당이지만 다음 기간에는 아니다
+  const w = termTab(x, x.term).length;
+  for (const from of ['2027-03-18', ' 2027-03-18', '2027-03-18 ']) {
+    x.env.expectDenied(TEACHER, 'exception.save', 'saveException', { studentId: sid, from, blocks: 'ALL', type: '병결' });
+    x.env.expectDenied(TEACHER, 'exception.save', 'previewException', { studentId: sid, from, blocks: 'ALL', type: '병결' });
+  }
+  assert.strictEqual(termTab(x, x.term).length, w, '아무것도 쓰지 않았다');
+});
+
+test('날짜 형식이 아닌 값이 오면 오늘로 대신하지 않고 거부한다(Auth)', () => {
+  const x = makeEnv();
+  for (const from of ['2027-02-30', 'abc', '2027/03/18']) {
+    x.env.expectDenied(TEACHER, 'exception.save', 'saveException', { studentId: x.mine[0].id, from, blocks: 'ALL', type: '병결' });
+  }
+  assert.ok(x.env.call(TEACHER, 'previewException', { studentId: x.mine[0].id, blocks: 'ALL', type: '병결' }).errors.some((e) => e.field === 'from'), '날짜가 비면(ymd 없음) 입력 검사가 안내');
+});
+
+test('오늘 기간에는 등록돼 있고 다음 기간에는 미등록인 학생은 다음 기간 날짜로 저장할 수 없다(출결 담당·관리자 모두)', () => {
+  const x = makeEnv('2027-02-26T20:00:00');
+  setEnr(x, x.first.id, x.term.id, { student_id: 'gone-' + x.first.id.slice(-4) });   // 다음 기간(2027 1학기) 등록만 지운다
+  const input = { studentId: x.first.id, from: '2027-03-18', blocks: 'ALL', type: '병결' };
+  x.env.expectDenied(ATT, 'exception.save', 'saveException', input);
+  const r = x.env.call(ADMIN, 'saveException', input);   // 관리자는 권한은 있지만 그 기간 명단에 없으면 저장하지 않는다
+  assert.strictEqual(r.ok, false); assert.strictEqual(r.errors[0].field, 'studentId');
+  assert.strictEqual(x.env.call(ADMIN, 'previewException', input).ok, false);
+});
+
+test('관리자도 그 기간 미등록 학생에게는 저장 거부(목록에 안 보여 취소할 수 없는 기록이 되지 않게)', () => {
+  const x = makeEnv();
+  const w = x.tab().length;
+  const r = x.env.call(ADMIN, 'saveException', { studentId: x.acc.unenrolledStudentId, from: '2027-03-18', blocks: 'ALL', type: '병결' });
+  assert.deepStrictEqual([r.ok, r.errors[0].field], [false, 'studentId']);
+  assert.strictEqual(x.tab().length, w);
+});
+
+test('기간 경계에 걸친 주는 두 기간의 탭을 모두 읽는다(양쪽 기록이 함께 나온다)', () => {
+  const x = makeEnv('2027-03-01T20:00:00');
+  const prev = prevTermOf(x);
+  const a = x.env.call(ATT, 'saveException', { studentId: x.first.id, from: '2027-02-26', blocks: 'ALL', type: '병결' });
+  const b = x.env.call(ATT, 'saveException', { studentId: x.first.id, from: '2027-03-02', blocks: 'ALL', type: '병결' });
+  assert.ok(a.ok && b.ok);
+  assert.ok(termTab(x, prev).some((q) => q.group_id === a.groupId) && termTab(x, x.term).some((q) => q.group_id === b.groupId), '서로 다른 탭에 저장됨');
+  const ids = x.env.call(ATT, 'listExceptions', { scope: 'range', from: '2027-02-26', to: '2027-03-03' }).groups.map((g) => g.groupId);
+  assert.ok(ids.includes(a.groupId) && ids.includes(b.groupId), JSON.stringify(ids));
+});
+
+test('"오늘 N명"은 살아 있는 행만: 취소된 묶음·취소된 날은 목록에서도 홈에서도 세지 않고 두 숫자가 같다', () => {
+  const x = makeEnv();
+  const liveStudents = (s) => new Set(x.env.call(ATT, 'listExceptions', { scope: 'range', from: s, to: s }).groups.filter((g) => g.status !== '취소' && !g.rangeCanceled).map((g) => g.studentId)).size;
+  const home = () => x.env.call(ATT, 'getHomeData', 'attendance').exc.today;
+  assert.strictEqual(liveStudents('2027-03-03'), home());
+  const r = x.env.call(ATT, 'saveException', { studentId: x.first.id, from: '2027-03-03', to: '2027-03-04', blocks: '20:00-22:00', type: '병결', confirmOverlap: true });
+  assert.strictEqual(liveStudents('2027-03-03'), home());
+  x.env.call(ATT, 'cancelException', x.term.id, r.groupId, '하루만 취소', '2027-03-03');
+  assert.strictEqual(liveStudents('2027-03-03'), home());
+  const gview = x.env.call(ATT, 'listExceptions', { scope: 'range', from: '2027-03-03', to: '2027-03-03' }).groups.find((g) => g.groupId === r.groupId);
+  assert.strictEqual(gview.rangeCanceled, true, '그날 행은 취소 — 화면은 이 값으로 센다');
+});
+
+test('홈 요청 배지는 요청 처리 목록과 같은 기준(그 기간 명단에 있는 학생만)', () => {
+  const x = makeEnv();
+  x.env.asOwner((c) => c.appendRecord_(c.termSheetName_('exceptions', x.term.id), {
+    term_id: x.term.id, group_id: 'g-ghost', student_id: x.acc.unenrolledStudentId, date: '2027-03-20', blocks: 'ALL', type: '병결', reason: '',
+    status: '요청', requested_by: TEACHER, requested_at: '2027-03-03T10:00:00', confirmed_by: '', confirmed_at: '', cancel_reason: ''
+  }, ADMIN));
+  const list = x.env.call(ATT, 'listExceptions', { scope: 'pending' }).groups;
+  assert.strictEqual(x.env.call(ATT, 'getHomeData', 'attendance').exc.pending, list.length);
+  assert.ok(!list.some((g) => g.groupId === 'g-ghost'));
 });

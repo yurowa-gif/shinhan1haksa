@@ -109,10 +109,10 @@ function getCurrentTerm_() {
   return inRange[0] || started[0] || null;
 }
 
-/** 날짜가 속한 운영 기간(겹치면 나중에 시작한 것). 없으면 null */
-function termOnDate_(ymd) {
+/** 날짜가 속한 운영 기간(겹치면 나중에 시작한 것). 없으면 null. terms를 안 주면 시트에서 읽는다 */
+function termOnDate_(ymd, terms) {
   var hit = null;
-  readAll_('terms').forEach(function (t) {
+  (terms || readAll_('terms')).forEach(function (t) {
     if (!t.start_date || !t.end_date || ymd < t.start_date || ymd > t.end_date) return;
     if (!hit || t.start_date >= hit.start_date) hit = t;
   });
@@ -132,8 +132,8 @@ function isOnDutyToday_(email) {
  */
 function studentFacts_(user, student, ymd) {
   // ymd(YYYY-MM-DD)를 주면 그 날짜가 속한 운영 기간으로 판정한다(다음 기간 신입생 입력 등). 없으면 오늘의 기간.
-  // 날짜가 형식에 맞지 않거나 어떤 기간에도 속하지 않으면 오늘의 기간으로 판정한다(그런 날짜는 저장 단계의 입력 검사가 안내한다).
-  var term = (ymd && ymdIsValid_(String(ymd)) ? termOnDate_(String(ymd)) : null) || getCurrentTerm_();
+  // 어떤 기간에도 속하지 않는 날짜는 오늘의 기간으로 판정한다(저장 단계의 입력 검사가 "기간에 속하지 않음"으로 막는다)
+  var term = (ymd ? termOnDate_(ymd) : null) || getCurrentTerm_();
   var termId = term ? term.id : '';
   var enrolled = readAll_('enrollments').some(function (en) { return en.term_id === termId && en.student_id === student.id; });
   var facts = {
@@ -209,9 +209,12 @@ function requirePermission_(action, context) {
   if (rule.scope === 'ownRole') {
     if (!context.role || !hasRole_(user, context.role)) deny('본인 역할 아님');
   } else if (rule.scope === 'student') {
+    // ymd가 주어졌는데 날짜가 아니면 오늘로 대신하지 않고 거부한다(공백·형식 우회 방지). 빈 값은 "없음" = 오늘의 기간
+    var ymd = context.ymd === undefined || context.ymd === null || context.ymd === '' ? '' : context.ymd;
+    if (ymd && (typeof ymd !== 'string' || !ymdIsValid_(ymd))) deny('날짜 형식');
     var student = context.studentId ? findById_('students', context.studentId) : null;
     if (!student) deny('학생 없음');
-    var facts = studentFacts_(user, student, context.ymd);
+    var facts = studentFacts_(user, student, ymd);
     if (rule.noDuty) facts.isOnDuty = false;
     if (!canAccessStudentByFacts_(user.roles, facts, rule.roles)) deny('범위 밖 학생');
   }

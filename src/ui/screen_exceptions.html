@@ -62,6 +62,16 @@
     }
 
     /* ───────── 입력 ───────── */
+    // 폼 날짜가 지금 불러온 기간 밖이면 그 날짜가 속한 기간의 학생 목록으로 다시 불러온다(2/26에 다음 기간 신입생 입력)
+    function ensureCtx(date) {
+      var t = state.ctx.term;
+      if (!date || (date >= t.start_date && date <= t.end_date) || state.ctxFor === date) return;
+      state.ctxFor = date;
+      call('getExceptionContext', date).then(function (ctx) {
+        if (ctx.term.id === t.id) return;
+        state.ctx = ctx; state.student = null; drawTabs(); drawTab();
+      }).catch(fail);
+    }
     function drawInput() {
       var c = state.ctx, confirmMode = c.mode === 'confirm';
       // UI.rangeField는 만들어지는 중에 onchange를 부르므로, 그때 쓰는 값들을 먼저 선언해 둔다
@@ -84,11 +94,11 @@
       function drawWhen() {
         clear(whenBody);
         if (state.mode === 'day') {
-          whenBody.appendChild(UI.dateField({ label: '날짜', value: state.from, shortcuts: shortcuts, name: 'from', onchange: function (v) { state.from = state.to = v; loadBlocks(); schedule(); } }));
+          whenBody.appendChild(UI.dateField({ label: '날짜', value: state.from, shortcuts: shortcuts, name: 'from', onchange: function (v) { state.from = state.to = v; ensureCtx(v); loadBlocks(); schedule(); } }));
         } else {
           whenBody.appendChild(UI.rangeField({ from: state.from, to: state.to, shortcuts: shortcuts, onchange: function (v) {
             var firstChange = v.from !== state.from; state.from = v.from; state.to = v.to;
-            if (firstChange) loadBlocks();
+            if (firstChange) { ensureCtx(v.from); loadBlocks(); }
             schedule();
           } }));
         }
@@ -236,7 +246,7 @@
         el('span', {}, [pillFor(g), g.auto && !cancelled ? ' ' : null, g.auto && !cancelled ? UI.statusPill('out1', '1OUT 예정') : null])
       ]));
       // 묶음 전체 기간을 보인다(하루 카드에서도): 취소·확정이 묶음 단위라는 것을 알 수 있게
-      item.appendChild(el('div', { class: cancelled ? 'muted exc-cancelled' : 'muted', text: datesText(g) + (multi ? ' (' + g.dates.length + '일 묶음)' : '') + ' · ' + g.blocksText + (g.requestedByName ? ' · ' + g.requestedByName : '') }));
+      item.appendChild(el('div', { class: cancelled ? 'muted exc-cancelled' : 'muted', text: datesText(g) + ' · ' + g.blocksText + (g.requestedByName ? ' · ' + g.requestedByName : '') }));
       if (g.canceledDates && g.canceledDates.length && !cancelled) item.appendChild(el('div', { class: 'muted', text: '취소된 날: ' + g.canceledDates.map(ymdKo).join(', ') }));
       if (g.rangeCanceled && !cancelled) item.appendChild(el('div', { class: 'notice info', text: '이 날은 취소되었습니다. 묶음의 다른 날은 그대로입니다.' }));
       if (cancelled && g.cancelReason) item.appendChild(el('div', { class: 'muted', text: '취소 사유: ' + g.cancelReason }));
@@ -262,13 +272,13 @@
         var day = opts.day && g.rangeDates && g.rangeDates.length === 1 && !g.rangeCanceled ? g.rangeDates[0] : '';
         if (multi && day) {
           acts.appendChild(el('button', { type: 'button', class: 'btn secondary', text: '이 날만 취소', onclick: function () { cancelFlow('이 날만 취소할까요?', day, ymdKo(day) + ' 하루만(묶음의 다른 날은 그대로)'); } }));
-          acts.appendChild(el('button', { type: 'button', class: 'btn secondary', text: '묶음 전체 취소', onclick: function () { cancelFlow('묶음 전체를 취소할까요?', '', datesText(g) + ' ' + g.dates.length + '일 전체'); } }));
+          acts.appendChild(el('button', { type: 'button', class: 'btn secondary', text: '묶음 전체 취소', onclick: function () { cancelFlow('묶음 전체를 취소할까요?', '', datesText(g) + ' 전체'); } }));
         } else {
-          acts.appendChild(el('button', { type: 'button', class: 'btn secondary', text: multi ? '묶음 전체 취소' : '취소 처리', onclick: function () { cancelFlow(multi ? '묶음 전체를 취소할까요?' : '취소 처리할까요?', '', datesText(g) + (multi ? ' ' + g.dates.length + '일 전체' : '')); } }));
+          acts.appendChild(el('button', { type: 'button', class: 'btn secondary', text: multi ? '묶음 전체 취소' : '취소 처리', onclick: function () { cancelFlow(multi ? '묶음 전체를 취소할까요?' : '취소 처리할까요?', '', datesText(g) + (multi ? ' 전체' : '')); } }));
         }
       }
       if (g.canConfirm) {
-        if (multi) item.appendChild(el('div', { class: 'muted', text: '확정하면 ' + datesText(g) + ' ' + g.dates.length + '일 묶음 전체가 확정됩니다.' }));
+        if (multi) item.appendChild(el('div', { class: 'muted', text: '확정하면 ' + datesText(g) + ' 묶음 전체가 확정됩니다.' }));
         var doConfirm = function (ack) {
           call('confirmException', g.termId, g.groupId, !!ack).then(function (r) {
             if (r.needsConfirm) {
@@ -318,7 +328,7 @@
         call('listExceptions', filter).then(function (r) {
           clear(card);
           var students = {};
-          r.groups.forEach(function (g) { students[g.studentId] = true; });
+          r.groups.forEach(function (g) { if (g.status !== '취소' && !g.rangeCanceled) students[g.studentId] = true; });   // 홈 "오늘 N명"과 같은 기준: 살아 있는 행만
           card.appendChild(el('h2', { text: title + ' · ' + (filter.scope === 'range' && filter.from === filter.to ? Object.keys(students).length + '명' : r.groups.length + '건') }));
           if (!r.groups.length) { card.appendChild(UI.emptyState('이 조건에 해당하는 특이사항이 없습니다.', c.mode === 'confirm' || true ? { text: '특이사항 입력', onclick: function () { state.tab = 'input'; drawTabs(); drawTab(); } } : null)); return; }
           r.groups.forEach(function (g) { card.appendChild(groupCard(g, function () { show(filter, title); }, { day: filter.scope === 'range' && filter.from === filter.to })); });

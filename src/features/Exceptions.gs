@@ -46,16 +46,6 @@ function excTypeChips_(settings) {
   });
 }
 
-/** 날짜가 속한 운영 기간(겹치면 나중에 시작한 것). 없으면 null */
-function excTermOn_(terms, ymd) {
-  var hit = null;
-  (terms || []).forEach(function (t) {
-    if (!t.start_date || !t.end_date || ymd < t.start_date || ymd > t.end_date) return;
-    if (!hit || t.start_date >= hit.start_date) hit = t;
-  });
-  return hit;
-}
-
 /**
  * 입력 검사(순수).
  * @param {Object} input {studentId, from, to, blocks, type, reason}
@@ -75,7 +65,7 @@ function excValidate_(input, ctx) {
   else if (to < from) add('to', '종료일이 시작일보다 빠릅니다. 종료일을 같은 날이나 뒤로 고쳐 주세요.');
   else if (ymdDiffDays_(from, to) + 1 > EXC_MAX_DAYS) add('to', '한 번에 ' + EXC_MAX_DAYS + '일까지 입력할 수 있습니다. 나누어 입력해 주세요.');
   else {
-    term = excTermOn_(ctx.terms, from);
+    term = termOnDate_(from, ctx.terms);
     if (!term) add('from', '이 날짜는 어떤 운영 기간에도 속하지 않습니다. 운영 기간을 먼저 만들어 주세요.');
     else if (to > term.end_date) add('to', '종료일이 "' + term.name + '" 기간(' + term.end_date + '까지)을 넘습니다. 기간을 나누어 입력해 주세요.');
     else dates = ymdRange_(from, to, EXC_MAX_DAYS);
@@ -168,9 +158,18 @@ function excVisibleIds_(user, enrollments, students, termId) {
   return ids;
 }
 
+/** 저장·검사가 쓰는 시작일과 같은 값(trim) — 권한 판정도 이 날짜의 기간으로 한다 */
+function excYmd_(input) { return String((input && input.from) || '').trim(); }
+
 function excDisplay_(s) { return s.grade + '. ' + s.name; }
 
 function excCanConfirm_(user) { return hasAnyAllowedRole_(user.roles, permissions_()['exception.confirm'].roles); }
+
+/** 학생이 그 기간 명단에 있는지(관리자도 마찬가지 — 목록에 안 보여 취소할 수 없는 기록을 막는다) → 오류 목록 */
+function excEnrollErrors_(enrollments, studentId, term) {
+  var ok = enrollments.some(function (e) { return e.term_id === term.id && e.student_id === studentId; });
+  return ok ? [] : [{ field: 'studentId', message: '"' + term.name + '" 명단에 없는 학생입니다. 명단 올리기에서 먼저 등록해 주세요.' }];
+}
 
 /* ───────────── 읽기 도우미 ───────────── */
 
@@ -206,7 +205,7 @@ function getExceptionContext(date) {
   var today = today_();
   var ymd = String(date || '').trim() || today;
   if (!ymdIsValid_(ymd)) throw new Error('날짜를 골라 주세요.');
-  var term = excTermOn_(d.terms, ymd) || getCurrentTerm_();
+  var term = termOnDate_(ymd, d.terms) || getCurrentTerm_();
   if (!term) throw new Error('운영 기간이 없습니다. 관리자에게 운영 기간을 만들어 달라고 요청해 주세요.');
   var base = ymd < term.start_date ? term.start_date : (ymd > term.end_date ? term.end_date : ymd);
   var visible = excVisibleIds_(user, d.enrollments, d.students, term.id);
@@ -238,9 +237,11 @@ function getDayBlocks(date) {
 
 /** 저장 전 확인: 검사 결과·겹침 경고·미인정 안내. 아무것도 쓰지 않는다. */
 function previewException(input) {
-  var user = requirePermission_('exception.save', { studentId: input && input.studentId, ymd: input && input.from });
+  var user = requirePermission_('exception.save', { studentId: input && input.studentId, ymd: excYmd_(input) });
   var d = excLoad_();
   var v = excValidate_(input, { terms: d.terms, types: d.settings.types });
+  if (v.term) v.errors = v.errors.concat(excEnrollErrors_(d.enrollments, String(input.studentId), v.term));
+  v.ok = !v.errors.length;
   var out = { ok: v.ok, errors: v.errors, mode: excCanConfirm_(user) ? 'confirm' : 'request', dayCount: v.dates.length, warnings: [],
     autoOut: v.ok && d.settings.autoOut.indexOf(v.rec.type) >= 0 };
   if (v.ok) out.warnings = excOverlapWarnings_(excRows_(v.term).rows, String(input.studentId), v.dates, v.rec.blocks);
@@ -253,13 +254,14 @@ function previewException(input) {
  * 겹치는 특이사항이 있으면 input.confirmOverlap이 true일 때만 저장한다(아니면 {ok:false, needsConfirm:true, warnings}).
  */
 function saveException(input) {
-  var user = requirePermission_('exception.save', { studentId: input && input.studentId, ymd: input && input.from });
+  var user = requirePermission_('exception.save', { studentId: input && input.studentId, ymd: excYmd_(input) });
   return withLock_(function () {
     ['terms', 'students', 'enrollments'].forEach(function (n) { invalidate_('db', n); });
     var d = excLoad_();
     var v = excValidate_(input, { terms: d.terms, types: d.settings.types });
-    if (!v.ok) return { ok: false, errors: v.errors };
     var studentId = String(input.studentId);
+    if (v.term) v.errors = v.errors.concat(excEnrollErrors_(d.enrollments, studentId, v.term));
+    if (v.errors.length) return { ok: false, errors: v.errors };
     var student = d.students.filter(function (s) { return s.id === studentId; })[0];
     var existing = excRows_(v.term);
     if (existing.missing) ensureTermSheet_('exceptions', v.term.id);
@@ -329,7 +331,7 @@ function listExceptions(filter) {
       .sort(function (a, b) { return a.start_date < b.start_date ? -1 : 1; });
   } else {
     var one = (filter.termId ? d.terms.filter(function (t) { return t.id === filter.termId; })[0] : null) ||
-      excTermOn_(d.terms, String(filter.from || today)) || getCurrentTerm_();
+      termOnDate_(String(filter.from || today), d.terms) || getCurrentTerm_();
     terms = one ? [one] : [];
   }
   if (scope === 'pending' && !excCanConfirm_(user)) excDenied_(user, 'exception.view', '요청 처리 목록은 출결 담당·관리자만');
@@ -450,13 +452,15 @@ function excHomeInfo_(user) {
   var days = { today: {}, tomorrow: {} };
   var pendingGroups = 0;
   var isHomeroom = user.roles.indexOf('homeroom') >= 0;
-  var enrollments = isHomeroom ? readAll_('enrollments') : [];
-  var students = isHomeroom ? readAll_('students') : [];
+  var enrollments = readAll_('enrollments');
+  var students = readAll_('students');
   excLiveTerms_(d.terms, today).forEach(function (term) {
     var rows = excRows_(term).rows;
     if (out.canConfirm) {
-      pendingGroups += excGroups_(rows.filter(function (r) { return r.status === '요청'; })).length;
-      rows.forEach(function (r) {
+      var vis = excVisibleIds_(user, enrollments, students, term.id);   // 요청 처리 목록과 같은 기준(그 기간 명단의 학생만)
+      var shown = rows.filter(function (r) { return vis[r.student_id]; });
+      pendingGroups += excGroups_(shown.filter(function (r) { return r.status === '요청'; })).length;
+      shown.forEach(function (r) {
         if (EXC_LIVE.indexOf(String(r.status).trim()) < 0) return;
         if (r.date === today) days.today[r.student_id] = true;
         if (r.date === tomorrow) days.tomorrow[r.student_id] = true;
