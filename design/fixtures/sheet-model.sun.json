@@ -1646,6 +1646,15 @@
     {
      "row": 6,
      "col": 12,
+     "kind": "pillar",
+     "seatLabel": "",
+     "occupant": null,
+     "vacant": false,
+     "marks": []
+    },
+    {
+     "row": 7,
+     "col": 1,
      "kind": "seat",
      "seatLabel": "1-7",
      "occupant": {
@@ -1679,7 +1688,7 @@
     },
     {
      "row": 7,
-     "col": 1,
+     "col": 3,
      "kind": "seat",
      "seatLabel": "2-7",
      "occupant": {
@@ -1713,7 +1722,7 @@
     },
     {
      "row": 7,
-     "col": 3,
+     "col": 4,
      "kind": "seat",
      "seatLabel": "3-7",
      "occupant": {
@@ -1747,7 +1756,7 @@
     },
     {
      "row": 7,
-     "col": 4,
+     "col": 6,
      "kind": "seat",
      "seatLabel": "4-7",
      "occupant": {
@@ -1781,7 +1790,7 @@
     },
     {
      "row": 7,
-     "col": 6,
+     "col": 7,
      "kind": "seat",
      "seatLabel": "5-7",
      "occupant": {
@@ -1815,7 +1824,7 @@
     },
     {
      "row": 7,
-     "col": 7,
+     "col": 9,
      "kind": "seat",
      "seatLabel": "6-7",
      "occupant": {
@@ -1849,7 +1858,7 @@
     },
     {
      "row": 7,
-     "col": 9,
+     "col": 10,
      "kind": "seat",
      "seatLabel": "7-7",
      "occupant": null,
@@ -1879,7 +1888,7 @@
     },
     {
      "row": 7,
-     "col": 10,
+     "col": 12,
      "kind": "seat",
      "seatLabel": "8-6",
      "occupant": {
@@ -1912,8 +1921,8 @@
      ]
     },
     {
-     "row": 7,
-     "col": 12,
+     "row": 8,
+     "col": 1,
      "kind": "seat",
      "seatLabel": "1-8",
      "occupant": {
@@ -1947,7 +1956,7 @@
     },
     {
      "row": 8,
-     "col": 1,
+     "col": 3,
      "kind": "seat",
      "seatLabel": "2-8",
      "occupant": {
@@ -1981,7 +1990,7 @@
     },
     {
      "row": 8,
-     "col": 3,
+     "col": 4,
      "kind": "seat",
      "seatLabel": "3-8",
      "occupant": {
@@ -2015,7 +2024,7 @@
     },
     {
      "row": 8,
-     "col": 4,
+     "col": 6,
      "kind": "seat",
      "seatLabel": "4-8",
      "occupant": {
@@ -2049,7 +2058,7 @@
     },
     {
      "row": 8,
-     "col": 6,
+     "col": 7,
      "kind": "seat",
      "seatLabel": "5-8",
      "occupant": {
@@ -2083,7 +2092,7 @@
     },
     {
      "row": 8,
-     "col": 7,
+     "col": 9,
      "kind": "seat",
      "seatLabel": "6-8",
      "occupant": {
@@ -2117,7 +2126,7 @@
     },
     {
      "row": 8,
-     "col": 9,
+     "col": 10,
      "kind": "seat",
      "seatLabel": "7-8",
      "occupant": {
@@ -2151,7 +2160,7 @@
     },
     {
      "row": 8,
-     "col": 10,
+     "col": 12,
      "kind": "seat",
      "seatLabel": "8-7",
      "occupant": null,
@@ -2180,8 +2189,8 @@
      ]
     },
     {
-     "row": 8,
-     "col": 12,
+     "row": 9,
+     "col": 1,
      "kind": "seat",
      "seatLabel": "1-9",
      "occupant": {
@@ -2215,7 +2224,7 @@
     },
     {
      "row": 9,
-     "col": 1,
+     "col": 3,
      "kind": "seat",
      "seatLabel": "2-9",
      "occupant": {
@@ -2249,7 +2258,7 @@
     },
     {
      "row": 9,
-     "col": 3,
+     "col": 4,
      "kind": "seat",
      "seatLabel": "3-9",
      "occupant": {
@@ -2283,7 +2292,7 @@
     },
     {
      "row": 9,
-     "col": 4,
+     "col": 6,
      "kind": "seat",
      "seatLabel": "4-9",
      "occupant": {
@@ -2317,7 +2326,7 @@
     },
     {
      "row": 9,
-     "col": 6,
+     "col": 7,
      "kind": "seat",
      "seatLabel": "5-9",
      "occupant": {
@@ -2351,7 +2360,7 @@
     },
     {
      "row": 9,
-     "col": 7,
+     "col": 9,
      "kind": "seat",
      "seatLabel": "6-9",
      "occupant": {
@@ -2385,7 +2394,7 @@
     },
     {
      "row": 9,
-     "col": 9,
+     "col": 10,
      "kind": "seat",
      "seatLabel": "7-9",
      "occupant": {
@@ -2419,7 +2428,7 @@
     },
     {
      "row": 9,
-     "col": 10,
+     "col": 12,
      "kind": "seat",
      "seatLabel": "8-8",
      "occupant": {
@@ -2452,8 +2461,8 @@
      ]
     },
     {
-     "row": 9,
-     "col": 12,
+     "row": 10,
+     "col": 1,
      "kind": "seat",
      "seatLabel": "1-10",
      "occupant": null,
@@ -2483,7 +2492,7 @@
     },
     {
      "row": 10,
-     "col": 1,
+     "col": 3,
      "kind": "seat",
      "seatLabel": "2-10",
      "occupant": {
@@ -2517,7 +2526,7 @@
     },
     {
      "row": 10,
-     "col": 3,
+     "col": 4,
      "kind": "seat",
      "seatLabel": "3-10",
      "occupant": {
@@ -2551,7 +2560,7 @@
     },
     {
      "row": 10,
-     "col": 4,
+     "col": 6,
      "kind": "seat",
      "seatLabel": "4-10",
      "occupant": {
@@ -2585,7 +2594,7 @@
     },
     {
      "row": 10,
-     "col": 6,
+     "col": 7,
      "kind": "seat",
      "seatLabel": "5-10",
      "occupant": {
@@ -2619,7 +2628,7 @@
     },
     {
      "row": 10,
-     "col": 7,
+     "col": 9,
      "kind": "seat",
      "seatLabel": "6-10",
      "occupant": {
@@ -2653,7 +2662,7 @@
     },
     {
      "row": 10,
-     "col": 9,
+     "col": 10,
      "kind": "seat",
      "seatLabel": "7-10",
      "occupant": {
@@ -2687,7 +2696,7 @@
     },
     {
      "row": 10,
-     "col": 10,
+     "col": 12,
      "kind": "seat",
      "seatLabel": "8-9",
      "occupant": {
@@ -2720,8 +2729,8 @@
      ]
     },
     {
-     "row": 10,
-     "col": 12,
+     "row": 11,
+     "col": 1,
      "kind": "seat",
      "seatLabel": "1-11",
      "occupant": {
@@ -2755,7 +2764,7 @@
     },
     {
      "row": 11,
-     "col": 1,
+     "col": 3,
      "kind": "seat",
      "seatLabel": "2-11",
      "occupant": null,
@@ -2785,7 +2794,7 @@
     },
     {
      "row": 11,
-     "col": 3,
+     "col": 4,
      "kind": "seat",
      "seatLabel": "3-11",
      "occupant": {
@@ -2819,7 +2828,7 @@
     },
     {
      "row": 11,
-     "col": 4,
+     "col": 6,
      "kind": "seat",
      "seatLabel": "4-11",
      "occupant": {
@@ -2853,7 +2862,7 @@
     },
     {
      "row": 11,
-     "col": 6,
+     "col": 7,
      "kind": "seat",
      "seatLabel": "5-11",
      "occupant": {
@@ -2887,7 +2896,7 @@
     },
     {
      "row": 11,
-     "col": 7,
+     "col": 9,
      "kind": "seat",
      "seatLabel": "6-11",
      "occupant": {
@@ -2921,7 +2930,7 @@
     },
     {
      "row": 11,
-     "col": 9,
+     "col": 10,
      "kind": "seat",
      "seatLabel": "7-11",
      "occupant": {
@@ -2955,7 +2964,7 @@
     },
     {
      "row": 11,
-     "col": 10,
+     "col": 12,
      "kind": "seat",
      "seatLabel": "8-10",
      "occupant": {
@@ -2988,8 +2997,8 @@
      ]
     },
     {
-     "row": 11,
-     "col": 12,
+     "row": 12,
+     "col": 1,
      "kind": "seat",
      "seatLabel": "1-12",
      "occupant": {
@@ -3023,7 +3032,7 @@
     },
     {
      "row": 12,
-     "col": 1,
+     "col": 3,
      "kind": "seat",
      "seatLabel": "2-12",
      "occupant": {
@@ -3057,7 +3066,7 @@
     },
     {
      "row": 12,
-     "col": 3,
+     "col": 4,
      "kind": "seat",
      "seatLabel": "3-12",
      "occupant": null,
@@ -3087,7 +3096,7 @@
     },
     {
      "row": 12,
-     "col": 4,
+     "col": 6,
      "kind": "seat",
      "seatLabel": "4-12",
      "occupant": {
@@ -3121,7 +3130,7 @@
     },
     {
      "row": 12,
-     "col": 6,
+     "col": 7,
      "kind": "seat",
      "seatLabel": "5-12",
      "occupant": {
@@ -3155,7 +3164,7 @@
     },
     {
      "row": 12,
-     "col": 7,
+     "col": 9,
      "kind": "seat",
      "seatLabel": "6-12",
      "occupant": {
@@ -3189,7 +3198,7 @@
     },
     {
      "row": 12,
-     "col": 9,
+     "col": 10,
      "kind": "seat",
      "seatLabel": "7-12",
      "occupant": {
@@ -3223,7 +3232,16 @@
     },
     {
      "row": 12,
-     "col": 10,
+     "col": 12,
+     "kind": "pillar",
+     "seatLabel": "",
+     "occupant": null,
+     "vacant": false,
+     "marks": []
+    },
+    {
+     "row": 13,
+     "col": 1,
      "kind": "seat",
      "seatLabel": "1-13",
      "occupant": {
@@ -3256,8 +3274,8 @@
      ]
     },
     {
-     "row": 12,
-     "col": 12,
+     "row": 13,
+     "col": 3,
      "kind": "seat",
      "seatLabel": "2-13",
      "occupant": {
@@ -3291,7 +3309,7 @@
     },
     {
      "row": 13,
-     "col": 1,
+     "col": 4,
      "kind": "seat",
      "seatLabel": "3-13",
      "occupant": {
@@ -3325,7 +3343,7 @@
     },
     {
      "row": 13,
-     "col": 3,
+     "col": 6,
      "kind": "seat",
      "seatLabel": "4-13",
      "occupant": {
@@ -3359,7 +3377,7 @@
     },
     {
      "row": 13,
-     "col": 4,
+     "col": 7,
      "kind": "seat",
      "seatLabel": "5-13",
      "occupant": null,
@@ -3389,7 +3407,7 @@
     },
     {
      "row": 13,
-     "col": 6,
+     "col": 9,
      "kind": "seat",
      "seatLabel": "6-13",
      "occupant": {
@@ -3423,7 +3441,7 @@
     },
     {
      "row": 13,
-     "col": 7,
+     "col": 10,
      "kind": "seat",
      "seatLabel": "7-13",
      "occupant": {
@@ -3457,7 +3475,7 @@
     },
     {
      "row": 13,
-     "col": 9,
+     "col": 12,
      "kind": "seat",
      "seatLabel": "8-11",
      "occupant": {
@@ -3490,8 +3508,8 @@
      ]
     },
     {
-     "row": 13,
-     "col": 10,
+     "row": 14,
+     "col": 1,
      "kind": "seat",
      "seatLabel": "1-14",
      "occupant": {
@@ -3524,8 +3542,8 @@
      ]
     },
     {
-     "row": 13,
-     "col": 12,
+     "row": 14,
+     "col": 3,
      "kind": "seat",
      "seatLabel": "2-14",
      "occupant": {
@@ -3559,7 +3577,7 @@
     },
     {
      "row": 14,
-     "col": 1,
+     "col": 4,
      "kind": "seat",
      "seatLabel": "3-14",
      "occupant": {
@@ -3593,7 +3611,7 @@
     },
     {
      "row": 14,
-     "col": 3,
+     "col": 6,
      "kind": "seat",
      "seatLabel": "4-14",
      "occupant": {
@@ -3627,7 +3645,7 @@
     },
     {
      "row": 14,
-     "col": 4,
+     "col": 7,
      "kind": "seat",
      "seatLabel": "5-14",
      "occupant": {
@@ -3661,7 +3679,7 @@
     },
     {
      "row": 14,
-     "col": 6,
+     "col": 9,
      "kind": "seat",
      "seatLabel": "6-14",
      "occupant": null,
@@ -3691,7 +3709,7 @@
     },
     {
      "row": 14,
-     "col": 7,
+     "col": 10,
      "kind": "seat",
      "seatLabel": "7-14",
      "occupant": {
@@ -3725,7 +3743,7 @@
     },
     {
      "row": 14,
-     "col": 9,
+     "col": 12,
      "kind": "seat",
      "seatLabel": "8-12",
      "occupant": {
@@ -3758,8 +3776,8 @@
      ]
     },
     {
-     "row": 14,
-     "col": 10,
+     "row": 15,
+     "col": 1,
      "kind": "seat",
      "seatLabel": "1-15",
      "occupant": {
@@ -3792,8 +3810,8 @@
      ]
     },
     {
-     "row": 14,
-     "col": 12,
+     "row": 15,
+     "col": 3,
      "kind": "seat",
      "seatLabel": "2-15",
      "occupant": {
@@ -3827,7 +3845,7 @@
     },
     {
      "row": 15,
-     "col": 1,
+     "col": 4,
      "kind": "seat",
      "seatLabel": "3-15",
      "occupant": {
@@ -3861,7 +3879,7 @@
     },
     {
      "row": 15,
-     "col": 3,
+     "col": 6,
      "kind": "seat",
      "seatLabel": "4-15",
      "occupant": {
@@ -3895,7 +3913,7 @@
     },
     {
      "row": 15,
-     "col": 4,
+     "col": 7,
      "kind": "seat",
      "seatLabel": "5-15",
      "occupant": {
@@ -3929,7 +3947,7 @@
     },
     {
      "row": 15,
-     "col": 6,
+     "col": 9,
      "kind": "seat",
      "seatLabel": "6-15",
      "occupant": {
@@ -3963,7 +3981,7 @@
     },
     {
      "row": 15,
-     "col": 7,
+     "col": 10,
      "kind": "seat",
      "seatLabel": "7-15",
      "occupant": null,
@@ -3993,7 +4011,7 @@
     },
     {
      "row": 15,
-     "col": 9,
+     "col": 12,
      "kind": "seat",
      "seatLabel": "8-13",
      "occupant": {
@@ -4026,8 +4044,8 @@
      ]
     },
     {
-     "row": 15,
-     "col": 10,
+     "row": 16,
+     "col": 1,
      "kind": "seat",
      "seatLabel": "1-16",
      "occupant": {
@@ -4061,7 +4079,7 @@
     },
     {
      "row": 16,
-     "col": 1,
+     "col": 3,
      "kind": "seat",
      "seatLabel": "2-16",
      "occupant": {
@@ -4095,7 +4113,7 @@
     },
     {
      "row": 16,
-     "col": 3,
+     "col": 4,
      "kind": "seat",
      "seatLabel": "3-16",
      "occupant": {
@@ -4129,7 +4147,7 @@
     },
     {
      "row": 16,
-     "col": 4,
+     "col": 6,
      "kind": "seat",
      "seatLabel": "4-16",
      "occupant": {
@@ -4163,7 +4181,7 @@
     },
     {
      "row": 16,
-     "col": 6,
+     "col": 7,
      "kind": "seat",
      "seatLabel": "5-16",
      "occupant": {
@@ -4197,7 +4215,7 @@
     },
     {
      "row": 16,
-     "col": 7,
+     "col": 9,
      "kind": "seat",
      "seatLabel": "6-16",
      "occupant": {
@@ -4231,7 +4249,7 @@
     },
     {
      "row": 16,
-     "col": 9,
+     "col": 10,
      "kind": "seat",
      "seatLabel": "7-16",
      "occupant": {
@@ -4265,7 +4283,7 @@
     },
     {
      "row": 16,
-     "col": 10,
+     "col": 12,
      "kind": "seat",
      "seatLabel": "8-14",
      "occupant": null,
@@ -4292,15 +4310,6 @@
        "text": ""
       }
      ]
-    },
-    {
-     "row": 16,
-     "col": 12,
-     "kind": "pillar",
-     "seatLabel": "",
-     "occupant": null,
-     "vacant": false,
-     "marks": []
     },
     {
      "row": 17,
