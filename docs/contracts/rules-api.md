@@ -107,6 +107,9 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts)  
         //   → {kind, date, rule, autoDate(R10), from, blocked, superseded, toCancel:[…], followUps:[…], warnings:[]}
 function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)     // 새 행이 덮어야 할 행(R6 추가)
         // opts = {source:'F7'|'F6', requestedAt, newValue} → [{id, effective_date, value}]
+function mealCountsOn_(students, enrollments, changes, termId, ymd)
+        // (R12) → {groups:{'여1':{hall, dorm, nonDorm, breakfast, hallDinner, generalDinner}, …, '여 합계','남 합계','1학년'…'전체'},
+        //    afterLeaveHallDinner, unknownGroup:[studentId], warnings}
 ```
 
 ## 동작 메모(R1, 2026-11-06)
@@ -237,3 +240,7 @@ function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)    
 - 기숙사 입실 + 조식: `mealPlanChange_(…, {effectiveDate: 입실일, effectiveRule:'entry_date'})` → 조식 실시@입실일(F7, `effective_date_auto` = 입실일, PRD F7 표 2줄). 기숙사 퇴실 + 조식 미실시: 미실시 규칙(기숙사 퇴실일보다 이르지 않게, F7). ASSUMPTION(4-2): 두 조식 선택은 기본으로 켠다(`false`를 넘기면 끔). 이미 그 값이고 취소할 대기 행도 없으면 급식 행을 쓰지 않는다.
 - ASSUMPTION: 학사 입실(재입실 포함)의 급식은 R11b(`moveUndoPlan_`·재입실)에서 정한다 — 지금은 대표 행만.
 - 테스트의 F6 퇴실 흉내(`meal.test.js` saveLeave, `meal_oracle.test.js`)는 이 함수를 쓴다(규칙은 한 곳에).
+
+## 동작 메모(R12, 2026-11-07)
+
+- `mealCountsOn_`: termId 기간에 등록된 학생을 그날 상태 그대로 센다(결석·외박은 빼지 않는다, 같은 학생 두 번 등록은 한 번). 학사 = 학사 `입실`, 기숙 = 학사 입실이면서 기숙사 `입실`, 비기숙 = 학사 입실이면서 기숙 아님. **조식·석식은 학사 상태로 거르지 않는다**(결정 35 — 퇴실 학생도 석식 중단일 전까지 학사 석식, `afterLeaveHallDinner`로 따로 센다). 줄은 '여1'…'남3'(학년 3 밖도 있으면 줄을 만든다), '여 합계'·'남 합계', 'N학년', '전체'이고 합계 줄 = 부분 합. ASSUMPTION: 성별(남·여)·학년(숫자)이 비었거나 다른 학생, 학생 행이 없는 등록은 어느 줄에도 넣지 않고 `unknownGroup` + 경고. 잘못된 날짜는 Error.
