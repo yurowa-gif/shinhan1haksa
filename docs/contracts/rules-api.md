@@ -109,6 +109,9 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts)  
         //   → {kind, date, rule, autoDate(R10), from, blocked, superseded, toCancel:[…], followUps:[…], warnings:[]}
 function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)     // 새 행이 덮어야 할 행(R6 추가)
         // opts = {source:'F7'|'F6', requestedAt, newValue} → [{id, effective_date, value}]
+function mealCountsOn_(students, enrollments, changes, termId, ymd)
+        // (R12) → {groups:{'여1':{hall, dorm, nonDorm, breakfast, hallDinner, generalDinner}, …, '여 합계','남 합계','1학년'…'전체'},
+        //    afterLeaveHallDinner, unknownGroup:[studentId], warnings}
 ```
 
 ## 동작 메모(R1, 2026-11-06)
@@ -246,3 +249,7 @@ function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)    
 - **`mealPlanChange_` followUps 추가(R11b):** 학사생 값 신청이 닿는 퇴실의 중단일 뒤에 재입실이 있으면 재입실일에 이 신청 값 행(`source:'F7'`, 이 신청의 일부)을 더한다 — 재입실일에 이미 더 새 신청(F6 제외)이 적용되면 빼고, 이 신청의 같은 행이 이미 있으면(다시 계획) 빼고. 다른 신청의 행이 같은 값을 주고 있어도 쓴다(그 행은 그 신청과 함께 취소될 수 있으므로). 저장 쪽은 followUps마다 `source`를 그대로 쓴다.
 - **`moveUndoPlan_(changes, headId, opts)`**(퇴실 취소): toCancel = 대표 + 연결 행(`linked_change_id`), 대표가 학사 퇴실이면 그 퇴실의 중단일(조식 퇴실일·석식 결정 35)에 있는 F6 `미실시` 행(급식 신청 followUps로 쓴 것 포함 — 남은 다른 학사 퇴실이 같은 날을 중단일로 쓰면 둠). toRestore = cancel_reason이 `[자동] <headId>`로 시작하거나 memo에 그 꼬리표가 있는 취소 행 중 더 새 신청(신청 일시가 늦고 적용일이 그 행 이하, F6 제외)에 덮이지 않는 것(덮이면 경고). 되살린 신청 행은 처음 저장될 때처럼 그보다 먼저 신청했는데 더 늦게 적용되는 다른 값의 행(그동안 늦게 입력된 옛 신청서)을 toCancel에 더한다. 대표가 없거나 이미 취소면 경고만, 지난 적용일은 경고. ASSUMPTION: 누가 언제 취소할 수 있는지(4-2)는 저장 쪽이 판정한다.
 - 오라클(`meal_oracle.test.js`)에 퇴실 취소(퇴실이 없었던 것처럼)·재입실(재입실일부터 퇴실 전날 값을 새 의도로) 사건이 들어 있다. 재입실일부터는 퇴실 규칙(조식 즉시 중단·석식 중단일)을 적용하지 않는다.
+
+## 동작 메모(R12, 2026-11-07)
+
+- `mealCountsOn_`: termId 기간에 등록된 학생을 그날 상태 그대로 센다(결석·외박은 빼지 않는다, 같은 학생 두 번 등록은 한 번). 학사 = 학사 `입실`, 기숙 = 학사 입실이면서 기숙사 `입실`, 비기숙 = 학사 입실이면서 기숙 아님. **조식·석식은 학사 상태로 거르지 않는다**(결정 35 — 퇴실 학생도 석식 중단일 전까지 학사 석식, `afterLeaveHallDinner`로 따로 센다). 줄은 '여1'…'남3'(학년 3 밖도 있으면 줄을 만든다), '여 합계'·'남 합계', 'N학년', '전체'이고 합계 줄 = 부분 합. ASSUMPTION: 성별(남·여)·학년(숫자)이 비었거나 다른 학생, 학생 행이 없는 등록은 어느 줄에도 넣지 않고 `unknownGroup` + 경고. 잘못된 날짜는 Error.

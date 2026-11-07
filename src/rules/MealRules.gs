@@ -287,3 +287,50 @@ function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts) {
     return { id: ruleStr_(c.id), effective_date: ruleStr_(c.effective_date), value: ruleStr_(c.value) };
   }).sort(function (a, b) { return a.effective_date < b.effective_date ? -1 : a.effective_date > b.effective_date ? 1 : 0; });
 }
+
+/**
+ * 그날 식수 집계(PRD F7, 결정 35, stage2.md 4-2). 아무것도 쓰지 않는다.
+ * students = students 행(id, gender 남·여, grade), enrollments = 등록 행(term_id, student_id), changes = status_changes 전부.
+ * → {groups:{'여1':{hall, dorm, nonDorm, breakfast, hallDinner, generalDinner}, …, '여 합계', '남 합계', '1학년'…, '전체'},
+ *    afterLeaveHallDinner, unknownGroup:[studentId], warnings}
+ * - 대상: termId 기간에 등록된 학생(그날 상태 그대로, 결석·외박은 빼지 않는다). 등록 안 된 학생은 세지 않는다.
+ * - 학사(hall) = 학사 '입실', 기숙(dorm) = 학사 입실이면서 기숙사 '입실', 비기숙 = 학사 입실이면서 기숙 아님.
+ * - 조식·석식은 학사 상태로 거르지 않는다(결정 35: 퇴실한 학생도 석식 중단일 전까지 학사 석식). afterLeaveHallDinner = 학사 석식인데 학사 입실 아님.
+ * - 줄: 성별+학년('여1'…'남3'), '여 합계'·'남 합계', 'N학년', '전체'. 합계 줄 = 부분 합.
+ * ASSUMPTION: 성별(남·여)이나 학년이 비었거나 다른 학생은 어느 줄에도 넣지 않고 unknownGroup + 경고(합계 줄이 부분 합과 맞게).
+ */
+function mealCountsOn_(students, enrollments, changes, termId, ymd) {
+  var tid = ruleStr_(termId), day = ruleStr_(ymd);
+  if (!ymdIsValid_(day)) throw new Error('날짜 형식이 아닙니다(yyyy-MM-dd): ' + ymd);
+  var byId = {};
+  (students || []).forEach(function (s) { if (s) byId[ruleStr_(s.id)] = s; });
+  var zero = function () { return { hall: 0, dorm: 0, nonDorm: 0, breakfast: 0, hallDinner: 0, generalDinner: 0 }; };
+  var groups = {}, grades = { '1': true, '2': true, '3': true }, seen = {};
+  var out = { groups: groups, afterLeaveHallDinner: 0, unknownGroup: [], warnings: [] };
+  var rows = [];
+  (enrollments || []).forEach(function (e) {
+    var sid = ruleStr_(e && e.student_id);
+    if (!e || ruleStr_(e.term_id) !== tid || !sid || seen[sid]) return;
+    seen[sid] = true;
+    var s = byId[sid], g = ruleStr_(s && s.gender), gr = ruleStr_(s && s.grade);
+    if (!s || (g !== '남' && g !== '여') || !/^\d+$/.test(gr)) {
+      out.unknownGroup.push(sid);
+      out.warnings.push(sid + ' 학생의 성별·학년을 알 수 없어 식수 줄에 넣지 않았습니다');
+      return;
+    }
+    grades[gr] = true;
+    var hall = statusOn_(changes, sid, '학사', day) === '입실', dorm = hall && statusOn_(changes, sid, '기숙사', day) === '입실';
+    var dinner = statusOn_(changes, sid, '석식', day);
+    if (dinner === '학사 석식' && !hall) out.afterLeaveHallDinner++;
+    rows.push({ keys: [g + gr, g + ' 합계', gr + '학년', '전체'], v: { hall: +hall, dorm: +dorm, nonDorm: +(hall && !dorm),
+      breakfast: +(statusOn_(changes, sid, '조식', day) === '실시'), hallDinner: +(dinner === '학사 석식'), generalDinner: +(dinner === '일반 석식') } });
+  });
+  var gl = Object.keys(grades).sort(function (a, b) { return a - b; });
+  ['여', '남'].forEach(function (g) { gl.forEach(function (gr) { groups[g + gr] = zero(); }); groups[g + ' 합계'] = zero(); });
+  gl.forEach(function (gr) { groups[gr + '학년'] = zero(); });
+  groups['전체'] = zero();
+  rows.forEach(function (r) {
+    r.keys.forEach(function (k) { Object.keys(r.v).forEach(function (m) { groups[k][m] += r.v[m]; }); });
+  });
+  return out;
+}

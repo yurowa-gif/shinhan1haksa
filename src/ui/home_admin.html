@@ -1,4 +1,9 @@
 <script>
+  /** 2단계 A 카드(CODING-A: 근무·OUT·면담). 이 함수의 몸통만 고친다(docs/plan/stage2.md 1절) */
+  function renderStage2A(d, root) {
+    return;
+  }
+
   /** 관리자 홈: 전체 현황 (PRD 8절) */
   function renderHome(d, root) {
     root.appendChild(el('div', { class: 'card' }, [
@@ -13,8 +18,8 @@
     var roleStats = el('div', { class: 'stats' });
     Object.keys(d.roleCounts).forEach(function (k) { roleStats.appendChild(statBox(d.roleCounts[k], k)); });
     root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '계정(활성)' }), roleStats]));
-    root.appendChild(soonCard('학사·기숙·조식·석식 인원, 공석', '2단계(F6·F7)에서 채웁니다.'));
-    root.appendChild(soonCard('2OUT 대상', '2단계(F4)에서 채웁니다.'));
+    try { renderStage2B(d, root); } catch (e) { showError(root, e); }   // 2단계 카드가 실패해도 나머지 카드는 그린다
+    try { renderStage2A(d, root); } catch (e) { showError(root, e); }
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '운영 기간' }),
       el('div', { class: 'muted', text: '학기·방학 기간을 추가하고 고칩니다.' }),
@@ -46,5 +51,10 @@
       el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=seats', text: '좌석표 열기' })
     ]));
     root.appendChild(soonCard('계정, 설정', '1단계부터 차례로 추가합니다.'));
+  }
+
+  /** 2단계 B 카드(CODING-B: 입퇴실·급식·서류). 이 함수의 몸통만 고친다(docs/plan/stage2.md 1절) */
+  function renderStage2B(d, root) {
+    return;
   }
 </script>
