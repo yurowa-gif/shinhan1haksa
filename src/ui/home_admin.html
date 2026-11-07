@@ -30,6 +30,11 @@
       el('div', { class: 'muted', text: '날짜별 운영 여부·시작·종료와 요일 유형별 출석 블록을 정합니다.' }),
       el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=schedule', text: '자습 일정 열기' })
     ]));
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '좌석표' }),
+      el('div', { class: 'muted', text: '공간·좌석 격자를 그리고 학생을 자리에 앉힙니다.' }),
+      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=seats', text: '좌석표 열기' })
+    ]));
     root.appendChild(soonCard('계정, 설정', '1단계부터 차례로 추가합니다.'));
   }
 </script>
