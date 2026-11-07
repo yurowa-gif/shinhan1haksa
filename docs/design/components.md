@@ -44,7 +44,7 @@
 `UI.blockChips({blocks:[{seq,start,end,label}], value?:{all,seqs}, onchange(value)})` → 칩 줄(전체 + 블록별). 블록을 다 고르면 "전체"로 바뀐다. `getValue()` → `{all, seqs, spec, valid}`: `spec`은 `'ALL'` 또는 `'18:00-20:00;22:00-24:00'`, 아무것도 안 골랐으면 `valid:false`. "15:00부터 귀가"는 화면이 시각 입력으로 따로 받는다(`UI.util.blockSpec`는 블록 칩만 다룬다).
 
 ### UI.segmented
-`UI.segmented({options:[{value,label}], value?, label?, onchange(value)})` → 2~4개 중 하나 고르기(`role="radiogroup"`). 노드: `getValue()`, `setValue(v)`. 예: 하루 / 기간.
+`UI.segmented({options:[{value,label}], value?, label?, onchange(value)})`(`value`를 안 주면 첫 칸, `value:''`면 아무것도 고르지 않은 상태 — 꼭 골라야 하는 칸) → 2~4개 중 하나 고르기(`role="radiogroup"`). 노드: `getValue()`, `setValue(v)`. 예: 하루 / 기간.
 
 ### UI.studentPicker
 `UI.studentPicker({students:[{id,name,grade,classNo,number,studentNo}], onpick(student|null), label?, placeholder?, maxResults?:8})` → 검색 + 결과 목록. 이름 일부·초성(ㄱㄱㅇ)·학번 앞자리로 찾고, 고르면 "1. 김가온 · 1-3 5번 [변경]"으로 바뀐다. 결과가 없으면 다음 할 일을 알려 준다. 노드: `getValue()`, `clear()`. 이메일·성별 같은 값은 화면에 쓰지 않는다.

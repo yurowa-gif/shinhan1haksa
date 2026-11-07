@@ -46,6 +46,13 @@ async function main() {
           .filter((e) => vis(e) && e.offsetHeight < 48).map((e) => (e.className || e.tagName) + ':' + e.offsetHeight);
         return { scrollW: document.documentElement.scrollWidth, scrollH: document.documentElement.scrollHeight, small };
       });
+      const conf = await page.evaluate(() => {
+        const o = window.__confirm; if (!o) return null;
+        return { want: { lead: o.lead || '', lines: o.lines || [], confirmText: o.confirmText || '', danger: !!o.danger },
+          got: { lead: (document.querySelector('.sheet .sheet-lead') || {}).textContent || '', lines: Array.from(document.querySelectorAll('.sheet .sheet-body li')).map((e) => e.textContent),
+            confirmText: Array.from(document.querySelectorAll('.sheet .sheet-actions .btn')).pop().textContent, danger: !!document.querySelector('.sheet .sheet-actions .btn.danger') } };
+      });
+      if (conf && JSON.stringify(conf.want) !== JSON.stringify(conf.got)) problems.push(s.id + '@' + size.w + ' 확인창이 준 값과 다르게 그려짐 ' + JSON.stringify(conf));
       if (info.scrollW > size.w) problems.push(s.id + '@' + size.w + ' 가로 스크롤 ' + info.scrollW);
       if (info.small.length) problems.push(s.id + '@' + size.w + ' 48px 미만 ' + info.small.join(','));
       if (errors.length) problems.push(s.id + '@' + size.w + ' 오류 ' + errors.join('|'));

@@ -58,12 +58,13 @@ test('screens.md 가 한 화면씩 다룬다: F1·F2·F5 절과 "버튼 두 번"
   assert.ok(doc.indexOf('30초') > 0 && /탭 \d회/.test(doc));
 });
 
-test('D6 시안(stage2-screens.js)의 화면 이름이 모두 screens.md 5-2에 적혀 있고, confirmSheet 의 lead·lines 가 components.md 에 있다', () => {
+test('D6 시안(stage2-screens.js)의 화면 이름이 모두 screens.md 5-2 절에 백틱으로 적혀 있고, confirmSheet 의 lead·lines 가 components.md 에 있다', () => {
   const src = css.readFile('design/preview/stage2-screens.js');
   const doc = css.readFile('docs/design/screens.md');
+  const sec = doc.slice(doc.indexOf('## 5-2. 2단계 화면'), doc.indexOf('## 6. 권한별'));
   const ids = [...src.matchAll(/^def\('([^']+)'/gm)].map((m) => m[1]);
   assert.ok(ids.length >= 20, '시안 화면 수 ' + ids.length);
-  ids.forEach((id) => assert.ok(doc.indexOf(id) >= 0, 'screens.md 에 없는 시안: ' + id));
+  ids.forEach((id) => assert.ok(sec.indexOf('`' + id + '`') >= 0, '5-2 절에 `' + id + '` 가 없다'));
   const comp = css.readFile('docs/design/components.md');
   assert.ok(comp.indexOf('lead?') > 0 && comp.indexOf('lines?') > 0);
   assert.ok(css.readFile('src/ui/Components.html').indexOf("opts.lead") > 0);
