@@ -88,7 +88,7 @@ S2-0a 병합 이후 기준이다. "소유"는 그 세션만 그 파일을 고친
 | `tests/features/{duty,duty_record,notify,outs,counsel_gate,exceptions,sheet_model*}.test.js`, `tests/core/auth.test.js`, `tests/public-api.d/coding-a.json` | CODING-A | |
 | `tests/features/{meals,moves,mealcount,roster_commit}.test.js`, `tests/public-api.d/coding-b.json` | CODING-B | |
 | `tests/public-api.d/test.json` | TEST | |
-| `tests/core/{security,schema}.test.js`, `tests/run.js`, `docs/contracts/{vocabulary,sheet-model}.md`, `docs/plan/**`, `docs/decisions.md`, `CLAUDE.md`, `PRD.md`, `README.md` | 총괄 | |
+| `tests/core/{security,schema,skeleton}.test.js`, `tests/run.js`, `docs/contracts/{vocabulary,sheet-model}.md`, `docs/plan/**`, `docs/decisions.md`, `CLAUDE.md`, `PRD.md`, `README.md` | 총괄 | |
 
 **전역 이름 접두어** (Apps Script는 같은 이름을 경고 없이 덮는다. 전역 이름 중복 테스트가 막는다, stage1.md:55)
 

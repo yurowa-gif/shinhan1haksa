@@ -138,15 +138,20 @@ function getHomeData(role) {
     appUrl: ScriptApp.getService().getUrl()
   };
 
-  // 2단계 교사 홈 카드(각 기능 파일의 훅). ms = 훅마다 걸린 시간 — 확인 ③에서 재고, PRD §9 3초를 넘으면 카드별 호출로 바꾼다
-  if (role !== 'student' && role !== 'parent') {
-    base.ms = {};
-    [['duty', dtyHomeInfo_], ['out', vioHomeInfo_], ['food', foodHomeInfo_]].forEach(function (h) {
-      var t0 = Date.now();
+  // 2단계 교사 홈 카드(각 기능 파일의 훅). 보고 있는 홈 역할이 그 보기 키를 가질 때만 부른다(출결 담당·근무표 담당자 홈에 OUT·급식 없음, 학생·학부모 홈에는 없음).
+  // 훅 하나가 실패해도 홈 전체는 열린다(setup 전 탭 없음 등). ms = 훅마다 걸린 시간 — 확인 ③에서 재고, PRD §9 3초를 넘으면 카드별 호출로 바꾼다
+  var perms = permissions_();
+  [['duty', dtyHomeInfo_, 'duty.view'], ['out', vioHomeInfo_, 'out.view'], ['food', foodHomeInfo_, 'status.list']].forEach(function (h) {
+    if (!hasAnyAllowedRole_([role], perms[h[2]].roles)) return;
+    var t0 = Date.now();
+    try {
       base[h[0]] = h[1](user, role);
-      base.ms[h[0]] = Date.now() - t0;
-    });
-  }
+    } catch (e) {
+      console.error(h[0] + ' 홈 훅: ' + e.message);
+      base[h[0]] = { error: '불러오지 못했습니다' };
+    }
+    (base.ms = base.ms || {})[h[0]] = Date.now() - t0;
+  });
 
   switch (role) {
     case 'admin':

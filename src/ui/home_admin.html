@@ -18,8 +18,8 @@
     var roleStats = el('div', { class: 'stats' });
     Object.keys(d.roleCounts).forEach(function (k) { roleStats.appendChild(statBox(d.roleCounts[k], k)); });
     root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '계정(활성)' }), roleStats]));
-    renderStage2B(d, root);
-    renderStage2A(d, root);
+    try { renderStage2B(d, root); } catch (e) { showError(root, e); }   // 2단계 카드가 실패해도 나머지 카드는 그린다
+    try { renderStage2A(d, root); } catch (e) { showError(root, e); }
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '운영 기간' }),
       el('div', { class: 'muted', text: '학기·방학 기간을 추가하고 고칩니다.' }),

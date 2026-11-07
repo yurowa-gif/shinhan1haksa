@@ -46,8 +46,8 @@
       el('div', { class: 'muted', text: '우리 반 학생의 자리를 확인합니다.' }),
       el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=seats', text: '좌석표 열기' })
     ]));
-    renderStage2A(d, root);
-    renderStage2B(d, root);
+    try { renderStage2A(d, root); } catch (e) { showError(root, e); }   // 2단계 카드가 실패해도 나머지 카드는 그린다
+    try { renderStage2B(d, root); } catch (e) { showError(root, e); }
   }
 
   /** 2단계 B 카드(CODING-B: 입퇴실·급식·서류). 이 함수의 몸통만 고친다(docs/plan/stage2.md 1절) */

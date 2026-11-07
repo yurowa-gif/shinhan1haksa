@@ -1,5 +1,5 @@
 <script>
-  /** 2단계 A 카드(CODING-A: 근무·OUT·면담). 이 함수의 몸통만 고친다(docs/plan/stage2.md 1절) */
+  /** 2단계 A 카드(CODING-A: 근무·OUT·면담). 이 함수의 몸통만 고친다(docs/plan/stage2.md 1절). 오늘 카드의 #home-duty 줄(내 근무, screens.md 학사 교사)도 여기서 채운다 */
   function renderStage2A(d, root) {
     return;
   }
@@ -10,7 +10,7 @@
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '오늘 ' + d.today }),
       el('div', { class: 'muted', text: d.termName }),
-      el('div', { class: 'muted', text: '내 근무 정보는 2단계(F3)에서 채웁니다.' })
+      el('div', { class: 'muted', id: 'home-duty' })
     ]));
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '내가 보낸 특이사항 요청' }),
@@ -34,8 +34,8 @@
       el('div', { class: 'muted', text: '학생을 빈 자리에 앉히고 두 자리를 맞바꿉니다.' }),
       el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=seats', text: '좌석표 열기' })
     ]));
-    renderStage2A(d, root);
-    renderStage2B(d, root);
+    try { renderStage2A(d, root); } catch (e) { showError(root, e); }   // 2단계 카드가 실패해도 나머지 카드는 그린다
+    try { renderStage2B(d, root); } catch (e) { showError(root, e); }
   }
 
   /** 2단계 B 카드(CODING-B: 입퇴실·급식·서류). 이 함수의 몸통만 고친다(docs/plan/stage2.md 1절) */
