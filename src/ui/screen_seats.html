@@ -1,0 +1,321 @@
+<style>
+  /* 좌석표는 줄이 많아(1층 8줄) PC에서는 화면 폭을 넓게 쓴다. 휴대폰에서는 격자 안에서 가로로 민다. */
+  main { max-width: none; }
+  .seat-filter .segmented { margin-bottom: 0; flex: 0 0 auto; }
+  .seat-filter .seg { white-space: nowrap; flex: 1 1 auto; padding: 8px 12px; }
+  .seat-filter { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .seat-stu-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .seat-stu { min-height: var(--tap); padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+    background: var(--card); color: var(--text); font: inherit; cursor: pointer; }
+  .seat-stu[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-weak); color: var(--accent-ink); font-weight: 700; }
+  .seat-pick { margin-top: 12px; }
+  .grid-edit-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); max-width: 100%; }
+  table.grid-edit { border-collapse: separate; border-spacing: 2px; }
+  .grid-edit button { width: var(--tap); height: var(--tap); padding: 0; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--card); color: var(--text); font: inherit; font-size: var(--font-xs); cursor: pointer; }
+  .grid-edit button.k-seat { background: var(--accent-weak); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  .grid-edit button.k-pillar { background: var(--muted-weak); color: var(--muted-ink); }
+  .grid-edit button.k-door, .grid-edit button.k-window { background: var(--caution-weak); color: var(--caution-ink); border-color: var(--caution-line); }
+  .seat-row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+</style>
+<script>
+  /** 좌석표 화면(C6): 배정(미배정 학생 → 자리, 두 자리 맞바꾸기, 배정 풀기) + 격자 편집(관리자). */
+  function renderScreen(root) {
+    var state = { data: null, termId: '', spaceId: '', mode: 'assign', student: null, filter: { gender: '', grade: '', veritas: '' }, layout: null };
+    var head = el('div', { class: 'card' });
+    var body = el('div');
+    root.appendChild(head); root.appendChild(body);
+    var layoutBar = null;
+
+    function load(note) {
+      call('getSeatData', state.termId).then(function (d) {
+        state.data = d; state.termId = d.term.id;
+        if (!d.spaces.some(function (s) { return s.id === state.spaceId; })) state.spaceId = d.spaces.length ? d.spaces[0].id : '';
+        if (state.student && !d.unseated.some(function (s) { return s.id === state.student.id; })) state.student = null;
+        drawHead(); drawBody(note);
+      }).catch(function (err) { clear(head); showError(head, err); });
+    }
+    function space() { return state.data.spaces.filter(function (s) { return s.id === state.spaceId; })[0] || null; }
+    function posMap(sp) { var m = {}; sp.cells.forEach(function (c) { m[c.row + ',' + c.col] = c; }); return m; }
+
+    function drawHead() {
+      clear(head);
+      head.appendChild(el('h2', { text: '좌석표' }));
+      var term = el('select', {}, state.data.terms.map(function (t) { return el('option', { value: t.id, text: t.name }); }));
+      term.value = state.termId;
+      term.addEventListener('change', function () { state.termId = term.value; state.student = null; load(); });
+      head.appendChild(UI.field('운영 기간', term, { name: 'term' }));
+      head.appendChild(el('div', { class: 'muted', text: '기준일 ' + state.data.ymd + '(오늘이 기간 밖이면 가까운 날)' }));
+      if (state.data.spaces.length) {
+        var sel = el('select', {}, state.data.spaces.map(function (s) { return el('option', { value: s.id, text: s.name + ' · ' + s.gender }); }));
+        sel.value = state.spaceId;
+        sel.addEventListener('change', function () { state.spaceId = sel.value; state.student = null; state.layout = null; drawBody(); });
+        head.appendChild(UI.field('공간', sel, { name: 'space' }));
+      }
+      if (state.data.canLayout) {
+        head.appendChild(UI.segmented({ label: '하려는 일', value: state.mode,
+          options: [{ value: 'assign', label: '학생 배정' }, { value: 'layout', label: '격자 편집' }],
+          onchange: function (v) { state.mode = v; state.student = null; state.layout = null; drawBody(); } }));
+      }
+      if (state.data.ended) head.appendChild(el('div', { class: 'notice info', text: '끝난 운영 기간입니다. 좌석표는 볼 수만 있습니다.' }));
+      state.data.warnings.forEach(function (w) { head.appendChild(el('div', { class: 'notice warn', text: w })); });
+    }
+
+    function removeBar() {
+      if (layoutBar) { layoutBar.remove(); layoutBar = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); }
+    }
+
+    function drawBody(note) {
+      clear(body); removeBar();
+      if (note) body.appendChild(el('div', { class: 'notice ok', text: note }));
+      if (!state.data.spaces.length) {
+        body.appendChild(UI.emptyState('아직 공간이 없습니다.' + (state.data.canLayout ? ' 격자 편집에서 첫 공간을 만들어 주세요.' : ' 관리자에게 공간을 만들어 달라고 요청해 주세요.'),
+          state.data.canLayout ? { text: '격자 편집 열기', onclick: function () { state.mode = 'layout'; drawHead(); drawBody(); } } : null));
+        if (!state.data.canLayout) return;
+      }
+      if (state.mode === 'layout' && state.data.canLayout) drawLayout(); else drawAssign();
+    }
+
+    /* ───────── 학생 배정 ───────── */
+    function filteredUnseated() {
+      var f = state.filter;
+      return state.data.unseated.filter(function (s) {
+        return (!f.gender || s.gender === f.gender) && (!f.grade || String(s.grade) === f.grade) && (!f.veritas || s.veritas);
+      });
+    }
+
+    function drawAssign() {
+      var sp = space();
+      var canEdit = state.data.canEdit;
+      var info = el('div'); // 한 자리를 골랐을 때 안내
+      if (canEdit) {
+        var card = el('div', { class: 'card' }, [el('h2', { text: '미배정 학생 ' + state.data.unseated.length + '명' })]);
+        card.appendChild(el('div', { class: 'seat-filter' }, [
+          UI.segmented({ label: '성별', value: state.filter.gender, options: [{ value: '', label: '전체' }, { value: '남', label: '남' }, { value: '여', label: '여' }],
+            onchange: function (v) { state.filter.gender = v; drawBody(); } }),
+          UI.segmented({ label: '학년', value: state.filter.grade, options: [{ value: '', label: '전체' }, { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }],
+            onchange: function (v) { state.filter.grade = v; drawBody(); } }),
+          UI.segmented({ label: '베리타스', value: state.filter.veritas, options: [{ value: '', label: '전체' }, { value: '1', label: '베리타스만' }],
+            onchange: function (v) { state.filter.veritas = v; drawBody(); } })
+        ]));
+        var list = el('div', { class: 'seat-stu-list' });
+        var shown = filteredUnseated();
+        shown.forEach(function (s) {
+          var on = !!state.student && state.student.id === s.id;
+          var b = el('button', { type: 'button', class: 'seat-stu', 'aria-pressed': on ? 'true' : 'false',
+            text: (on ? '✓ ' : '') + s.display + ' · ' + s.gender + (s.veritas ? ' · 베리타스' : '') });
+          b.addEventListener('click', function () { state.student = on ? null : s; drawBody(); });
+          list.appendChild(b);
+        });
+        if (!shown.length) list.appendChild(el('div', { class: 'muted', text: state.data.unseated.length ? '조건에 맞는 학생이 없습니다. 거름 조건을 바꿔 보세요.' : '미배정 학생이 없습니다.' }));
+        card.appendChild(list);
+        card.appendChild(el('div', { class: 'muted', style: 'margin-top:8px',
+          text: state.student ? state.student.display + ' 학생을 앉힐 빈 자리를 누르세요.' : '학생을 누른 뒤 빈 자리를 누르면 앉힙니다. 학생 없이 두 자리를 차례로 누르면 맞바꿉니다.' }));
+        body.appendChild(card);
+      }
+      if (!sp) return;
+      var gridCard = el('div', { class: 'card' }, [el('h2', { text: sp.name })]);
+      var pm = posMap(sp);
+      var grid = UI.seatGrid({ rows: sp.rows, cols: sp.cols, mode: 'swap', cells: sp.cells.map(function (c) {
+        return { row: c.row, col: c.col, kind: c.kind, seatLabel: c.seatLabel, text: c.text, vacant: c.vacant };
+      }), onselect: function (picked, done) {
+        if (!canEdit) { grid.clearSelection(); return; }
+        clear(info);
+        var cells = picked.map(function (p) { return pm[p.row + ',' + p.col]; });
+        if (state.student && cells.length) { grid.clearSelection(); doAssign(cells[0]); return; }
+        if (done) { grid.clearSelection(); confirmSwap(cells[0], cells[1]); return; }
+        var c = cells[0];
+        if (!c) return;
+        info.appendChild(el('div', { class: 'card seat-pick' }, [
+          el('b', { text: (c.seatLabel ? c.seatLabel + '번 · ' : '') + (c.text || '공석') + (c.hold ? ' (' + c.hold + ' — ' + c.reason + ')' : '') }),
+          el('div', { class: 'seat-row-actions' }, [
+            (c.studentId || c.hold) ? el('button', { type: 'button', class: 'btn secondary', text: '배정 풀기', onclick: function () { confirmUnassign(c); } }) : null,
+            el('button', { type: 'button', class: 'btn secondary', text: '선택 취소', onclick: function () { grid.clearSelection(); clear(info); } })
+          ]),
+          el('div', { class: 'muted', style: 'margin-top:8px', text: '다른 자리를 하나 더 누르면 맞바꿉니다(빈 자리면 이동).' })
+        ]));
+      } });
+      gridCard.appendChild(grid);
+      gridCard.appendChild(info);
+      if (!canEdit) gridCard.appendChild(el('div', { class: 'muted', text: state.data.ended ? '끝난 기간이라 볼 수만 있습니다.' : '좌석 배정은 관리자와 학사 교사만 할 수 있습니다.' }));
+      if (!canEdit && state.data.unseatedCount) gridCard.appendChild(el('div', { class: 'muted', text: '미배정 학생 ' + state.data.unseatedCount + '명' }));
+      body.appendChild(gridCard);
+    }
+
+    function done(r, okText) {
+      if (!r.ok) { UI.toast(r.error || '저장하지 못했습니다.', { kind: 'warn', ms: 5000 }); if (r.stale) load(); return; }
+      if (r.warnings && r.warnings.length) UI.toast(r.warnings.join(' '), { kind: 'warn', ms: 6000 }); else UI.toast(okText, { kind: 'ok' });
+      load();
+    }
+    function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
+    // 자리에 학생이 있는 것으로 치는 경우: 앉아 있거나, 입실 전 학생이 배정돼 있다(서버도 같은 기준으로 맞바꾼다). 퇴실한 학생의 자리는 빈 자리.
+    function occupied(c) { return !!c.studentId || (!!c.hold && c.reason !== '퇴실'); }
+    function label(c) {
+      var who = c.text || (c.hold ? c.hold + (c.reason === '퇴실' ? ' 퇴실 자리' : ' (' + c.reason + ')') : '공석');
+      return (c.seatLabel ? c.seatLabel + '번 ' : '') + who;
+    }
+    function expectOf(cells) { var e = {}; cells.forEach(function (c) { e[c.id] = c.token; }); return e; }
+    function doAssign(cell) {
+      if (!cell.vacant) { UI.toast('이미 앉은 학생이 있습니다. 두 자리를 차례로 눌러 맞바꿔 주세요.', { kind: 'warn', ms: 5000 }); return; }
+      if (cell.hold && cell.reason !== '퇴실') { UI.toast(cell.hold + ' 학생이 배정된 자리입니다(' + cell.reason + '). 자리를 눌러 배정을 먼저 풀어 주세요.', { kind: 'warn', ms: 6000 }); return; }
+      call('assignSeat', state.termId, cell.id, state.student.id, expectOf([cell])).then(function (r) { if (r.ok) state.student = null; done(r, '앉혔습니다.'); }).catch(fail);
+    }
+    function confirmSwap(a, b) {
+      if (!a || !b) return;
+      var oa = occupied(a), ob = occupied(b);
+      if (!oa && !ob) { UI.toast('두 자리 모두 비어 있어 바꿀 것이 없습니다.', { kind: 'info' }); return; }
+      var both = oa && ob;
+      var note = !both && (a.reason === '퇴실' || b.reason === '퇴실') ? ' 퇴실한 학생의 지난 기록은 그대로 남습니다.' : '';
+      UI.confirmSheet({ title: both ? '두 자리를 맞바꿀까요?' : '자리를 옮길까요?',
+        message: label(a) + '  ↔  ' + label(b) + note, confirmText: both ? '맞바꾸기' : '옮기기', cancelText: '취소',
+        onconfirm: function () { call('swapSeats', state.termId, a.id, b.id, expectOf([a, b])).then(function (r) { done(r, '바꿨습니다.'); }).catch(fail); } });
+    }
+    function confirmUnassign(c) {
+      UI.confirmSheet({ title: '배정을 풀까요?', message: label(c) + (c.studentId ? ' 학생이 미배정 목록으로 돌아갑니다.' : ' 학생의 배정을 풀어 이 자리를 비웁니다.'), confirmText: '배정 풀기', cancelText: '취소', danger: true,
+        onconfirm: function () { call('unassignSeat', state.termId, c.id, expectOf([c])).then(function (r) { done(r, '배정을 풀었습니다.'); }).catch(fail); } });
+    }
+
+    /* ───────── 격자 편집(관리자) ───────── */
+    var NEXT = { '': '좌석', '좌석': '기둥', '기둥': '비상문', '비상문': '창문', '창문': '' };
+    var KO = { '좌석': '좌석', '기둥': '기둥', '비상문': '비상문', '창문': '창문' };
+    var EN = { '좌석': 'seat', '기둥': 'pillar', '비상문': 'door', '창문': 'window' };
+    var FROM_EN = { seat: '좌석', pillar: '기둥', door: '비상문', window: '창문' };
+
+    function drawLayout() {
+      var sp = space();
+      body.appendChild(spaceFormCard(sp));
+      if (sp) body.appendChild(gridEditCard(sp));
+      body.appendChild(importCard());
+    }
+
+    function spaceFormCard(sp) {
+      var card = el('div', { class: 'card' }, [el('h2', { text: sp ? '공간 정보 · ' + sp.name : '새 공간' })]);
+      var name = el('input', { type: 'text', maxlength: '30', placeholder: '예: 1층 자습실, SA1실' });
+      var gender = el('select', {}, ['혼성', '남', '여'].map(function (g) { return el('option', { value: g, text: g }); }));
+      var rows = el('input', { type: 'text', inputmode: 'numeric', placeholder: '예: 20' });
+      var cols = el('input', { type: 'text', inputmode: 'numeric', placeholder: '예: 12' });
+      if (sp) { name.value = sp.name; gender.value = sp.gender; rows.value = sp.rows; cols.value = sp.cols; }
+      var fields = {
+        name: UI.field('이름', name, { name: 'name' }), gender: UI.field('성별 구역', gender, { name: 'gender' }),
+        rows: UI.field('행 수(위→아래)', rows, { name: 'rows' }), cols: UI.field('열 수(왼쪽→오른쪽)', cols, { name: 'cols' })
+      };
+      Object.keys(fields).forEach(function (k) { card.appendChild(fields[k]); });
+      var save = el('button', { type: 'button', class: 'btn', text: sp ? '공간 정보 저장' : '공간 만들기' });
+      var actions = el('div', { class: 'seat-row-actions' }, [save]);
+      if (sp) actions.appendChild(el('button', { type: 'button', class: 'btn secondary', text: '새 공간 추가', onclick: function () { state.spaceId = ''; drawBody(); } }));
+      card.appendChild(actions);
+      function send(confirmRelabel) {
+        save.disabled = true;
+        Object.keys(fields).forEach(function (k) { fields[k].setError(''); });
+        call('saveSpace', { id: sp ? sp.id : '', name: name.value, gender: gender.value, rows: rows.value, cols: cols.value, confirmRelabel: !!confirmRelabel }).then(function (r) {
+          save.disabled = false;
+          if (r.needsConfirm) {   // 이름을 바꿔 번호 방식이 바뀐다: 저장 전에 "라벨이 바뀌는 배정 좌석 N개"를 보여 준다
+            UI.confirmSheet({ title: '좌석 번호 방식이 바뀝니다',
+              message: '이름을 바꾸면 번호 방식(SA실은 방 안 순번, 그 밖은 줄-순번)이 바뀌어 좌석 ' + r.relabelCount + '개의 번호가 달라집니다. 라벨이 바뀌는 배정 좌석 ' + r.relabelAssigned + '개(배정은 그대로 이어집니다).',
+              confirmText: '번호 다시 매기고 저장', cancelText: '취소', onconfirm: function () { send(true); } });
+            return;
+          }
+          if (!r.ok) { r.errors.forEach(function (e) { if (fields[e.field]) fields[e.field].setError(e.message); }); return; }
+          state.spaceId = r.id; load('저장했습니다.');
+        }).catch(function (err) { save.disabled = false; fail(err); });
+      }
+      save.addEventListener('click', function () { send(false); });
+      return card;
+    }
+
+    function gridEditCard(sp) {
+      var card = el('div', { class: 'card' }, [el('h2', { text: '격자 그리기 · ' + sp.name })]);
+      card.appendChild(el('div', { class: 'muted', text: '칸을 누를 때마다 좌석 → 기둥 → 비상문 → 창문 → 빈칸 순서로 바뀝니다. 이번 운영 기간에 학생이 앉았던 좌석은 배정을 풀어도 기간이 끝난 뒤에야 바꿀 수 있습니다. 번호는 1층은 줄-순번(예 3-7), SA실은 방 안 순번으로 자동 매겨집니다.' }));
+      var kinds = {};
+      sp.cells.forEach(function (c) { kinds[c.row + ',' + c.col] = FROM_EN[c.kind]; });
+      var table = el('table', { class: 'grid-edit' });
+      var buttons = {};
+      function paint(k) {
+        var b = buttons[k], kd = kinds[k] || '';
+        b.className = kd ? 'k-' + EN[kd] : '';
+        b.textContent = kd === '좌석' ? '좌' : (kd || '·');
+        b.setAttribute('aria-label', k.replace(',', '행 ') + '열 ' + (kd || '빈칸'));
+      }
+      for (var r = 1; r <= sp.rows; r++) {
+        var tr = el('tr');
+        for (var c = 1; c <= sp.cols; c++) {
+          (function (key) {
+            var b = el('button', { type: 'button' });
+            buttons[key] = b; paint(key);
+            b.addEventListener('click', function () { var nx = NEXT[kinds[key] || '']; if (nx) kinds[key] = nx; else delete kinds[key]; paint(key); });
+            tr.appendChild(el('td', {}, [b]));
+          })(r + ',' + c);
+        }
+        table.appendChild(tr);
+      }
+      card.appendChild(el('div', { class: 'grid-edit-wrap' }, [table]));
+      var msg = el('div', { style: 'margin-top:8px' });
+      card.appendChild(msg);
+      state.layout = { sp: sp, kinds: kinds, msg: msg };
+      layoutBar = UI.actionBar([{ text: '격자 저장', kind: 'primary', onclick: function (e, btn) { saveGrid(btn); } }], { mount: true });
+      return card;
+    }
+
+    function saveGrid(btn) {
+      var L = state.layout; if (!L) return;
+      var cells = Object.keys(L.kinds).map(function (k) { var p = k.split(','); return { row: +p[0], col: +p[1], kind: L.kinds[k] }; });
+      if (btn) btn.disabled = true;
+      clear(L.msg);
+      // 저장 전에 바뀌는 것을 보여 준다: 칸 수, 번호가 바뀌는 배정 좌석 수, 지난 기간 경고
+      call('previewSpaceGrid', L.sp.id, cells).then(function (p) {
+        if (btn) btn.disabled = false;
+        if (!p.ok) { p.errors.forEach(function (m) { L.msg.appendChild(el('div', { class: 'notice warn', text: m })); }); return; }
+        if (!p.created && !p.updated && !p.cancelled) { UI.toast('바뀐 것이 없습니다.', { kind: 'info' }); return; }
+        var lines = ['추가 ' + p.created + '칸, 변경 ' + p.updated + '칸, 삭제 ' + p.cancelled + '칸'];
+        lines.push('라벨이 바뀌는 배정 좌석 ' + p.relabelAssigned + '개' + (p.relabelAssigned ? '(배정은 그대로 이어집니다)' : ''));
+        (p.warnings || []).forEach(function (w) { lines.push(w); });
+        UI.confirmSheet({ title: '격자를 저장할까요?', message: lines.join(' · '), confirmText: '저장', cancelText: '취소', onconfirm: function () { reallySave(btn, cells); } });
+      }).catch(function (err) { if (btn) btn.disabled = false; fail(err); });
+    }
+    function reallySave(btn, cells) {
+      var L = state.layout; if (!L) return;
+      if (btn) btn.disabled = true;
+      call('saveSpaceGrid', L.sp.id, cells).then(function (r) {
+        if (btn) btn.disabled = false;
+        if (!r.ok) { r.errors.forEach(function (m) { L.msg.appendChild(el('div', { class: 'notice warn', text: m })); }); return; }
+        load('격자를 저장했습니다. (추가 ' + r.created + ', 변경 ' + r.updated + ', 삭제 ' + r.cancelled + ')');
+      }).catch(function (err) { if (btn) btn.disabled = false; fail(err); });
+    }
+
+    function importCard() {
+      var card = el('div', { class: 'card' }, [el('h2', { text: '좌석표 붙여넣어 새 공간 만들기' })]);
+      card.appendChild(el('div', { class: 'muted', text: '선생님의 좌석표를 시트에서 복사해 붙여넣으면 자리 모양만 가져옵니다(이름은 가져오지 않고, 학생은 따로 배정합니다). 칸에는 공석·"1. 이름"·기둥·비상문·창문만 있어야 합니다.' }));
+      var name = el('input', { type: 'text', maxlength: '30', placeholder: '예: SA3실' });
+      var gender = el('select', {}, ['혼성', '남', '여'].map(function (g) { return el('option', { value: g, text: g }); }));
+      var text = el('textarea', { style: 'min-height:140px' });
+      var f = { name: UI.field('새 공간 이름', name, { name: 'name' }), gender: UI.field('성별 구역', gender, { name: 'gender' }), text: UI.field('좌석표', text, { name: 'text' }) };
+      Object.keys(f).forEach(function (k) { card.appendChild(f[k]); });
+      var out = el('div');
+      var pv = el('button', { type: 'button', class: 'btn secondary', text: '미리보기' });
+      var go = el('button', { type: 'button', class: 'btn', text: '가져오기', disabled: 'disabled' });
+      card.appendChild(el('div', { class: 'seat-row-actions' }, [pv, go])); card.appendChild(out);
+      go.disabled = true;
+      text.addEventListener('input', function () { go.disabled = true; });
+      pv.addEventListener('click', function () {
+        pv.disabled = true; clear(out); f.text.setError('');
+        call('previewSeatGrid', text.value).then(function (p) {
+          pv.disabled = false;
+          if (!p.ok) { p.errors.forEach(function (e) { out.appendChild(el('div', { class: 'notice warn', text: e.message })); }); go.disabled = true; return; }
+          out.appendChild(kv([['크기', p.rows + '행 × ' + p.cols + '열'], ['좌석', p.seatCount + '석'], ['이름 칸(무시)', p.namedCount + '칸']]));
+          go.disabled = false;
+        }).catch(function (err) { pv.disabled = false; fail(err); });
+      });
+      go.addEventListener('click', function () {
+        go.disabled = true;
+        Object.keys(f).forEach(function (k) { f[k].setError(''); });
+        call('importSeatGrid', text.value, { name: name.value, gender: gender.value }).then(function (r) {
+          if (!r.ok) { go.disabled = false; r.errors.forEach(function (e) { if (f[e.field]) f[e.field].setError(e.message); }); return; }
+          state.spaceId = r.id; load('가져왔습니다. 좌석 ' + r.seats + '석.');
+        }).catch(function (err) { go.disabled = false; fail(err); });
+      });
+      return card;
+    }
+
+    load();
+  }
+</script>

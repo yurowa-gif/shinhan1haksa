@@ -32,7 +32,11 @@ function permissions_() {
     'sheet.view': { roles: ['admin', 'attendance', 'hall_teacher'] },
     // 자습 일정·블록: 교사 역할은 보기, 수정은 관리자만
     'schedule.view': { roles: ['admin', 'attendance', 'hall_teacher', 'duty_manager', 'homeroom'] },
-    'schedule.edit': { roles: ['admin'] }
+    'schedule.edit': { roles: ['admin'] },
+    // 좌석: 보기는 교사 역할, 학생 배정은 관리자·학사 교사, 격자(공간 구조) 편집은 관리자
+    'seat.view': { roles: ['admin', 'attendance', 'hall_teacher', 'duty_manager', 'homeroom'] },
+    'seat.edit': { roles: ['admin', 'hall_teacher'] },
+    'seat.layout': { roles: ['admin'] }
   };
 }
 

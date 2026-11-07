@@ -15,6 +15,11 @@
       el('div', { class: 'muted', text: '날짜를 고르면 그날 출석부를 미리 보고 PDF로 받습니다.' }),
       el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=sheet', text: '출석부 열기' })
     ]));
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '좌석표' }),
+      el('div', { class: 'muted', text: '학생을 빈 자리에 앉히고 두 자리를 맞바꿉니다.' }),
+      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=seats', text: '좌석표 열기' })
+    ]));
     root.appendChild(soonCard('특이사항 보기·요청', '1단계(F1)에서 만듭니다.'));
   }
 </script>

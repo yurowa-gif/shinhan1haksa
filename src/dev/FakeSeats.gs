@@ -9,18 +9,20 @@
  *   spaces: [{key, name, gender:'혼성'|'남'|'여', rows, cols}]   배열 순서 = 화면·인쇄 순서
  *   seats:  [{spaceKey, row, col, label, kind:'좌석'|'기둥'|'비상문'|'창문'}]
  *     row·col은 1부터. seats에 없는 칸은 빈칸(통로).
- *     label은 좌석만 공간 안 번호('1'부터, 행 우선), 좌석이 아닌 칸은 ''.
+ *     label은 좌석만. 1층은 "줄-순번"(좌석이 있는 열을 왼쪽부터 센 줄 번호 + 앞(1행 쪽)부터 순번, 예 '3-7'),
+ *     SA실은 방 안 순번('1'부터, 행 우선)(결정 37). 좌석이 아닌 칸은 ''.
  */
 
 /**
  * 1층 자습실: 실제 2025 1학기 자리배치도의 모양을 따른다(docs/reference/real-layout-2025.md, 이름 없음).
  * 세로 줄 8개 = 홑줄 · 짝줄 3쌍 · 홑줄, 줄 사이는 통로 열.
  * 20행 × 12열: 열 1(줄1) | 2 통로 | 3·4(줄2·3) | 5 통로 | 6·7(줄4·5) | 8 통로 | 9·10(줄6·7) | 11 통로 | 12(줄8)
- * 줄 길이 18·18·18·19·19·20·20·16, 줄8의 2칸은 기둥 → 좌석 146.
+ * 줄별 좌석 수(실제 2025 출석부, docs/reference/real-layout-2025.md 4.1) 19·17·18·19·19·20·20·14 = 146.
+ * 줄8은 기둥 2칸이 끼어 있어 칸 길이가 16이다(좌석 14 + 기둥 2).
  */
 var FAKE_SEAT_FLOOR1 = {
   key: '1F', name: '1층 자습실', gender: '혼성', rows: 20, cols: 12,
-  lines: [{ col: 1, len: 18 }, { col: 3, len: 18 }, { col: 4, len: 18 }, { col: 6, len: 19 }, { col: 7, len: 19 },
+  lines: [{ col: 1, len: 19 }, { col: 3, len: 17 }, { col: 4, len: 18 }, { col: 6, len: 19 }, { col: 7, len: 19 },
     { col: 9, len: 20 }, { col: 10, len: 20 }, { col: 12, len: 16 }],
   special: { '6,12': '기둥', '12,12': '기둥', '20,12': '비상문', '20,1': '창문' }
 };
@@ -44,9 +46,9 @@ function buildFakeSeatLayout_() {
   var seats = [];
 
   /** cellKind(r, c) → '좌석'|'기둥'|'비상문'|'창문'|'' (''이면 빈칸, seats에 넣지 않음) */
-  var addSpace = function (key, name, gender, rows, cols, cellKind) {
+  var addSpace = function (key, name, gender, rows, cols, cellKind, lineStyle) {
     spaces.push({ key: key, name: name, gender: gender, rows: rows, cols: cols });
-    var n = 0;
+    var n = 0, first = seats.length;
     for (var r = 1; r <= rows; r++) {
       for (var c = 1; c <= cols; c++) {
         var kind = cellKind(r, c);
@@ -58,6 +60,20 @@ function buildFakeSeatLayout_() {
         });
       }
     }
+    if (!lineStyle) return;
+    // 줄-순번: 좌석이 있는 열마다 줄 번호, 그 줄 안에서 앞(1행)부터 순번(seats는 행 우선이라 열별로 세면 행 순서가 된다)
+    var lineNo = {}, count = {}, lines = 0;
+    for (var c2 = 1; c2 <= cols; c2++) {
+      for (var i = first; i < seats.length; i++) {
+        if (seats[i].col === c2 && seats[i].kind === '좌석') { if (!lineNo[c2]) lineNo[c2] = ++lines; break; }
+      }
+    }
+    for (var i2 = first; i2 < seats.length; i2++) {
+      var st = seats[i2];
+      if (st.kind !== '좌석') continue;
+      count[st.col] = (count[st.col] || 0) + 1;
+      st.label = lineNo[st.col] + '-' + count[st.col];
+    }
   };
 
   var f = FAKE_SEAT_FLOOR1;
@@ -68,7 +84,7 @@ function buildFakeSeatLayout_() {
       if (f.lines[i].col === c) return r <= f.lines[i].len ? '좌석' : '';
     }
     return ''; // 통로 열
-  });
+  }, true);
 
   for (var j = 0; j < FAKE_SEAT_SA_ROOMS.length; j++) {
     var room = FAKE_SEAT_SA_ROOMS[j];
