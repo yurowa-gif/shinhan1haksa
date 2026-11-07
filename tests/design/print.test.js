@@ -7,7 +7,7 @@ const path = require('path');
 const { test, loadGs, plain, ROOT } = require('../helpers/harness');
 const { validateSheetModel } = require('./sheet-model-shape');
 
-const ctx = loadGs(['src/print/AttendanceSheetHtml.gs']);
+const ctx = loadGs(['src/rules/DateRules.gs', 'src/print/AttendanceSheetHtml.gs']);
 const DAYS = ['mon_thu', 'fri', 'sat', 'sun'];
 const fixture = (d) => JSON.parse(fs.readFileSync(path.join(ROOT, 'design/fixtures/sheet-model.' + d + '.json'), 'utf8'));
 const count = (s, sub) => s.split(sub).length - 1;
@@ -482,10 +482,12 @@ test('그릴 수 없는 입력: 빈 공간은 빼고, 같은 칸 좌석 둘은 �
   assert.ok(html.indexOf('빈 공간 가') < 0, '빈 공간은 그리지 않는다');
   assert.ok(html.indexOf('그릴 칸이 없는 공간 2개 빠짐') > 0 && html.indexOf('가려진 학생 3. 겹침이') > 0, '앞면 경고 줄');
   assert.ok(plan(m).warnings.join().indexOf('겹침이') >= 0);
-  assert.strictEqual(ctx.printWeekday_('2027-03-03'), '수');
   assert.strictEqual(ctx.printDateKo_('2027-03-07', ''), '2027년 3월 7일(일)');
   m.weekdayKo = undefined; m.date = '2027-03-07'; m.dayType = 'mon_thu';
   assert.strictEqual(ctx.printIsMonThu_(m), false, '요일이 없으면 날짜로 판정');
+  m.weekdayKo = '월';
+  assert.strictEqual(ctx.printIsMonThu_(m), false, '요일이 날짜와 다르면 날짜를 믿는다');
+  assert.ok(ctx.printDateKo_('2027-03-07', '월').indexOf('(일)') > 0);
   const onlyEmpty = fixture('mon_thu');
   onlyEmpty.spaces = [{ id: 'e', name: '빈', gender: '혼성', rows: 0, cols: 0, cells: [] }];
   assert.ok(ctx.printRenderSheet_(onlyEmpty, {}).indexOf('공간(좌석 배치)이 없습니다') > 0 && plan(onlyEmpty) === null);

@@ -12,7 +12,7 @@ const OUT = path.join(__dirname, 'out');
 const DAYS = ['mon_thu', 'fri', 'sat', 'sun'];
 
 function render(day) {
-  const ctx = loadGs(['src/print/AttendanceSheetHtml.gs']);
+  const ctx = loadGs(['src/rules/DateRules.gs', 'src/print/AttendanceSheetHtml.gs']);
   const model = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'sheet-model.' + day + '.json'), 'utf8'));
   return { model, html: ctx.printRenderSheet_(model, {}) };
 }
@@ -32,9 +32,9 @@ async function main() {
     const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
     fs.writeFileSync(path.join(OUT, 'sheet-' + day + '.pdf'), pdf);
     const overflow = await page.evaluate(() => Array.from(document.querySelectorAll('section.page')).map((s, i) => ({
-      i, over: s.scrollHeight > s.clientHeight + 1 || s.scrollWidth > s.clientWidth + 1
+      i, over: Math.round(s.getBoundingClientRect().height - 544 * 4 / 3) > 1 || s.scrollWidth > s.clientWidth + 1
     })).filter((x) => x.over));
-    const want = loadGs(['src/print/AttendanceSheetHtml.gs']).printSheetPlan_(model, {}).pages;
+    const want = loadGs(['src/rules/DateRules.gs', 'src/print/AttendanceSheetHtml.gs']).printSheetPlan_(model, {}).pages;
     const ok = pages === want && !overflow.length;
     if (!ok) bad++;
     console.log(day + ': PDF ' + pages + '쪽(기대 ' + want + '쪽, 공간 ' + model.spaces.length + '개를 한 장에)' + (overflow.length ? ', 넘침 ' + JSON.stringify(overflow) : '') + (ok ? ' ✓' : ' ✗'));

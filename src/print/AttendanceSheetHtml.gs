@@ -44,6 +44,7 @@ var PRINT_ROW_SLACK_PT = 1.3;    // 좌석 한 줄(tr 두 개)에 테두리가 �
 var PRINT_SLACK_PT = 3;          // 그 밖의 여유
 var PRINT_LIST_LINE_PT = 8.5;    // 특이사항 목록 한 줄 높이(7pt 글자)
 var PRINT_LIST_TITLE_PT = 11;
+var PRINT_LIST_MIN_PT = 22;      // 특이사항 칸 최소 높이(제목 + '없음'·첫 항목 한 줄): 작은 방이 아무리 많아도 이만큼은 남긴다
 var PRINT_MEMO_PT = 40;          // 메모 칸 높이(앞면에 늘 있다)
 var PRINT_BACK_LINE_PT = 10.5;   // 뒷면 목록 한 줄 높이(8pt 글자)
 var PRINT_BACK_COLS = 3;
@@ -66,7 +67,7 @@ function printClamp_(x, lo, hi) {
   return x < lo ? lo : (x > hi ? hi : x);
 }
 
-/** 글자 폭 어림(em), 넉넉하게: 한글·전각 1, 대문자 1, 소문자 0.85, 숫자 0.6, 구두점 0.4, 공백 0.3. // shortcut: 실제 글꼴 폭이 아니라 넘침이 드물도록 크게 잡은 값, C0 PDF에서 어긋나면 글꼴별 폭표로 바꾼다 */
+/** 글자 폭 어림(em), 넉넉하게: 한글·전각 1, 대문자 1, 소문자 0.85, 숫자·구두점 0.6(% & @ 는 1), 공백 0.3. // shortcut: 실제 글꼴 폭이 아니라 넘침이 드물도록 크게 잡은 값, C0 PDF에서 어긋나면 글꼴별 폭표로 바꾼다 */
 function printTextEm_(s) {
   var em = 0;
   var str = String(s === null || s === undefined ? '' : s);
@@ -76,7 +77,8 @@ function printTextEm_(s) {
     else if (c >= 65 && c <= 90) em += 1;
     else if (c >= 97 && c <= 122) em += 0.85;
     else if (c >= 48 && c <= 57) em += 0.6;
-    else if (c < 128) em += 0.4;
+    else if (c === 37 || c === 38 || c === 64) em += 1;   // % & @
+    else if (c < 128) em += 0.6;
     else em += 1;
   }
   return em;
@@ -106,19 +108,11 @@ function printCircled_(n) {
   return n >= 1 && n <= 20 ? String.fromCharCode(0x2460 + n - 1) : '(' + n + ')';
 }
 
-/** '2027-03-03' → '수'. 날짜가 아니면 ''. (Date.UTC로 요일만 계산: 시간대·현재 시각을 쓰지 않는다) */
-function printWeekday_(date) {
-  var p = String(date || '').split('-');
-  if (p.length !== 3 || !(Number(p[1]) >= 1 && Number(p[2]) >= 1)) return '';
-  var d = new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2])));
-  return isNaN(d.getTime()) ? '' : '일월화수목금토'.charAt(d.getUTCDay());
-}
-
-/** '2027-03-03' + '수' → '2027년 3월 3일(수)'. 요일이 없으면 날짜로 계산한다 */
+/** '2027-03-03' → '2027년 3월 3일(수)'. 요일은 날짜에서 구하고(ymdWeekdayKo_), 날짜가 아니면 받은 요일을 쓴다 */
 function printDateKo_(date, weekdayKo) {
   var p = String(date || '').split('-');
   if (p.length !== 3) return String(date || '');
-  return p[0] + '년 ' + Number(p[1]) + '월 ' + Number(p[2]) + '일(' + (weekdayKo || printWeekday_(date)) + ')';
+  return p[0] + '년 ' + Number(p[1]) + '월 ' + Number(p[2]) + '일(' + (ymdIsValid_(date) ? ymdWeekdayKo_(date) : (weekdayKo || '')) + ')';
 }
 
 function printArr_(x) {
@@ -151,12 +145,16 @@ function printOutsideCount_(space) {
 /**
  * 그릴 수 있는 공간만 고른다: 행·열이 0이거나 칸 목록이 없는 공간은 뺀다(skipped). 같은 칸(행,열)에 좌석이 둘이면 먼저 나온 것만 그리고
  * 가려진 학생 이름을 hidden에 모은다(앞면 경고 줄에 적는다).
- * @return {{spaces:Object[], skipped:number, hidden:string[]}}
+ * @return {{spaces:Object[], skipped:number, hidden:string[], lost:string[]}} lost = 그려지지 않는 좌석(격자 밖·그릴 수 없는 공간)에 앉은 학생
  */
 function printCleanSpaces_(model) {
-  var out = { spaces: [], skipped: 0, hidden: [] };
+  var out = { spaces: [], skipped: 0, hidden: [], lost: [] };
   (model.spaces || []).forEach(function (sp) {
-    if (!sp || !(sp.rows >= 1) || !(sp.cols >= 1) || !(sp.cells || []).length) { out.skipped++; return; }
+    if (!sp || !(sp.rows >= 1) || !(sp.cols >= 1) || !(sp.cells || []).length) {
+      out.skipped++;
+      ((sp && sp.cells) || []).forEach(function (c) { if (c.kind === 'seat' && c.occupant) out.lost.push(String(c.occupant.display)); });
+      return;
+    }
     var seen = {};
     var cells = [];
     sp.cells.forEach(function (c) {
@@ -166,6 +164,7 @@ function printCleanSpaces_(model) {
         return;
       }
       seen[k] = true;
+      if (c.kind === 'seat' && c.occupant && (!(c.row >= 1 && c.row <= sp.rows) || !(c.col >= 1 && c.col <= sp.cols))) out.lost.push(String(c.occupant.display));
       cells.push(c);
     });
     out.spaces.push(Object.assign({}, sp, { cells: cells }));
@@ -309,7 +308,7 @@ function printSummary_(model) {
 
 /** 월~목인가: 실제 요일(model.weekdayKo)로 판정한다(요일 유형 코드가 특별 코드여도 맞게). 요일이 없으면 dayType */
 function printIsMonThu_(model) {
-  var wd = model.weekdayKo || printWeekday_(model.date);
+  var wd = ymdIsValid_(model.date) ? ymdWeekdayKo_(model.date) : model.weekdayKo;
   if (wd === '월' || wd === '화' || wd === '수' || wd === '목') return true;
   if (wd === '금' || wd === '토' || wd === '일') return false;
   return model.dayType === 'mon_thu';
@@ -521,7 +520,7 @@ function printTryColumns_(picked, c, base) {
     var sp = rooms[i];
     return printTitleH_(sp, roomWs[i]) + PRINT_LINEHEAD_PT + printRowsH_(1, sp.rows, pitch, roomEx[i]);
   }
-  var roomsAvail = base.bodyH - PRINT_MEMO_PT - PRINT_ROOMVGAP_PT * 2;
+  var roomsAvail = base.bodyH - PRINT_MEMO_PT - PRINT_LIST_MIN_PT - PRINT_ROOMVGAP_PT * 2;
   var front = [];
   var roomsH = 0;
   var i;
@@ -553,7 +552,7 @@ function printTryColumns_(picked, c, base) {
 function printContPages_(lay, picked) {
   var pages = [];
   var main = picked.main, rooms = picked.rooms;
-  var contBody = PRINT_PAGE_H_PT - 24 - PRINT_SLACK_PT;
+  var contBody = PRINT_PAGE_H_PT - lay.miniH - PRINT_SLACK_PT;
   var nextRow = lay.mainRowsFront + 1;
   var chunks = [];
   lay.contRooms.forEach(function (ri) {
@@ -653,6 +652,7 @@ function printLayoutOnce_(model, opts, warnIn, clean) {
   lay.n = n; lay.main = main; lay.rooms = rooms; lay.mainCols = base.mainCols; lay.roomCols = base.roomCols;
   lay.head = head; lay.foot = foot; lay.bodyH = base.bodyH; lay.vacantLabel = vacantLabel; lay.summary = printSummary_(model);
   lay.markH = lay.pitch - PRINT_NAME_PT;
+  lay.miniH = printMiniHeadH_(model);
   lay.cont = lay.allFit ? [] : printContPages_(lay, picked);
 
   // 앞면 특이사항 목록 칸
@@ -681,7 +681,7 @@ function printLayoutOnce_(model, opts, warnIn, clean) {
     if (!texts.length) backItems.push({ text: '없음' });
   }
   var backColW = PRINT_PAGE_W_PT / PRINT_BACK_COLS - 6;   // 열 padding-right 6pt를 뺀 내용 너비
-  var backLines = Math.floor((PRINT_PAGE_H_PT - 24 - PRINT_SLACK_PT - 4) / (PRINT_BACK_LINE_PT + 0.5));
+  var backLines = Math.floor((PRINT_PAGE_H_PT - lay.miniH - PRINT_SLACK_PT - 4) / (PRINT_BACK_LINE_PT + 0.5));
   lay.back = backItems.length ? printPackPages_(backItems, PRINT_BACK_COLS, backLines, backColW - 1, 8) : [];
   lay.backColW = backColW;
   lay.pages = 1 + lay.cont.length + lay.back.length;
@@ -698,15 +698,14 @@ function printLayoutOnce_(model, opts, warnIn, clean) {
   var outside = 0;
   spaces.forEach(function (sp) { outside += printOutsideCount_(sp); });
   lay.dropped = outside + clean.skipped + clean.hidden.length;
-  var wt = [];
-  if (!lay.allFit) wt.push('큰 공간 ' + (lay.mainRowsFront < main.rows ? '일부 행' : '') + (lay.contRooms.length ? (lay.mainRowsFront < main.rows ? '과 ' : '') + '작은 공간 ' + lay.contRooms.length + '개' : '') + ' 앞면에 다 안 들어가 뒷면에 이어집니다');
-  if (outside) wt.push('격자 밖 좌석 ' + outside + '개 그려지지 않음(좌석 배치 확인)');
-  if (clean.skipped) wt.push('그릴 칸이 없는 공간 ' + clean.skipped + '개 빠짐(좌석 배치 확인)');
-  if (clean.hidden.length) wt.push('같은 칸에 좌석이 겹쳐 가려진 학생 ' + clean.hidden.join(', '));
-  lay.warnText = wt.join('. ') + (wt.length ? '.' : '');
-  if (outside) warnings.push('격자 밖 좌석 ' + outside + '개는 그려지지 않았습니다.');
-  if (clean.skipped) warnings.push('그릴 칸이 없는 공간 ' + clean.skipped + '개는 빠졌습니다.');
-  if (clean.hidden.length) warnings.push('같은 칸에 좌석이 겹쳐 가려진 학생: ' + clean.hidden.join(', ') + '.');
+  var notes = [];
+  if (!lay.allFit) notes.push('큰 공간 ' + (lay.mainRowsFront < main.rows ? '일부 행' : '') + (lay.contRooms.length ? (lay.mainRowsFront < main.rows ? '과 ' : '') + '작은 공간 ' + lay.contRooms.length + '개' : '') + ' 앞면에 다 안 들어가 뒷면에 이어집니다');
+  if (outside) notes.push('격자 밖 좌석 ' + outside + '개 그려지지 않음(좌석 배치 확인)');
+  if (clean.skipped) notes.push('그릴 칸이 없는 공간 ' + clean.skipped + '개 빠짐(좌석 배치 확인)');
+  if (clean.lost.length) notes.push('그려지지 않은 좌석의 학생 ' + clean.lost.join(', '));
+  if (clean.hidden.length) notes.push('같은 칸에 좌석이 겹쳐 가려진 학생 ' + clean.hidden.join(', '));
+  lay.warnText = notes.join('. ') + (notes.length ? '.' : '');
+  notes.slice(lay.allFit ? 0 : 1).forEach(function (t) { warnings.push(t + '.'); });
   lay.fits = lay.allFit;     // 앞면 한 장에 공간이 모두 들어갔는가(뒷면이 목록뿐이면 true)
   return lay;
 }
@@ -871,9 +870,18 @@ function printFrontHtml_(model, lay, isLast) {
     'page-break-after:' + (isLast ? 'auto' : 'always') + '">' + printHeadHtml_(model, lay) + body + printFootHtml_(lay.foot, lay.warnText) + '</section>';
 }
 
-function printMiniHead_(model, label) {
-  return '<div style="min-height:24pt;font-size:12pt;font-weight:bold;line-height:22pt">' +
-    printEsc_(model.title || '신한학사 출석부') + ' · ' + printEsc_(printDateKo_(model.date, model.weekdayKo)) + ' · ' + printEsc_(label) + '</div>';
+/** 이어지는 쪽·뒷면 머리 높이: 제목·날짜·쪽 표시가 한 줄에 안 들어가면 줄 수만큼 높인다(12pt, 줄 22pt) */
+function printMiniHeadH_(model) {
+  var lines = Math.max(1, Math.ceil(printTextEm_(printMiniHeadText_(model, '앞면에 이어서 (99/99)')) * 12 / (PRINT_PAGE_W_PT * 0.97)));
+  return lines * 22 + 2;
+}
+
+function printMiniHeadText_(model, label) {
+  return (model.title || '신한학사 출석부') + ' · ' + printDateKo_(model.date, model.weekdayKo) + ' · ' + label;
+}
+
+function printMiniHead_(model, label, h) {
+  return '<div style="min-height:' + h + 'pt;font-size:12pt;font-weight:bold;line-height:22pt">' + printEsc_(printMiniHeadText_(model, label)) + '</div>';
 }
 
 function printContHtml_(model, lay, cp, label, isLast) {
@@ -883,7 +891,7 @@ function printContHtml_(model, lay, cp, label, isLast) {
     '<td style="padding:0;vertical-align:top;width:' + printNum_(left ? left.width : 0) + 'pt">' + (left ? left.html : '') + '</td>' +
     '<td style="padding:0;width:' + PRINT_SEP_PT + 'pt"></td><td style="padding:0;vertical-align:top">' + right + '</td></tr></table>';
   return '<section class="page" style="width:' + PRINT_PAGE_W_PT + 'pt;min-height:' + PRINT_PAGE_H_PT + 'pt;' + PRINT_COLOR_EXACT +
-    'page-break-after:' + (isLast ? 'auto' : 'always') + '">' + printMiniHead_(model, label) + body + '</section>';
+    'page-break-after:' + (isLast ? 'auto' : 'always') + '">' + printMiniHead_(model, label, lay.miniH) + body + '</section>';
 }
 
 function printBackHtml_(model, lay, page, label, isLast) {
@@ -894,7 +902,7 @@ function printBackHtml_(model, lay, page, label, isLast) {
     }).join('') + '</td>';
   });
   return '<section class="page" style="width:' + PRINT_PAGE_W_PT + 'pt;min-height:' + PRINT_PAGE_H_PT + 'pt;' + PRINT_COLOR_EXACT +
-    'page-break-after:' + (isLast ? 'auto' : 'always') + '">' + printMiniHead_(model, label) +
+    'page-break-after:' + (isLast ? 'auto' : 'always') + '">' + printMiniHead_(model, label, lay.miniH) +
     '<table style="width:100%;border-collapse:collapse;table-layout:fixed"><tr>' + tds.join('') + '</tr></table></section>';
 }
 

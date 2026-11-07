@@ -88,6 +88,21 @@ function cases() {
   add('빈 공간(cells 없음·rows 0)', (m) => {
     m.spaces.push({ id: 'e1', name: '빈 공간 가', gender: '혼성', rows: 5, cols: 2, cells: [] }, { id: 'e2', name: '빈 공간 나', gender: '혼성', rows: 0, cols: 0, cells: [] });
   });
+  add('작은 방이 오른쪽을 채우고 특이사항 0명', (m) => {
+    m.spaces.forEach((sp) => sp.cells.forEach((c) => { if (c.marks) c.marks.forEach((k) => { k.code = 'NONE'; k.text = ''; }); }));
+    [1, 2, 3].forEach((k) => {
+      const cells = [];
+      for (let r = 1; r <= 6; r++) for (let c = 1; c <= 2; c++) cells.push({ row: r, col: c, kind: 'seat', seatLabel: k + '-' + r + '-' + c, occupant: null, vacant: true, marks: m.blocks.map((b) => ({ seq: b.seq, code: 'NONE', text: '' })) });
+      m.spaces.push({ id: 'extra' + k, name: '추가방' + k, gender: '혼성', rows: 6, cols: 2, cells });
+    });
+  });
+  list[list.length - 1].must = ['없음'];
+  add('그려지지 않는 좌석의 학생 이름', (m) => {
+    const base = m.spaces[1].cells.find((c) => c.kind === 'seat');
+    m.spaces[1].cells.push(Object.assign(clone(base), { row: 40, col: 1, occupant: { grade: 2, name: '격자밖', display: '2. 격자밖' } }));
+    m.spaces.push({ id: 'z', name: '영행 공간', gender: '혼성', rows: 0, cols: 0, cells: [Object.assign(clone(base), { row: 1, col: 1, occupant: { grade: 2, name: '빠진공간', display: '2. 빠진공간' } })] });
+  });
+  list[list.length - 1].must = ['그려지지 않은 좌석의 학생 2. 격자밖, 2. 빠진공간'];
   add('블록 label 없음', (m) => { m.blocks.forEach((b) => { delete b.label; }); });
   add('일요일 + 특이사항 120명', (m) => {
     let n = 0;
@@ -98,7 +113,7 @@ function cases() {
 
 async function runAll(browser) {
   fs.mkdirSync(OUT, { recursive: true });
-  const ctx = loadGs(['src/print/AttendanceSheetHtml.gs']);
+  const ctx = loadGs(['src/rules/DateRules.gs', 'src/print/AttendanceSheetHtml.gs']);
   let bad = 0;
   for (const c of cases().concat(['mon_thu', 'fri', 'sat', 'sun'].map((d) => ({ name: '기본 ' + d, model: buildModel(d) })))) {
     let html;
