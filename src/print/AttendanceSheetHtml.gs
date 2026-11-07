@@ -66,15 +66,17 @@ function printClamp_(x, lo, hi) {
   return x < lo ? lo : (x > hi ? hi : x);
 }
 
-/** 글자 폭 어림(em): 한글·전각 1, 대문자 0.9, 숫자·소문자 0.55, 공백 0.3. // shortcut: 실제 글꼴 폭이 아니다, C0 PDF에서 줄바꿈이 어긋나면 글꼴별 폭표로 바꾼다 */
+/** 글자 폭 어림(em), 넉넉하게: 한글·전각 1, 대문자 1, 소문자 0.85, 숫자 0.6, 구두점 0.4, 공백 0.3. // shortcut: 실제 글꼴 폭이 아니라 넘침이 드물도록 크게 잡은 값, C0 PDF에서 어긋나면 글꼴별 폭표로 바꾼다 */
 function printTextEm_(s) {
   var em = 0;
   var str = String(s === null || s === undefined ? '' : s);
   for (var i = 0; i < str.length; i++) {
     var c = str.charCodeAt(i);
     if (c === 32) em += 0.3;
-    else if (c >= 65 && c <= 90) em += 0.9;   // 대문자(W·M은 거의 한 칸)
-    else if (c < 128) em += 0.55;
+    else if (c >= 65 && c <= 90) em += 1;
+    else if (c >= 97 && c <= 122) em += 0.85;
+    else if (c >= 48 && c <= 57) em += 0.6;
+    else if (c < 128) em += 0.4;
     else em += 1;
   }
   return em;
@@ -104,11 +106,19 @@ function printCircled_(n) {
   return n >= 1 && n <= 20 ? String.fromCharCode(0x2460 + n - 1) : '(' + n + ')';
 }
 
-/** '2027-03-03' + '수' → '2027년 3월 3일(수)' (Date를 쓰지 않는다) */
+/** '2027-03-03' → '수'. 날짜가 아니면 ''. (Date.UTC로 요일만 계산: 시간대·현재 시각을 쓰지 않는다) */
+function printWeekday_(date) {
+  var p = String(date || '').split('-');
+  if (p.length !== 3 || !(Number(p[1]) >= 1 && Number(p[2]) >= 1)) return '';
+  var d = new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2])));
+  return isNaN(d.getTime()) ? '' : '일월화수목금토'.charAt(d.getUTCDay());
+}
+
+/** '2027-03-03' + '수' → '2027년 3월 3일(수)'. 요일이 없으면 날짜로 계산한다 */
 function printDateKo_(date, weekdayKo) {
   var p = String(date || '').split('-');
   if (p.length !== 3) return String(date || '');
-  return p[0] + '년 ' + Number(p[1]) + '월 ' + Number(p[2]) + '일(' + (weekdayKo || '') + ')';
+  return p[0] + '년 ' + Number(p[1]) + '월 ' + Number(p[2]) + '일(' + (weekdayKo || printWeekday_(date)) + ')';
 }
 
 function printArr_(x) {
@@ -136,6 +146,31 @@ function printOutsideCount_(space) {
   return (space.cells || []).filter(function (c) {
     return c.kind === 'seat' && (!(c.row >= 1 && c.row <= space.rows) || !(c.col >= 1 && c.col <= space.cols));
   }).length;
+}
+
+/**
+ * 그릴 수 있는 공간만 고른다: 행·열이 0이거나 칸 목록이 없는 공간은 뺀다(skipped). 같은 칸(행,열)에 좌석이 둘이면 먼저 나온 것만 그리고
+ * 가려진 학생 이름을 hidden에 모은다(앞면 경고 줄에 적는다).
+ * @return {{spaces:Object[], skipped:number, hidden:string[]}}
+ */
+function printCleanSpaces_(model) {
+  var out = { spaces: [], skipped: 0, hidden: [] };
+  (model.spaces || []).forEach(function (sp) {
+    if (!sp || !(sp.rows >= 1) || !(sp.cols >= 1) || !(sp.cells || []).length) { out.skipped++; return; }
+    var seen = {};
+    var cells = [];
+    sp.cells.forEach(function (c) {
+      var k = c.row + ',' + c.col;
+      if (seen[k]) {
+        if (c.kind === 'seat' && c.occupant) out.hidden.push(String(c.occupant.display));
+        return;
+      }
+      seen[k] = true;
+      cells.push(c);
+    });
+    out.spaces.push(Object.assign({}, sp, { cells: cells }));
+  });
+  return out;
 }
 
 function printSeatCells_(space) {
@@ -274,7 +309,7 @@ function printSummary_(model) {
 
 /** 월~목인가: 실제 요일(model.weekdayKo)로 판정한다(요일 유형 코드가 특별 코드여도 맞게). 요일이 없으면 dayType */
 function printIsMonThu_(model) {
-  var wd = model.weekdayKo;
+  var wd = model.weekdayKo || printWeekday_(model.date);
   if (wd === '월' || wd === '화' || wd === '수' || wd === '목') return true;
   if (wd === '금' || wd === '토' || wd === '일') return false;
   return model.dayType === 'mon_thu';
@@ -335,7 +370,7 @@ function printHeadHtml_(model, lay) {
   var blocks = seg.blocks.map(printEsc_).join('&nbsp;&nbsp;');
   var legend = seg.legend.map(function (l) { return '<b>' + printEsc_(l.m) + '</b>&nbsp;' + printEsc_(l.t); }).join('&nbsp;·&nbsp;');
   var rowH = l1.rows === 1 ? PRINT_HEAD1_PT : PRINT_HEAD1_PT - 2;
-  var box = 'height:' + rowH + 'pt;overflow:hidden;white-space:nowrap;line-height:' + rowH + 'pt;';
+  var box = 'min-height:' + rowH + 'pt;line-height:' + rowH + 'pt;';
   var left = '<div style="' + box + 'font-size:' + printNum_(15 * l1.left) + 'pt;font-weight:bold">' + title +
     '&nbsp;&nbsp;<span style="font-size:' + printNum_(12 * l1.left) + 'pt;line-height:10pt">' + printEsc_(printDateKo_(model.date, model.weekdayKo)) + '</span>' +
     '&nbsp;&nbsp;<span style="font-size:' + printNum_(10 * l1.left) + 'pt;font-weight:normal;line-height:10pt">자습 ' + printEsc_(first.start) + '–' + printEsc_(last.end) + '</span></div>';
@@ -345,15 +380,21 @@ function printHeadHtml_(model, lay) {
   var row1 = l1.rows === 1 ? '<tr><td style="' + td + '">' + left + '</td><td style="' + td + '">' + right + '</td></tr>'
     : '<tr><td colspan="2" style="' + td + '">' + left + '</td></tr><tr><td colspan="2" style="' + td + '">' + right + '</td></tr>';
   return '<table style="width:100%;border-collapse:collapse;table-layout:auto;height:' + printNum_(lay.head.h) + 'pt">' + row1 +
-    '<tr><td colspan="2" style="' + td + '"><div style="height:' + (lay.head.lines * PRINT_HEAD2_PT) + 'pt;overflow:hidden;font-size:7pt;line-height:' + PRINT_HEAD2_PT + 'pt"><b>' + summary + '</b>' +
+    '<tr><td colspan="2" style="' + td + '"><div style="min-height:' + (lay.head.lines * PRINT_HEAD2_PT) + 'pt;font-size:7pt;line-height:' + PRINT_HEAD2_PT + 'pt"><b>' + summary + '</b>' +
     '&nbsp;&nbsp;|&nbsp;&nbsp;<b>표시 칸(왼쪽→오른쪽)</b>&nbsp;' + blocks + '&nbsp;&nbsp;|&nbsp;&nbsp;' + legend + '</div></td></tr></table>';
 }
 
 /** 앞면 아래 줄 "자리 배정 안 됨": 최대 2줄, 넘치면 "외 N명(뒷면)". // shortcut: 줄바꿈 위치를 모르고 전체 폭으로 줄 수를 어림(여유 6%), 실제 인쇄에서 줄이 하나 더 생기면 여유를 늘린다 */
-function printFootInfo_(model, warnLine) {
+/** 경고 줄이 몇 줄이 되는가(7pt 굵게, 전체 폭의 94%) */
+function printWarnLines_(warnText) {
+  return warnText ? Math.max(1, Math.ceil(printTextEm_('※ ' + warnText) * 7 / (PRINT_PAGE_W_PT * 0.94))) : 0;
+}
+
+function printFootInfo_(model, warnText) {
   var items = (model.unseated || []).map(function (u) { return String(u && u.display !== undefined ? u.display : ''); });
-  var warnH = warnLine ? PRINT_FOOT_LINE_PT : 0;
-  if (!items.length) return { items: [], shown: 0, over: false, h: warnH, lines: 0, warnLine: !!warnLine };
+  var warnLine = !!warnText;
+  var warnH = printWarnLines_(warnText) * PRINT_FOOT_LINE_PT;
+  if (!items.length) return { items: [], shown: 0, over: false, h: warnH, lines: 0, warnLine: warnLine };
   var budget = PRINT_FOOT_MAX_LINES * PRINT_PAGE_W_PT * 0.94;
   var label = 8 * 7;
   var total = label;
@@ -371,16 +412,16 @@ function printFootInfo_(model, warnLine) {
     }
   }
   var lines = Math.min(PRINT_FOOT_MAX_LINES, Math.max(1, Math.ceil((over ? budget : total) / (PRINT_PAGE_W_PT * 0.94))));
-  return { items: items, shown: shown, over: over, h: lines * PRINT_FOOT_LINE_PT + warnH, lines: lines, warnLine: !!warnLine };
+  return { items: items, shown: shown, over: over, h: lines * PRINT_FOOT_LINE_PT + warnH, lines: lines, warnLine: warnLine };
 }
 
 function printFootHtml_(foot, warnText) {
   if (!foot.items.length && !foot.warnLine) return '';
   var text = foot.items.slice(0, foot.shown).map(printEsc_).join(', ');
-  var warn = foot.warnLine ? '<div style="height:' + PRINT_FOOT_LINE_PT + 'pt;overflow:hidden;font-weight:bold">※ ' + printEsc_(warnText) + '</div>' : '';
-  var list = foot.items.length ? '<div style="height:' + printNum_(foot.lines * PRINT_FOOT_LINE_PT) + 'pt;overflow:hidden"><b>자리 배정 안 됨</b>&nbsp;' + text +
+  var warn = foot.warnLine ? '<div style="min-height:' + PRINT_FOOT_LINE_PT + 'pt;font-weight:bold">※ ' + printEsc_(warnText) + '</div>' : '';
+  var list = foot.items.length ? '<div style="min-height:' + printNum_(foot.lines * PRINT_FOOT_LINE_PT) + 'pt"><b>자리 배정 안 됨</b>&nbsp;' + text +
     (foot.over ? ' <b>외 ' + (foot.items.length - foot.shown) + '명(뒷면에 전체)</b>' : '') + '</div>' : '';
-  return '<div style="height:' + printNum_(foot.h) + 'pt;font-size:7pt;line-height:' + PRINT_FOOT_LINE_PT + 'pt;overflow:hidden">' + warn + list + '</div>';
+  return '<div style="min-height:' + printNum_(foot.h) + 'pt;font-size:7pt;line-height:' + PRINT_FOOT_LINE_PT + 'pt">' + warn + list + '</div>';
 }
 
 /** 글자를 칸(열) 여러 개에 위에서 아래로 채운다. 한 칸 안에서 못 넣으면 다음 열. → {columns:[[text…]], count} */
@@ -443,7 +484,7 @@ function printRowsH_(from, to, pitch, ex) {
 /**
  * 열 수 c(작은 공간 열 수)로 배치를 시험한다. 앞면에 다 들어가는지, 못 들어가는 것은 무엇인지(이어지는 쪽으로 보낸다).
  */
-function printTryColumns_(model, opts, picked, c, base) {
+function printTryColumns_(picked, c, base) {
   var n = base.n;
   var main = picked.main, rooms = picked.rooms;
   var regionOnly = rooms.length === 0;
@@ -457,6 +498,7 @@ function printTryColumns_(model, opts, picked, c, base) {
   base.roomCols.forEach(function (cols) { roomW = Math.max(roomW, printBlockWidth_(cols, L)); });
   var rightW = regionOnly ? PRINT_REGION_ONLY_PT : c * roomW + (c - 1) * PRINT_ROOMGAP_PT;
   var mainTitleH = printTitleH_(main, mainW);
+  var roomWs = base.roomCols.map(function (cols) { return printBlockWidth_(cols, L); });
   var availMain = base.bodyH - mainTitleH - PRINT_LINEHEAD_PT;
 
   function sizing(cap) {
@@ -477,7 +519,7 @@ function printTryColumns_(model, opts, picked, c, base) {
   var roomEx = rooms.map(function (sp) { return printExtras_(sp, markW, L, cap, base.vacantLabel); });
   function roomH(i) {
     var sp = rooms[i];
-    return printTitleH_(sp, roomW) + PRINT_LINEHEAD_PT + printRowsH_(1, sp.rows, pitch, roomEx[i]);
+    return printTitleH_(sp, roomWs[i]) + PRINT_LINEHEAD_PT + printRowsH_(1, sp.rows, pitch, roomEx[i]);
   }
   var roomsAvail = base.bodyH - PRINT_MEMO_PT - PRINT_ROOMVGAP_PT * 2;
   var front = [];
@@ -508,7 +550,7 @@ function printTryColumns_(model, opts, picked, c, base) {
  * 이어지는 쪽 나누기: 앞면에 못 담은 큰 공간 행·작은 공간을 쪽 높이에 맞춰 나눈다. 쪽보다 큰 공간(행이 많은 방)은 행 단위로 나눈다.
  * @return {{mainFrom:number, mainTo:number, parts:{idx:number, from:number, to:number}[]}[]} parts = 작은 공간의 행 조각
  */
-function printContPages_(lay, picked, base) {
+function printContPages_(lay, picked) {
   var pages = [];
   var main = picked.main, rooms = picked.rooms;
   var contBody = PRINT_PAGE_H_PT - 24 - PRINT_SLACK_PT;
@@ -516,7 +558,7 @@ function printContPages_(lay, picked, base) {
   var chunks = [];
   lay.contRooms.forEach(function (ri) {
     var sp = rooms[ri];
-    var availR = contBody - printTitleH_(sp, lay.roomW) - PRINT_LINEHEAD_PT;
+    var availR = contBody - printTitleH_(sp, printBlockWidth_(lay.roomCols[ri], lay.L)) - PRINT_LINEHEAD_PT;
     for (var r = 1; r <= sp.rows;) {
       var k = Math.max(1, printFitRows_(r, sp.rows, availR, lay.pitch, lay.roomEx[ri]));
       chunks.push({ idx: ri, from: r, to: r + k - 1 });
@@ -524,7 +566,7 @@ function printContPages_(lay, picked, base) {
     }
   });
   function chunkH(ch) {
-    return printTitleH_(rooms[ch.idx], lay.roomW) + PRINT_LINEHEAD_PT + printRowsH_(ch.from, ch.to, lay.pitch, lay.roomEx[ch.idx]);
+    return printTitleH_(rooms[ch.idx], printBlockWidth_(lay.roomCols[ch.idx], lay.L)) + PRINT_LINEHEAD_PT + printRowsH_(ch.from, ch.to, lay.pitch, lay.roomEx[ch.idx]);
   }
   var guard = 0;
   while ((nextRow <= main.rows || chunks.length) && guard++ < 200) {
@@ -554,22 +596,32 @@ function printContPages_(lay, picked, base) {
   return pages;
 }
 
-/** 앞면에 다 못 담은 것이 있으면 아래 줄에 "※ …뒷면에 이어집니다"를 보이도록 한 번 더 계산한다(경고 줄도 높이를 차지하므로) */
+/**
+ * 앞면에 다 못 담은 것(또는 그리지 못한 것)이 있으면 아래 줄에 "※ …"를 보이도록 다시 계산한다(경고 줄도 높이를 차지하므로,
+ * 경고 글이 줄 수를 더 늘리면 그 글로 한 번 더).
+ */
 function printLayout_(model, opts) {
-  var lay = printLayoutOnce_(model, opts, false);
-  if (!lay.allFit || lay.dropped) lay = printLayoutOnce_(model, opts, true);
+  var clean = printCleanSpaces_(model);
+  var lay = printLayoutOnce_(model, opts, '', clean);
+  if (lay.allFit && !lay.dropped) return lay;
+  var warn = lay.warnText;
+  for (var i = 0; i < 3; i++) {
+    lay = printLayoutOnce_(model, opts, warn, clean);
+    if (printWarnLines_(lay.warnText) <= printWarnLines_(warn)) break;
+    warn = lay.warnText;
+  }
   return lay;
 }
 
-function printLayoutOnce_(model, opts, warnLine) {
+function printLayoutOnce_(model, opts, warnIn, clean) {
   opts = opts || {};
   var n = model.blocks.length;
-  var spaces = model.spaces;
+  var spaces = clean.spaces;
   var picked = printPickMain_(spaces);
   var main = picked.main;
   var rooms = picked.rooms;
   var head = printHeadInfo_(model);
-  var foot = printFootInfo_(model, warnLine);
+  var foot = printFootInfo_(model, warnIn);
   var vacantLabel = String(opts.vacantLabel || '공석');
   var base = {
     n: n, vacantLabel: vacantLabel, mainCols: printColumns_(main), roomCols: rooms.map(printColumns_),
@@ -584,7 +636,7 @@ function printLayoutOnce_(model, opts, warnLine) {
   var cs = rooms.length ? [Math.min(3, rooms.length), Math.min(2, rooms.length), 1] : [0];
   var seen = {};
   cs = cs.filter(function (c) { if (seen[c]) return false; seen[c] = true; return true; });
-  var tries = cs.map(function (c) { return printTryColumns_(model, opts, picked, c, base); });
+  var tries = cs.map(function (c) { return printTryColumns_(picked, c, base); });
   var chosen = null;
   tries.forEach(function (t) { if (!chosen && t.tier1) chosen = t; });
   tries.forEach(function (t) { if (!chosen && t.tier2) chosen = t; });
@@ -601,7 +653,7 @@ function printLayoutOnce_(model, opts, warnLine) {
   lay.n = n; lay.main = main; lay.rooms = rooms; lay.mainCols = base.mainCols; lay.roomCols = base.roomCols;
   lay.head = head; lay.foot = foot; lay.bodyH = base.bodyH; lay.vacantLabel = vacantLabel; lay.summary = printSummary_(model);
   lay.markH = lay.pitch - PRINT_NAME_PT;
-  lay.cont = lay.allFit ? [] : printContPages_(lay, picked, base);
+  lay.cont = lay.allFit ? [] : printContPages_(lay, picked);
 
   // 앞면 특이사항 목록 칸
   lay.entries = printEntries_(model);
@@ -609,11 +661,13 @@ function printLayoutOnce_(model, opts, warnLine) {
   var linesPerCol = Math.floor((lay.listH - PRINT_LIST_TITLE_PT - 2) / PRINT_LIST_LINE_PT);
   var texts = lay.entries.map(printEntryText_);
   var pack = printPackColumns_(texts, 2, linesPerCol, listW, 7);
+  // 앞면에 3명도 못 담으면 목록은 제목 한 줄만 두고 남는 높이는 메모 칸에 준다(전체는 뒷면)
+  lay.listCollapsed = texts.length > pack.count && pack.count < 3;
+  if (lay.listCollapsed) pack = { columns: [[], []], count: 0 };
+  lay.memoH = PRINT_MEMO_PT + (lay.listCollapsed ? Math.max(0, lay.listH - PRINT_LIST_TITLE_PT) : 0);
   lay.listPack = pack;
   lay.listShown = pack.count;
   lay.listOverflow = pack.count < texts.length;
-  lay.listTexts = texts;
-  lay.listW = listW;
 
   // 뒷면(목록) 쪽
   var backItems = [];
@@ -641,18 +695,25 @@ function printLayoutOnce_(model, opts, warnLine) {
   if (lay.listOverflow) warnings.push('오늘 특이사항 ' + lay.entries.length + '명 중 ' + lay.listShown + '명만 앞면에 있습니다(전체는 뒷면).');
   if (lay.pitch < PRINT_MIN_PITCH_PT) warnings.push('좌석 한 줄 높이가 기준(' + PRINT_MIN_PITCH_PT + 'pt)보다 낮습니다(' + printNum_(lay.pitch) + 'pt).');
   lay.warnings = warnings;
-  lay.dropped = 0;
-  spaces.forEach(function (sp) { lay.dropped += printOutsideCount_(sp); });
-  lay.warnText = (lay.allFit ? '' : '큰 공간 ' + (lay.mainRowsFront < main.rows ? '일부 행' : '') + (lay.contRooms.length ? (lay.mainRowsFront < main.rows ? '과 ' : '') + '작은 공간 ' + lay.contRooms.length + '개' : '') + '가 앞면에 다 안 들어가 뒷면에 이어집니다. ') +
-    (lay.dropped ? '격자 밖 좌석 ' + lay.dropped + '개는 그려지지 않았습니다(좌석 배치 확인). ' : '');
-  if (lay.dropped) warnings.push('격자 밖 좌석 ' + lay.dropped + '개는 그려지지 않았습니다.');
+  var outside = 0;
+  spaces.forEach(function (sp) { outside += printOutsideCount_(sp); });
+  lay.dropped = outside + clean.skipped + clean.hidden.length;
+  var wt = [];
+  if (!lay.allFit) wt.push('큰 공간 ' + (lay.mainRowsFront < main.rows ? '일부 행' : '') + (lay.contRooms.length ? (lay.mainRowsFront < main.rows ? '과 ' : '') + '작은 공간 ' + lay.contRooms.length + '개' : '') + ' 앞면에 다 안 들어가 뒷면에 이어집니다');
+  if (outside) wt.push('격자 밖 좌석 ' + outside + '개 그려지지 않음(좌석 배치 확인)');
+  if (clean.skipped) wt.push('그릴 칸이 없는 공간 ' + clean.skipped + '개 빠짐(좌석 배치 확인)');
+  if (clean.hidden.length) wt.push('같은 칸에 좌석이 겹쳐 가려진 학생 ' + clean.hidden.join(', '));
+  lay.warnText = wt.join('. ') + (wt.length ? '.' : '');
+  if (outside) warnings.push('격자 밖 좌석 ' + outside + '개는 그려지지 않았습니다.');
+  if (clean.skipped) warnings.push('그릴 칸이 없는 공간 ' + clean.skipped + '개는 빠졌습니다.');
+  if (clean.hidden.length) warnings.push('같은 칸에 좌석이 겹쳐 가려진 학생: ' + clean.hidden.join(', ') + '.');
   lay.fits = lay.allFit;     // 앞면 한 장에 공간이 모두 들어갔는가(뒷면이 목록뿐이면 true)
   return lay;
 }
 
 /** 진단용: 배치 요약 */
 function printSheetPlan_(model, opts) {
-  if (!model.operating || !model.spaces || !model.spaces.length || !model.blocks || !model.blocks.length) return null;
+  if (!model.operating || !model.blocks || !model.blocks.length || !printCleanSpaces_(model).spaces.length) return null;
   var p = printLayout_(model, opts);
   return {
     pages: p.pages, frontPage: 1, contPages: p.cont.length, backPages: p.back.length,
@@ -741,8 +802,8 @@ function printBlockHtml_(space, lay, ex, rowFrom, rowTo, suffix) {
       var shade = vacant ? 'background:' + PRINT_VACANT_BG + ';' : '';
       var text = printNameText_(cell, lay.vacantLabel);
       var nf = printNameFont_(text, L);
-      rows1.push('<td class="n" colspan="' + n + '" style="padding:0 1pt;overflow:hidden;vertical-align:middle;border:0.8pt solid #222;border-bottom:0.5pt solid #555;' +
-        'white-space:' + (nf.lines > 1 ? 'normal;word-break:break-all' : 'nowrap') + ';font-size:' + printNum_(nf.pt) + 'pt;line-height:' + PRINT_NAME_PT + 'pt;' +
+      rows1.push('<td class="n" colspan="' + n + '" style="padding:0 1pt;vertical-align:middle;border:0.8pt solid #222;border-bottom:0.5pt solid #555;' +
+        'white-space:normal;word-break:break-all;font-size:' + printNum_(nf.pt) + 'pt;line-height:' + PRINT_NAME_PT + 'pt;' +
         (vacant ? 'color:#555;' + shade : 'font-weight:bold;') + '">' + printEsc_(text) + '</td>');
       for (var i = 0; i < n; i++) {
         var m = (cell.marks || [])[i] || { text: '', code: 'NONE' };
@@ -788,7 +849,7 @@ function printListHtml_(lay) {
   var note = lay.listOverflow ? '&nbsp;(전체는 뒷면)' : '';
   var cols = lay.listPack.columns;
   var body = lay.entries.length ? printListDivs_(cols[0]) : '<div style="font-size:7pt;line-height:' + PRINT_LIST_LINE_PT + 'pt">없음</div>';
-  var out = '<div style="width:' + printNum_(lay.rightW) + 'pt;height:' + printNum_(Math.max(PRINT_LIST_TITLE_PT, lay.listH)) + 'pt;overflow:hidden">' +
+  var out = '<div style="width:' + printNum_(lay.rightW) + 'pt;min-height:' + printNum_(lay.listCollapsed ? PRINT_LIST_TITLE_PT : Math.max(PRINT_LIST_TITLE_PT, lay.listH)) + 'pt">' +
     '<div style="font-size:8pt;font-weight:bold;line-height:' + PRINT_LIST_TITLE_PT + 'pt;border-bottom:0.5pt solid #555">오늘 특이사항 ' + lay.entries.length + '명' + note + '</div>' +
     '<table style="width:100%;border-collapse:collapse;table-layout:fixed"><tr><td style="padding:0;vertical-align:top;width:50%">' + body +
     '</td><td style="padding:0 0 0 4pt;vertical-align:top">' + printListDivs_(cols[1]) + '</td></tr></table></div>';
@@ -796,7 +857,7 @@ function printListHtml_(lay) {
 }
 
 function printMemoHtml_(lay) {
-  return '<div style="height:' + (PRINT_MEMO_PT - 2) + 'pt;border:0.5pt solid #555;font-size:7pt;line-height:8pt;overflow:hidden">&nbsp;메모 (조퇴 사유·무단 사항)</div>';
+  return '<div style="height:' + (lay.memoH - 2) + 'pt;border:0.5pt solid #555;font-size:7pt;line-height:8pt;overflow:hidden">&nbsp;메모 (조퇴 사유·무단 사항)</div>';
 }
 
 function printFrontHtml_(model, lay, isLast) {
@@ -806,12 +867,12 @@ function printFrontHtml_(model, lay, isLast) {
   var body = '<table style="border-collapse:collapse;table-layout:fixed;width:' + PRINT_PAGE_W_PT + 'pt"><tr>' +
     '<td style="padding:0;vertical-align:top;width:' + printNum_(main.width) + 'pt">' + main.html + '</td>' +
     '<td style="padding:0;width:' + PRINT_SEP_PT + 'pt"></td><td style="padding:0;vertical-align:top">' + right + '</td></tr></table>';
-  return '<section class="page" style="width:' + PRINT_PAGE_W_PT + 'pt;height:' + PRINT_PAGE_H_PT + 'pt;overflow:hidden;' + PRINT_COLOR_EXACT +
+  return '<section class="page" style="width:' + PRINT_PAGE_W_PT + 'pt;min-height:' + PRINT_PAGE_H_PT + 'pt;' + PRINT_COLOR_EXACT +
     'page-break-after:' + (isLast ? 'auto' : 'always') + '">' + printHeadHtml_(model, lay) + body + printFootHtml_(lay.foot, lay.warnText) + '</section>';
 }
 
 function printMiniHead_(model, label) {
-  return '<div style="height:24pt;font-size:12pt;font-weight:bold;line-height:22pt;white-space:nowrap;overflow:hidden">' +
+  return '<div style="min-height:24pt;font-size:12pt;font-weight:bold;line-height:22pt">' +
     printEsc_(model.title || '신한학사 출석부') + ' · ' + printEsc_(printDateKo_(model.date, model.weekdayKo)) + ' · ' + printEsc_(label) + '</div>';
 }
 
@@ -821,7 +882,7 @@ function printContHtml_(model, lay, cp, label, isLast) {
   var body = '<table style="border-collapse:collapse;table-layout:fixed;width:' + PRINT_PAGE_W_PT + 'pt"><tr>' +
     '<td style="padding:0;vertical-align:top;width:' + printNum_(left ? left.width : 0) + 'pt">' + (left ? left.html : '') + '</td>' +
     '<td style="padding:0;width:' + PRINT_SEP_PT + 'pt"></td><td style="padding:0;vertical-align:top">' + right + '</td></tr></table>';
-  return '<section class="page" style="width:' + PRINT_PAGE_W_PT + 'pt;height:' + PRINT_PAGE_H_PT + 'pt;overflow:hidden;' + PRINT_COLOR_EXACT +
+  return '<section class="page" style="width:' + PRINT_PAGE_W_PT + 'pt;min-height:' + PRINT_PAGE_H_PT + 'pt;' + PRINT_COLOR_EXACT +
     'page-break-after:' + (isLast ? 'auto' : 'always') + '">' + printMiniHead_(model, label) + body + '</section>';
 }
 
@@ -832,13 +893,13 @@ function printBackHtml_(model, lay, page, label, isLast) {
       return '<div style="font-size:8pt;line-height:' + PRINT_BACK_LINE_PT + 'pt;word-break:break-all;border-bottom:0.3pt dotted #999">' + printEsc_(it.text) + '</div>';
     }).join('') + '</td>';
   });
-  return '<section class="page" style="width:' + PRINT_PAGE_W_PT + 'pt;height:' + PRINT_PAGE_H_PT + 'pt;overflow:hidden;' + PRINT_COLOR_EXACT +
+  return '<section class="page" style="width:' + PRINT_PAGE_W_PT + 'pt;min-height:' + PRINT_PAGE_H_PT + 'pt;' + PRINT_COLOR_EXACT +
     'page-break-after:' + (isLast ? 'auto' : 'always') + '">' + printMiniHead_(model, label) +
     '<table style="width:100%;border-collapse:collapse;table-layout:fixed"><tr>' + tds.join('') + '</tr></table></section>';
 }
 
 function printNoticePage_(model, text) {
-  return '<section class="page" style="width:' + PRINT_PAGE_W_PT + 'pt;height:' + PRINT_PAGE_H_PT + 'pt;overflow:hidden">' +
+  return '<section class="page" style="width:' + PRINT_PAGE_W_PT + 'pt;min-height:' + PRINT_PAGE_H_PT + 'pt">' +
     '<div style="font-size:16pt;font-weight:bold;padding-top:40pt;text-align:center">' + printEsc_(printDateKo_(model.date, model.weekdayKo)) + ' ' + printEsc_(text) + '</div></section>';
 }
 
@@ -852,7 +913,7 @@ function printRenderSheet_(model, opts) {
     '<style>@page { size: A4 landscape; margin: 8mm; } html, body { margin: 0; padding: 0; } ' +
     'body { font-family: ' + PRINT_FONT + '; color: #000; background: #fff; ' + PRINT_COLOR_EXACT + ' } table { empty-cells: show; }</style></head><body>';
   if (!model.operating) return head + printNoticePage_(model, '은(는) 운영하지 않는 날입니다.') + '</body></html>';
-  if (!model.spaces || !model.spaces.length) return head + printNoticePage_(model, '은(는) 출석부에 쓸 공간(좌석 배치)이 없습니다. 좌석 배치에서 먼저 공간과 좌석을 만들어 주세요.') + '</body></html>';
+  if (!printCleanSpaces_(model).spaces.length) return head + printNoticePage_(model, '은(는) 출석부에 쓸 공간(좌석 배치)이 없습니다. 좌석 배치에서 먼저 공간과 좌석을 만들어 주세요.') + '</body></html>';
   if (!model.blocks || !model.blocks.length) return head + printNoticePage_(model, '은(는) 자습 블록이 없습니다. 자습 일정·블록에서 확인해 주세요.') + '</body></html>';
   var lay = printLayout_(model, opts);
   var total = lay.pages;

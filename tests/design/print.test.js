@@ -12,7 +12,7 @@ const DAYS = ['mon_thu', 'fri', 'sat', 'sun'];
 const fixture = (d) => JSON.parse(fs.readFileSync(path.join(ROOT, 'design/fixtures/sheet-model.' + d + '.json'), 'utf8'));
 const count = (s, sub) => s.split(sub).length - 1;
 const seats = (m) => m.spaces.reduce((n, sp) => n + sp.cells.filter((c) => c.kind === 'seat').length, 0);
-const seatsInGrid = (m) => m.spaces.reduce((n, sp) => n + sp.cells.filter((c) => c.kind === 'seat' && c.row >= 1 && c.row <= sp.rows && c.col >= 1 && c.col <= sp.cols).length, 0);
+const seatsInGrid = (m) => m.spaces.reduce((n, sp) => n + new Set(sp.cells.filter((c) => c.kind === 'seat' && c.row >= 1 && c.row <= sp.rows && c.col >= 1 && c.col <= sp.cols).map((c) => c.row + ',' + c.col)).size, 0);
 
 test('픽스처 4종이 sheet-model 계약 모양을 지킨다(블록 수 3/3/3/4)', () => {
   const blocks = {};
@@ -253,7 +253,7 @@ test('줄바꿈 계산: 글자 단위로 나누고, 칸 수를 넘으면 그 행
   assert.strictEqual(ctx.printWrapLines_('정상 종료', 7, 17), 2);
   assert.strictEqual(ctx.printWrapLines_('학', 7, 17), 1);
   assert.strictEqual(ctx.printWrapLines_('병결 외 1', 7, 12.8), 4);
-  assert.strictEqual(ctx.printWrapLines_('병결 외 1', 7, 13), 3);
+  assert.strictEqual(ctx.printWrapLines_('병결 외 1', 7, 14), 2, '14pt면 "병결"이 한 줄(표시 칸 목표 14.5pt)');
   assert.strictEqual(ctx.printWrapLines_('', 7, 13), 1);
   const space = fixture('mon_thu').spaces[0];
   const base = ctx.printExtras_(space, 18, 54.5, 2, '공석');
@@ -466,9 +466,27 @@ test('리뷰 지적 재현: 4칸 약어가 모두 다른 목록·행이 많은 �
   const holiday = ctx.printRenderSheet_(JSON.parse(JSON.stringify(by('특별 코드 평일(dayType 가 holiday)').model)), {});
   assert.ok(holiday.indexOf('예비') < 0 && holiday.indexOf('근무 ________ ________') > 0, '수요일이면 요일 유형 코드가 특별해도 근무 2칸·예비 없음');
   const out = ctx.printRenderSheet_(JSON.parse(JSON.stringify(by('격자 밖 좌석 2개').model)), {});
-  assert.ok(out.slice(0, out.indexOf('</section>')).indexOf('격자 밖 좌석 2개는 그려지지 않았습니다') > 0, '앞면 경고 줄');
+  assert.ok(out.slice(0, out.indexOf('</section>')).indexOf('격자 밖 좌석 2개 그려지지 않음') > 0, '앞면 경고 줄');
   assert.ok(plan(by('격자 밖 좌석 2개').model).warnings.join().indexOf('격자 밖 좌석 2개') >= 0);
   const nolabel = ctx.printRenderSheet_(JSON.parse(JSON.stringify(by('블록 label 없음').model)), {});
   assert.ok(nolabel.indexOf('①18:00–20:00') > 0 && nolabel.indexOf('undefined') < 0, '라벨이 없으면 시작–끝');
-  assert.ok(ctx.printTextEm_('WWWW') > ctx.printTextEm_('wwww') + 1 && ctx.printTextEm_('W') >= 0.9, '대문자 폭은 넓게 어림');
+  assert.ok(ctx.printTextEm_('WWWW') > ctx.printTextEm_('wwww') && ctx.printTextEm_('wwww') > ctx.printTextEm_('1234') && ctx.printTextEm_('W') >= 1, '영문·숫자 폭은 한글에 가깝게 넉넉히 어림');
+});
+
+test('그릴 수 없는 입력: 빈 공간은 빼고, 같은 칸 좌석 둘은 먼저 것만 그리고 가려진 학생을 경고, 요일은 날짜에서 계산', () => {
+  const m = fixture('mon_thu');
+  const first = m.spaces[1].cells.find((c) => c.kind === 'seat');
+  m.spaces[1].cells.push(Object.assign({}, first, { occupant: { grade: 3, name: '겹침이', display: '3. 겹침이' } }));
+  m.spaces.push({ id: 'e1', name: '빈 공간 가', gender: '혼성', rows: 5, cols: 2, cells: [] }, { id: 'e2', name: '빈 공간 나', gender: '혼성', rows: 0, cols: 0, cells: [] });
+  const html = ctx.printRenderSheet_(JSON.parse(JSON.stringify(m)), {});
+  assert.ok(html.indexOf('빈 공간 가') < 0, '빈 공간은 그리지 않는다');
+  assert.ok(html.indexOf('그릴 칸이 없는 공간 2개 빠짐') > 0 && html.indexOf('가려진 학생 3. 겹침이') > 0, '앞면 경고 줄');
+  assert.ok(plan(m).warnings.join().indexOf('겹침이') >= 0);
+  assert.strictEqual(ctx.printWeekday_('2027-03-03'), '수');
+  assert.strictEqual(ctx.printDateKo_('2027-03-07', ''), '2027년 3월 7일(일)');
+  m.weekdayKo = undefined; m.date = '2027-03-07'; m.dayType = 'mon_thu';
+  assert.strictEqual(ctx.printIsMonThu_(m), false, '요일이 없으면 날짜로 판정');
+  const onlyEmpty = fixture('mon_thu');
+  onlyEmpty.spaces = [{ id: 'e', name: '빈', gender: '혼성', rows: 0, cols: 0, cells: [] }];
+  assert.ok(ctx.printRenderSheet_(onlyEmpty, {}).indexOf('공간(좌석 배치)이 없습니다') > 0 && plan(onlyEmpty) === null);
 });

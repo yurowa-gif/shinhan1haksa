@@ -68,6 +68,26 @@ function cases() {
     [1, 2].forEach((k) => m.spaces[1].cells.push(Object.assign(clone(base), { row: 30 + k, col: 1, seatLabel: 'X' + k })));
   });
   list[list.length - 1].must = ['격자 밖 좌석 2개'];
+  add('1줄방 40행 + 긴 이름 + 1층 16행', (m) => {
+    m.spaces[0].rows = 16; m.spaces[0].cells = m.spaces[0].cells.filter((c) => c.row <= 16);
+    const cells = [];
+    for (let r = 1; r <= 40; r++) cells.push({ row: r, col: 1, kind: 'seat', seatLabel: String(r), occupant: { grade: 1, name: r === 5 ? '가나다라마바사아자' : '줄' + r, display: '1. ' + (r === 5 ? '가나다라마바사아자' : '줄' + r) }, vacant: false, marks: m.blocks.map((b) => ({ seq: b.seq, code: 'NONE', text: '' })) });
+    m.spaces.push({ id: 'one', name: '한 줄 방', gender: '혼성', rows: 40, cols: 1, cells });
+  });
+  add('평일 + 상담실 옆 자습실 1줄×2행 + 미배정 2명', (m) => {
+    const cells = [1, 2].map((r) => ({ row: r, col: 1, kind: 'seat', seatLabel: String(r), occupant: { grade: 2, name: '옆방' + r, display: '2. 옆방' + r }, vacant: false, marks: m.blocks.map((b) => ({ seq: b.seq, code: 'NONE', text: '' })) }));
+    m.spaces.push({ id: 'side', name: '상담실 옆 자습실', gender: '혼성', rows: 2, cols: 1, cells });
+    m.unseated = [{ display: '3. 미배정가' }, { display: '3. 미배정나' }];
+  });
+  [13, 14].forEach((n) => add('mw 이름 미배정 ' + n + '명', (m) => { m.unseated = Array.from({ length: n }, (_, i) => ({ display: '1. mwmwmwmwmw' + String(i).padStart(2, '0') })); }));
+  add('같은 칸에 좌석 둘', (m) => {
+    const a = m.spaces[1].cells.find((c) => c.kind === 'seat');
+    m.spaces[1].cells.push(Object.assign(clone(a), { occupant: { grade: 3, name: '겹침이', display: '3. 겹침이' } }));
+  });
+  list[list.length - 1].must = ['가려진 학생 3. 겹침이'];
+  add('빈 공간(cells 없음·rows 0)', (m) => {
+    m.spaces.push({ id: 'e1', name: '빈 공간 가', gender: '혼성', rows: 5, cols: 2, cells: [] }, { id: 'e2', name: '빈 공간 나', gender: '혼성', rows: 0, cols: 0, cells: [] });
+  });
   add('블록 label 없음', (m) => { m.blocks.forEach((b) => { delete b.label; }); });
   add('일요일 + 특이사항 120명', (m) => {
     let n = 0;
@@ -91,7 +111,7 @@ async function runAll(browser) {
       const secs = Array.from(document.querySelectorAll('section.page'));
       return {
         pages: secs.length,
-        over: secs.map((s, i) => ({ i, h: s.scrollHeight - s.clientHeight, w: s.scrollWidth - s.clientWidth })).filter((x) => x.h > 1 || x.w > 1),
+        over: secs.map((s, i) => ({ i, h: Math.round(s.getBoundingClientRect().height - 544 * 4 / 3), w: s.scrollWidth - s.clientWidth })).filter((x) => x.h > 1 || x.w > 1),
         // overflow:hidden 인 칸·상자 안에서 내용이 칸을 넘으면 잘린 것이다(가로·세로)
         clipped: Array.from(document.querySelectorAll('td,div,span')).filter((e) => {
           const st = getComputedStyle(e);
@@ -103,7 +123,7 @@ async function runAll(browser) {
     // 글자가 실제로 보이는가: 글자 상자(Range)가 자기를 감싼 overflow:hidden 상자와 쪽 안에 들어 있어야 한다(innerText 는 잘린 글자도 센다)
     const need = (c.model.unseated || []).map((u) => u.display).concat(ctx.printEntries_(clone(c.model)).map((e) => e.display));
     const hidden = await page.evaluate((strings) => {
-      const clipRects = (node) => { const out = []; for (let e = node.parentElement; e; e = e.parentElement) { if (getComputedStyle(e).overflow === 'hidden' || e.tagName === 'SECTION') out.push(e.getBoundingClientRect()); } return out; };
+      const clipRects = (node) => { const out = []; for (let e = node.parentElement; e; e = e.parentElement) { if (e.tagName === 'SECTION') { const b = e.getBoundingClientRect(); out.push({ left: b.left, right: b.left + 796 * 4 / 3, top: b.top, bottom: b.top + 544 * 4 / 3 }); } else if (getComputedStyle(e).overflow === 'hidden') out.push(e.getBoundingClientRect()); } return out; };
       const seen = (str) => {
         const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
         for (let n = w.nextNode(); n; n = w.nextNode()) {
@@ -128,7 +148,7 @@ async function runAll(browser) {
     if (pdfPages !== info.pages) problems.push('PDF ' + pdfPages + '쪽 ≠ section ' + info.pages);
     const model = c.model;
     if (model.operating !== false && model.spaces.length) {
-      const inGrid = model.spaces.reduce((k, sp) => k + sp.cells.filter((x) => x.kind === 'seat' && x.row >= 1 && x.row <= sp.rows && x.col >= 1 && x.col <= sp.cols).length, 0);
+      const inGrid = model.spaces.reduce((k, sp) => k + new Set(sp.cells.filter((x) => x.kind === 'seat' && x.row >= 1 && x.row <= sp.rows && x.col >= 1 && x.col <= sp.cols).map((x) => x.row + ',' + x.col)).size, 0);
       if (info.names !== inGrid) problems.push('그려진 좌석 ' + info.names + ' ≠ 격자 안 좌석 ' + inGrid);
       if (hidden.length) problems.push('안 보이는 글자(잘림): ' + JSON.stringify(hidden));
       const plan = ctx.printSheetPlan_(clone(model), c.opts || {});
