@@ -7,11 +7,11 @@
  *   - 신청의 적용일은 PRD 표(11:30 규칙·미실시 규칙). 같은 값을 다시 신청해도 의도로 센다.
  *   - 학사생 값(조식 '실시'·석식 '학사 석식')은 학사 퇴실 뒤에는 새로 신청할 수 없다(적용일이 퇴실일 이후면 무효).
  *   - 조식: 퇴실일부터 학사생 값은 세지 않는다(PRD F6 즉시 중단). 남는 의도가 없으면 '미실시'.
- *   - 석식: 퇴실일 전에는 위와 같이 정확히 비교하고, 퇴실일부터는 결정 35(미실시 규칙까지 이어짐) 때문에 가장 늦은 의도가
- *     학사 석식이면 '학사 석식' 또는 '미실시'만 허용하고, 퇴실일·퇴실 입력일 중 늦은 날 + 14일부터는 '미실시'여야 한다.
- *     가장 늦은 의도가 미실시·일반 석식이면 정확히 그 값.
+ *   - 석식: 가장 늦은 의도가 학사 석식이면 결정 35 중단일(퇴실 입력일이 월·화면 다음 주 월요일, 수~일이면 다다음 주 월요일,
+ *     퇴실일보다 이르면 퇴실일 — 이 파일에서 따로 계산)부터 '미실시', 그 전은 '학사 석식'. 아니면 정확히 그 의도의 값.
  * 사건(무작위): F7 신청(늦게 입력한 이전 신청서 포함), 학사 퇴실(미리·당일·늦게 입력). 신청마다 같은 계획을 바로 다시 세우면
  * 할 일이 없어야 한다(수렴). 사건마다 3/1~4/30 모든 날을 비교한다.
+ * 기본 100가지(npm test 시간), ORACLE_FULL=1이면 400가지(같은 시드 1부터).
  */
 const assert = require('assert');
 const { test, loadGs, plain } = require('../helpers/harness');
@@ -27,6 +27,13 @@ const iso = (min) => new Date(START + min * 60000).toISOString().slice(0, 19);
 const DAYS = ctx.ymdRange_('2027-03-01', '2027-04-30');
 const VALUES = { '조식': ['실시', '미실시'], '석식': ['학사 석식', '일반 석식', '미실시'] };
 const isHall = (item, v) => (item === '조식' && v === '실시') || (item === '석식' && v === '학사 석식');
+// 결정 35 석식 중단일: 규칙 함수와 따로, 날짜 계산도 Date로 직접
+function stop35(t, L) {
+  const d = new Date(t.slice(0, 10) + 'T00:00:00Z'), w = d.getUTCDay();
+  d.setUTCDate(d.getUTCDate() - ((w + 6) % 7) + (w === 1 || w === 2 ? 7 : 14));
+  const s = d.toISOString().slice(0, 10);
+  return s < L ? L : s;
+}
 
 function simulate(seed, steps) {
   const R = rng(seed);
@@ -59,17 +66,9 @@ function simulate(seed, steps) {
       const b = ctx.statusOn_(rows, 's1', '조식', d);
       const tb = oracleTop('조식', d, leave && d >= leave.L);
       assert.strictEqual(b, tb ? tb.value : '미실시', where + '\n조식 ' + d);
-      const dn = ctx.statusOn_(rows, 's1', '석식', d);
-      if (!leave || d < leave.L) {
-        assert.strictEqual(dn, oracleTop('석식', d, false).value, where + '\n석식 ' + d);
-      } else {
-        const top = oracleTop('석식', d, false);
-        if (!isHall('석식', top.value)) assert.strictEqual(dn, top.value, where + '\n석식(퇴실 뒤, 가장 늦은 의도가 학사생 값 아님) ' + d);
-        else {
-          assert.ok(dn === '학사 석식' || dn === '미실시', where + '\n석식(퇴실 뒤) ' + d + ' = ' + dn);
-          if (d >= ctx.ymdAddDays_(leave.L > leave.entryDate ? leave.L : leave.entryDate, 14)) assert.strictEqual(dn, '미실시', where + '\n석식(퇴실 2주 뒤) ' + d);
-        }
-      }
+      const top = oracleTop('석식', d, false).value;
+      const want = leave && isHall('석식', top) && d >= stop35(leave.t, leave.L) ? '미실시' : top;
+      assert.strictEqual(ctx.statusOn_(rows, 's1', '석식', d), want, where + '\n석식 ' + d);
     }
   }
 
@@ -81,7 +80,7 @@ function simulate(seed, steps) {
       let L = ctx.ymdAddDays_(today, Math.floor(R() * 14) - 3);
       if (L < '2027-03-02') L = '2027-03-02';                 // 기간 시작(입실 3/1) 뒤
       const t = iso(now);
-      leave = { L, t, entryDate: today };
+      leave = { L, t };
       addRow({ item: '학사', value: '퇴실', effective_date: L, source: 'F6', requested_at: t });
       for (const item of ['조식', '석식']) {
         const stop = item === '조식' ? L : ctx.mealEffectiveDate_('stop', t, { leaveDate: L }).date;
@@ -118,8 +117,9 @@ function simulate(seed, steps) {
   return { rows: rows.length, leave: !!leave };
 }
 
-test('오라클 무작위 시험 400가지(사건 40개씩, 3/1~4/30 매일 비교): 조식·석식 값, 퇴실 처리, 늦은 입력, 수렴', () => {
+const SEEDS = process.env.ORACLE_FULL ? 400 : 100;
+test('오라클 무작위 시험 ' + SEEDS + '가지(사건 40개씩, 3/1~4/30 매일 비교): 조식·석식 값, 결정 35 중단일, 퇴실 처리, 늦은 입력, 수렴', () => {
   let leaves = 0, rows = 0;
-  for (let seed = 1; seed <= 400; seed++) { const r = simulate(seed, 40); leaves += r.leave ? 1 : 0; rows += r.rows; }
-  assert.ok(leaves > 100 && rows > 4000, '시험 폭: 퇴실 ' + leaves + '건, 행 ' + rows + '개');
+  for (let seed = 1; seed <= SEEDS; seed++) { const r = simulate(seed, 40); leaves += r.leave ? 1 : 0; rows += r.rows; }
+  assert.ok(leaves > SEEDS / 4 && rows > SEEDS * 10, '시험 폭: 퇴실 ' + leaves + '건, 행 ' + rows + '개');
 });

@@ -197,15 +197,18 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
 
   // 퇴실 전에 켠 학사생 값이 퇴실 뒤까지 이어지면 퇴실 정리 행을 함께 쓴다
   if (mealIsHallOnly_(it, to)) {   // none이어도: 이전 미실시 대기 행을 취소하면 학사생 값이 퇴실 뒤까지 이어질 수 있다
-    var leave = '';
+    var leaveRow = null;
     rows.forEach(function (c) {
       var e = String(c.effective_date).trim();
       if (String(c.item || '').trim() === '학사' && String(c.value || '').trim() === '퇴실' && e > cand.date &&
-          statusOn_(rows, sid, '학사', e) === '퇴실' && (!leave || e < leave)) leave = e;
+          statusOn_(rows, sid, '학사', e) === '퇴실' && (!leaveRow || e < String(leaveRow.effective_date).trim())) leaveRow = c;
     });
-    if (leave) {
+    if (leaveRow) {
+      var leave = String(leaveRow.effective_date).trim();
       var after = rows.filter(function (c) { return !cancelled[String(c.id || '').trim()]; }).concat([newRow]);
-      var stop = it === '조식' ? leave : mealEffectiveDate_('stop', requestedAt, { leaveDate: leave }).date;
+      // 석식 중단일은 퇴실 기록의 입력 일시로(결정 35, F6 정리와 같은 날 — 입력 순서와 무관)
+      // shortcut: 퇴실 행에 requested_at이 없으면 이 신청 일시로 계산한다, F6 아닌 경로(명단 등)로 퇴실을 쓰게 되면 고친다
+      var stop = it === '조식' ? leave : mealEffectiveDate_('stop', statStr_(leaveRow.requested_at) || requestedAt, { leaveDate: leave }).date;
       if (mealIsHallOnly_(it, statusOn_(after, sid, it, stop))) {
         out.followUps.push({ item: it, value: '미실시', effective_date: stop, source: 'F6' });
       }
