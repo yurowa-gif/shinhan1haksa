@@ -15,6 +15,7 @@
 
   <?!= include('ui/Client') ?>
   <?!= include('ui/Components') ?>
+  <script>var SCREEN_PARAMS = <?!= screenParams ?>; var SCREEN_TAB = SCREEN_PARAMS.tab || ''; var SCREEN_DATE = SCREEN_PARAMS.date || ''; var SCREEN_STUDENT = SCREEN_PARAMS.student || '';</script>
   <?!= include(screenFile) ?>
   <script>
     (function () {

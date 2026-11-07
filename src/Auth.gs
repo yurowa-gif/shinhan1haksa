@@ -31,6 +31,12 @@ function permissions_() {
     // 자습 일정·블록: 교사 역할은 보기, 수정은 관리자만
     'schedule.view': { roles: ['admin', 'attendance', 'hall_teacher', 'duty_manager', 'homeroom'] },
     'schedule.edit': { roles: ['admin'] },
+    // 사전 특이사항(F1): 출결 담당·관리자는 입력(바로 확정)·확정, 담임(자기 반)·학사 교사(담당 학생)는 요청만, 취소는 출결 담당·관리자 또는 본인 요청
+    'exception.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] },
+    // noDuty: 근무일(isOnDuty)은 범위에 넣지 않는다 — 저장은 담당·담임·출결·관리자만(ASSUMPTION: F3 이후에도 근무일 교사가 모든 학생에게 요청하지는 못하게)
+    'exception.save': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'], scope: 'student', noDuty: true },
+    'exception.confirm': { roles: ['admin', 'attendance'] },
+    'exception.cancel': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] },
     // 좌석: 보기는 교사 역할, 학생 배정은 관리자·학사 교사, 격자(공간 구조) 편집은 관리자
     'seat.view': { roles: ['admin', 'attendance', 'hall_teacher', 'duty_manager', 'homeroom'] },
     'seat.edit': { roles: ['admin', 'hall_teacher'] },
@@ -103,6 +109,16 @@ function getCurrentTerm_() {
   return inRange[0] || started[0] || null;
 }
 
+/** 날짜가 속한 운영 기간(겹치면 나중에 시작한 것). 없으면 null. terms를 안 주면 시트에서 읽는다 */
+function termOnDate_(ymd, terms) {
+  var hit = null;
+  (terms || readAll_('terms')).forEach(function (t) {
+    if (!t.start_date || !t.end_date || ymd < t.start_date || ymd > t.end_date) return;
+    if (!hit || t.start_date >= hit.start_date) hit = t;
+  });
+  return hit;
+}
+
 /**
  * 근무교사(오늘 근무자)인지. F3 근무표(duty_slots)가 생기면 채운다.
  * TODO(F3): duty_slots에서 오늘 날짜의 실제 근무자 이메일과 비교
@@ -114,8 +130,10 @@ function isOnDutyToday_(email) {
 /**
  * 학생 한 명에 대한 범위 판정에 필요한 사실을 모은다.
  */
-function studentFacts_(user, student) {
-  var term = getCurrentTerm_();
+function studentFacts_(user, student, ymd) {
+  // ymd(YYYY-MM-DD)를 주면 그 날짜가 속한 운영 기간으로 판정한다(다음 기간 신입생 입력 등). 없으면 오늘의 기간.
+  // 어떤 기간에도 속하지 않는 날짜는 오늘의 기간으로 판정한다(저장 단계의 입력 검사가 "기간에 속하지 않음"으로 막는다)
+  var term = (ymd ? termOnDate_(ymd) : null) || getCurrentTerm_();
   var termId = term ? term.id : '';
   var enrolled = readAll_('enrollments').some(function (en) { return en.term_id === termId && en.student_id === student.id; });
   var facts = {
@@ -191,9 +209,14 @@ function requirePermission_(action, context) {
   if (rule.scope === 'ownRole') {
     if (!context.role || !hasRole_(user, context.role)) deny('본인 역할 아님');
   } else if (rule.scope === 'student') {
+    // ymd가 주어졌는데 날짜가 아니면 오늘로 대신하지 않고 거부한다(공백·형식 우회 방지). 빈 값은 "없음" = 오늘의 기간
+    var ymd = context.ymd === undefined || context.ymd === null || context.ymd === '' ? '' : context.ymd;
+    if (ymd && (typeof ymd !== 'string' || !ymdIsValid_(ymd))) deny('날짜 형식');
     var student = context.studentId ? findById_('students', context.studentId) : null;
     if (!student) deny('학생 없음');
-    if (!canAccessStudentByFacts_(user.roles, studentFacts_(user, student), rule.roles)) deny('범위 밖 학생');
+    var facts = studentFacts_(user, student, ymd);
+    if (rule.noDuty) facts.isOnDuty = false;
+    if (!canAccessStudentByFacts_(user.roles, facts, rule.roles)) deny('범위 밖 학생');
   }
   return user;
 }
