@@ -24,6 +24,31 @@ function isAllowedUrl(s) {
   return ALLOWED_DOMAINS.some(function (d) { return u.hostname === d || u.hostname.endsWith('.' + d); });
 }
 
+const TWO_ROWS = '공식 자료에 유형이 다른 두 행';
+const NO_SPLIT = '반영과목(원문, 핵심·권장 구분 없음)';
+
+/**
+ * note에서 'A 또는 B', 'A, B 중 N과목', 'A, B를 포함하여'로 이름이 나온 표준 과목.
+ * '그 외 … 등'(예시)은 보지 않는다. 대응표로 바꾼 원문 표기는 검사하지 않는다(표준 이름만).
+ */
+function namedInNote(note, standard) {
+  const out = [];
+  for (const seg0 of note.split(/ \/ |; /)) {
+    const seg = seg0.split('그 외')[0];
+    const parts = [];
+    seg.replace(/([^:]*?)(?:中|중)\s*\d+\s*과목/g, function (m, a) { parts.push(a); return m; });
+    seg.replace(/([^:]*?)(?:을|를)\s*포함/g, function (m, a) { parts.push(a.split('중 ').pop()); return m; });
+    seg.replace(/([^:,(\[]*?또는[^,:)\]]*)/g, function (m, a) { parts.push(a); return m; });
+    for (const part of parts) {
+      for (let t of part.split(/[,\[\]]|또는/)) {
+        t = t.trim();
+        if (standard.has(t) && out.indexOf(t) < 0) out.push(t);
+      }
+    }
+  }
+  return out;
+}
+
 function splitCourses(s) {
   return s === '' ? [] : s.split(';').map(function (x) { return x.trim(); });
 }
@@ -50,8 +75,10 @@ function checkRecommendations(recs, ref) {
       else if (ref.sources[r.source_title] !== r.source_url) errs.push(at + 'source_url이 sources.csv의 같은 문서 url과 다름');
     }
     const k = [r.base_year, r.university, r.unit].join('|');
-    if (keys[k]) errs.push(at + '(base_year, university, unit) 중복(' + keys[k] + '번째 줄)');
-    keys[k] = r._line;
+    // 공식 자료 자체에 같은 모집단위가 두 줄이면 note에 표시하고 둘 다 둔다.
+    const twoRows = r.note.indexOf(TWO_ROWS) >= 0 && keys[k] && keys[k].note.indexOf(TWO_ROWS) >= 0;
+    if (keys[k] && !twoRows) errs.push(at + '(base_year, university, unit) 중복(' + keys[k].line + '번째 줄)');
+    keys[k] = { line: r._line, note: r.note };
 
     const core = splitCourses(r.core_courses);
     const rec = splitCourses(r.recommended_courses);
@@ -63,6 +90,10 @@ function checkRecommendations(recs, ref) {
       if (!ref.standard.has(c) && !Object.prototype.hasOwnProperty.call(ref.map, c)) {
         errs.push(at + '표준 목록·대응표에 없는 과목명: ' + c);
       }
+    }
+    if (r.note.indexOf(NO_SPLIT) === 0 && r.core_courses !== '') errs.push(at + '핵심·권장 구분 없음 행인데 core_courses가 있음');
+    for (const c of namedInNote(r.note, ref.standard)) {
+      if (!seen[c]) errs.push(at + 'note의 조건(또는·중 N과목·포함)에 이름이 나온 과목이 과목 칸에 없음: ' + c);
     }
   }
   return errs;
@@ -99,4 +130,4 @@ function checkNameMap(rows, standard) {
   return errs;
 }
 
-module.exports = { HEADER, SOURCES_HEADER, MAP_HEADER, ALLOWED_DOMAINS, isAllowedUrl, checkRecommendations, checkSources, checkNameMap };
+module.exports = { namedInNote, HEADER, SOURCES_HEADER, MAP_HEADER, ALLOWED_DOMAINS, isAllowedUrl, checkRecommendations, checkSources, checkNameMap };

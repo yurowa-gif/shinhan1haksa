@@ -31,6 +31,11 @@
       el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=schedule', text: '자습 일정 열기' })
     ]));
     root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '사전 특이사항' }),
+      el('div', { class: 'muted', text: '병결·가정사유·학원 등을 입력하고 담임·담당교사의 요청을 확정합니다.' }),
+      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=exceptions', text: '특이사항 열기' })
+    ]));
+    root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '출석부' }),
       el('div', { class: 'muted', text: '날짜를 고르면 그날 출석부를 미리 보고 PDF로 받습니다.' }),
       el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=sheet', text: '출석부 열기' })
