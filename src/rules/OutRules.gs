@@ -1,7 +1,7 @@
 /**
  * OUT 규칙(RULES 세션 소유, docs/contracts/rules-api.md, PRD F1·F4, 결정 4·10·22, vocabulary.md violations).
  *
- * 순수 함수만 둔다. DateRules.gs(ymdIsValid_)·AttendanceRules.gs(attStr_·attTypeBase_·parseBlockSpec_)의 함수를 부른다.
+ * 순수 함수만 둔다. DateRules.gs(ymdIsValid_)·AttendanceRules.gs(attStr_·attIso_·attTypeBase_·parseBlockSpec_)의 함수를 부른다.
  * 시트 행(문자열)은 그대로 받는다.
  *   exceptions_<기간>:  id, term_id, group_id, student_id, date, blocks, type, status(요청·확정·취소),
  *                      requested_by, confirmed_by, confirmed_at …
@@ -64,10 +64,6 @@ function outDutyText_(dutyByDate, date) {
   return Array.isArray(d) ? d.map(attStr_).filter(Boolean).join(',') : attStr_(d);
 }
 
-function outIso_(v) {
-  return attStr_(v).replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T');
-}
-
 /**
  * 확정된 미인정 특이사항 ↔ 자동 1OUT 맞추기(결정 10·22). 아무것도 쓰지 않고 할 일만 돌려준다.
  * exceptions·violations는 **그 기간의 모든 행**을 넘긴다(한 학생 것만 넘기면 다른 학생의 자동 OUT이
@@ -115,7 +111,7 @@ function reconcileAutoOuts_(exceptions, violations, opts) {
   var autoTypes = (opts.autoTypes || []).map(attTypeBase_).filter(function (t) { return t !== ''; });
   if (!autoTypes.length) autoTypes = ['미인정지각', '미인정조퇴', '미인정결석'];
   var sinceMap = {};
-  Object.keys(opts.autoTypeSince || {}).forEach(function (t) { sinceMap[attTypeBase_(t)] = outIso_(opts.autoTypeSince[t]); });
+  Object.keys(opts.autoTypeSince || {}).forEach(function (t) { sinceMap[attTypeBase_(t)] = attIso_(opts.autoTypeSince[t]); });
   var per = opts.per === 'row' ? 'row' : 'group';
   var prefix = outAutoCancelPrefix_();
   var only = null;
@@ -125,7 +121,7 @@ function reconcileAutoOuts_(exceptions, violations, opts) {
   }
   var inScope = function (sid) { return !only || only[attStr_(sid)]; };
   var sinceOk = function (e, type) {
-    return !Object.prototype.hasOwnProperty.call(sinceMap, type) || outIso_(e.confirmed_at) >= sinceMap[type];
+    return !Object.prototype.hasOwnProperty.call(sinceMap, type) || attIso_(e.confirmed_at) >= sinceMap[type];
   };
   var eligible = function (e) {
     var t = attTypeBase_(e.type);

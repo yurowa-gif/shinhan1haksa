@@ -159,7 +159,7 @@ function mealChangeKind_(item, fromValue, toValue)
 ## 동작 메모(R5, 2026-11-07, 총괄 검토 3차 반영)
 
 **OutRules** — violations 탭(`violations_<기간>`)은 2단계 F4에서 만든다. 이 함수는 아무것도 쓰지 않는다. 값 글자는 vocabulary.md violations 절. `tests/rules/out_oracle.test.js`가 단순한 오라클 모델과 무작위 시험(시드 고정 300가지)으로 비교한다.
-- **입력 범위:** `exceptions`·`violations`는 **그 기간의 모든 행**. 일부만 넘기면 넘기지 않은 특이사항에 연결된 자동 OUT이 `'[자동] 연결된 특이사항이 없습니다'`로 취소된다. 한 학생만 맞추려면 기간 전체 행을 넘기고 `opts.studentIds`로 좁힌다.
+- **입력 범위:** `exceptions`·`violations`는 **그 기간의 모든 행**. 일부만 넘기면 넘기지 않은 특이사항에 연결된 자동 OUT이 `'[자동] 연결된 특이사항이 없습니다'`로 취소된다. 한 학생만 맞추려면 기간 전체 행을 넘기고 `opts.studentIds`로 좁힌다. `opts.studentIds`는 F1 확정 시 한 학생만 맞출 때 사용한다(2단계).
 - **전제:** 특이사항 행의 `student_id`·`term_id`·`date`는 저장 뒤 바뀌지 않는다(vocabulary.md). 바뀌어도 견디지만, `term_id`가 바뀌면 두 기간의 실행이 서로 취소·생성을 되풀이할 수 있다.
 - **단위:** `per:'group'`(기본, 결정 22 "입력 1건 = 1OUT")이면 (학생, group_id) 묶음, group_id가 비면 행 하나. `per:'row'`면 행마다.
 - **자격 행:** `확정` + 날짜가 달력에 있음(`ymdIsValid_`) + 유형이 `autoTypes`(괄호 설명을 떼고 비교, 비거나 빈 항목뿐이면 기본 3종) + 그 유형이 `opts.autoTypeSince`에 있으면 `confirmed_at >=` 그 시각.
