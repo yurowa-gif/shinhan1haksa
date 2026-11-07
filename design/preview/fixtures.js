@@ -13,7 +13,7 @@ const { loadGs, plain } = require('../../tests/helpers/harness');
 const KIND = { 좌석: 'seat', 기둥: 'pillar', 비상문: 'door', 창문: 'window' };
 const LEGEND = [
   { mark: '○', text: '출석' }, { mark: '×', text: '결석' }, { mark: '△', text: '지각' },
-  { mark: '조', text: '조퇴(아래 칸에 질병·가정사유)' }, { mark: '학', text: '학원' }, { mark: '가', text: '가정' }
+  { mark: '조', text: '조퇴(사유는 메모 칸에)' }, { mark: '학', text: '학원' }, { mark: '가', text: '가정' }
 ];
 // 블록은 기본값(Schema.gs DEFAULT_BLOCKS·defaultBlockRows_)을 그대로 쓴다. 날짜·요일만 여기서 정한다.
 const DAYS = {

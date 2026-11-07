@@ -1,12 +1,26 @@
 <script>
-  /** 출결 담당 홈 (PRD 8절): 오늘·내일 특이사항, 요청 배지, 격자 정리 남은 날짜 */
+  /** 출결 담당 홈 (PRD 8절, docs/design/screens.md 1절): 특이사항 요청 배지, 오늘·내일 특이사항, 입력 */
   function renderHome(d, root) {
+    var x = d.exc || { pending: 0, today: 0, tomorrow: 0 };
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '오늘 ' + d.today }),
       el('div', { class: 'muted', text: d.termName + ' · 학사생 ' + d.studentCount + '명' })
     ]));
-    root.appendChild(soonCard('오늘·내일 사전 특이사항 · 담임·담당교사 요청', '1단계(F1)에서 만듭니다.'));
-    root.appendChild(soonCard('출석부 인쇄', '1단계(F2)에서 만듭니다.'));
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', {}, ['특이사항 요청 ', UI.badge(x.pending)]),
+      el('div', { class: 'muted', text: x.pending ? '확정할 요청이 ' + x.pending + '건 있습니다.' : '확정할 요청이 없습니다.' }),
+      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=exceptions&tab=requests', text: '요청 처리' })
+    ]));
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '오늘·내일 특이사항' }),
+      el('div', { class: 'muted', text: '오늘 ' + x.today + '명 · 내일 ' + x.tomorrow + '명' }),
+      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=exceptions', text: '특이사항 입력' })
+    ]));
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '출석부' }),
+      el('div', { class: 'muted', text: '날짜를 고르면 그날 출석부를 미리 보고 PDF로 받습니다.' }),
+      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=sheet', text: '출석부 열기' })
+    ]));
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '좌석표' }),
       el('div', { class: 'muted', text: '학사생 자리를 확인합니다(배정은 학사 교사·관리자).' }),
