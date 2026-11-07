@@ -69,7 +69,8 @@ var SCREENS = {
   terms: { file: 'ui/screen_terms', title: '운영 기간', view: 'term.view' },
   roster: { file: 'ui/screen_roster', title: '명단 올리기', view: 'roster.edit' },
   schedule: { file: 'ui/screen_schedule', title: '자습 일정·블록', view: 'schedule.view' },
-  exceptions: { file: 'ui/screen_exceptions', title: '특이사항', view: 'exception.view' }
+  exceptions: { file: 'ui/screen_exceptions', title: '특이사항', view: 'exception.view' },
+  seats: { file: 'ui/screen_seats', title: '좌석표', view: 'seat.view' }
 };
 
 /**

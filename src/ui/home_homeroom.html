@@ -36,6 +36,11 @@
       el('div', { class: 'muted', text: '우리 반 학생에게만 보낼 수 있고, 출결 담당 선생님이 확인하면 출석부에 반영됩니다.' }),
       el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=exceptions', text: '요청 보내기' })
     ]));
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '좌석표' }),
+      el('div', { class: 'muted', text: '우리 반 학생의 자리를 확인합니다.' }),
+      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=seats', text: '좌석표 열기' })
+    ]));
     root.appendChild(soonCard('학생별 OUT·급식·기숙사·상담 열람', '이후 단계에서 추가합니다.'));
   }
 </script>

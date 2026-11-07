@@ -36,7 +36,11 @@ function permissions_() {
     // noDuty: 근무일(isOnDuty)은 범위에 넣지 않는다 — 저장은 담당·담임·출결·관리자만(ASSUMPTION: F3 이후에도 근무일 교사가 모든 학생에게 요청하지는 못하게)
     'exception.save': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'], scope: 'student', noDuty: true },
     'exception.confirm': { roles: ['admin', 'attendance'] },
-    'exception.cancel': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] }
+    'exception.cancel': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] },
+    // 좌석: 보기는 교사 역할, 학생 배정은 관리자·학사 교사, 격자(공간 구조) 편집은 관리자
+    'seat.view': { roles: ['admin', 'attendance', 'hall_teacher', 'duty_manager', 'homeroom'] },
+    'seat.edit': { roles: ['admin', 'hall_teacher'] },
+    'seat.layout': { roles: ['admin'] }
   };
 }
 
