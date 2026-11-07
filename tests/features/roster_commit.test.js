@@ -89,7 +89,7 @@ test('저장: 학생→등록→상태→계정 순서, 새 id로 참조가 모�
   for (const c of s.db.status_changes) {
     assert.ok(ids.has(c.student_id) && !String(c.student_id).startsWith('new:'));
     assert.strictEqual(c.source, '명단업로드'); assert.strictEqual(c.status, '유효');
-    assert.strictEqual(c.requested_at, '2027-03-03T10:00:00'); assert.strictEqual(c.effective_date, '2027-03-02');
+    assert.strictEqual(c.requested_at, '', '명단 초기 행의 신청 일시는 비어 있다(업로드 시각이 아님)'); assert.strictEqual(c.effective_date, '2027-03-02');
   }
   const stuUsers = s.db.users.filter((u) => u.roles === 'student');
   assert.strictEqual(stuUsers.length, 30);

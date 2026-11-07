@@ -102,6 +102,9 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts)  
         // opts = {cutoff, leaveDate, today(필수)} → {kind, date, rule, from, blocked, superseded, toCancel:[…], followUps:[…], warnings:[]}
 function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)     // 새 행이 덮어야 할 행(R6 추가)
         // opts = {source:'F7'|'F6', requestedAt, newValue} → [{id, effective_date, value}]
+function mealCountsOn_(students, enrollments, changes, termId, ymd)
+        // (R12) → {groups:{'여1':{hall, dorm, nonDorm, breakfast, hallDinner, generalDinner}, …, '여 합계','남 합계','1학년'…'전체'},
+        //    afterLeaveHallDinner, unknownGroup:[studentId], warnings}
 ```
 
 ## 동작 메모(R1, 2026-11-06)
@@ -226,3 +229,7 @@ function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)    
 - `outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes)`: 유형별 마지막 넓힘 시각을 스냅숏 `{types, since}`로 들고 다닌다(저장은 F4 몫). `snapshot`이 null(처음·분실)이면 기준 = `defaultTypes`(설정 기본값 `exception.auto_out_types`): 기본 그대로면 `since {}`(처음 연결 때 일괄 생성), 기본에 없는 유형은 `since = nowIso`(스냅숏을 잃어도 넓혔던 유형은 소급하지 않는다). 새로 나타난 유형은 `since = nowIso`(다시 넓혀도 덮어씀), 빠진 유형의 since는 남긴다. 괄호 설명은 떼고 비교. `changed` = 스냅숏을 새로 써야 하는지(null이면 참, 유형 집합이 같으면 거짓). 잘못된 `nowIso`는 Error.
 - `outDismissalGate_`(2OUT 퇴실 확정 관문): 이번 기간 살아 있는 OUT을 `occurred_at` → `created_at` → id 순으로 놓은 둘째가 `triggerOutId`. 면담 = status 빈칸·유효, 같은 학생, type `2OUT 학부모 면담`, **이번 기간 살아 있는 OUT에 연결**, 날짜 ≥ triggerOut 발생일. `alreadyLeft` = ymd에 학사 퇴실. 판정 순서: `이미 퇴실` → `퇴실 대상 아님`(2건 미만) → `면담 기록 필요` → ok. `notes`에는 내용(content)을 넘기지 않는다. ASSUMPTION(Q9): 연결한 OUT이 관리자 취소로 죽으면 그 면담은 세지 않는다(다른 2건이 남아도 다시 면담). StatusRules(`statusOn_`)를 부른다.
 - O43 회귀 테스트: 같은 묶음의 앞선 자동 OUT이 중복·유형 변경으로 `[자동]` 취소돼 있어도 since 거르기는 그대로다(`moved`는 '학생 또는 기간이 바뀌었습니다' 취소만).
+
+## 동작 메모(R12, 2026-11-07)
+
+- `mealCountsOn_`: termId 기간에 등록된 학생을 그날 상태 그대로 센다(결석·외박은 빼지 않는다, 같은 학생 두 번 등록은 한 번). 학사 = 학사 `입실`, 기숙 = 학사 입실이면서 기숙사 `입실`, 비기숙 = 학사 입실이면서 기숙 아님. **조식·석식은 학사 상태로 거르지 않는다**(결정 35 — 퇴실 학생도 석식 중단일 전까지 학사 석식, `afterLeaveHallDinner`로 따로 센다). 줄은 '여1'…'남3'(학년 3 밖도 있으면 줄을 만든다), '여 합계'·'남 합계', 'N학년', '전체'이고 합계 줄 = 부분 합. ASSUMPTION: 성별(남·여)·학년(숫자)이 비었거나 다른 학생, 학생 행이 없는 등록은 어느 줄에도 넣지 않고 `unknownGroup` + 경고. 잘못된 날짜는 Error.

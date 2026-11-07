@@ -49,6 +49,40 @@
 | rule_name | `직접`이면 F4 항목 이름. `F1자동`이면 **`무단 지각·결석·이탈(<만들 때 특이사항 유형>)`** 형식(R5가 이 괄호 유형으로 "설정 변경은 앞으로만"을 판정한다). F4 화면은 `F1자동` 행의 rule_name을 고치지 못하게 한다 |
 | cancel_reason | 자유 입력. 단, 규칙이 자동으로 취소한 행은 **`[자동] `**(대괄호·공백 포함)으로 시작한다. 이 머리말이 없는 `F1자동` 취소 행은 관리자가 직접 취소한 것으로 보고 다시 만들지 않는다(R5) |
 
+## 새 탭·열 어휘 (승인 대기, 2단계)
+
+`docs/plan/stage2.md` 5절 구조 변경안(T0a)의 초안이다. 승인되면 S2-0b에서 "(승인 대기)"를 지우고 확정한다. 승인 전에는 브랜치에서 이 값으로 개발할 수 있지만, 새 탭·열을 쓰는 PR은 S2-0b 병합 뒤에 병합한다(stage2.md 0절 2).
+
+| 탭 | 열 | 값 |
+| --- | --- | --- |
+| duty_slots | slot | `21:30조` · `23:00조` · `단독` · `예비` |
+| duty_slots | status | `유효` · `취소` |
+| duty_slots | end_time / swapped_at | `HH:mm` / `yyyy-MM-ddTHH:mm:ss`(교대 전에는 빈칸) |
+| violation_rules | active | `TRUE` · `FALSE` |
+| counsel_notes | type | `생활` · `학습` · `진로` · `진학` · `2OUT 학부모 면담` · `기타` |
+| counsel_notes | target | `학생` · `학부모` |
+| counsel_notes | show_to_parent / status | `TRUE`(기본, 2단계는 늘 TRUE) · `FALSE` / `유효` · `취소` |
+| status_changes | requested_at | source `명단업로드`이면 `''`(C16). F6·F7은 날짜+시각 필수 |
+| status_changes | linked_change_id | 한 번의 F6·F7 입력에서 대표 행 id. 대표 행은 `''`. "학사 및 기숙사 퇴실"의 기숙사 행, 퇴실 정리 급식 행, 퇴실과 함께 만든 일반 석식 행, F7 신청의 followUps가 대표를 가리킨다 |
+| status_changes | source(연결 행) | 퇴실 정리 급식 행과 F7 followUps는 `F6`. **F6 화면이 퇴실과 함께 만든 일반 석식 행은 `F7`**(신청이다 — MealRules.gs:168·183·261은 F6 행을 정리 행으로 보고 superseded·퇴실 취소 대상에서 뺀다) |
+| status_changes | doc_submitted | 대표 행 `TRUE`·`FALSE`. 연결 행(일반 석식 행 포함)과 명단업로드 행은 `''`. 서류 미제출 목록은 `FALSE`만 센다 |
+| status_changes | effective_date_auto | 규칙 계산값. effective_date와 다르면 교사가 고친 행(사유는 reason) |
+| status_changes | reason(자동) | 퇴실 정리 행 `학사 퇴실 정리`, 2OUT 퇴실 대표 행 `2OUT 퇴실`(날짜·면담 정보 없음) |
+| status_changes | memo(자동) | 2OUT 퇴실 대표 행 `[2OUT] out:<OUT id> note:<면담 id>`. 화면에 내보내지 않는다 |
+| status_changes | cancel_reason | `[자동] <원인 행 id> …`(규칙이 취소) 또는 사람이 적은 사유(2자 이상) |
+
+### 전역 이름 접두어 (2단계 파일, stage2.md 1절)
+
+Apps Script는 같은 전역 이름을 경고 없이 덮는다. 새 전역 이름은 파일의 접두어로 시작한다(전역 이름 중복은 security.test.js가 막는다).
+
+| 파일 | 접두어 | 파일 | 접두어 |
+| --- | --- | --- | --- |
+| rules/DutyRules.gs | `duty…` | features/Duty.gs | `dty…` |
+| rules/OutRules.gs | `out…` | features/Outs.gs | `vio…` |
+| rules/MoveRules.gs | `move…` | features/Moves.gs | `inout…` |
+| rules/MealRules.gs | `meal…` | features/Meals.gs | `food…` |
+| print/*.gs | `print…` | features/Counsel.gs · Notify.gs | `cns…` · `notify…` |
+
 ## 나머지 1단계 탭
 
 | 탭 | 열 | 값 |
