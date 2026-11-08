@@ -344,7 +344,7 @@ function commitRoster(text, opts, expect) {
     bulkUpdateRecords_('students', d.updateStudents, email);
     bulkAppend_('enrollments', rosterApplyRefs_(d.createEnrollments, idByRef), email);
     bulkUpdateRecords_('enrollments', d.updateEnrollments, email);
-    // 명단 초기 행의 requested_at은 ''로 둔다(업로드 시각이 아니다): 같은 적용일의 F6 퇴실이 늘 뒤에 오고, 업로드 전 날짜의 F7 신청서도 밀려난다(규칙·오라클 전제)
+    // 명단 초기 행의 requested_at은 ''로 둔다(업로드 시각이 아니다). 명단 행은 어떤 신청보다 이른 신청으로 본다: 같은 적용일의 F6 퇴실이 이기고, 업로드 전 날짜의 F7 신청서도 superseded되지 않는다(적용일이 더 늦은 명단 행은 취소 대상)
     bulkAppend_('status_changes', rosterApplyRefs_(d.createChanges, idByRef), email);
     bulkAppend_('users', plan.userPlan.create, email);
     bulkUpdateRecords_('users', plan.userPlan.update, email);

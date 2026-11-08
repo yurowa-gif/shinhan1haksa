@@ -1,7 +1,20 @@
 <script>
   /** 2단계 A 카드(CODING-A: 근무·OUT·면담). 이 함수의 몸통만 고친다(docs/plan/stage2.md 1절). 오늘 카드의 #home-duty 줄(내 근무, screens.md 학사 교사)도 여기서 채운다 */
   function renderStage2A(d, root) {
-    return;
+    var x = d.duty, line = document.getElementById('home-duty');
+    if (!x) return;
+    if (line) {
+      if (x.error) line.textContent = '근무 정보를 불러오지 못했습니다.';
+      else {
+        var nx = x.next ? ' · 다음 근무 ' + (+x.next.date.slice(5, 7)) + '월 ' + (+x.next.date.slice(8, 10)) + '일(' + x.next.label + ')' : '';
+        line.textContent = (x.today ? '오늘 내 근무: ' + x.today : '오늘 내 근무 없음') + nx;
+      }
+    }
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '근무표' }),
+      el('div', { class: 'muted', text: '내 근무와 이번 달 근무표를 봅니다.' }),
+      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=duty', text: '근무표 보기' })
+    ]));
   }
 
   /** 학사 교사 홈: 오늘, 내가 보낸 특이사항 요청 상태, 내 담당 학생 (PRD 8절) */

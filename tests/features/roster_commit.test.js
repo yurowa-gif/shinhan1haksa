@@ -78,7 +78,7 @@ test('처음 올리기: 미리보기는 아무것도 쓰지 않고, 개수와 �
   assert.ok(!wire.includes('example.com'), '응답에 이메일을 싣지 않는다');
 });
 
-test('저장: 학생→등록→상태→계정 순서, 새 id로 참조가 모두 바뀌고, 계정은 student 역할', () => {
+test('저장: 학생→등록→상태→계정 순서, 새 id로 참조가 모두 바뀌고, 계정은 student 역할, 명단 초기 상태 행 requested_at은 빈칸', () => {
   const s = admin();
   const r = commit(s, FULL);
   assert.strictEqual(r.ok, true);

@@ -187,10 +187,10 @@ function setDutyOperating(input) {
 /**
  * 교사 홈의 근무 카드 데이터(getHomeData가 부른다). 아직 없으면 null.
  * 보고 있는 홈 역할(role)이 duty.view를 가질 때만 불린다. 던진 오류는 getHomeData가 잡아 {error}로 바꾼다.
- * 근무표 담당자: 이번 달 빈 날·교대 수. 학사 교사: 오늘 내 근무와 다음 근무.
+ * 근무표 담당자·관리자: 이번 달 빈 날·교대 수. 학사 교사: 오늘 내 근무와 다음 근무.
  */
 function dtyHomeInfo_(user, role) {
-  if (role === 'duty_manager') {
+  if (role === 'duty_manager' || role === 'admin') {
     var v = dtyMonthView_(today_().slice(0, 7), user);
     return { emptyDays: v.emptyDays, swapCount: v.swapCount };
   }

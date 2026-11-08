@@ -156,6 +156,7 @@ test('홈 훅: 근무표 담당자는 이번 달 빈 날·교대, 학사 교사�
   save(x, DUTY, { date: FRI, slots: { '단독': x.t3, '예비': x.t1 } });
   const mgr = x.env.call(DUTY, 'getHomeData', 'duty_manager').duty;
   assert.ok(mgr.emptyDays > 0 && mgr.swapCount === 0);
+  assert.deepStrictEqual(plain(x.env.call(ADMIN, 'getHomeData', 'admin').duty), plain(mgr), '관리자 홈도 같은 숫자');
   const t1 = x.env.call(T1, 'getHomeData', 'hall_teacher').duty;
   assert.deepStrictEqual(plain(t1), { today: '21:30조', next: { date: FRI, label: '예비 감독' } });
   const t3 = x.env.call(T3, 'getHomeData', 'hall_teacher').duty;
