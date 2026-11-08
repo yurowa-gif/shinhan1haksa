@@ -45,7 +45,7 @@ function hmNorm_(v)        // 'H:mm'·'HH:mm:00' → 'HH:mm', 빈칸 '', 시각 
 // src/rules/DutyRules.gs (R8)
 function dutySlotsFor_(plan)
         // resolveDayPlan_ 결과 → 운영 안 함 [] | 월~목 [{slot:'21:30조',end},{slot:'23:00조',end}] | 금·토·일 [{slot:'단독',end},{slot:'예비',end:''}]
-function dutyOn_(rows, ymd)                   // → {duty:[{slot, email, end, swappedFrom}], standby:[email], warnings}
+function dutyOn_(rows, ymd)                   // → {duty:[{slot, email, end, swappedFrom}], standby:[{email, swappedFrom}], warnings}
 function dutyIsOn_(rows, email, ymd, today, windowDays)   // → boolean(그날 실제 근무자 && ymd ≤ today ≤ ymd + windowDays, 기본 0)
 function dutyRecord_(rows, month, opts)
         // opts = {operatingByDate:{}} → {teachers:[{email, total, bySlot, dates:[{date,slot,end,swappedFrom}]}],
@@ -232,12 +232,12 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd)
 
 ## 동작 메모(R8, 2026-11-07)
 
-**DutyRules** — duty_slots 행(아직 승인 전 탭, stage2.md 5절 1번)을 그대로 받는다. DateRules·ScheduleRules(`baseDayType_`)를 부른다.
+**DutyRules** — duty_slots 행(결정 41로 승인된 탭, stage2.md 5절 1번)을 그대로 받는다. DateRules·ScheduleRules(`baseDayType_`)를 부른다.
 
 - `dutySlotsFor_`: 끝 시각 = min(조 시각, 그날 종료), 단독 = 그날 종료, 예비 `''`. 방학도 같은 틀(4-2). ASSUMPTION: 특별 요일 유형(exam 등)은 실제 달력 요일의 틀(R3 END와 같은 방식).
-- `dutyOn_`: 취소 제외, (date, slot)마다 `updated_at` 최신 1행(같으면 아래 행) + 경고. 근무자 = `actual_email`(빈칸이면 `original_email` — ASSUMPTION: 교대 전에는 빈칸일 수 있다). 이메일은 소문자·공백 없이. 모르는 칸 이름·근무자 없는 칸은 빼고 경고. 예비 칸은 `standby`로만.
+- `dutyOn_`: 취소 제외, (date, slot)마다 `updated_at` 최신 1행(같으면 아래 행) + 경고. 근무자 = `actual_email`(빈칸이면 `original_email` — ASSUMPTION: 교대 전에는 빈칸일 수 있다). 이메일은 소문자·공백 없이. 모르는 칸 이름·근무자 없는 칸은 빼고 경고. 그 요일 틀 밖의 칸(토요일 21:30조, 화요일 단독·예비 등)은 쓰되 경고. 예비 칸은 `standby`로만(`{email, swappedFrom}`).
 - `dutyIsOn_`(근무교사 시간 범위 권한): 그날 실제 근무자만 참. 예비 지정만·교대로 넘긴 원래 근무자는 거짓. `windowDays` 기본 0(Q2 기본: 보기는 당일만, OUT 입력만 1). 잘못된 날짜·음수·소수 `windowDays`는 거짓(넓히지 않는다).
-- `dutyRecord_`(월말 근무 기록): 교사별 합계 = 실제 근무자(원래 근무자에게는 세지 않음). `swaps` = 칸마다 마지막 교대(원래 → 실제, `at`·`by`는 그날 쓴 행의 `swapped_at`·`swapped_by`). 예비 지정은 `standby`로 근무 합계와 따로 센다(결정 46). 그날 대신 근무한 예비는 근무로만 세고 `standby`에서는 뺀다(두 번 세지 않음). ASSUMPTION: 운영 안 하는 날(`operatingByDate[date] === false`)의 행도 세고 경고. 금액은 계산하지 않는다(결정 47 — 두 조의 수당이 같아 합계를 크게, 조별은 참고). 잘못된 달은 Error.
+- `dutyRecord_`(월말 근무 기록): 교사별 합계 = 실제 근무자(원래 근무자에게는 세지 않음). `swaps` = 칸마다 마지막 교대(원래 → 실제, **예비 칸 포함**, `at`·`by`는 그날 쓴 행의 `swapped_at`·`swapped_by`). 예비만 있는 교사도 `teachers`에 넣는다(total 0). 예비 지정은 `standby`로 근무 합계와 따로 센다(결정 46). 그날 대신 근무한 예비는 근무로만 세고 `standby`에서는 뺀다(두 번 세지 않음). ASSUMPTION: 운영 안 하는 날(`operatingByDate[date] === false`)의 행도 세고 경고. 금액은 계산하지 않는다(결정 47 — 두 조의 수당이 같아 합계를 크게, 조별은 참고). 잘못된 달은 Error.
 
 ## 동작 메모(R12, 2026-11-07)
 

@@ -61,7 +61,7 @@ test('dutyOn_: 예비가 단독을 대신 근무하면 단독 = 예비 교사, �
   const rows = [ROW('2027-03-05', '단독', 'a@example.com', { actual_email: 'p@example.com' }), ROW('2027-03-05', '예비', 'p@example.com')];
   const r = on(rows, '2027-03-05');
   assert.deepStrictEqual(r.duty.map((d) => [d.slot, d.email, d.swappedFrom]), [['단독', 'p@example.com', 'a@example.com']]);
-  assert.deepStrictEqual(r.standby, ['p@example.com']);
+  assert.deepStrictEqual(r.standby, [{ email: 'p@example.com', swappedFrom: '' }]);
 });
 
 test('dutyOn_: 취소 행·다른 날짜 행은 무시, 이메일은 소문자·공백 없이', () => {
@@ -131,15 +131,15 @@ test('dutyRecord_: 예비 지정은 근무 합계와 따로 센다, 그날 대�
   const rows = [ROW('2027-03-05', '단독', 'c@example.com', { actual_email: 'p@example.com' }), ROW('2027-03-05', '예비', 'p@example.com'),
     ROW('2027-03-06', '단독', 'c@example.com'), ROW('2027-03-06', '예비', 'b@example.com'), ROW('2027-03-07', '예비', 'b@example.com')];
   const r = plain(ctx.dutyRecord_(rows, '2027-03'));
-  assert.deepStrictEqual(r.teachers.map((x) => [x.email, x.total]), [['c@example.com', 1], ['p@example.com', 1]]);
+  assert.deepStrictEqual(r.teachers.map((x) => [x.email, x.total]), [['b@example.com', 0], ['c@example.com', 1], ['p@example.com', 1]]);   // 예비만 있는 교사도(total 0)
   assert.deepStrictEqual(r.standby, [{ email: 'b@example.com', count: 2 }]);
 });
 
 test('dutyRecord_: 같은 칸 중복이면 교대 목록도 그날 근무자로 쓴 행(최신 수정)의 교대 일시·누른 사람', () => {
-  const rows = [ROW('2027-03-02', '21:30조', 'a@example.com', { actual_email: 'b@example.com', swapped_by: 'new@example.com', updated_at: '2027-03-01T10:00:00' }),
-    ROW('2027-03-02', '21:30조', 'a@example.com', { actual_email: 'c@example.com', swapped_by: 'old@example.com', updated_at: '2027-03-01T09:00:00' })];
+  const rows = [ROW('2027-03-02', '21:30조', 'a@example.com', { actual_email: 'b@example.com', swapped_by: 'new@example.com', swapped_at: '2027-03-01T10:30:00', updated_at: '2027-03-01T10:00:00' }),
+    ROW('2027-03-02', '21:30조', 'a@example.com', { actual_email: 'c@example.com', swapped_by: 'old@example.com', swapped_at: '2027-03-01T09:30:00', updated_at: '2027-03-01T09:00:00' })];
   const r = plain(ctx.dutyRecord_(rows, '2027-03'));
-  assert.deepStrictEqual(r.swaps.map((x) => [x.to, x.by]), [['b@example.com', 'new@example.com']]);
+  assert.deepStrictEqual(r.swaps.map((x) => [x.to, x.by, x.at]), [['b@example.com', 'new@example.com', '2027-03-01T10:30:00']]);
 });
 
 test('dutyRecord_: 월 경계(1/31·2/1)는 그 달 행만 센다', () => {
@@ -159,4 +159,22 @@ test('dutyRecord_: 운영 안 하는 날의 행은 세되 경고(가정: 조용�
 test('dutyRecord_: 잘못된 달은 Error', () => {
   assert.throws(() => ctx.dutyRecord_([], '2027-13'), /yyyy-MM/);
   assert.throws(() => ctx.dutyRecord_([], '2027-3'), /yyyy-MM/);
+});
+
+/* ───── 총괄 검토(#51) ───── */
+
+test('예비 칸 교대: dutyOn_ standby에 swappedFrom, dutyRecord_ swaps에 예비 교대(결정 46 — 예비도 수당 근거)', () => {
+  const rows = [ROW('2027-03-05', '단독', 'c@example.com'), ROW('2027-03-05', '예비', 'b@example.com', { actual_email: 'd@example.com', swapped_at: '2027-03-04T12:00:00', swapped_by: 'mgr@example.com' })];
+  assert.deepStrictEqual(on(rows, '2027-03-05').standby, [{ email: 'd@example.com', swappedFrom: 'b@example.com' }]);
+  const r = plain(ctx.dutyRecord_(rows, '2027-03'));
+  assert.deepStrictEqual(r.standby, [{ email: 'd@example.com', count: 1 }]);
+  assert.deepStrictEqual(r.swaps, [{ date: '2027-03-05', slot: '예비', from: 'b@example.com', to: 'd@example.com', at: '2027-03-04T12:00:00', by: 'mgr@example.com' }]);
+});
+
+table('그 요일 틀 밖의 칸은 쓰되 경고(토요일 21:30조, 화요일 단독·예비)', [
+  ['2027-03-06', '21:30조'], ['2027-03-02', '단독'], ['2027-03-02', '예비']
+], ([date, slot]) => {
+  const r = on([ROW(date, slot, 'a@example.com')], date);
+  assert.ok(r.warnings.some((w) => /그 요일에 없는 근무 칸/.test(w)), JSON.stringify(r.warnings));
+  assert.strictEqual(r.duty.length + r.standby.length, 1);
 });
