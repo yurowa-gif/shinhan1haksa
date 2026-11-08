@@ -198,7 +198,7 @@ function dtyHomeInfo_(user, role) {
   var today = today_(), rows = readAll_('duty_slots');
   var mineSlot = function (ymd) {
     var d = dutyOn_(rows, ymd), hit = d.duty.filter(function (x) { return x.email === user.email; })[0];
-    return hit ? DTY_SLOT_LABEL[hit.slot] : (d.standby.indexOf(user.email) >= 0 ? DTY_SLOT_LABEL['예비'] : '');
+    return hit ? DTY_SLOT_LABEL[hit.slot] : (d.standby.some(function (sb) { return sb.email === user.email; }) ? DTY_SLOT_LABEL['예비'] : '');
   };
   var dates = {};
   rows.forEach(function (r) { var d = String(r.date || '').trim(); if (d > today && ruleRowLive_(r)) dates[d] = true; });
