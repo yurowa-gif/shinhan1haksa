@@ -43,6 +43,7 @@ function getDutyMonth(month) {
     month: m, today: today_(),
     canEdit: hasAnyAllowedRole_(user.roles, perms['duty.edit'].roles),
     canOperate: hasAnyAllowedRole_(user.roles, perms['duty.operating'].roles),
+    canOperatePast: user.roles.indexOf('admin') >= 0,   // 지난 날짜의 운영 여부는 관리자만(수당 기록이 빠지므로)
     teachers: view.teachers.map(function (t) { return { id: t.id, name: t.name }; }),
     days: view.days, emptyDays: view.emptyDays, swapCount: view.swapCount, warnings: view.warnings
   };
@@ -147,7 +148,9 @@ function dtyNameOf_(teachers, email) {
  * 그날 "운영 안 함" 켜고 끄기(결정 44). input = {date, operating(boolean), memo(생략하면 그대로), acknowledge}.
  * 근무표 담당자·관리자(duty.operating). day_schedules의 운영 여부·메모만 바꾼다(시각·요일 유형은 있던 값 그대로).
  * 기본과 같아지면(운영, 메모 없음, 다른 값 없음) 그날 행을 '취소'로 되돌린다.
- * 운영 안 함으로 바꾸는데 그날 근무 편성이 있으면 {ok:false, needsConfirm:true, warnings}(편성은 지우지 않는다).
+ * 운영 안 함으로 바꾸면 그날 살아 있는 근무 칸은 '취소'로 바꾼다(행은 지우지 않고 audit에 남는다, 총괄 답).
+ * 칸이 있으면 {ok:false, needsConfirm:true, warnings:['21:30조 박선생, … 근무 칸이 취소됩니다']}를 먼저 돌려준다.
+ * 다시 운영으로 켜도 취소한 칸은 되살리지 않는다(다시 편성). 오늘보다 앞선 날짜는 관리자만 바꾼다(담당자는 거부).
  */
 function setDutyOperating(input) {
   var user = requirePermission_('duty.operating');
@@ -158,18 +161,28 @@ function setDutyOperating(input) {
   var memoGiven = input.memo !== undefined && input.memo !== null;
   var memoIn = memoGiven ? String(input.memo).trim() : '';
   if (memoIn.length > CAL_MEMO_MAX) return { ok: false, errors: [{ field: 'memo', message: '메모는 ' + CAL_MEMO_MAX + '자 안으로 적어 주세요.' }] };
+  if (date < today_() && user.roles.indexOf('admin') < 0) {
+    return { ok: false, errors: [{ field: 'date', message: '지난 날짜는 바꿀 수 없습니다. 필요하면 관리자에게 알려 주세요.' }] };
+  }
   return withLock_(function () {
-    ['duty_slots', 'day_schedules', 'blocks'].forEach(function (t) { invalidate_('db', t); });
+    ['duty_slots', 'day_schedules', 'blocks', 'users'].forEach(function (t) { invalidate_('db', t); });
     var ctx = calLoadCtx_();
     var ex = pickDaySchedule_(ctx.daySchedules, date);
     var memo = memoGiven ? memoIn : (ex ? String(ex.memo || '') : '');
     var curOp = dtyPlan_(date, ctx).operating;
     var same = curOp === input.operating && (ex ? String(ex.memo || '') : '') === memo;
     if (same) return { ok: true, changed: false };
+    var cancelRows = [];
     if (!input.operating && curOp) {
-      var live = readAll_('duty_slots').filter(function (r) { return ruleRowLive_(r) && String(r.date).trim() === date; }).length;
-      if (live && input.acknowledge !== true) {
-        return { ok: false, needsConfirm: true, warnings: ['그날 근무 편성 ' + live + '칸이 있습니다. 운영 안 함으로 바꿔도 편성은 지워지지 않으니 필요하면 먼저 비워 주세요.'] };
+      cancelRows = readAll_('duty_slots').filter(function (r) { return ruleRowLive_(r) && String(r.date).trim() === date; });
+      if (cancelRows.length && input.acknowledge !== true) {
+        var names = Object.create(null);
+        readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = u.name; });
+        var list = cancelRows.map(function (r) {
+          var e = dutyEmail_(r.actual_email) || dutyEmail_(r.original_email);
+          return r.slot + ' ' + (names[e] || '(등록 안 된 교사)');
+        }).join(', ');
+        return { ok: false, needsConfirm: true, warnings: [list + ' 근무 칸이 취소됩니다. 다시 운영으로 켜도 되살아나지 않으니 그때 다시 편성해 주세요.'] };
       }
     }
     var defOp = dtyPlan_(date, { terms: ctx.terms, daySchedules: [], blocks: ctx.blocks, defaults: ctx.defaults }).operating;
@@ -180,7 +193,8 @@ function setDutyOperating(input) {
       appendRecord_('day_schedules', { date: date, operating: input.operating ? 'TRUE' : 'FALSE', start: keep.start, end: keep.end,
         day_type: keep.day_type, memo: memo, status: '유효' }, user.email);
     }
-    return { ok: true, changed: true };
+    cancelRows.forEach(function (r) { updateRecord_('duty_slots', r.id, { status: '취소' }, user.email); });
+    return { ok: true, changed: true, canceledSlots: cancelRows.length };
   });
 }
 

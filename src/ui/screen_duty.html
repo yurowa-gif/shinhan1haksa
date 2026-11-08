@@ -181,7 +181,8 @@
     function openSheet(x) {
       var d = state.data, sheet = null, busy = false;
       var op = x.operating, memo0 = x.memo || '';
-      var opSeg = d.canOperate ? UI.segmented({ label: '운영 여부', options: [{ value: 'on', label: '운영' }, { value: 'off', label: '운영 안 함' }], value: op ? 'on' : 'off',
+      var pastLocked = d.canOperate && x.date < d.today && !d.canOperatePast;   // 지난 날짜는 관리자만 운영 여부를 바꾼다
+      var opSeg = d.canOperate && !pastLocked ? UI.segmented({ label: '운영 여부', options: [{ value: 'on', label: '운영' }, { value: 'off', label: '운영 안 함' }], value: op ? 'on' : 'off',
         onchange: function () { drawSlots(); refresh(); } }) : null;
       var memoIn = el('input', { type: 'text', maxlength: '60', value: memo0 });
       memoIn.addEventListener('input', refresh);
@@ -192,11 +193,11 @@
       function drawSlots() {
         clear(slotBox);
         if (!wantOn()) {
-          slotBox.appendChild(el('div', { class: 'notice warn', text: '운영 안 함으로 바꾸면 그날 출석부가 사라지고 근무 칸 편성은 화면에서 보이지 않습니다(기록은 지워지지 않습니다). 저장할 때 한 번 더 확인합니다.' }));
+          if (opSeg) slotBox.appendChild(el('div', { class: 'notice warn', text: '운영 안 함으로 바꾸면 그날 출석부가 사라지고 편성된 근무 칸은 취소됩니다(기록은 남습니다). 저장할 때 한 번 더 확인합니다.' }));
           return;
         }
         if (!d.canEdit) return;
-        if (!x.operating) { slotBox.appendChild(el('div', { class: 'muted', text: '운영으로 바꾼 뒤 저장하면 근무 칸을 편성할 수 있습니다.' })); return; }
+        if (!x.operating) { slotBox.appendChild(el('div', { class: 'muted', text: '운영으로 바꾼 뒤 저장하면 근무 칸을 편성할 수 있습니다. 앞서 취소된 근무 칸은 되살아나지 않으니 다시 편성해 주세요.' })); return; }
         x.slots.forEach(function (s) {
           var sel = selects[s.slot] || el('select');
           if (!selects[s.slot]) {
@@ -225,6 +226,7 @@
       function refresh() { if (sheet) sheet.buttons[1].disabled = busy || !dirty(); }
 
       var content = el('div', {}, [
+        pastLocked ? el('div', { class: 'notice warn', text: '지난 날짜는 바꿀 수 없습니다. 필요하면 관리자에게 알려 주세요.' }) : null,
         opSeg ? UI.field('운영 여부', opSeg) : null,
         opSeg ? UI.field('메모(선택)', memoIn, { hint: '예: 수능 전날, 학교 행사' }) : (x.memo ? el('div', { class: 'muted', text: '메모: ' + x.memo }) : null),
         slotBox, el('div', { class: 'fix', id: 'duty-err' })
