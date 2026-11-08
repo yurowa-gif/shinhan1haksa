@@ -53,7 +53,19 @@ test('디자인 문서가 가리키는 파일(`docs/…` `src/…` `design/…` 
 
 test('screens.md 가 한 화면씩 다룬다: F1·F2·F5 절과 "버튼 두 번"·"30초" 경로가 있다', () => {
   const doc = css.readFile('docs/design/screens.md');
-  ['## 1. 홈 카드 배치', '## 2. C5', '## 3. C7', '## 4. C6', '## 5. 이미 만든 화면', '## 5-2. 2단계 대비'].forEach((h) => assert.ok(doc.indexOf(h) >= 0, h));
+  ['## 1. 홈 카드 배치', '## 2. C5', '## 3. C7', '## 4. C6', '## 5. 이미 만든 화면', '## 5-2. 2단계 화면'].forEach((h) => assert.ok(doc.indexOf(h) >= 0, h));
   assert.ok(doc.indexOf('버튼 두 번') > 0 && doc.indexOf('홈 → 오늘 출석부(탭 1) → PDF 열기(탭 2)') > 0);
   assert.ok(doc.indexOf('30초') > 0 && /탭 \d회/.test(doc));
+});
+
+test('D6 시안(stage2-screens.js)의 화면 이름이 모두 screens.md 5-2 절에 백틱으로 적혀 있고, confirmSheet 의 lead·lines 가 components.md 에 있다', () => {
+  const src = css.readFile('design/preview/stage2-screens.js');
+  const doc = css.readFile('docs/design/screens.md');
+  const sec = doc.slice(doc.indexOf('## 5-2. 2단계 화면'), doc.indexOf('## 6. 권한별'));
+  const ids = [...src.matchAll(/^def\('([^']+)'/gm)].map((m) => m[1]);
+  assert.ok(ids.length >= 20, '시안 화면 수 ' + ids.length);
+  ids.forEach((id) => assert.ok(sec.indexOf('`' + id + '`') >= 0, '5-2 절에 `' + id + '` 가 없다'));
+  const comp = css.readFile('docs/design/components.md');
+  assert.ok(comp.indexOf('lead?') > 0 && comp.indexOf('lines?') > 0);
+  assert.ok(css.readFile('src/ui/Components.html').indexOf("opts.lead") > 0);
 });
