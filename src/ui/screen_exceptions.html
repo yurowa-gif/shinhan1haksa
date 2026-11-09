@@ -148,7 +148,7 @@
         });
         var sel = c.types.filter(function (t) { return t.name === state.type; })[0];
         if (sel) typeNote.appendChild(el('div', { class: 'muted', text: '선택: ' + sel.name }));
-        if (sel && sel.auto) typeNote.appendChild(el('div', { class: 'notice warn', text: '미인정 유형입니다. 1OUT 예정으로 표시됩니다.' }));
+        if (sel && sel.auto) typeNote.appendChild(el('div', { class: 'notice warn', text: c.mode === 'confirm' ? '미인정 유형입니다. 저장하면 1OUT이 기록됩니다.' : '미인정 유형입니다. 출결 담당이 확정하면 1OUT이 기록됩니다.' }));
       }
       drawTypes();
 
@@ -227,8 +227,9 @@
           if (r.needsConfirm) { refresh(); askOverlap(r.warnings || [], function () { doSave(true); }); return; }   // 미리보기 뒤에 다른 선생님이 입력한 경우
           if (!r.ok) { clear(previewBox); r.errors.forEach(function (e) { previewBox.appendChild(el('div', { class: 'error', text: e.message })); }); state.preview = { ok: false }; refresh(); return; }
           var when = r.from === r.to ? ymdKo(r.from) : U.formatRangeKo(r.from, r.to);
-          state.last = (r.status === '확정' ? '저장했습니다: ' : '요청을 보냈습니다: ') + r.display + ' · ' + r.type + ' · ' + when + (r.autoOut ? ' · 1OUT 예정' : '');
+          state.last = (r.status === '확정' ? '저장했습니다: ' : '요청을 보냈습니다: ') + r.display + ' · ' + r.type + ' · ' + when + (r.autoOut ? (r.status === '확정' ? autoOutText(r.out) : ' · 확정되면 1OUT') : '');
           UI.toast(r.status === '확정' ? '저장했습니다.' : '요청을 보냈습니다.', { kind: 'ok' });
+          if (r.out && (r.out.error || r.out.notified === false)) UI.toast(r.out.error || '1OUT 알림 메일이 가지 않았습니다. 필요하면 담당 선생님께 직접 알려 주세요.', { kind: 'warn', ms: 7000 });
           state.student = null; state.type = ''; state.reason = ''; state.retTime = ''; state.preview = null;
           drawTab();
         }).catch(function (err) { busy = false; refresh(); fail(err); });
@@ -239,6 +240,8 @@
     function pillFor(g) {
       return UI.statusPill(g.status === '확정' ? 'confirmed' : (g.status === '요청' ? 'requested' : 'canceled'));
     }
+    /** 저장 응답의 자동 OUT 결과 문구 */
+    function autoOutText(out) { return out && out.created ? ' · 1OUT이 기록되었습니다' : out && out.error ? '' : ' · 같은 묶음의 1OUT이 이미 있습니다'; }
     function groupCard(g, reload, opts) {
       opts = opts || {};
       var cancelled = g.status === '취소';
@@ -246,7 +249,7 @@
       var item = el('div', { class: 'exc-item' });
       item.appendChild(el('div', { class: 'exc-line' }, [
         el('b', { class: cancelled ? 'exc-cancelled' : '', text: g.display + ' · ' + g.short }),
-        el('span', {}, [pillFor(g), g.auto && !cancelled ? ' ' : null, g.auto && !cancelled ? UI.statusPill('out1', '1OUT 예정') : null])
+        el('span', {}, [pillFor(g), g.auto && !cancelled ? ' ' : null, g.auto && !cancelled ? UI.statusPill('out1', g.status === '확정' ? '1OUT' : '확정되면 1OUT') : null])
       ]));
       // 묶음 전체 기간을 보인다(하루 카드에서도): 취소·확정이 묶음 단위라는 것을 알 수 있게
       item.appendChild(el('div', { class: cancelled ? 'muted exc-cancelled' : 'muted', text: datesText(g) + ' · ' + g.blocksText + (g.requestedByName ? ' · ' + g.requestedByName : '') }));
@@ -266,7 +269,7 @@
         UI.confirmWithReason({ title: title, message: g.display + ' · ' + g.type + ' · ' + what + (g.status === '확정' ? ' — 출석부에서 빠집니다.' : ''),
           reasonLabel: '취소 사유', confirmText: '취소 처리', minLength: 2, danger: true,
           onconfirm: function (reason) { call('cancelException', g.termId, g.groupId, reason, only || '').then(function (r) {
-            if (!r.ok) { UI.toast(r.error, { kind: 'warn', ms: 5000 }); } else { UI.toast('취소 처리했습니다.', { kind: 'ok' }); }
+            if (!r.ok) { UI.toast(r.error, { kind: 'warn', ms: 5000 }); } else { UI.toast('취소 처리했습니다.' + (r.out && r.out.canceled ? ' 연결된 자동 OUT도 취소되었습니다.' : ''), { kind: 'ok' }); }
             reload();
           }).catch(fail); } });
       }
@@ -289,7 +292,10 @@
                 confirmText: '그래도 확정', cancelText: '돌아가기', danger: true, onconfirm: function () { doConfirm(true); } });
               return;
             }
-            if (!r.ok) UI.toast(r.error, { kind: 'warn', ms: 5000 }); else UI.toast('확정했습니다.', { kind: 'ok' });
+            if (!r.ok) UI.toast(r.error, { kind: 'warn', ms: 5000 }); else {
+              UI.toast('확정했습니다.' + (r.out && r.out.created ? ' 1OUT이 기록되었습니다.' : ''), { kind: 'ok' });
+              if (r.out && (r.out.error || r.out.notified === false)) UI.toast(r.out.error || '1OUT 알림 메일이 가지 않았습니다. 필요하면 담당 선생님께 직접 알려 주세요.', { kind: 'warn', ms: 7000 });
+            }
             reload();
           }).catch(fail);
         };

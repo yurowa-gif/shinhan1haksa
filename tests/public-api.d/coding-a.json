@@ -51,6 +51,10 @@
     "swapDuty": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "syncAutoOutsAll": {
+      "use": "편집기",
+      "guard": "assertOwnerRun_"
     }
   }
 }
