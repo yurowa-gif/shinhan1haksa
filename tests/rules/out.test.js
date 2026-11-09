@@ -510,8 +510,22 @@ test('outDismissalGate_: 발생 일시가 같으면 created_at 순(id 순서는 
   assert.strictEqual(gate(tie, []).triggerOutId, 'a');
 });
 
-test('outDismissalGate_: 앞으로 학사 퇴실이 잡혀 있어도 "이미 퇴실"(퇴실 신청을 두 번 만들지 않게)', () => {
-  const planned = HALL_IN.concat([{ id: 'c3', student_id: 's1', item: '학사', value: '퇴실', effective_date: '2027-03-20', status: '유효', requested_at: '2027-03-11T10:00:00' }]);
-  const r = gate(TWO(), [NOTE()], planned);
+const LEAVE = (id, eff, extra) => Object.assign({ id, student_id: 's1', item: '학사', value: '퇴실', effective_date: eff, status: '유효', requested_at: '2027-03-11T10:00:00' }, extra || {});
+table('outDismissalGate_: 앞으로 잡힌 퇴실은 2OUT 퇴실(memo [2OUT] 또는 reason 2OUT 퇴실)일 때만 "이미 퇴실", 보통 퇴실·취소된 2OUT은 ok', [
+  ['2OUT memo', [LEAVE('c3', '2027-03-20', { memo: '[2OUT] out:o2 note:n1' })], [true, false, '이미 퇴실']],
+  ['2OUT reason', [LEAVE('c3', '2027-03-20', { reason: '2OUT 퇴실' })], [true, false, '이미 퇴실']],
+  ['보통 미래 퇴실 7/16(신청 3/2, 개인 사정)', [LEAVE('c3', '2027-07-16', { requested_at: '2027-03-02T10:00:00', reason: '개인 사정' })], [false, true, '']],
+  ['취소된 2OUT 퇴실', [LEAVE('c3', '2027-03-20', { memo: '[2OUT] out:o2 note:n1', status: '취소' })], [false, true, '']],
+  ['지난 2OUT 퇴실 3/5 뒤 재입실 3/8(관문 3/12, 앞으로 잡힌 것만 본다)', [LEAVE('c3', '2027-03-05', { memo: '[2OUT] out:o0 note:n0', requested_at: '2027-03-04T10:00:00' }),
+    { id: 'c4', student_id: 's1', item: '학사', value: '입실', effective_date: '2027-03-08', status: '유효', requested_at: '2027-03-07T10:00:00' }], [false, true, '']]
+], ([, rows, want]) => {
+  const r = gate(TWO(), [NOTE()], HALL_IN.concat(rows));
+  assert.deepStrictEqual([r.alreadyLeft, r.ok, r.reason], want);
+});
+
+test('outDismissalGate_: ymd에 퇴실 상태면 뒤에 재입실이 잡혀 있어도 "이미 퇴실"(입실 3/1, 퇴실 3/5, 입실 3/20, 관문 3/12)', () => {
+  const rows = HALL_IN.concat([LEAVE('c2', '2027-03-05', { requested_at: '2027-03-04T10:00:00' }),
+    { id: 'c3', student_id: 's1', item: '학사', value: '입실', effective_date: '2027-03-20', status: '유효', requested_at: '2027-03-06T10:00:00' }]);
+  const r = gate(TWO(), [NOTE()], rows);
   assert.deepStrictEqual([r.alreadyLeft, r.ok, r.reason], [true, false, '이미 퇴실']);
 });
