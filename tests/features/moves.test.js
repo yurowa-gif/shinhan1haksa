@@ -214,7 +214,7 @@ test('기간 경계(결정 60 보충): 2/28에 3/8 적용 퇴실 → 새 기간 
   const i = input(non, '학사 퇴실', '2027-02-28T10:00:00', '2027-03-08');
   Object.keys(env.cache).filter((k) => k.indexOf('script:deny:') === 0).forEach((k) => delete env.cache[k]);
   const before = env.rows('audit_log').length;
-  assert.throws(() => prev(env, OLD, i), /부터는 .* 일입니다\. 그 기간 담당교사나 관리자가 신청합니다/);
+  assert.throws(() => prev(env, OLD, i), /이 신청\(적용일 .*\)은 .* 담당교사나 관리자가 합니다/);
   assert.ok(env.rows('audit_log').slice(before).some((r) => r.action === 'denied:status.edit' && r.created_by === OLD));
   const r = saveOk(env, HALL, i);
   assert.strictEqual(r.ok, true);

@@ -98,12 +98,7 @@ function inoutCheck_(input, d) {
   if (v.errors.length) return { errors: v.errors, permYmd: '' };
   var rec = v.rec;
   var term = foodTermFor_(rec.studentId, rec.effectiveDate, d.terms, d.enrollments);   // 급식 신청과 같은 기간 판정(결정 60 보충)
-  var errors = [];
-  if (!term) errors.push({ field: 'effectiveDate', message: '적용일이 속한 운영 기간이 없습니다.' });
-  else if (term.end_date < today) errors.push({ field: 'effectiveDate', message: '"' + term.name + '"은(는) 끝난 기간입니다. 끝난 기간의 입퇴실은 받지 않습니다.' });
-  else if (!d.enrollments.some(function (e) { return e.term_id === term.id && e.student_id === rec.studentId; })) {
-    errors.push({ field: 'studentId', message: '"' + term.name + '" 명단에 없는 학생입니다. 관리자에게 명단 등록을 요청해 주세요.' });
-  }
+  var errors = foodTermErrors_(rec.studentId, rec.effectiveDate, term, d.terms, d.enrollments, today, '입퇴실');
   return { errors: errors, rec: rec, term: term, eff: rec.effectiveDate, permYmd: foodPermYmd_(term, rec.effectiveDate) };
 }
 
