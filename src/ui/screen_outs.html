@@ -32,13 +32,16 @@
       if (!state.ctx || state.dateTouched || state.timeTouched || state.date !== state.ctx.today || serverYmd() === state.ctx.today) return false;
       state.date = serverYmd(); state.student = null; state.time = '';
       load(state.date, '날짜가 바뀌어 오늘 날짜로 옮겼습니다. 학생을 다시 골라 주세요.');
+      window.scrollTo(0, 0);   // 고정 머리말 밑에 안내가 가리지 않게
       return true;
     }
     /** 시각을 사용자가 건드리지 않았고 날짜가 오늘이면 지금 시각으로(저장 직전·학생을 고를 때) */
     function refreshTime() {
-      if (state.timeTouched || !state.ctx || state.date !== state.ctx.today) return;
-      state.time = defaultTime();
+      if (state.timeTouched || !state.ctx) return;
+      // 고른 날짜가 서버의 오늘일 때만 지금 시각을 채운다(자정을 넘겨 날짜와 시각이 어긋난 채 저장되지 않게). 아니면 비워 직접 입력하게 한다
+      state.time = serverYmd() === state.date ? defaultTime() : '';
       var t = body.querySelector('input.out-time'); if (t) t.value = state.time;
+      refresh();
     }
 
     function load(date, note, noteWarn) {
@@ -150,7 +153,7 @@
 
       bar = UI.actionBar([
         { text: '저장', kind: 'primary', disabled: true, onclick: onSave },
-        { text: '비우기', kind: 'secondary', onclick: function () { reset(); load(state.date); } }
+        { text: '비우기', kind: 'secondary', onclick: function () { var touched = state.dateTouched; reset(); if (!touched && state.ctx) state.date = serverYmd(); load(state.date); } }
       ], { mount: true });
       saveBtn = bar.querySelectorAll('button')[0];
       refresh();
@@ -190,8 +193,9 @@
     }
     function showFailure(message) { showErrors([{ field: '', message: message }]); }
 
-    function onSave() { if (dayRolled()) return; if (canSave()) doSave(false); }
+    function onSave() { if (canSave()) doSave(false); }
     function doSave(ack) {
+      if (dayRolled()) return;   // [그래도 저장] 확인 뒤에 자정을 넘긴 경우에도
       state.busy = true; refresh();
       showErrors([]);
       var v = inputValue(); if (ack) v.acknowledge = true;
