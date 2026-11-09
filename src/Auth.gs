@@ -54,7 +54,7 @@ function permissions_() {
     'duty.swap': { roles: ['admin', 'duty_manager', 'hall_teacher'] },
     'duty.record': { roles: ['admin', 'duty_manager'] },   // 기록표 파일(엑셀): 관리자·근무표 담당자(결정 48)
     // OUT(F4): 보기 범위는 함수 안(vioVisibleIds_). 1학사 교사(학사 교사·출결 담당)는 학사생 전체, 담임은 자기 반(결정 45)
-    'out.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] },
+    'out.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'], wideView: true },   // 보기 목록만 넓게(결정 45·53), out.save는 그대로
     // dutyWindow: 발생일(ymd)의 실제 근무자가 ymd ≤ 오늘 ≤ ymd+N 동안 통과(isOnDutyFor_, C8s). 없으면 0 = ymd가 오늘인 근무자만
     'out.save': { roles: ['admin', 'hall_teacher'], scope: 'student', dutyWindow: 1 },
     'out.cancel': { roles: ['admin'] },

@@ -8,6 +8,7 @@
   function renderHome(d, root) {
     var m = (d.exc && d.exc.mine) || { requested: 0, confirmed: 0, canceled: 0 };
     var per = (d.exc && d.exc.perStudent) || {};
+    var outN = (d.out && d.out.perStudent) || {};   // 학생별 이번 기간 OUT 수(1이면 1OUT, 2 이상이면 퇴실 대상)
     var listCard = el('div', { class: 'card' }, [
       el('h2', { text: d.homeroomClass + ' 학사생 (' + d.students.length + '명)' }),
       el('div', { class: 'muted', text: d.termName })
@@ -23,7 +24,7 @@
         // 이름을 누르면 그 학생의 특이사항 기록(학생별 목록)으로 간다
         ul.appendChild(el('li', {}, [
           el('a', { href: d.appUrl + '?page=exceptions&tab=list&student=' + encodeURIComponent(s.id), text: s.name }),
-          el('span', { class: 'muted' }, [s.number + '번 ', per[s.id] ? UI.statusPill('requested', '요청 ' + per[s.id]) : null])
+          el('span', { class: 'muted' }, [s.number + '번 ', outN[s.id] ? UI.statusPill(outN[s.id] >= 2 ? 'out2' : 'out1') : null, per[s.id] ? UI.statusPill('requested', '요청 ' + per[s.id]) : null])
         ]));
       });
       listBox.appendChild(ul);

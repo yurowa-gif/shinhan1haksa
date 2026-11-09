@@ -6,10 +6,19 @@
 /**
  * 교사 홈의 OUT 카드 데이터(getHomeData가 부른다). 아직 없으면 null.
  * 보고 있는 홈 역할(role)이 out.view를 가질 때만 불린다. 던진 오류는 getHomeData가 잡아 {error}로 바꾼다.
- * C11a: OUT 기록 카드는 기록할 수 있는 역할(학사 교사·관리자)에게만. 숫자 카드는 C11b.
+ * → {canRecord(기록 카드는 학사 교사·관리자만), out1, out2(이번 기간 1OUT·퇴실 대상 학생 수), today(오늘 건수), perStudent(담임: 우리 반 학생별 OUT 수)}
  */
 function vioHomeInfo_(user, role) {
-  return { canRecord: role === 'hall_teacher' || role === 'admin' };
+  var out = { canRecord: role === 'hall_teacher' || role === 'admin', out1: 0, out2: 0, today: 0, perStudent: {} };
+  var term = getCurrentTerm_();
+  if (!term) return out;
+  var vu = Object.assign({}, user, { roles: [role] });   // 보고 있는 홈 역할 하나로만 센다
+  var visible = vioVisibleIds_(vu, readAll_('enrollments'), readAll_('students'), term.id, vioViewWide_());
+  var live = vioViolations_(term).filter(function (v) { return ruleRowLive_(v) && visible[String(v.student_id)]; });
+  var per = Object.create(null), today = today_();
+  live.forEach(function (v) { per[v.student_id] = (per[v.student_id] || 0) + 1; if (String(v.occurred_at).slice(0, 10) === today) out.today++; });
+  Object.keys(per).forEach(function (id) { if (per[id] >= 2) out.out2++; else out.out1++; if (role === 'homeroom') out.perStudent[id] = per[id]; });
+  return out;
 }
 
 var VIO_MEMO_MAX = 200;
@@ -213,4 +222,117 @@ function saveOut(input) {
     }
   }
   return { ok: true, after: res.after, notified: sent.notified, notifyWarn: reason === 'failed' || reason === 'quota', notifyReason: reason };
+}
+
+
+/* ───── C11b: 목록·취소 ───── */
+
+/** 보기 범위가 넓은지: 권한표 out.view의 wideView 표시(학사 교사도 이번 기간 학사생 전체, 결정 45·53). 쓰기(out.save)에는 쓰지 않는다 */
+function vioViewWide_() { return !!permissions_()['out.view'].wideView; }
+
+/**
+ * 이 사용자가 볼 수 있는 학생 id 집합(순수): 그 기간 등록 학생 중 관리자·출결 담당 = 전체, 학사 교사 = wide면 전체(근무 여부는 보지 않는다)·아니면 담당 학생,
+ * 담임 = 자기 반(여러 역할이면 합집합). excVisibleIds_를 그대로 쓰지 않는다(출결 담당 범위가 다르다).
+ */
+function vioVisibleIds_(user, enrollments, students, termId, wide) {
+  var byId = {};
+  (students || []).forEach(function (s) { byId[s.id] = s; });
+  var ids = Object.create(null);
+  var roles = user.roles || [];
+  var all = roles.indexOf('admin') >= 0 || roles.indexOf('attendance') >= 0;
+  (enrollments || []).forEach(function (e) {
+    if (e.term_id !== termId) return;
+    var s = byId[e.student_id];
+    if (!s) return;
+    if (all ||
+        (roles.indexOf('hall_teacher') >= 0 && (wide || normalizeEmail_(e.teacher_email) === user.email)) ||
+        (roles.indexOf('homeroom') >= 0 && sameClass_(user.homeroomClass, s.grade, s.class_no))) ids[s.id] = true;
+  });
+  return ids;
+}
+
+/** 입력·취소가 닫힌 기간인가: 끝난 다음 날까지만 열려 있다(저장 검사와 같은 기준) */
+function vioTermClosed_(term) { return today_() > ymdAddDays_(term.end_date, 1); }
+
+/**
+ * OUT 목록. filter = {scope:'student'|'term'|'today', termId, studentId, date}
+ *  - term: 그 기간 전체(기본 이번 기간)  - student: 한 학생의 그 기간 누적  - today: 오늘(또는 date) 발생한 것
+ * 볼 수 있는 학생(vioVisibleIds_)만. 이메일은 내보내지 않고 이름으로 바꾼다. 지난 기간도 조회는 된다.
+ * → {ok, term, terms:[{id,name}], items:[...], summary:[{studentId, student, count, label}], canCancel}
+ */
+function listOuts(filter) {
+  var user = requirePermission_('out.view');
+  filter = filter || {};
+  var scope = String(filter.scope || 'term');
+  if (['student', 'term', 'today'].indexOf(scope) < 0) throw new Error('볼 범위를 다시 골라 주세요.');
+  var terms = readAll_('terms').filter(function (t) { return t.start_date && t.end_date; }).sort(function (a, b) { return a.start_date < b.start_date ? 1 : -1; });
+  var term = (filter.termId ? terms.filter(function (t) { return t.id === String(filter.termId); })[0] : null) || getCurrentTerm_();
+  var out = { ok: true, term: null, terms: terms.map(function (t) { return { id: t.id, name: t.name }; }), items: [], summary: [], canCancel: false };
+  if (!term) return out;
+  var enrollments = readAll_('enrollments'), students = readAll_('students');
+  var visible = vioVisibleIds_(user, enrollments, students, term.id, vioViewWide_());
+  if (scope === 'student' && !visible[String(filter.studentId || '')]) {
+    logDenied_(user.email, 'out.view', '범위 밖 학생');
+    throw new Error('권한이 없습니다.');
+  }
+  var closed = vioTermClosed_(term);
+  out.term = { id: term.id, name: term.name, type: term.type, start_date: term.start_date, end_date: term.end_date, closed: closed };
+  out.canCancel = hasRole_(user, 'admin') && !closed;
+  var names = {}, byEmail = {}, byId = {};
+  readAll_('users').forEach(function (u) { byEmail[normalizeEmail_(u.email)] = u; });
+  students.forEach(function (s) { byId[s.id] = s; });
+  var rows = vioViolations_(term).filter(function (v) { return visible[String(v.student_id)]; });
+  var nameOf = function (email) { var u = byEmail[normalizeEmail_(email)]; return u ? String(u.name || '') : (email ? '(등록 안 된 교사)' : ''); };
+  var count = Object.create(null);
+  rows.forEach(function (v) { if (ruleRowLive_(v)) count[v.student_id] = (count[v.student_id] || 0) + 1; });
+  var today = String(filter.date || '').trim() || today_();
+  if (scope === 'today' && !ymdIsValid_(today)) throw new Error('날짜를 골라 주세요.');
+  var shown = rows.filter(function (v) {
+    if (scope === 'student') return String(v.student_id) === String(filter.studentId);
+    if (scope === 'today') return String(v.occurred_at).slice(0, 10) === today;
+    return true;
+  }).sort(function (a, b) { return String(a.occurred_at) < String(b.occurred_at) ? 1 : -1; });
+  var label = function (n) { return n >= 2 ? '퇴실 대상' : n === 1 ? '1OUT' : ''; };
+  out.items = shown.map(function (v) {
+    var s = byId[v.student_id] || {};
+    var live = ruleRowLive_(v);
+    return { id: v.id, termId: term.id, studentId: v.student_id, student: { name: s.name || '', grade: +s.grade, classNo: s.class_no, number: s.number, studentNo: s.student_no },
+      occurredAt: String(v.occurred_at), ruleName: v.rule_name, memo: v.memo || '', detectedBy: v.detected_by ? nameOf(v.detected_by) : '(모름)',
+      enteredBy: nameOf(v.entered_by), source: v.source, status: live ? '유효' : '취소', cancelReason: v.cancel_reason || '',
+      canCancel: out.canCancel && live, level: live ? label(count[v.student_id] || 0) : '' };
+  });
+  var seen = Object.create(null);
+  (scope === 'term' ? Object.keys(count) : shown.map(function (v) { return v.student_id; })).forEach(function (id) {
+    if (seen[id]) return; seen[id] = true;
+    var s = byId[id] || {};
+    out.summary.push({ studentId: id, student: { name: s.name || '', grade: +s.grade, classNo: s.class_no, number: s.number, studentNo: s.student_no }, count: count[id] || 0, label: label(count[id] || 0) });
+  });
+  out.summary.sort(function (a, b) { return b.count - a.count || String(a.student.studentNo).localeCompare(String(b.student.studentNo)); });
+  return out;
+}
+
+/**
+ * OUT 취소(관리자만): status를 '취소'로 바꾸고 사유를 남긴다(삭제하지 않는다, audit). 사유 2~200자.
+ * '[자동]'으로 시작하는 사유는 규칙이 자동 취소할 때만 쓰는 머리말이라 거부(vocabulary.md). 닫힌 기간(끝난 다음 날 이후)은 거부.
+ */
+function cancelOut(termId, id, reason) {
+  var user = requirePermission_('out.cancel');
+  var why = String(reason === undefined || reason === null ? '' : reason).trim();
+  var err = function (field, message) { return { ok: false, errors: [{ field: field, message: message }] }; };
+  if (why.length < 2 || why.length > 200) return err('reason', '취소 사유를 2자 이상 200자 안으로 적어 주세요.');
+  if (why.indexOf('[자동]') === 0) return err('reason', '[자동]으로 시작하는 사유는 쓸 수 없습니다.');
+  return withLock_(function () {
+    ['terms', 'enrollments', 'students'].forEach(function (t) { invalidate_('db', t); });
+    var term = readAll_('terms').filter(function (t) { return t.id === String(termId || ''); })[0];
+    if (!term) return err('termId', '운영 기간을 찾을 수 없습니다. 새로 고친 뒤 다시 해 주세요.');
+    if (vioTermClosed_(term)) return err('termId', '끝난 운영 기간의 OUT은 볼 수만 있습니다.');
+    var sheet = termSheetName_('violations', term.id);
+    invalidate_('db', sheet);
+    var row = vioViolations_(term).filter(function (v) { return v.id === String(id || ''); })[0];
+    if (!row) return err('id', 'OUT 기록을 찾을 수 없습니다. 새로 고친 뒤 다시 해 주세요.');
+    if (!ruleRowLive_(row)) return err('id', '이미 취소된 OUT입니다.');
+    updateRecord_(sheet, row.id, { status: '취소', cancel_reason: why }, user.email);
+    var rows = vioViolations_(term);
+    return { ok: true, after: outLevel_(rows, row.student_id, term.id) };
+  });
 }

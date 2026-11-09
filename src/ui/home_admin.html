@@ -5,7 +5,10 @@
       root.appendChild(el('div', { class: 'card' }, [
         el('h2', { text: 'OUT 기록' }),
         el('div', { class: 'muted', text: '오늘 적발한 학생의 OUT을 30초 안에 기록합니다.' }),
-        el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=outs&tab=record', text: 'OUT 기록하기' })
+        el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin:8px 0' }, [
+          UI.statusPill('out1', '1OUT ' + (d.out.out1 || 0) + '명'), UI.statusPill('out2', '퇴실 대상 ' + (d.out.out2 || 0) + '명'), UI.statusPill('mute', '오늘 ' + (d.out.today || 0) + '건')]),
+        el('a', { class: 'btn', style: 'margin-top:4px', href: d.appUrl + '?page=outs&tab=record', text: 'OUT 기록하기' }),
+        el('a', { class: 'btn secondary', style: 'margin:4px 0 0 8px', href: d.appUrl + '?page=outs&tab=term', text: '이번 학기 보기' })
       ]));
     }
     var x = d.duty;

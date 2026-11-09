@@ -27,6 +27,14 @@
     "saveOut": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "listOuts": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "cancelOut": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }
