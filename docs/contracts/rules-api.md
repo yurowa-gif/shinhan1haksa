@@ -113,7 +113,7 @@ function mealChangeKind_(item, fromValue, toValue)
         // → 'none'|'initial'|'start'|'to_general'|'stop'. fromValue = 새 행 적용일에 실제로 적용되는 값(R6)
 function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts)   // F7 신청 하나의 계획(R6 추가)
         // opts = {cutoff, leaveDate, today(필수), effectiveDate, effectiveRule:'manual'|'entry_date'(R10)}
-        //   → {kind, date, rule, autoDate(R10), from, blocked, superseded, toCancel:[…], followUps:[…], warnings:[]}
+        //   → {kind, date, rule, autoDate(R10), from, blocked, superseded, supersededBy:[id], toCancel:[…], followUps:[…], warnings:[]}
 function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)     // 새 행이 덮어야 할 행(R6 추가)
         // opts = {source:'F7'|'F6', requestedAt, newValue} → [{id, effective_date, value}]
 function mealCountsOn_(students, enrollments, changes, termId, ymd)
@@ -227,7 +227,7 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd)
   - `kind`: 후보 적용일(미실시면 미실시 규칙의 날, 그 밖에는 11:30 규칙의 날)에 실제로 적용되는 값과 비교. 같으면 `none`(상태는 그대로). 미실시인데 그날 먹는 급식이 없으면 `initial`(신청일).
   - **저장:** `blocked`·`superseded`가 아니면 `kind`가 `none`이어도 신청 행(`date`, 값, `requested_at` = 신청서 일시, `source:'F7'`)을 쓴다 — 신청서 기록이고, 나중에 늦게 입력되는 이전 신청서가 이 신청을 덮지 못하게 한다.
   - `blocked`(쓰지 않음): 후보 적용일에 학사 상태가 `퇴실`이면 조식 `실시`는 늘, 석식 `학사 석식`은 그 퇴실 기록(`requested_at`)보다 **뒤에 신청했으면** 켜지 못한다(일반 석식은 된다). 입력 순서가 아니라 신청 일시 순서다: 퇴실 기록보다 먼저 신청한 학사 석식은 늦게 입력해도 결정 35 중단일까지 유지(followUps가 끝낸다). 퇴실 기록의 `requested_at`이 비었거나 형식이 틀리면 이 신청 일시로 본다(지름길).
-  - `superseded`(쓰지 않음): 이 신청보다 신청 일시가 늦은 신청 행(퇴실 정리 F6 행은 세지 않음)이 이미 있고 그 적용일이 이 신청의 적용일 이하이면 이 신청은 영영 적용되지 않는다(늦게 입력한 이전 신청서). 경고를 함께 준다.
+  - `superseded`(쓰지 않음): 이 신청보다 신청 일시가 늦은 신청 행(퇴실 정리 F6 행은 세지 않음)이 이미 있고 그 적용일이 이 신청의 적용일 이하이면 이 신청은 영영 적용되지 않는다(늦게 입력한 이전 신청서). 경고를 함께 준다. `supersededBy` = 덮은 행 id(적용일이 늦은 순, 같으면 신청 일시가 늦은 순). **저장(결정 58):** 신청서를 status `취소`, `cancel_reason` `[자동] <supersededBy[0]> 더 새 신청`으로 쓴다(종이 신청서 기록이 남고, 덮은 행이 나중에 퇴실 정리로 취소되면 `movePlan_`이 되살린다 — 입력 순서와 무관).
   - `toCancel`(같은 락 안에서 status `'취소'`, audit_log): ① `mealPendingToCancel_(…, date, {source:'F7', requestedAt, newValue})` — 신청 일시가 이 신청 이전(같으면 먼저 저장된 행이 이전)이고 적용일이 더 늦고 값이 다른 F6 아닌 행(오늘 이전에 이미 적용된 행이어도). ② 뜻이 없어진 퇴실 정리(F6) 행 — 이 신청을 저장한 뒤 그 행이 없어도 그날 값이 학사생 값이 아니고 그 행 값과 다르면(예: 퇴실 뒤 일반 석식 신청).
   - `followUps`(함께 쓰기, `source:'F6'`): 학사생 값 신청이 닿는 학사 퇴실(적용일에 퇴실 상태면 그 퇴실, 아니면 그 뒤 가장 이른 퇴실 — 같은 날 다시 입실한 퇴실은 빼고)이 있고, 중단일에 아직 퇴실 상태(그 전에 다시 입실하지 않음)이며, 저장 뒤 중단일(조식은 퇴실일, 석식은 F6 정리와 같은 `mealEffectiveDate_('stop', 퇴실 행의 requested_at, {leaveDate})` — 입력 순서와 무관, 결정 35)의 값이 학사생 값이면 그날 `미실시` 행. 퇴실 전에 켠 학사 급식이 퇴실 뒤에도 이어지지 않게 한다(`none`이어도 — 이전 미실시 대기 행을 취소한 경우).
   - `warnings`: 남아서 이 신청을 나중에 덮는 행(더 새 신청·퇴실 정리)이 있으면 "X일부터 Y로 바뀌는 행이 있어 이 신청을 덮습니다". ASSUMPTION: 이 신청보다 먼저 적용되는(적용일이 오늘 이후·이 신청 전) 다른 값의 대기 행은 취소하지 않고 경고만 한다(예: 내일부터 `실시` 대기 중에 오늘 `미실시` 신청 → 미실시는 다다음 주 월요일. 미실시 규칙의 준비 기간을 지키려고).
@@ -235,7 +235,7 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd)
   - `source:'F7'`: 위 ①.
   - `source:'F6'`(퇴실 정리): 적용일이 `effectiveDate`(조식은 퇴실일, 석식은 결정 35 중단일) **이상**인 F6 아닌 행 중 학사생 값 행 전부(신청 일시·오늘과 상관없이 — PRD F6 "퇴실일부터 바로 중단"). 미실시·일반 석식 신청은 남긴다.
 - **F6 학사 퇴실 정리 순서**(R11a부터 `movePlan_`이 이 순서로 계획한다): ① 학사 `퇴실` 행(`source:'F6'`) ② 조식(중단일 = 퇴실일)·석식(중단일 = `mealEffectiveDate_('stop', 퇴실 입력 일시, {leaveDate})`)마다 `mealPendingToCancel_(…, 중단일, {source:'F6'})`를 취소 ③ 그 뒤에도 중단일의 값(`statusOn_`)이 학사생 값이면 그날 `미실시` 행을 `source:'F6'`으로 쓴다. 늦게 입력한 퇴실(퇴실일이 오늘 이전)도 같다. 서류 미제출이어도 적용한다(결정 3).
-- **고친 적용일(R10):** `opts.effectiveDate`(yyyy-MM-dd)를 주면 그 날을 적용일로 계산한다 — `kind`·`blocked`·`superseded`·`toCancel`·`followUps`·경고 모두 고친 날 기준. `rule` = `opts.effectiveRule`(`'manual'` 기본, 기숙사 입실 조식은 `'entry_date'`). 결과 `autoDate` = 규칙 계산값(고치지 않았으면 `date`와 같다, blocked·superseded여도 들어 있다). F7은 `autoDate`를 `effective_date_auto`에, 쓴 날짜를 `effective_date`에 저장한다(stage2.md 5절). 고친 날짜는 자동보다 이르거나 늦거나 오늘 이전이어도 되지만 신청일보다 이르면 Error, 날짜가 아니거나 모르는 `effectiveRule`, 날짜 없이 `effectiveRule`만 있어도 Error. **결정 52:** 미실시 규칙의 날보다 이르거나 오늘보다 이르면 경고(허용). 뜻이 없어진 퇴실 정리(F6) 행은 고친 날과 **같은 날**인 것도 취소한다(동점이면 신청 일시가 늦은 F6가 이기므로).
+- **고친 적용일(R10):** `opts.effectiveDate`(yyyy-MM-dd)를 주면 그 날을 적용일로 계산한다 — `kind`·`blocked`·`superseded`·`toCancel`·`followUps`·경고 모두 고친 날 기준. `rule` = `opts.effectiveRule`(`'manual'` 기본, 기숙사 입실 조식은 `'entry_date'`). 결과 `autoDate` = 규칙 계산값(고치지 않았으면 `date`와 같다, blocked·superseded여도 들어 있다). F7은 `autoDate`를 `effective_date_auto`에, 쓴 날짜를 `effective_date`에 저장한다(stage2.md 5절). 고친 날짜는 자동보다 이르거나 늦거나 오늘 이전이어도 되지만 신청일보다 이르면 Error(`entry_date`는 예외 — 입퇴실 늦은 입력), 날짜가 아니거나 모르는 `effectiveRule`, 날짜 없이 `effectiveRule`만 있어도 Error. **결정 52:** 교사가 고친 날(`manual`)이 미실시 규칙의 날보다 이르거나 오늘보다 이르면 경고(허용). `entry_date`에는 이 경고가 없다(늦은 입력 경고는 `movePlan_`이 한다). 뜻이 없어진 퇴실 정리(F6) 행은 고친 날과 **같은 날**인 것도 취소한다(동점이면 신청 일시가 늦은 F6가 이기므로).
 - 퇴실 기록보다 먼저 신청한 학사 석식도 고친 적용일이 결정 35 중단일 이후면 `blocked`(F6 정리가 중단일 이후 학사생 값 행을 취소하는 것과 같다).
 - StatusRules: `statusOn_`의 적용일 검사는 이제 달력 검사(`2027-02-30` 행 무시)로 `ymdIsValid_`와 같다(R6에서 고침).
 
@@ -254,8 +254,8 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd)
 
 - `errors`가 있으면 `rows`·`toCancel`은 비어 있다. 검사: 유형, 적용일, **신청 일시는 날짜+시각 전체**(`yyyy-MM-ddTHH:mm(:ss)`, 날짜뿐이면 석식 중단일이 입력 순서를 따르므로 — followups R6-3), 신청 일시가 오늘보다 미래, 상태(적용일 기준: 이미 같은 상태, 학사 입실이 아닌 학생의 퇴실·기숙사 입실, 기숙사생의 `학사 퇴실` → `학사 및 기숙사 퇴실`로 안내, 기숙사 입실이 아닌 학생의 기숙사 퇴실). `today` 없으면 Error. 적용일 < 오늘이면 경고.
 - `rows[0]`이 대표 행(`head:true`, source `F6`, 적용일 = `effectiveDate`). `학사 및 기숙사 퇴실`은 학사 퇴실(대표) + 기숙사 퇴실(연결). 저장하는 쪽이 연결 행의 `linked_change_id` = 대표 행 id, `toCancel`의 `cancel_reason` 앞에 `[자동] <대표 행 id> `를 붙인다.
-- 학사 퇴실 정리: 위 순서 그대로(조식 퇴실일, 석식 결정 35 중단일, 중단일 이상 학사생 값 취소, 그래도 학사생 값이면 그날 `미실시` F6). 학사생 값이 아니면(일반 석식·조식 미실시) 정리 행이 없다. 석식 `일반 석식`을 고르면 `mealPlanChange_`로 일반 석식 신청(source `F7`, 11:30 규칙, 퇴실일보다 이르지 않게, **값이 같아도 쓴다** — 고른 값은 그날부터의 의도)을 쓰고, **학사 석식 정리는 늘 한다**(일반 석식 날, 쓰지 못했으면 결정 35 중단일부터 — 일반 석식 신청이 막혀도 학사 석식으로 남지 않게).
-- **되살림(총괄 결정 (a)):** 정리가 취소한 학사생 값 행 X가 `[자동] <X id>`로 취소했던 행(cancel_reason, 없으면 memo) 중 더 새 신청에 덮이지 않는 것은 `toRestore`로 되살린다(되살려도 이 정리가 다시 취소할 중단일 이후 학사생 값 행은 뺀다). 같은 신청 일시면 입력 순서와 무관한 결과가 나온다. 저장 쪽은 F7 신청의 toCancel에 `[자동] <신청 행 id>`를 붙여야 한다(C17a).
+- 학사 퇴실 정리: 위 순서 그대로(조식 퇴실일, 석식 결정 35 중단일, 중단일 이상 학사생 값 취소, 그래도 학사생 값이면 그날 `미실시` F6). 석식은 **퇴실 기록 이후에 신청한**(`requested_at` ≥ 퇴실 신청 일시) 퇴실일 이상의 학사 석식도 취소한다(`mealPlanChange_`의 blocked 거울 — 늦게 입력한 퇴실이 먼저 입력된 그런 신청을 살려 두지 않게). 정리 전 중단일 값이 학사생 값이었는데 정리 뒤 값이 없으면(첫 급식 기록일에 퇴실) 그날 `미실시`. 학사생 값이 아니면(일반 석식·조식 미실시) 정리 행이 없다. 석식 `일반 석식`을 고르면 `mealPlanChange_`로 일반 석식 신청(source `F7`, 11:30 규칙, 퇴실일보다 이르지 않게, **값이 같아도 쓴다** — 고른 값은 그날부터의 의도)을 쓰고, **학사 석식 정리는 늘 한다**(일반 석식 날, 쓰지 못했으면 결정 35 중단일부터 — 일반 석식 신청이 막혀도 학사 석식으로 남지 않게). 일반 석식 신청의 "X일부터 … 덮습니다" 경고 중 이 계획이 취소하는 행을 가리키는 것은 뺀다. 급식 신청을 쓰지 않으면 그 경고도 내지 않는다.
+- **되살림(결정 55·58):** 정리가 취소한 학사생 값 행 X가 `[자동] <X id> …`(cancel_reason, id 전체로 맞춤)로 취소했던 행 중 더 새 신청에 덮이지 않는 것은 `toRestore`로 되살린다(되살려도 이 정리가 다시 취소할 중단일 이후 학사생 값 행은 뺀다). 덮임은 살아 있는 행과 **함께 되살아나는 행** 모두에서 본다(신청 일시가 늦은 것부터). 입력 순서와 무관한 결과가 나온다(시험: 사건 3~4개의 모든 순서). 저장 쪽(C17a)은 F7 신청의 toCancel에 `[자동] <신청 행 id> 새 신청으로 대체`를, superseded 신청서에 `[자동] <supersededBy[0]> 더 새 신청`을 붙인다. memo에서는 찾지 않는다(cancel_reason 열은 결정 41로 있다).
 - `summary`: 그 항목의 급식 행을 이 계획이 썼을 때만 `{value, from}`, 아니면 `null`(정리 행이 필요 없던 일반 석식 학생·미실시 대기 학생 등 — 확인창에 틀린 날짜를 보이지 않게).
 - 적용일 뒤에 살아 있는 학사·기숙사 행이 있으면 `errors`("이후 날짜에 입퇴실 기록이 있습니다 — 먼저 취소해 주세요"): 상태 검사는 적용일 하루만 보므로.
 - 급식 신청(`mealPlanChange_`)의 `followUps`도 연결 행으로 쓴다(`source`는 그대로). `entry_date`(기숙사 입실 조식)는 입퇴실을 늦게 입력하면 신청일보다 이를 수 있다.

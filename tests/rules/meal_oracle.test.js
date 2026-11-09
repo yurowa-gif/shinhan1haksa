@@ -11,7 +11,9 @@
  *   - 석식: 결정 35 중단일(퇴실 입력일이 월·화면 다음 주 월요일, 수~일이면 다다음 주 월요일, 퇴실일보다 이르면 퇴실일 — 이 파일에서
  *     따로 계산)부터는 중단일 이후에 시작하는 학사 석식 의도를 세지 않고(고친 적용일로 생길 수 있다), 남은 가장 늦은 의도가
  *     학사 석식이면 '미실시', 아니면 그 값. 중단일 전에는 정확히 가장 늦은 의도의 값.
- * 사건(무작위): F7 신청(늦게 입력한 이전 신청서, 교사가 고친 적용일 포함 — R10), 학사 퇴실(미리·당일·늦게 입력). 신청마다 같은 계획을 바로 다시 세우면
+ *   퇴실 기록보다 뒤에 신청한(신청 일시) 퇴실일 이후 학사 석식은 처음부터 없던 것으로 본다(먼저 입력돼 있어도 — 입력 순서와 무관).
+ * superseded 신청서도 '취소' 행으로 저장한다(결정 58 — 덮은 행이 퇴실 정리로 취소되면 되살아난다).
+ * 사건(무작위): F7 신청(늦게 입력한 이전 신청서, 교사가 고친 적용일 포함 — R10), 학사 퇴실(미리·당일·늦게 입력, 퇴실 기록 일시도 넷에 하나는 입력보다 이름). 신청마다 같은 계획을 바로 다시 세우면
  * 할 일이 없어야 한다(수렴). 사건마다 3/1~4/30 모든 날을 비교한다.
  * 사건마다 날짜 7개 중 하나씩 돌아가며(9일 정도) 비교하고, 마지막 사건 뒤에는 모든 날을 비교한다(npm test 시간).
  * 기본 400가지, ORACLE_FULL=1이면 사건 수를 그대로 두고 매 사건 모든 날을 비교한다.
@@ -70,8 +72,9 @@ function simulate(seed, steps) {
       const tb = oracleTop('조식', d, leave && d >= leave.L ? (i) => isHall('조식', i.value) : null);
       assert.strictEqual(b, tb ? tb.value : '미실시', where + '\n조식 ' + d);
       // 중단일부터: 중단일 이후에 시작하는 학사 석식 의도는 세지 않고(F6 정리가 취소), 남은 가장 늦은 의도가 학사 석식이면 미실시
+      // 퇴실 기록보다 뒤에 신청한 퇴실일 이후 학사 석식은 처음부터 없던 것(입력 순서와 무관 — 먼저 입력돼 있어도)
       const stop = leave ? stop35(leave.t, leave.L) : null;
-      const top = oracleTop('석식', d, stop && d >= stop ? (i) => isHall('석식', i.value) && i.eff >= stop : null).value;
+      const top = oracleTop('석식', d, leave ? (i) => isHall('석식', i.value) && ((d >= stop && i.eff >= stop) || (i.eff >= leave.L && i.req >= leave.t)) : null).value;
       const want = stop && d >= stop && isHall('석식', top) ? '미실시' : top;
       assert.strictEqual(ctx.statusOn_(rows, 's1', '석식', d), want, where + '\n석식 ' + d);
     }
@@ -84,7 +87,7 @@ function simulate(seed, steps) {
     if (!leave && R() < 0.12) {
       let L = ctx.ymdAddDays_(today, Math.floor(R() * 14) - 3);
       if (L < '2027-03-02') L = '2027-03-02';                 // 기간 시작(입실 3/1) 뒤
-      const t = iso(now);
+      const t = iso(R() < 0.25 ? Math.max(0, now - Math.floor(R() * 4 * 24 * 60)) : now);   // 넷에 하나는 늦게 입력한 퇴실 기록
       leave = { L, t };
       // F6 학사 퇴실 저장 = movePlan_(R11a) 계획 그대로(되살림 포함). 넷에 하나는 석식 '일반 석식으로' — 퇴실 입력 일시의 일반 석식 신청(의도)
       const general = R() < 0.25;
@@ -118,7 +121,7 @@ function simulate(seed, steps) {
       if (!p.superseded) {
         assert.strictEqual(p.date, eff, 'seed ' + seed + ' 적용일\n' + log.slice(-4).join('\n'));
         addRow({ item, value: to, effective_date: p.date, source: 'F7', requested_at: req });
-      }
+      } else addRow({ item, value: to, effective_date: eff, source: 'F7', requested_at: req, status: '취소', cancel_reason: '[자동] ' + p.supersededBy[0] + ' 더 새 신청' });   // 결정 58
       for (const f of p.followUps) addRow({ item: f.item, value: f.value, effective_date: f.effective_date, source: 'F6', requested_at: req });
       // 수렴: 같은 신청으로 바로 다시 계획하면 할 일이 없다
       const again = plain(ctx.mealPlanChange_(rows, 's1', item, to, req, popts));
