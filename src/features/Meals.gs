@@ -230,8 +230,10 @@ function foodWrite_(head, linked, cancels, actorEmail) {
  */
 function getMealContext() {
   var user = requirePermission_('status.list');
-  var term = getCurrentTerm_();
   var today = today_();
+  // 저장 판정(결정 60)과 같은 기간: 오늘이 기간 사이(예: 3/1)면 곧 시작하는 기간의 학생을 보여 준다. 다음 기간이 없으면 가장 최근 기간
+  var terms = readAll_('terms');
+  var term = foodTermOf_(today, terms) || getCurrentTerm_();
   var out = { now: nowIso_(), today: today, cutoff: foodCutoff_(readAll_('settings', 'config')),
     term: term ? { id: term.id, name: term.name } : null, canEdit: false,
     chips: FOOD_CHIPS.map(function (c) { return { id: c.id, label: c.label }; }), students: [] };
