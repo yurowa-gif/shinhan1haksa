@@ -27,6 +27,10 @@
     "saveOut": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "swapDuty": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }

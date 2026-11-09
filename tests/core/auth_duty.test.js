@@ -22,8 +22,8 @@ function makeEnv() {
   const check = (who, key, ctx) => env.errorOf(who, (c) => c.requirePermission_(key, ctx));
   return { env, acc, notMine, mine, duty, check, unenrolled: acc.unenrolledStudentId };
 }
-const denied = (x, who, key, ctx) => { const e = x.check(who, key, ctx); assert.ok(e && /권한이 없습니다/.test(e.message), who + ' ' + key + ' ' + JSON.stringify(ctx) + ' 가 거부되어야 한다'); };
-const allowed = (x, who, key, ctx) => assert.strictEqual(x.check(who, key, ctx), null, who + ' ' + key + ' ' + JSON.stringify(ctx) + ' 가 허용되어야 한다');
+const denied = (x, who, key, ctx, msg) => { const e = x.check(who, key, ctx); assert.ok(e && /권한이 없습니다/.test(e.message), (msg ? msg + ': ' : '') + who + ' ' + key + ' ' + JSON.stringify(ctx) + ' 가 거부되어야 한다'); };
+const allowed = (x, who, key, ctx, msg) => assert.strictEqual(x.check(who, key, ctx), null, (msg ? msg + ': ' : '') + who + ' ' + key + ' ' + JSON.stringify(ctx) + ' 가 허용되어야 한다');
 
 test('out.save: 발생일(ymd)의 실제 근무자는 담당이 아닌 등록 학생도 통과 — 오늘 근무자는 오늘 사건, 어제 근무자는 어제 사건(다음 날까지)', () => {
   const x = makeEnv();
@@ -41,6 +41,7 @@ test('out.save 거부: 어제 근무자가 오늘 사건, 오늘 근무자가 �
   denied(x, T2, 'out.save', { studentId: x.notMine.id, ymd: YESTERDAY });   // 오늘 근무자가 어제(근무 아님) 사건
   denied(x, T4, 'out.save', { studentId: x.notMine.id, ymd: TWO_AGO });     // 근무일은 맞지만 이틀 지남(창 밖)
   assert.strictEqual(x.env.auditActions('denied:out.save').length, before + 3);
+  x.duty('2027-03-04', '21:30조', T2);    // 내일 근무 칸이 있어도 오늘은 아직 그 날의 근무가 아니다(ymd = 내일)
   denied(x, T2, 'out.save', { studentId: x.notMine.id, ymd: '2027-03-04' }, '미래 날짜는 아직 근무가 아니다');
 });
 
@@ -82,7 +83,7 @@ test('열람·쓰기 키는 그대로: 근무 교사의 student.view는 넓은 �
   x.duty(TODAY, '21:30조', T2);
   allowed(x, T2, 'student.view', { studentId: x.notMine.id });
   denied(x, T2, 'student.view', { studentId: x.unenrolled });
-  for (const key of ['status.edit', 'exception.save', 'counsel.save']) denied(x, T2, key, { studentId: x.notMine.id });
+  for (const key of ['status.edit', 'exception.save', 'counsel.save', 'counsel.view']) denied(x, T2, key, { studentId: x.notMine.id });
   allowed(x, ADMIN, 'out.save', { studentId: x.notMine.id, ymd: TWO_AGO });
 });
 
@@ -95,4 +96,61 @@ test('dutyWindow가 없으면 창은 0 — 어제 근무자는 ymd = 어제여�
   assert.strictEqual(on(T2, '', undefined), true, 'ymd가 없으면 오늘의 실제 근무자');
   assert.strictEqual(on(T2, TODAY, 0), true);
   assert.strictEqual(on(T2, YESTERDAY, 1), false, '오늘 근무자는 어제 근무가 아니다');
+});
+
+test('주말 칸: 단독 근무자는 허용, 예비 지정만은 거부, 예비가 단독을 대신 맡으면(실제 근무자) 허용되고 원래 단독 근무자는 거부', () => {
+  const x = makeEnv();
+  x.env.setNow('2027-03-06T20:00:00');   // 토요일
+  x.duty('2027-03-06', '단독', T2); x.duty('2027-03-06', '예비', T3);
+  allowed(x, T2, 'out.save', { studentId: x.notMine.id, ymd: '2027-03-06' }, '단독 근무자');
+  denied(x, T3, 'out.save', { studentId: x.notMine.id, ymd: '2027-03-06' }, '예비 지정만');
+  x.env.asOwner((c) => c.updateRecord_('duty_slots', x.env.rows('duty_slots').find((r) => r.slot === '단독').id, { actual_email: T3 }, ADMIN));   // 예비가 대신 근무
+  allowed(x, T3, 'out.save', { studentId: x.notMine.id, ymd: '2027-03-06' }, '대신 근무한 예비');
+  denied(x, T2, 'out.save', { studentId: x.notMine.id, ymd: '2027-03-06' }, '넘긴 원래 단독 근무자');
+});
+
+test('자정 경계: 3/3 23:59:59에는 오늘 근무자(창 0), 3/4 00:00:01에는 창 0은 거짓·out.save(창 1)는 다음 날이라 허용, 3/5 00:00:01에는 out.save도 거부', () => {
+  const x = makeEnv();
+  x.duty(TODAY, '21:30조', T2);
+  const win0 = (who) => x.env.as(who, (c) => c.studentFacts_(c.getCurrentUser_(), c.findById_('students', x.notMine.id), TODAY, 0).isOnDuty);
+  x.env.setNow('2027-03-03T23:59:59');
+  assert.strictEqual(win0(T2), true); allowed(x, T2, 'out.save', { studentId: x.notMine.id, ymd: TODAY });
+  x.env.setNow('2027-03-04T00:00:01');
+  assert.strictEqual(win0(T2), false, '열람 키(창 0)는 자정이 지나면 끝');
+  allowed(x, T2, 'out.save', { studentId: x.notMine.id, ymd: TODAY }, '다음 날까지');
+  x.env.setNow('2027-03-05T00:00:01');
+  denied(x, T2, 'out.save', { studentId: x.notMine.id, ymd: TODAY }, '이틀 뒤');
+});
+
+test('한 실행 안에서 창 0과 창 1 호출을 섞어도 서로 영향이 없다(캐시 키)', () => {
+  const x = makeEnv();
+  x.duty(YESTERDAY, '23:00조', T3);
+  const seq = x.env.as(T3, (c) => {
+    const u = c.getCurrentUser_(), st = c.findById_('students', x.notMine.id);
+    return [0, 1, 0, 1].map((w) => c.studentFacts_(u, st, YESTERDAY, w).isOnDuty);
+  });
+  assert.deepStrictEqual(Array.from(seq), [false, true, false, true]);
+});
+
+test('noDuty 키(counsel.view 등)는 근무표를 읽지 않는다', () => {
+  const x = makeEnv();
+  x.duty(TODAY, '21:30조', T2);
+  const reads = x.env.as(T2, (c) => {
+    let n = 0; const read = c.readAll_;
+    c.readAll_ = (name, kind) => { if (name === 'duty_slots') n++; return read(name, kind); };
+    try { c.requirePermission_('counsel.view', { studentId: x.notMine.id }); } catch (e) { /* 거부 */ }
+    return n;
+  });
+  assert.strictEqual(reads, 0);
+});
+
+test('근무교사 목록엔 있고 요청 고르기엔 없다: 실제 근무 행이 있는 근무교사는 담당이 아닌 학생의 특이사항을 목록에서 보지만 입력 화면 학생 선택에는 담당 학생만', () => {
+  const x = makeEnv();
+  x.duty(TODAY, '21:30조', T1);
+  const saved = x.env.call(ATT, 'saveException', { studentId: x.notMine.id, from: '2027-03-12', blocks: 'ALL', type: '병결' });
+  assert.strictEqual(saved.ok, true, JSON.stringify(saved));
+  const list = x.env.call(T1, 'listExceptions', { scope: 'range', from: '2027-03-12', to: '2027-03-12' });
+  assert.ok(list.groups.some((g) => g.studentId === x.notMine.id), '목록에는 담당 아닌 학생도');
+  const ctxStudents = x.env.call(T1, 'getExceptionContext').students.map((s) => s.id);
+  assert.ok(!ctxStudents.includes(x.notMine.id) && ctxStudents.length > 0, '요청 고르기에는 담당 학생만');
 });
