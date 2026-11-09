@@ -181,28 +181,28 @@ S2-0a 병합 이후 기준이다. "소유"는 그 세션만 그 파일을 고친
 
 | # | 작업 | 쓰는 곳 | 완료 기준(테스트가 증명) | 크기 |
 | --- | --- | --- | --- | --- |
-| R8 | DutyRules.gs: `dutySlotsFor_`·`dutyOn_`·`dutyIsOn_`·`dutyRecord_` | C8s·C8a·C10·C12·C14 | `tests/rules/duty.test.js`: 요일 7개와 exam 목·금의 칸 틀, **방학 plan(`termType '방학'`, 종료 시각이 다른 날)**, 종료를 22:00으로 당긴 날은 21:30/22:00, 운영 안 함은 `[]`. 교대 전·후, A→B→C 뒤에는 C, 예비가 단독을 대신 근무한 경우, 취소 행 무시, 같은 칸 중복은 최신 1행과 경고, 이메일 대소문자·공백. `dutyIsOn_`: 그날 실제 근무자만 참, 예비 지정만·교대로 넘긴 원래 근무자는 거짓, `windowDays` 0이면 ymd = today만, 1이면 today ∈ [ymd, ymd+1], ymd가 미래면 거짓, 월말·연말 경계. `dutyRecord_`: **교대 3건(일반·교대의 교대·예비 대신 근무)인 달의 교사별 합계 = 실제 근무자**(PRD F3 완료 기준), 원래 근무자에게는 세지 않음, 예비 지정만은 기본 미포함·옵션이면 포함(Q3), 월 경계(1/31·2/1), 운영 안 하는 날의 행은 세되 경고(ASSUMPTION: 조용히 빼면 실제 근무를 놓친다), 빈 실제 근무자 경고. `contract.test.js`에 이름 | M |
+| R8 | DutyRules.gs: `dutySlotsFor_`·`dutyOn_`·`dutyIsOn_`·`dutyRecord_` | C8s·C8a·C10·C12·C14 | `tests/rules/duty.test.js`: 요일 7개와 exam 목·금의 칸 틀, **방학 plan(`termType '방학'`, 종료 시각이 다른 날)**, 종료를 22:00으로 당긴 날은 21:30/22:00, 운영 안 함은 `[]`. 교대 전·후, A→B→C 뒤에는 C, 예비가 단독을 대신 근무한 경우, 취소 행 무시, 같은 칸 중복은 최신 1행과 경고, 이메일 대소문자·공백. `dutyIsOn_`: 그날 실제 근무자만 참, 예비 지정만·교대로 넘긴 원래 근무자는 거짓, `windowDays` 0이면 ymd = today만, 1이면 today ∈ [ymd, ymd+1], ymd가 미래면 거짓, 월말·연말 경계. `dutyRecord_`: **교대 3건(일반·교대의 교대·예비 대신 근무)인 달의 교사별 합계 = 실제 근무자**(PRD F3 완료 기준), 원래 근무자에게는 세지 않음, 예비 지정은 `standby`로 따로 세고 대신 근무한 날은 뺀다(결정 46), 월 경계(1/31·2/1), 운영 안 하는 날의 행은 세되 경고(ASSUMPTION: 조용히 빼면 실제 근무를 놓친다), 빈 실제 근무자 경고. `contract.test.js`에 이름 | M |
 | R10 | MealRules: `mealPlanChange_`에 `opts.effectiveDate`·`opts.effectiveRule`, 결과에 `autoDate` | C17a·C18a | 표: 수동 날짜가 자동보다 이름·늦음·오늘 이전, 신청일보다 이르면 Error, `entry_date`(기숙사 입실 조식). 고친 날짜 기준으로 `toCancel`·`followUps`·`blocked`가 계산된다. 오라클(meal_oracle)에 무작위 수동 적용일 사건을 더한다(의도 적용일 = 수동 날짜). 같은 계획을 바로 다시 세우면 할 일 0. rules-api.md:212 고침 | M |
 | R11a | MoveRules.gs `movePlan_`: 퇴실·입실·기숙사 | C18a·T1b | 학사 퇴실 정리 순서(rules-api.md:211)에 일반 석식 선택(**source F7**, linked)·기숙사 입실 조식·기숙사 퇴실 조식·상태 검사(기숙사생의 학사만 퇴실 거부 등, 4-2)·`requested_at` 일시 필수(followups.md:15)를 더한다. 결정 35 예(3/3 수 15:00 신청·3/5 퇴실 → 조식 3/5, 석식 3/15), 월·화 신청 → 3/8, 퇴실일이 더 늦으면 퇴실일. meal.test.js의 `saveLeave` 흉내를 이 함수로 옮긴다(규칙은 한 곳에). 회귀: 명단 행(`requested_at ''`)과 같은 적용일이면 신청 일시가 이른 F6 퇴실이 이긴다, 업로드 전 날짜의 F7 신청서가 superseded되지 않는다. followups R6-3에 `[x]` | M |
 | R9 | OutRules 후속 + 관문: O43 회귀, `outAutoSinceNext_`, `outDismissalGate_` | C12·C13 | O43: 같은 묶음의 앞선 자동 OUT이 유형 변경·중복으로 `[자동]` 취소된 상태에서, since 이전 확정 행만 남으면 since 뒤에 만든 OUT도 취소된다. `moved`를 모든 `[자동]` 취소로 넓히는 변이에서는 실패한다(OutRules.gs:161·189). `outAutoSinceNext_` 표: 처음(null) + 지금 = 기본 3종 → since `{}`. **스냅숏 분실(null) + '기타'가 이미 설정됨 → 기타 since = now**. '기타' 넓힘 T1, 좁혀도 T1 유지, 다시 넓히면 T2로 덮음, 그대로면 `changed:false`, '미인정결석(무단)' = '미인정결석', 잘못된 시각 Error. `outDismissalGate_` 표: 면담 전 `면담 기록 필요` / 면담 후 ok / 면담 취소 → 막힘 / **면담 날짜가 연결 OUT 발생일보다 이르면 `면담 기록 필요`** / 연결 OUT이 관리자 취소로 죽고 다른 2건이 남음 → 막힘(Q9) / 다른 학생·다른 유형·지난 기간 OUT에 연결 → 막힘 / OUT 1건 → `퇴실 대상 아님` / 이미 학사 퇴실 → `이미 퇴실`. rules-api.md R5 절의 `autoTypeSince` 출처를 고친다 | M |
 | R11b | MoveRules.gs `moveUndoPlan_` + 재입실 | C18b | `moveUndoPlan_(changes, headId, opts)`: 대표·연결 행 취소, `[자동] <headId>`로 취소된 행 중 되살려도 더 새 신청에 덮이지 않는 행만 되살림(꼬리표는 `cancel_reason`, 5절 5번이 승인되지 않으면 `memo`에서 찾는다). 재입실(4-2): 퇴실 전 급식 값을 재입실일부터, 아직 오지 않은 석식 중단 취소. 오라클에 '퇴실 취소'·'재입실' 사건을 더한다. M45(followups.md:14). followups R6-1·R6-2에 `[x]` | M |
 | R12 | `mealCountsOn_` | C19·D8 | 단순 오라클과 대조, 합계 줄 = 부분 합, 결정 35 흐름(퇴실 학생은 3/5~3/14 학사 석식에 포함, 3/15부터 빠짐, 조식은 3/5부터 빠짐), 성별·학년이 빈 학생은 `unknownGroup` + 경고, 미등록 학생 제외, 취소 행 무시(4-2 식수 집계 대상) | S |
 
-**함수 시그니처 초안** — RULES가 rules-api.md에 넣는다. CODING은 이 이름을 부른다.
+**함수 시그니처 초안** — RULES가 rules-api.md에 넣는다. CODING은 이 이름을 부른다. **병합된 뒤에는 `docs/contracts/rules-api.md`가 기준이다**(이 초안과 다르면 rules-api.md를 따른다).
 ```js
 // src/rules/DutyRules.gs (R8)
 function dutySlotsFor_(plan)
         // resolveDayPlan_ 결과 → 운영 안 함 [] | mon_thu [{slot:'21:30조',end},{slot:'23:00조',end}] | 금·토·일 [{slot:'단독',end},{slot:'예비',end:''}]
         // end = min('21:30'|'23:00', plan.end), 단독 = plan.end. 특별 요일 유형은 실제 달력 요일로(ASSUMPTION, R3 END와 같은 방식). 방학도 같은 틀(4-2)
 function dutyOn_(rows, ymd)
-        // → {duty:[{slot, email, end, swappedFrom}], standby:[email], warnings}
+        // → {duty:[{slot, email, end, swappedFrom}], standby:[{email, swappedFrom}], warnings}
         //   취소 제외, (date, slot)마다 updated_at 최신 1행(같으면 아래 행) + 경고, actual_email 기준, 순서 21:30조→23:00조→단독
 function dutyIsOn_(rows, email, ymd, today, windowDays)
         // → boolean. dutyOn_(rows, ymd).duty에 email이 있고 ymd ≤ today ≤ ymd + windowDays. 예비 지정만은 거짓
 function dutyRecord_(rows, month, opts)
-        // opts = {includeStandby:false, operatingByDate:{}}
+        // opts = {operatingByDate:{}}   (includeStandby는 결정 46으로 지웠다 — 예비는 늘 따로 센다)
         // → {teachers:[{email, total, bySlot:{'21:30조','23:00조','단독'}, dates:[{date,slot,end,swappedFrom}]}],
-        //    standby:[{email, count}], swaps:[{date, slot, from, to, at, by}], warnings}   금액은 계산하지 않는다(Q4)
+        //    standby:[{email, count, dates}], swaps:[{date, slot, from, to, at, by, kind:'교대'|'대신 근무'}], warnings}   금액은 계산하지 않는다(결정 47)
         //   swaps = 칸마다 마지막 교대(원래 → 실제). 중간 단계는 audit_log에만 있다(4-2)
 
 // src/rules/OutRules.gs (R9 추가)
@@ -394,7 +394,7 @@ T0a(구조 승인) 뒤:
 - 상담 감사는 운영 DB audit_log에 두되 내용 칸을 가린다. 상담 파일에 audit_log 탭을 따로 만들지 않는다(새 탭 없음).
 - **bulk_create 감사는 행 id 목록만 남긴다**(행에 created_at·by가 있고 이후 수정은 전후 값이 남는다). 행마다 JSON 전체를 남기지 않는다(좌석 격자 200행이면 audit_log가 두 배가 된다). decisions.md에 적는다.
 - 자동 OUT 넓힌 시각은 Script Property `AUTO_OUT_SINCE`에 둔다. 설정 행을 더하지 않는다. 잃어버리면 기본 3종 기준으로 돌아간다(R9). README에 재설치 안내를 한 줄 적는다.
-- 예비 지정의 수당 포함 여부(Q3)는 설정 행이 아니라 규칙 옵션(`includeStandby`)으로 둔다. 답이 바뀌면 한 줄만 고친다.
+- 예비 지정은 `dutyRecord_`의 `standby`로 늘 따로 센다(결정 46, #51에서 `includeStandby` 옵션을 지웠다).
 - 출력물(기록표·식수 집계)은 C7처럼 base64로 내려주고 Drive에 저장·공유하지 않는다. xlsx는 학교 양식을 받은 뒤에만 만들고 임시 사본은 휴지통으로 보낸다(C14b).
 - 양식 템플릿 ID는 Script Properties에 둔다(CLAUDE.md 7). PRD §7 문구는 총괄이 고친다.
 - 메일은 `MAIL_ENABLED`가 `'true'`일 때만 보내고, `@example.com`은 늘 빼고, 한도를 먼저 본다. 확인 ②에서 선생님이 켠다.
@@ -474,6 +474,6 @@ T0a(구조 승인) 뒤:
 
 | 완료 기준 | 규칙 테스트 | 기능 테스트(gas-fakes) | 끝까지(T2) | 선생님 확인 |
 | --- | --- | --- | --- | --- |
-| ① 1월 근무표로 기록표 출력 (+ F3 "교대 3건 달 = 실제 근무자", PRD.md:174) | `rules/duty.test.js`: `dutyRecord_` 교대 3건(일반·교대의 교대·예비 대신 근무) 달의 합계 = 실제 근무자, 원래 근무자 합계와 다름, 예비 지정만 제외(Q3). `dutySlotsFor_` 방학 plan | `features/duty_record.test.js`: 권한(관리자 전체·담당자 전체 합계·학사 교사 본인·담당자 파일 거부), 렌더 HTML에 교사별 합계·교대 3건 | `acceptance/stage2_duty.test.js`: seedFakeStage2 → 교대 1건 더 → getDutyRecord('2027-01') 합계가 실제 근무자 → getDutyRecordFile 모델·HTML. 한계: 가짜 1월은 학기 기간(T1a) | ④ PDF(양식이 오면 xlsx)를 실제 근무자와 대조 |
+| ① 1월 근무표로 기록표 출력 (+ F3 "교대 3건 달 = 실제 근무자", PRD.md:174) | `rules/duty.test.js`: `dutyRecord_` 교대 3건(일반·교대의 교대·예비 대신 근무) 달의 합계 = 실제 근무자, 원래 근무자 합계와 다름, 예비 지정은 `standby`로 따로(결정 46). `dutySlotsFor_` 방학 plan | `features/duty_record.test.js`: 권한(관리자 전체·담당자 전체 합계·학사 교사 본인·담당자 파일 거부), 렌더 HTML에 교사별 합계·교대 3건 | `acceptance/stage2_duty.test.js`: seedFakeStage2 → 교대 1건 더 → getDutyRecord('2027-01') 합계가 실제 근무자 → getDutyRecordFile 모델·HTML. 한계: 가짜 1월은 학기 기간(T1a) | ④ PDF(양식이 오면 xlsx)를 실제 근무자와 대조 |
 | ② 급식 적용일 규칙 표의 모든 경우 통과 (PRD.md:204-210 다섯 줄) | `rules/meal.test.js`(이미 통과) + R10 수동 적용일 + R11a 퇴실·입실 표 + 오라클 | `features/meals.test.js`: 1줄(11:29:59/11:30:00, 연말), 3·4줄(미실시 7개 요일, 2026-12-30). `features/moves.test.js`: 2줄(기숙사 입실 조식 = 입실일), 5줄(학사 퇴실 조식 = 퇴실일) + 결정 35 석식. 서류 미제출이어도 적용(결정 3) | `acceptance/stage2_meal.test.js`: 다섯 줄을 화면 함수(preview → save)로 차례로 저장하고, 적용일 전날·당일 statusOn_과 식수 집계 숫자 변화를 확인 | ③b 신청 일시 기본값, 어제 11:20/11:40 저장 |
 | ③ 2OUT은 면담 기록 전 퇴실 확정이 막히고, 기록 후 F6 학사 퇴실 신청이 미리 채워진다 | `rules/out.test.js`: `outDismissalGate_` 표(R9, 면담 날짜 < 둘째 OUT 포함) | `features/counsel_gate.test.js`(C13), `features/moves.test.js` outDismissal(C20: 담당교사 거부 `denied:out.dismiss`, 관리자 허용) | `acceptance/stage2_out2.test.js`: 직접 OUT 2건 → confirmOutDismissal `{ok:false, reason:'면담 기록 필요'}` → 그 상태로 관리자 saveMove(outDismissal) 거부 → 담당교사 saveOutMeeting → `{ok:true, prefill}`(학생·유형·사유 `2OUT 퇴실`·신청 일시) → 담당교사 saveMove(outDismissal) 거부 → 관리자 saveMove → 학사 퇴실 행 + 조식·석식 정리 행. 운영 DB audit_log, 응답 JSON, **근무교사 계정의 listStudentStatus 응답**에 면담 표식·면담 날짜 없음. 그날 getAttendanceSheet 모델에 OUT 표시 없음(결정 36) | ③a 화면 흐름 |
