@@ -33,8 +33,8 @@ function vioHomeInfo_(user, role) {
     readAll_('students').forEach(function (s) { byId[s.id] = s; });
     var ids = Object.keys(per).filter(function (id) { return per[id] >= 2; });
     var info = vioMeetingInfo_(vu, term, ids, byId, vioViolations_(term));
-    out.targets = { n: ids.length, need: 0, ready: 0 };
-    Object.keys(info).forEach(function (id) { if (info[id].state === 'need') out.targets.need++; if (info[id].state === 'recorded') out.targets.ready++; });
+    out.targets = { n: 0, need: 0, ready: 0 };   // 퇴실 처리된 학생은 세지 않는다
+    Object.keys(info).forEach(function (id) { if (info[id].state === 'left') return; out.targets.n++; if (info[id].state === 'need') out.targets.need++; if (info[id].state === 'recorded') out.targets.ready++; });
   }
   return out;
 }
@@ -301,7 +301,7 @@ function listOuts(filter) {
     term = terms.filter(function (t) { return t.id === String(filter.termId); })[0];
     if (!term) throw new Error('운영 기간을 찾을 수 없습니다. 새로 고친 뒤 다시 해 주세요.');
   } else term = getCurrentTerm_();
-  var out = { ok: true, term: null, terms: terms.map(function (t) { return { id: t.id, name: t.name }; }), items: [], summary: [], canCancel: false, isAdmin: hasRole_(user, 'admin') };
+  var out = { ok: true, date: today, term: null, terms: terms.map(function (t) { return { id: t.id, name: t.name }; }), items: [], summary: [], canCancel: false, isAdmin: hasRole_(user, 'admin') };
   if (!term) return out;
   var enrollments = readAll_('enrollments'), students = readAll_('students'), changes = readAll_('status_changes');
   var visible = vioVisibleIds_(user, enrollments, students, term.id, vioViewWide_());
@@ -350,10 +350,16 @@ function listOuts(filter) {
       isMine: !!myStudents[id], left: statusOn_(changes, id, '학사', today_()) === '퇴실',
       latest: mine ? { occurredAt: String(mine.occurred_at), ruleName: mine.rule_name, source: mine.source } : null });
   });
+  // 퇴실 처리된 학생은 맨 뒤로 보내고 1OUT·퇴실 대상 학생 수에서 뺀다
+  out.hasMine = Object.keys(myStudents).length > 0;
   out.stats = { records: 0, out1Students: 0, out2Students: 0 };
   rows.forEach(function (v) { if (ruleRowLive_(v)) out.stats.records++; });
-  Object.keys(count).forEach(function (id) { if (count[id] >= 2) out.stats.out2Students++; else if (count[id] === 1) out.stats.out1Students++; });
-  out.summary.sort(function (a, b) { return b.count - a.count || String(a.student.studentNo).localeCompare(String(b.student.studentNo)); });
+  Object.keys(count).forEach(function (id) {
+    var sm = out.summary.filter(function (x) { return x.studentId === id; })[0];
+    if (sm && sm.left) return;
+    if (count[id] >= 2) out.stats.out2Students++; else if (count[id] === 1) out.stats.out1Students++;
+  });
+  out.summary.sort(function (a, b) { return (a.left ? 1 : 0) - (b.left ? 1 : 0) || b.count - a.count || String(a.student.studentNo).localeCompare(String(b.student.studentNo)); });   // 퇴실 처리됨은 맨 뒤
   // 2OUT 학생의 면담 칸(상담 보기 범위를 통과한 학생만)
   var targetIds = out.summary.filter(function (x) { return x.count >= 2; }).map(function (x) { return x.studentId; });
   var info = vioMeetingInfo_(user, term, targetIds, byId, vioViolations_(term));
@@ -406,10 +412,11 @@ function vioMeetingInfo_(user, term, studentIds, byId, rows) {
     var s = byId[id];
     if (!s) return;
     var f = studentFacts_(user, s, today_(), 0, true);   // 근무 여부는 보지 않는다(noDuty)
+    f.isOnDuty = false;   // 이 PR만으로도 근무교사가 면담 칸을 못 보게(studentFacts_의 noDuty에 기대지 않는다)
     if (canAccessStudentByFacts_(user.roles, f, allowedRoles, false)) { ok.push(id); facts[id] = f; }
   });
   if (!ok.length) return out;
-  var notes = cnsNotesForGate_(), changes = readAll_('status_changes'), names = {};
+  var changes = readAll_('status_changes'), notes = cnsNotesForGate_(changes), names = {};
   readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = String(u.name || ''); });
   var isTeacher = hasRole_(user, 'hall_teacher'), isAdmin = hasRole_(user, 'admin');
   ok.forEach(function (id) {
@@ -420,6 +427,7 @@ function vioMeetingInfo_(user, term, studentIds, byId, rows) {
       meeting: g.meetingNote ? { date: g.meetingNote.date, teacher: names[normalizeEmail_(g.meetingNote.teacher_email)] || '(등록 안 된 교사)', noteId: mine ? g.meetingNote.id : undefined } : null,
       // 결정 51: 면담이 있었는데 연결한 OUT이 취소돼 인정되지 않는 경우(카드가 '면담 필요'로 돌아가고 안내가 붙는다)
       staleMeeting: state === 'need' && notes.some(function (n) { return n.student_id === id && ruleRowLive_(n) && String(n.type).trim() === CNS_TYPE_OUT2; }),
+      trigger: g.triggerOutId ? (function () { var t = rows.filter(function (v) { return String(v.id) === g.triggerOutId; })[0]; return t ? { occurredAt: String(t.occurred_at), ruleName: t.rule_name } : null; })() : null,
       canMeeting: isTeacher && !!facts[id].isAssigned && state === 'need', canConfirm: isAdmin && state === 'recorded' };
   });
   return out;

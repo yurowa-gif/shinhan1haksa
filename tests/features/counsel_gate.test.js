@@ -177,3 +177,54 @@ test('listOuts targets: 2OUT 학생의 살아 있는 OUT 목록이 함께 오고
   const t2 = call(x, T1, 'listOuts', { scope: 'targets' });
   assert.deepStrictEqual([t2.summary[0].state, t2.summary[0].staleMeeting, t2.summary[0].meeting], ['need', true, null]);
 });
+
+test('재입실: 2OUT 퇴실 뒤 다시 입실하면 옛 면담으로 관문이 다시 열리지 않고(면담 기록 필요), 퇴실 이후 날짜의 새 면담만 인정. 퇴실 메모가 가리키는 면담은 취소 불가', () => {
+  const x = makeEnv();
+  x.two(x.mine); meet(x, T1);
+  const note = x.notes()[0];
+  x.env.asOwner((c) => {
+    c.appendRecord_('status_changes', { student_id: x.mine.id, item: '학사', value: '퇴실', effective_date: '2027-03-04', reason: '2OUT 퇴실', memo: '[2OUT] out:x note:' + note.id, status: '유효' }, ADMIN);
+    c.appendRecord_('status_changes', { student_id: x.mine.id, item: '학사', value: '입실', effective_date: '2027-03-08', reason: '재입실', memo: '', status: '유효' }, ADMIN);
+  });
+  x.env.setNow('2027-03-10T10:00:00');
+  assert.deepStrictEqual(call(x, ADMIN, 'confirmOutDismissal', x.mine.id), { ok: false, reason: '면담 기록 필요' }, '옛 면담(퇴실 이전)은 인정 안 됨');
+  assert.strictEqual(meet(x, T1, { date: '2027-03-04' }).ok, false, '퇴실 적용일 당일 이하는 거부');
+  const e = plain(x.env.call(T1, 'cancelOutMeeting', note.id, '재입실 뒤 옛 면담 취소'));
+  assert.strictEqual(e.ok, false, '퇴실 메모가 가리키는 면담은 학생 상태와 상관없이 취소 불가');
+  assert.strictEqual(x.notes()[0].status, '유효');
+  assert.strictEqual(meet(x, T1, { date: '2027-03-09' }).ok, true, '재입실 뒤 날짜의 새 면담');
+  assert.strictEqual(call(x, ADMIN, 'confirmOutDismissal', x.mine.id).ok, true);
+});
+
+test('면담 칸·취소 범위: 오늘 근무교사는 못 보고, 학사 교사+출결 계정도 담당이 아니면 비고, 담당이 바뀐 뒤 옛 담당의 취소는 denied:counsel.save, 학생·학부모·근무표 담당자는 denied:counsel.cancel', () => {
+  const x = makeEnv();
+  x.two(x.mine); meet(x, T1);
+  const note = x.notes()[0];
+  x.env.asOwner((c) => { c.addUser('fake.t3@example.com', '가짜교사3', 'hall_teacher,attendance'); c.appendRecord_('duty_slots', { date: TODAY, slot: '21:30조', end_time: '21:30', original_email: T2, actual_email: T2, swapped_at: '', swapped_by: '', status: '유효', memo: '' }, ADMIN); });
+  for (const who of [T2, 'fake.t3@example.com']) {
+    const v = call(x, who, 'listOuts', { scope: 'targets' }).summary.find((s) => s.studentId === x.mine.id);
+    assert.deepStrictEqual([v.state, v.meeting, v.canMeeting], [undefined, undefined, undefined], who);
+  }
+  for (const who of [STUDENT, PARENT, DUTY]) x.env.expectDenied(who, 'counsel.cancel', 'cancelOutMeeting', note.id, '취소 시도');
+  const en = x.env.rows('enrollments').find((e) => e.term_id === x.term.id && e.student_id === x.mine.id);
+  x.env.asOwner((c) => c.updateRecord_('enrollments', en.id, { teacher_email: T2 }, ADMIN));
+  x.env.expectDenied(T1, 'counsel.save', 'cancelOutMeeting', note.id, '담당이 바뀐 뒤 취소');
+  assert.strictEqual(x.notes()[0].status, '유효');
+});
+
+test('퇴실 처리됨(left)은 면담 권한이 없는 사람에게도 보이고, 관리자 홈 숫자는 left를 빼며 목록 상태와 같다. 응답에 표식이 없다(getHomeData 포함)', () => {
+  const x = makeEnv();
+  x.two(x.mine); x.two(x.other); meet(x, T1);
+  x.env.asOwner((c) => c.appendRecord_('status_changes', { student_id: x.other.id, item: '학사', value: '퇴실', effective_date: '2027-03-03', reason: '2OUT 퇴실', memo: '[2OUT] out:x note:y', status: '유효' }, ADMIN));
+  const row = (r, id) => r.summary.find((s) => s.studentId === id);
+  const att = call(x, ATT, 'listOuts', { scope: 'targets' });
+  assert.deepStrictEqual([row(att, x.other.id).left, row(att, x.mine.id).left], [true, false], '면담 권한이 없어도 퇴실 처리됨은 보인다');
+  const adm = call(x, ADMIN, 'listOuts', { scope: 'targets' });
+  const states = adm.summary.reduce((a, s) => { a[s.left ? 'left' : s.state] = (a[s.left ? 'left' : s.state] || 0) + 1; return a; }, {});
+  const home = plain(x.env.as(ADMIN, (c) => c.vioHomeInfo_(c.requirePermission_('out.view'), 'admin')));
+  assert.deepStrictEqual(home.targets, { n: (states.need || 0) + (states.recorded || 0), need: states.need || 0, ready: states.recorded || 0 }, '홈 숫자 = 목록 상태(left 제외)');
+  for (const [who, role] of [[ADMIN, 'admin'], [T1, 'hall_teacher'], [HOMEROOM, 'homeroom']]) {
+    const j = JSON.stringify(plain(x.env.call(who, 'getHomeData', role)));
+    assert.ok(!j.includes(MARK), who);
+  }
+});
