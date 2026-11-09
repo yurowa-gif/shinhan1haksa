@@ -16,7 +16,7 @@
  * 사건(무작위): F7 신청(늦게 입력한 이전 신청서, 교사가 고친 적용일 포함 — R10), 학사 퇴실(미리·당일·늦게 입력, 퇴실 기록 일시도 넷에 하나는 입력보다 이름). 신청마다 같은 계획을 바로 다시 세우면
  * 할 일이 없어야 한다(수렴). 사건마다 3/1~4/30 모든 날을 비교한다.
  * 사건마다 날짜 7개 중 하나씩 돌아가며(9일 정도) 비교하고, 마지막 사건 뒤에는 모든 날을 비교한다(npm test 시간).
- * 기본 400가지, ORACLE_FULL=1이면 사건 수를 그대로 두고 매 사건 모든 날을 비교한다.
+ * 기본 400가지(ORACLE_SEEDS로 늘림), ORACLE_FULL=1이면 사건 수를 그대로 두고 매 사건 모든 날을 비교한다.
  */
 const assert = require('assert');
 const { test, loadGs, plain } = require('../helpers/harness');
@@ -93,7 +93,7 @@ function simulate(seed, steps) {
       const general = R() < 0.25;
       const mp = plain(ctx.movePlan_(rows, 's1', { type: '학사 퇴실', effectiveDate: L, requestedAt: t, dinner: general ? '일반 석식' : '중단' }, { today }));
       assert.deepStrictEqual(mp.errors, [], 'seed ' + seed + ' 퇴실 계획 오류');
-      cancel(mp.toCancel, '[자동] r' + (rid + 1) + ' 퇴실 정리');
+      mp.toCancel.forEach((c) => cancel([c], /^\[자동\] /.test(c.cancel_reason) ? c.cancel_reason : '[자동] r' + (rid + 1) + ' 퇴실 정리'));   // 규칙이 준 꼬리표는 그대로
       mp.toRestore.forEach((c) => Object.assign(rows.find((r) => r.id === c.id), { status: '유효', cancel_reason: '' }));
       mp.rows.forEach((r) => addRow({ item: r.item, value: r.value, effective_date: r.effective_date, source: r.source, requested_at: t }));
       if (general) {
@@ -134,7 +134,7 @@ function simulate(seed, steps) {
   return { rows: rows.length, leave: !!leave };
 }
 
-const FULL = !!process.env.ORACLE_FULL, SEEDS = 400;
+const FULL = !!process.env.ORACLE_FULL, SEEDS = +process.env.ORACLE_SEEDS || 400;   // 넓게: ORACLE_SEEDS=6000
 test('오라클 무작위 시험 ' + SEEDS + '가지(사건 40개씩, 3/1~4/30 표본 날짜 + 끝에 매일 비교): 조식·석식 값, 결정 35 중단일, 퇴실 처리, 늦은 입력, 수렴', () => {
   let leaves = 0, rows = 0;
   for (let seed = 1; seed <= SEEDS; seed++) { const r = simulate(seed, 40); leaves += r.leave ? 1 : 0; rows += r.rows; }
