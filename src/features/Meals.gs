@@ -228,19 +228,46 @@ function foodFindDuplicate_(rec, changes) {
  *  행마다 appendRecord_(audit create), 취소는 bulkUpdateRecords_(audit bulk_update). 지우지 않는다.
  * → {head, linked}
  */
-function foodWrite_(head, linked, cancels, actorEmail) {
+function foodWrite_(head, linked, cancels, actorEmail, restores) {
   var base = { linked_change_id: '', doc_submitted: '', status: '유효', memo: '', cancel_reason: '' };
-  var h = appendRecord_('status_changes', Object.assign({}, base, head), actorEmail);
+  var id = Utilities.getUuid();   // 대표 id를 먼저 정해 대표+연결 행을 한 번에 쓴다(중간에 끊겨 대표 행만 남는 일이 없게)
+  var h = Object.assign({}, base, head, { id: id });
   var rows = (linked || []).map(function (l) {
-    return appendRecord_('status_changes', Object.assign({}, base, { student_id: h.student_id, requested_at: h.requested_at }, l,
-      { linked_change_id: h.id }), actorEmail);
+    return Object.assign({}, base, { student_id: h.student_id, requested_at: h.requested_at }, l, { id: Utilities.getUuid(), linked_change_id: id });
   });
+  bulkAppend_('status_changes', [h].concat(rows), actorEmail);
   if (cancels && cancels.length) {
-    bulkUpdateRecords_('status_changes', cancels.map(function (c) {
-      return { id: c.id, patch: { status: '취소', cancel_reason: '[자동] ' + h.id + ' ' + (c.cancel_reason || '새 신청으로 대체') } };
+    bulkUpdateRecords_('status_changes', cancels.map(function (c) {   // 규칙이 이미 '[자동] <원인 행 id> …'를 준 사유(되살린 신청이 다시 취소하는 행)는 그대로 쓴다
+      var r = String(c.cancel_reason || '');
+      return { id: c.id, patch: { status: '취소', cancel_reason: /^\[자동\] /.test(r) ? r : '[자동] ' + id + ' ' + (r || '새 신청으로 대체') } };
     }), actorEmail);
   }
+  if (restores && restores.length) {
+    bulkUpdateRecords_('status_changes', restores.map(function (r) { return { id: r.id, patch: { status: '유효', cancel_reason: '' } }; }), actorEmail);
+  }
   return { head: h, linked: rows };
+}
+
+/** 이 대표 행과 연결 행을 빼고, 이 대표 행이 취소한 행을 되살려 "저장 전" 모양으로 되돌린다(재시도 때 원래 계획을 다시 세우려고) */
+function foodBefore_(changes, headId) {
+  return changes.filter(function (c) { return c.id !== headId && c.linked_change_id !== headId; }).map(function (c) {
+    return String(c.cancel_reason || '').indexOf('[자동] ' + headId + ' ') === 0 ? Object.assign({}, c, { status: '유효', cancel_reason: '' }) : c;
+  });
+}
+
+var FOOD_UNFINISHED = '이전 저장이 중간에 끊겨 덜 끝났습니다. 관리자에게 알려 주세요.';
+
+/**
+ * 저장했다는 대표 행이 있는데 그 계획의 연결 행·취소·되살림이 빠져 있나(다시 눌렀을 때 "이미 저장"으로 넘기지 않으려고).
+ * plan = 저장 전 모양(foodBefore_)으로 다시 세운 계획(F7: mealPlanChange_ 결과, F6: movePlan_ 결과), changes = 지금 그 학생의 행.
+ */
+function foodUnfinished_(plan, changes, headId) {
+  var by = {};
+  changes.forEach(function (c) { by[c.id] = c; });
+  var live = function (id) { return String(by[id].status || '유효') === '유효'; };
+  var linked = changes.filter(function (c) { return c.linked_change_id === headId; }).length;
+  var expected = plan.followUps ? plan.followUps.length : plan.rows.length - 1;
+  return linked !== expected || plan.toCancel.some(function (x) { return by[x.id] && live(x.id); }) || (plan.toRestore || []).some(function (x) { return by[x.id] && !live(x.id); });
 }
 
 /* ───────────── 화면에서 부르는 서버 함수 ───────────── */
@@ -321,8 +348,13 @@ function saveMealChange(input, expect) {
     if (!c.plan || c.errors.length) return { ok: false, errors: c.errors };
     var rec = c.rec, plan = c.plan;
     var dup = foodFindDuplicate_(rec, d.changes);
-    if (dup) return { ok: true, duplicate: true, id: dup.id, superseded: String(dup.status) === '취소', date: dup.effective_date,
-      dateKo: ymdIsValid_(String(dup.effective_date)) ? foodDateKo_(dup.effective_date) : '', label: rec.chipLabel, cancelCount: 0, followUpCount: 0, doc: rec.doc };
+    if (dup) {
+      // 이미 저장된 신청서: 그 저장이 끝까지 갔는지(연결 행·취소)를 저장 전 모양에서 다시 세운 계획으로 확인한다. 덜 끝났으면 성공이라 하지 않는다
+      var again = foodPlan_(rec, foodBefore_(d.changes, dup.id), today_(), d.cutoff).plan;
+      if (foodUnfinished_(again, d.changes, dup.id)) return { ok: false, errors: [{ field: '', message: FOOD_UNFINISHED }] };
+      return { ok: true, duplicate: true, id: dup.id, superseded: String(dup.status) === '취소', date: dup.effective_date,
+        dateKo: ymdIsValid_(String(dup.effective_date)) ? foodDateKo_(dup.effective_date) : '', label: rec.chipLabel, cancelCount: 0, followUpCount: 0, doc: String(dup.doc_submitted).toUpperCase() === 'TRUE' };
+    }
     if (c.blocked) return { ok: false, blocked: c.blocked };
     if (String(expect || '') !== foodSignature_(plan, c.warnings)) {
       return { ok: false, stale: true, error: '확인한 뒤 다른 변경이 있었습니다. 다시 확인해 주세요.' };
