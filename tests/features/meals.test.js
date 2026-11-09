@@ -412,3 +412,27 @@ test('사유는 200자까지', () => {
   assert.strictEqual(p.ok, false);
   assert.ok(p.errors.some((e) => e.field === 'reason'));
 });
+
+test('getMealContext: 기간 사이 날(3/1)에는 다음 기간 담당 학생을 보여 준다(저장 판정과 같은 기간)', () => {
+  const env = makeEnv('2027-03-01T23:00:00');
+  const { a } = pick(env);
+  const old = env.rows('enrollments').find((e) => e.student_id === a && e.term_id !== term2(env).id);
+  env.asOwner((c) => c.updateRecord_('enrollments', old.id, { teacher_email: 'fake.teacher1@example.com' }, env.owner));
+  const ids = (who) => env.call(who, 'getMealContext').students.map((s) => s.id);
+  assert.ok(ids(HALL).includes(a), '새 기간 담당교사에게는 보인다');
+  assert.ok(!ids('fake.teacher1@example.com').includes(a), '옛 기간 담당교사에게는 보이지 않는다');
+  assert.strictEqual(env.call(ADMIN, 'getMealContext').term.id, term2(env).id);
+});
+
+test('근무교사(C8s)도 급식 변경은 못 한다: 오늘 근무자는 out.save는 통과하지만 status.edit는 denied:status.edit', () => {
+  const env = makeEnv('2027-03-03T22:00:00');
+  const { a } = pick(env);
+  const duty = 'fake.teacher2@example.com';   // a의 담당교사가 아닌 학사 교사
+  env.asOwner((c) => c.appendRecord_('duty_slots', { date: '2027-03-03', slot: '21:30조', end_time: '21:30', original_email: duty, actual_email: duty,
+    swapped_at: '', swapped_by: '', status: '유효', memo: '' }, env.owner));
+  env.as(duty, (c) => c.requirePermission_('out.save', { studentId: a, ymd: '2027-03-03' }));   // 근무 창 안: 통과
+  const i = input(a, 'd_off', '2027-03-03T10:00:00');
+  env.expectDenied(duty, 'status.edit', 'previewMealChange', i);
+  env.expectDenied(duty, 'status.edit', 'saveMealChange', i, '');
+  assert.strictEqual(rowsOf(env, a).filter((x) => x.source === 'F7').length, 0);
+});
