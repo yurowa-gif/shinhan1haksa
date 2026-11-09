@@ -128,3 +128,65 @@ test('users에 없는 근무자·이름이 빈 사용자는 "(등록 안 된 교
   const { html } = file(x, DUTY, MON, 'pdf');
   assert.ok(html.includes('(등록 안 된 교사)') && !html.includes('ghost'));
 });
+
+const text = (html) => html.replace(/<style[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
+
+test('PDF HTML: 교사별 [근무, 21:30, 23:00, 단독, 예비 지정]이 독립 계산과 같고, 교대 3건(대신 근무 포함)·마지막 변경 시각이 들어 있다', () => {
+  const x = makeEnv();
+  const o = oracle(x.slots), { html } = file(x, DUTY, MON, 'pdf');
+  const emails = Object.keys(Object.assign({}, o.work, o.standby));
+  const rows = html.split('<tr').filter((t) => t.includes('scope="row"')).map((t) => text(t).split('|').filter((q) => q && !/^ style=/.test(q))).filter((r) => r[0] !== '합계');
+  assert.strictEqual(rows.length, emails.length, '교사 행: ' + JSON.stringify(rows.map((r) => r[0])));
+  for (const e of emails) {
+    const row = rows.find((r) => r[0] === x.nameOf(e));
+    assert.ok(row, x.nameOf(e) + ' / ' + JSON.stringify(rows.map((r) => r.slice(0, 3))));
+    const got = row.slice(-5).map(Number), by = o.bySlot[e] || {};
+    assert.deepStrictEqual(got, [o.work[e] || 0, by['21:30조'] || 0, by['23:00조'] || 0, by['단독'] || 0, o.standby[e] || 0], x.nameOf(e));
+  }
+  const t = text(html);
+  assert.ok(/교대 3건/.test(t) && (t.match(/대신 근무/g) || []).length >= 1, '교대 3건과 대신 근무');
+  assert.ok(/2027년 1월 23일\(토\)\|단독\|[^|]+ → \|[^|]+\|대신 근무/.test(t), '1/23 대신 근무 행');
+  const last = x.slots.map((s) => String(s.updated_at)).sort().pop().replace('T', ' ').slice(0, 16);
+  assert.ok(html.includes(last), '근무표 마지막 변경 시각');
+});
+
+test('운영 안 한 1/1에 근무 행을 되살리면 경고가 PDF에 한 번만, 예비만 있는 운영 안 한 날도 경고가 남는다(조용히 세지 않는다)', () => {
+  const x = makeEnv();
+  const closed = x.slots.find((s) => s.date === '2027-01-01' && s.slot !== '예비');
+  x.env.asOwner((c) => c.updateRecord_('duty_slots', closed.id, { status: '유효' }, ADMIN));
+  const n = (h) => (text(h).match(/근무가 기록되어 있습니다|근무 행을 셌습니다/g) || []).length;   // 렌더러 문구 + R8 문구(범례의 '운영 안 하는 날입니다'는 세지 않는다)
+  assert.strictEqual(n(file(x, DUTY, MON, 'pdf').html), 1, '근무 행 + 칸 표시 중복 없이 한 번');
+  const y = makeEnv();
+  y.env.asOwner((c) => c.appendRecord_('duty_slots', { date: '2027-01-01', slot: '예비', end_time: '', original_email: T1, actual_email: T1, swapped_at: '', swapped_by: '', status: '유효', memo: '' }, ADMIN));
+  const f = file(y, DUTY, MON, 'pdf');
+  assert.ok(n(f.html) >= 1, '예비만 있는 날 경고가 PDF에: ' + text(f.html).slice(-300));
+  assert.ok(f.r.warnings.some((w) => w.includes('운영 안 하는 날')) && f.r.warnings.every((w) => !/\d{4}-\d{2}-\d{2}/.test(w)), JSON.stringify(f.r.warnings));
+  assert.ok(rec(y, DUTY).warnings.every((w) => !/\d{4}-\d{2}-\d{2}/.test(w)), '화면 경고에도 숫자 날짜 없음');
+});
+
+test('미등록 근무자가 여럿이면 번호로 구분하고, 이름이 빈 등록 사용자는 "(이름 없는 교사)", 경고 한 줄. 마지막 변경은 그 달 것만(다른 달 수정·취소 칸 반영)', () => {
+  const x = makeEnv();
+  const slot = (date, email) => x.env.asOwner((c) => c.appendRecord_('duty_slots', { date, slot: '단독', end_time: '', original_email: email, actual_email: email, swapped_at: '', swapped_by: '', status: '유효', memo: '' }, ADMIN));
+  slot('2027-01-29', 'fake.ghost1@example.com'); slot('2027-01-30', 'fake.ghost2@example.com');
+  x.env.asOwner((c) => c.updateRecord_('users', x.env.rows('users').find((u) => u.email === T1).id, { name: '' }, ADMIN));
+  const r = rec(x, DUTY);
+  const names = r.teachers.map((t) => t.name);
+  assert.ok(names.includes('(등록 안 된 교사 1)') && names.includes('(등록 안 된 교사 2)') && names.includes('(이름 없는 교사)'), JSON.stringify(names));
+  assert.strictEqual(r.warnings.filter((w) => w.includes('이름이 비어')).length, 1);
+  assert.ok(!JSON.stringify(r).includes('ghost') && !JSON.stringify(r).includes('@'));
+  // 다른 달 수정은 이 달 lastChangedAt을 바꾸지 않고, 취소 칸의 수정은 반영된다
+  const before = r.lastChangedAt;
+  x.env.setNow('2027-02-01T09:00:00');
+  slot('2027-02-10', T1);
+  assert.strictEqual(rec(x, DUTY).lastChangedAt, before, '2월 행은 1월 기록에 영향 없음');
+  x.env.setNow('2027-02-01T10:00:00');
+  const cancelled = x.slots.find((s) => s.status === '취소');
+  x.env.asOwner((c) => c.updateRecord_('duty_slots', cancelled.id, { memo: '취소 칸 수정' }, ADMIN));
+  assert.strictEqual(rec(x, DUTY).lastChangedAt, '2027-02-01 10:00', '취소된 칸의 수정도 마지막 변경');
+});
+
+test('getDutyRecordFile 형식 인자: 대소문자·공백은 받고, 배열·숫자·엑셀은 입력 오류 문구, 경고는 PDF 모델과 같다', () => {
+  const x = makeEnv();
+  for (const f of ['PDF', ' pdf ', undefined, '']) assert.strictEqual(file(x, DUTY, MON, f).r.ok, true, String(f));
+  for (const f of [['pdf'], 5, 'xlsx']) assert.strictEqual(file(x, DUTY, MON, f).r.ok, false, JSON.stringify(f));
+});

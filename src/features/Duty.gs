@@ -244,13 +244,27 @@ function dtyRecordData_(month) {
   plans.forEach(function (p) { if (!p.operating) { operatingByDate[p.date] = false; closedDates.push(p.date); } });
   var rec = dutyRecord_(rows, m, { operatingByDate: operatingByDate });
   var names = Object.create(null);
-  readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = u.name; });
+  readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = String(u.name || '').trim(); });
+  // 사용자 목록에 없는 주소는 여러 명이어도 구분되게 번호를 붙이고, 이름이 빈 등록 사용자는 따로 적는다(이메일은 내보내지 않는다)
+  var emails = [];
+  var see = function (e) { if (e && emails.indexOf(e) < 0) emails.push(e); };
+  rec.teachers.forEach(function (t) { see(t.email); });
+  rec.standby.forEach(function (t) { see(t.email); });
+  rec.swaps.forEach(function (w) { see(w.from); see(w.to); });
+  var unknown = emails.filter(function (e) { return !(e in names); }), blank = emails.filter(function (e) { return (e in names) && !names[e]; });
+  if (unknown.length || blank.length) rec.warnings = rec.warnings.concat(['사용자 목록에 없거나 이름이 비어 있는 선생님이 근무표에 있습니다. 근무표와 사용자 목록을 확인해 주세요.']);
   var last = '';
   rows.forEach(function (r) { if (String(r.date).slice(0, 7) === m && String(r.updated_at) > last) last = String(r.updated_at); });
   return { month: m, rec: rec, closedDates: closedDates, plans: plans,
-    who: function (email) { return names[email] || '(등록 안 된 교사)'; },   // 이메일은 내보내지 않는다
+    who: function (email) {
+      if (email in names) return names[email] || '(이름 없는 교사)';
+      return unknown.length > 1 ? '(등록 안 된 교사 ' + (unknown.indexOf(email) + 1) + ')' : '(등록 안 된 교사)';
+    },
     lastChangedAt: last ? last.replace('T', ' ').slice(0, 16) : '' };
 }
+
+/** R8 경고의 yyyy-MM-dd를 '3월 5일(금)'로(화면·PDF 공통) */
+function dtyWarnText_(w) { return String(w).replace(/\d{4}-\d{2}-\d{2}/g, function (d) { return ymdIsValid_(d) ? (+d.slice(5, 7)) + '월 ' + (+d.slice(8, 10)) + '일(' + ymdWeekdayKo_(d) + ')' : d; }); }
 
 function dtyStamp_(iso) { return String(iso).replace('T', ' ').slice(0, 16); }
 
@@ -271,7 +285,7 @@ function getDutyRecord(month) {
     return { date: s.date, weekdayKo: ymdWeekdayKo_(s.date), slot: s.slot, label: DTY_SLOT_LABEL[s.slot], from: d.who(s.from), to: d.who(s.to), kind: s.kind };
   });
   var out = { month: d.month, today: today_(), canFile: full, generatedAt: dtyStamp_(nowIso_()), lastChangedAt: d.lastChangedAt,
-    closedDates: d.closedDates, teachers: teachers, swaps: swaps, warnings: d.rec.warnings };
+    closedDates: d.closedDates, teachers: teachers, swaps: swaps, warnings: d.rec.warnings.map(dtyWarnText_) };
   if (full) out.totals = teachers.reduce(function (t, x) {
     t.total += x.total; t.standby += x.standby;
     Object.keys(x.bySlot).forEach(function (k) { t.bySlot[k] = (t.bySlot[k] || 0) + x.bySlot[k]; });
@@ -294,8 +308,12 @@ function dtyRecordModel_(d) {
     }),
     swaps: d.rec.swaps.map(function (s) { return { date: s.date, slot: s.slot, from: d.who(s.from), to: d.who(s.to), kind: s.kind }; }),
     generatedAt: dtyStamp_(nowIso_()), lastChangedAt: d.lastChangedAt,
-    // 운영 안 하는 날의 근무 경고는 렌더러가 칸에서 찾아 같은 말로 적는다(중복 방지)
-    warnings: d.rec.warnings.filter(function (w) { return w.indexOf('운영 안 하는 날의 근무 행을 셌습니다') < 0; })
+    // 운영 안 하는 날의 근무 경고는 그날 근무 칸이 있으면 렌더러가 칸에서 찾아 같은 말로 적는다(중복 방지). 예비만 있는 날은 렌더러가 못 보므로 경고를 남긴다
+    warnings: d.rec.warnings.filter(function (w) {
+      if (w.indexOf('운영 안 하는 날의 근무 행을 셌습니다') < 0) return true;
+      var date = w.slice(0, 10);
+      return !d.rec.teachers.some(function (t) { return t.dates.some(function (x) { return x.date === date; }); });
+    }).map(dtyWarnText_)
   };
 }
 
@@ -305,13 +323,15 @@ function dtyRecordModel_(d) {
  */
 function getDutyRecordFile(month, format) {
   requirePermission_('duty.record');
-  if (String(format || 'pdf') !== 'pdf') return { ok: false, error: '지금은 PDF(임시 양식)만 받을 수 있습니다. 엑셀은 학교 양식을 받은 뒤에 붙습니다.' };
+  var fmt = format === undefined || format === null || format === '' ? 'pdf' : (typeof format === 'string' ? format.trim().toLowerCase() : '');
+  if (fmt !== 'pdf') return { ok: false, error: '지금은 PDF(임시 양식)만 받을 수 있습니다. 엑셀은 학교 양식을 받은 뒤에 붙습니다.' };
   var d = dtyRecordData_(month);
-  var html = printRenderDutyRecord_(dtyRecordModel_(d));
+  var model = dtyRecordModel_(d);
+  var html = printRenderDutyRecord_(model);
   var name = '근무기록표_' + d.month + '.pdf';
   var blob = sheetMakePdf_(html, name);
   var bytes = blob.getBytes();
-  return { ok: true, name: name, base64: Utilities.base64Encode(bytes), bytes: bytes.length, warnings: d.rec.warnings };
+  return { ok: true, name: name, base64: Utilities.base64Encode(bytes), bytes: bytes.length, warnings: model.warnings };
 }
 
 /**

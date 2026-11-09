@@ -10,7 +10,8 @@
   .duty-card.readonly { cursor: default; }
   .duty-slot .slot-label { flex: 0 0 5.5em; color: var(--muted-ink); white-space: nowrap; }
   .duty-sheet-slots .field { margin-bottom: 8px; }
-  table.data.duty-rec th, table.data.duty-rec td { padding: 10px 4px; white-space: nowrap; }   /* 360px에서 예비 열까지 한 화면에 */
+  table.data.duty-rec th, table.data.duty-rec td { padding: 10px 4px; white-space: nowrap; }
+  table.data.duty-rec th[scope=row] { white-space: normal; overflow-wrap: anywhere; min-width: 4em; max-width: 7.5em; text-align: left; }   /* 긴 이름은 이름 칸 안에서 줄바꿈 */   /* 360px에서 예비 열까지 한 화면에 */
   .row-btn { flex: 0 0 auto; white-space: nowrap; }   /* 줄 끝 버튼(C9 교대)이 줄어들어 글자가 깨지지 않게 */
 </style>
 <script>
@@ -68,10 +69,10 @@
         ? d.month.slice(0, 4) + '년 ' + (+d.month.slice(5, 7)) + '월 ' + (state.week + 1) + '주 (' + (+ws[state.week][0].date.slice(8, 10)) + '일–' + (+ws[state.week][ws[state.week].length - 1].date.slice(8, 10)) + '일)'
         : d.month.slice(0, 4) + '년 ' + (+d.month.slice(5, 7)) + '월';
       function step(n) {
-        if (!weekMode) return load(monthShift(state.month, n));
+        if (!weekMode) return load(monthShift(d.month, n));
         var w = state.week + n;
-        if (w < 0) return load(monthShift(state.month, -1), { week: 'last' });
-        if (w >= ws.length) return load(monthShift(state.month, 1), { week: 0 });
+        if (w < 0) return load(monthShift(d.month, -1), { week: 'last' });
+        if (w >= ws.length) return load(monthShift(d.month, 1), { week: 0 });
         state.week = w; draw();
       }
       head.appendChild(el('div', { class: 'card' }, [
@@ -234,7 +235,7 @@
       drawSlots();
       function err(msg) { var n = content.querySelector('#duty-err'); n.textContent = msg || ''; }
 
-      function done(msg) { sheet.close(); load(state.month, { week: state.week, note: msg }); }
+      function done(msg) { sheet.close(); load(state.data.month, { week: state.week, note: msg }); }
       function fail(e) { busy = false; refresh(); err((e && e.message) || String(e)); }
 
       function saveSlots(ack) {
@@ -286,17 +287,18 @@
     function showView() {
       var rec = state.view === 'record';
       head.style.display = rec ? 'none' : ''; body.style.display = rec ? 'none' : ''; recBox.style.display = rec ? '' : 'none';
-      if (rec) loadRecord(state.month || '');
+      if (rec) loadRecord(recMonth || state.month || '');
     }
-    var recSeq = 0;
+    var recSeq = 0, recMonth = '';   // 기록표가 보는 달은 근무표(state.month)와 따로 둔다
     function loadRecord(month) {
       var my = ++recSeq;
       clear(recBox); recBox.appendChild(el('div', { class: 'loading', text: '불러오는 중…' }));
       call('getDutyRecord', month).then(function (r) {
         if (my !== recSeq) return;
-        state.month = r.month; drawRecord(r);
+        recMonth = r.month; drawRecord(r);
       }).catch(function (err) { if (my !== recSeq) return; clear(recBox); showError(recBox, err); });
     }
+    function koStamp(t) { return (+t.slice(5, 7)) + '월 ' + (+t.slice(8, 10)) + '일 ' + t.slice(11, 16); }
     function drawRecord(r) {
       clear(recBox);
       var nav = el('div', { class: 'card' }, [el('div', { class: 'duty-nav' }, [
@@ -307,9 +309,10 @@
       recBox.appendChild(nav);
       if (!r.canFile) nav.appendChild(el('div', { class: 'notice info', text: '본인 근무 기록만 보입니다.' }));
       if (r.warnings && r.warnings.length) nav.appendChild(el('div', { class: 'notice warn', text: r.warnings.slice(0, 3).join(' / ') }));
-      if (!r.teachers.length) { recBox.appendChild(UI.emptyState('이 달 근무 기록이 없습니다.')); return; }
+      if (!r.teachers.length && !r.swaps.length) { recBox.appendChild(UI.emptyState('이 달 근무 기록이 없습니다.')); return; }
       var small = 'color:var(--muted-ink);font-size:var(--font-sm)';
       var table = el('table', { class: 'data compact duty-rec' });
+      if (!r.teachers.length) recBox.appendChild(el('div', { class: 'card' }, [el('div', { class: 'muted', text: '이 달 본인 근무는 없습니다(교대로 넘긴 기록만 아래에 보입니다).' })]));
       table.appendChild(el('thead', {}, [el('tr', {}, ['교사', '근무', '21:30', '23:00', '단독', '예비'].map(function (h) { return el('th', { scope: 'col', text: h }); }))]));
       var tb = el('tbody');
       function row(name, total, by, standby, cls) {
@@ -321,7 +324,7 @@
       r.teachers.forEach(function (t) { row(t.name, t.total, t.bySlot, t.standby); });
       if (r.totals) row('합계', r.totals.total, r.totals.bySlot, r.totals.standby, 'total');
       table.appendChild(tb);
-      recBox.appendChild(el('div', { class: 'card' }, [
+      if (r.teachers.length) recBox.appendChild(el('div', { class: 'card' }, [
         el('div', { class: 'tablewrap' }, [table]),
         el('div', { class: 'muted', style: 'margin-top:8px', text: 'ⓘ "근무" 합계가 주 숫자입니다(21:30조·23:00조 수당은 같아 조별 횟수는 참고). "예비 지정"은 따로 세며, 대신 근무한 날은 근무로만 세고 예비 지정에서는 뺍니다.' })
       ]));
@@ -331,12 +334,14 @@
         return el('li', {}, [el('span', { text: (+x.date.slice(5, 7)) + '월 ' + (+x.date.slice(8, 10)) + '일(' + x.weekdayKo + ') ' + x.label + ' ' + x.from + ' → ' + x.to + (x.kind === '대신 근무' ? ' (예비 감독이 대신 근무, 근무로 셈)' : '') })]);
       })));
       recBox.appendChild(sw);
-      recBox.appendChild(el('div', { class: 'muted', text: '만든 시각 ' + r.generatedAt + ' · 근무표 마지막 변경 ' + (r.lastChangedAt || '(없음)') + ' — 출력한 뒤 근무표가 바뀌었는지 이 시각으로 확인합니다.' }));
+      recBox.appendChild(el('div', { class: 'muted', text: '이 표는 ' + koStamp(r.generatedAt) + '에 만들었고, 근무표는 ' + (r.lastChangedAt ? koStamp(r.lastChangedAt) + '에 마지막으로 바뀌었습니다.' : '바뀐 적이 없습니다.') + ' 출력한 뒤 근무표가 또 바뀌었는지 이 시각으로 확인하세요.' }));
       if (r.canFile) {
         var btn = el('button', { type: 'button', class: 'btn', style: 'margin-top:12px', text: 'PDF 받기(임시 양식)' });
         btn.addEventListener('click', function () {
+          var mine = recSeq;   // 만드는 동안 달·탭이 바뀌면 이 PDF는 쓰지 않는다
           btn.disabled = true; btn.textContent = 'PDF 만드는 중…';
           call('getDutyRecordFile', r.month, 'pdf').then(function (f) {
+            if (mine !== recSeq || !btn.parentNode) { UI.toast('기록표가 바뀌어 이 PDF는 쓰지 않았습니다. 다시 눌러 주세요.', { kind: 'warn', ms: 5000 }); return; }
             btn.disabled = false; btn.textContent = 'PDF 받기(임시 양식)';
             if (!f.ok) { UI.toast(f.error || 'PDF를 만들지 못했습니다.', { kind: 'warn', ms: 5000 }); return; }
             var bin = atob(f.base64), arr = new Uint8Array(bin.length);
@@ -346,7 +351,7 @@
             var old = recBox.querySelector('a.btn.secondary[download]'); if (old) old.remove();
             btn.parentNode.insertBefore(a, btn.nextSibling); a.click();
             UI.toast('PDF를 만들었습니다. 받아지지 않으면 옆 링크를 누르세요.', { kind: 'ok', ms: 5000 });
-          }).catch(function (err) { btn.disabled = false; btn.textContent = 'PDF 받기(임시 양식)'; UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); });
+          }).catch(function (err) { if (mine === recSeq) { btn.disabled = false; btn.textContent = 'PDF 받기(임시 양식)'; } UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); });
         });
         recBox.appendChild(btn);
       }
