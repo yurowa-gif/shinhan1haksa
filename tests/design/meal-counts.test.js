@@ -91,6 +91,9 @@ test('이상한 입력: 4학년·남4 줄도 순서대로 나오고, 숫자가 �
   assert.ok(html.indexOf('@page { size: A4 portrait') > 0 && html.indexOf('2027년 3월 3일(수)') > 0);
 });
 
+/** 줄 이름 칸(th)의 실제 굵기: 스타일에 normal이 없으면 th 기본값(굵게) */
+const weightOf = (style) => (/font-weight:normal/.test(style) ? 'normal' : 'bold');
+const doc0 = (v) => render(Object.assign(buildModel(), { docUnsubmitted: v }));
 const rowStyle = (html, name) => (new RegExp('<th scope="row" style="([^"]*)">' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '</th>').exec(html) || [])[1] || '';
 
 test('고정 문구와 칸: "신청 기준 인원" 문구, 급식실 확인(서명) 칸, 작성자·만든 시각, 운영 여부 문구, 합계 줄만 굵게+회색, 모든 글자 7pt 이상, 내용 폭 515pt(여백 14mm 안)', () => {
@@ -101,7 +104,8 @@ test('고정 문구와 칸: "신청 기준 인원" 문구, 급식실 확인(서�
   assert.ok(ctx.printRenderMealCounts_({ date: '2027-03-03', operating: true, counts: { groups: {} } }, {}).indexOf('이 날 자습 운영(참고)') > 0);
   assert.ok(ctx.printRenderMealCounts_({ date: '2027-03-03', counts: { groups: {} } }, {}).indexOf('자습 운영') < 0, '운영 여부를 모르면 문구 없음');
   ['여 합계', '남 합계', '1학년', '2학년', '3학년', '전체'].forEach((n) => assert.ok(/font-weight:bold;background:#e8e8e8/.test(rowStyle(html, n)), n + ' 줄은 굵게 + 회색'));
-  ['여1', '여2', '여3', '남1', '남2', '남3'].forEach((n) => assert.ok(!/font-weight:bold/.test(rowStyle(html, n)) && !/background/.test(rowStyle(html, n)), n + ' 줄은 보통'));
+  ['여1', '여2', '여3', '남1', '남2', '남3'].forEach((n) => assert.ok(weightOf(rowStyle(html, n)) === 'normal' && !/background/.test(rowStyle(html, n)), n + ' 줄 이름은 보통 굵기(th 기본값 굵게를 덮는다)'));
+  ['여 합계', '남 합계', '1학년', '전체'].forEach((n) => assert.strictEqual(weightOf(rowStyle(html, n)), 'bold', n));
   const sizes = [...html.matchAll(/font-size:([\d.]+)pt/g)].map((m) => Number(m[1]));
   assert.ok(sizes.length > 10 && sizes.every((x) => x >= 7), '글자 크기 ' + sizes.filter((x) => x < 7));
   assert.ok(html.indexOf('width:515pt') > 0 && html.indexOf('527pt') < 0 && html.indexOf('@page { size: A4 portrait; margin: 14mm; }') > 0);
@@ -146,6 +150,11 @@ test('숫자 읽기: 0 이상 정수와 숫자만 든 문자열만 받고 나머
   const t = readTable(render(m));
   assert.deepStrictEqual(t[0].v, [4, 3, '?', '?', '?', '?', '?']);
   assert.deepStrictEqual(t[1].v, ['?', '?', '?', 3, 3, 0, 3]);
+  const one = buildModel();
+  one.counts.groups['남1'].hallDinner = 'x';
+  one.counts.groups['남1'].generalDinner = 2;
+  assert.deepStrictEqual(readTable(render(one))[4].v.slice(4), ['?', 2, '?'], '석식 한 칸만 잘못되면 석식 계도 ?');
+  assert.ok(doc0('1.5').indexOf('서류 미제출 ?명') > 0, '소수 문자열은 ?');
   const doc = (v) => render(Object.assign(buildModel(), { docUnsubmitted: v }));
   assert.ok(doc('2').indexOf('서류 미제출 2명') > 0 && doc(' 5 ').indexOf('서류 미제출 5명') > 0);
   assert.ok(doc('').indexOf('서류 미제출 ?명') > 0 && doc('많음').indexOf('서류 미제출 ?명') > 0 && doc(true).indexOf('서류 미제출 ?명') > 0);

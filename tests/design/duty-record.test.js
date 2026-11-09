@@ -187,9 +187,21 @@ test('model.warnings는 그대로 아래 줄에, 운영 안 한 날은 회색 �
   m.warnings = ['R8: 근무 칸 중복 1건'];
   m.teachers[0].cells['2027-03-02'] = ['21:30조', '23:00조'];
   const html = render(m);
-  assert.ok(html.indexOf('<b>※ R8: 근무 칸 중복 1건 / ') > 0);
+  assert.ok(html.indexOf('<br><b>※ R8: 근무 칸 중복 1건</b>') > 0);
   assert.ok(html.indexOf('근무가 기록되어 있습니다: 박선생 —') > 0 && html.indexOf('박선생, 박선생') < 0);
   assert.strictEqual(count(render(buildModel()), 'background:#c8c8c8'), 8);
   assert.strictEqual(count(html, 'background:#c8c8c8'), 8, '근무가 있어도 운영 안 한 날 열은 그대로 회색');
   assert.strictEqual(readGrid(html)[6].cells[1], '2', '두 조 = 2');
+});
+
+test('기록표 경고는 한 줄에 하나(model.warnings·알 수 없는 칸·운영 안 한 날·별표 없는 교대)', () => {
+  const m = buildModel();
+  m.warnings = ['첫째', '둘째'];
+  m.teachers[0].cells['2027-03-02'] = ['21:30조'];
+  m.teachers[1].cells['2027-04-01'] = ['21:30조'];
+  const lines = [...render(m).matchAll(/<br><b>※ (.*?)<\/b>/g)].map((x) => x[1]);
+  assert.strictEqual(lines.length, 4);
+  assert.deepStrictEqual(lines.slice(0, 2), ['첫째', '둘째']);
+  assert.ok(lines[2].indexOf('알 수 없는 칸 값') === 0 && lines[3].indexOf('운영 안 하는 날') === 0);
+  assert.ok(render(m).indexOf(' / ') < 0 || render(m).indexOf('첫째 / ') < 0);
 });

@@ -81,7 +81,7 @@ function printRenderMealCounts_(model, opts) {
     });
     var d1 = printMealNum_(v.hallDinner), d2 = printMealNum_(v.generalDinner);
     var dn = d1 === null || d2 === null ? '?' : d1 + d2;
-    return '<tr style="page-break-inside:avoid"><th scope="row" style="' + td + 'text-align:left;' + st + '">' + printEsc_(k) + '</th>' + cells.join('') +
+    return '<tr style="page-break-inside:avoid"><th scope="row" style="' + td + 'text-align:left;' + (total ? '' : 'font-weight:normal;') + st + '">' + printEsc_(k) + '</th>' + cells.join('') +
       '<td style="' + td + 'font-weight:bold;' + (total ? 'background:#e8e8e8;' : 'background:#f4f4f4;') + '">' + dn + '</td></tr>';
   }).join('');
   var table = keys.length ? '<table style="width:100%;border-collapse:collapse;margin-top:10pt"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table>'

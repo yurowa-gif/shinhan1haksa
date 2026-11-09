@@ -214,7 +214,7 @@ function printRenderDutyRecord_(model, opts) {
     warnings.push('운영 안 하는 날(' + printDateKo_(c.date, '') + ')에 근무가 기록되어 있습니다: ' + c.names.join(', ') + ' — 근무로 셌습니다. 근무표를 확인해 주세요.');
   });
   var foot = '<div style="font-size:7.5pt;line-height:10pt;margin-top:8pt">' + notes.map(printEsc_).join('<br>') +
-    (warnings.length ? '<br><b>※ ' + warnings.map(printEsc_).join(' / ') + '</b>' : '') + '</div>';
+    warnings.map(function (w) { return '<br><b>※ ' + printEsc_(w) + '</b>'; }).join('') + '</div>';
 
   var head = '<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>' + title + '</title>' +
     '<style>@page { size: A4 landscape; margin: 8mm; } html, body { margin: 0; padding: 0; } ' +
