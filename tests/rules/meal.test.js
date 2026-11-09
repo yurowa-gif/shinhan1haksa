@@ -2,7 +2,7 @@
 const assert = require('assert');
 const { test, loadGs, plain } = require('../helpers/harness');
 
-const ctx = loadGs(['src/rules/DateRules.gs', 'src/rules/StatusRules.gs', 'src/rules/MealRules.gs']);
+const ctx = loadGs(['src/rules/DateRules.gs', 'src/rules/StatusRules.gs', 'src/rules/MealRules.gs', 'src/rules/MoveRules.gs']);
 
 function table(name, rows, fn) {
   test(name, () => {
@@ -297,14 +297,11 @@ function saveF7m(rows, item, to, at, today, effectiveDate) {
   if (!p.blocked && !p.superseded) out.push(CH(item, to, p.date, { source: 'F7', requested_at: at, created_at: String(++sseq) }));
   return out;
 }
-function saveLeave(rows, L, t) {
-  let out = rows.concat([CH('학사', '퇴실', L, { source: 'F6', requested_at: t, created_at: String(++sseq) })]);
-  for (const item of ['조식', '석식']) {
-    const stop = item === '조식' ? L : plain(ctx.mealEffectiveDate_('stop', t, { leaveDate: L })).date;
-    const ids = plain(ctx.mealPendingToCancel_(out, 's1', item, stop, { source: 'F6' })).map((c) => c.id);
-    out = out.map((r) => (ids.includes(r.id) ? Object.assign({}, r, { status: '취소' }) : r));
-    if (['실시', '학사 석식'].includes(ctx.statusOn_(out, 's1', item, stop))) out.push(CH(item, '미실시', stop, { source: 'F6', requested_at: t, created_at: String(++sseq) }));
-  }
+function saveLeave(rows, L, t) {   // F6 학사 퇴실 = movePlan_(R11a) 계획을 그대로 저장
+  const p = plain(ctx.movePlan_(rows, 's1', { type: '학사 퇴실', effectiveDate: L, requestedAt: t }, { today: t.slice(0, 10) }));
+  assert.deepStrictEqual(p.errors, []);
+  const out = rows.map((r) => (p.toCancel.some((c) => c.id === r.id) ? Object.assign({}, r, { status: '취소' }) : r));
+  p.rows.forEach((r) => out.push(CH(r.item, r.value, r.effective_date, { source: r.source, requested_at: t, created_at: String(++sseq) })));
   return out;
 }
 const daysOf = (rows, item) => plain(ctx.ymdRange_('2027-03-01', '2027-04-10')).map((d) => d + ' ' + ctx.statusOn_(rows, 's1', item, d));
@@ -476,4 +473,21 @@ test('결정 52: 고친 미실시 날짜가 미실시 규칙의 날보다 이르
   const past = plan(rows, '조식', '미실시', '2027-03-01T09:00:00', { today: '2027-03-05', effectiveDate: '2027-03-02' });
   assert.ok(past.warnings.some((w) => /오늘보다 이릅니다/.test(w)));
   assert.ok(!plan(rows, '조식', '미실시', '2027-03-03T09:00:00', { today: '2027-03-03', effectiveDate: '2027-03-20' }).warnings.some((w) => /이릅니다/.test(w)));
+});
+
+test('R10 경계: 먼저 신청한 학사 석식도 고친 날 = 결정 35 중단일(3/15)이면 막힘, 하루 전(3/14)은 안 막힘', () => {
+  const left = saveLeave([CH('학사', '입실', '2027-03-01'), CH('석식', '미실시', '2027-03-01')], '2027-03-10', '2027-03-03T10:00:00');
+  assert.ok(plan(left, '석식', '학사 석식', '2027-03-02T09:00:00', { today: '2027-03-09', effectiveDate: '2027-03-15' }).blocked);
+  assert.ok(!plan(left, '석식', '학사 석식', '2027-03-02T09:00:00', { today: '2027-03-09', effectiveDate: '2027-03-14' }).blocked);
+});
+
+test('결정 52 경계: 고친 날 = 자동 날, 고친 날 = 오늘, 일반 석식인데 고친 날 < 자동 날이면 "이릅니다" 경고 없음', () => {
+  const none = (p) => !p.warnings.some((w) => /이릅니다/.test(w));
+  const rows = [CH('조식', '실시', '2027-03-01'), CH('석식', '미실시', '2027-03-01')];
+  const sameAuto = plan(rows, '조식', '미실시', '2027-03-03T09:00:00', { today: '2027-03-03', effectiveDate: '2027-03-15' });
+  assert.deepStrictEqual([sameAuto.autoDate, none(sameAuto)], ['2027-03-15', true]);
+  const today = plan([CH('조식', '미실시', '2027-03-01')], '조식', '실시', '2027-03-01T09:00:00', { today: '2027-03-05', effectiveDate: '2027-03-05' });   // 늦은 입력, 자동 3/1
+  assert.deepStrictEqual([today.autoDate, none(today)], ['2027-03-01', true]);
+  const gen = plan(rows, '석식', '일반 석식', '2027-03-03T12:00:00', { today: '2027-03-03', effectiveDate: '2027-03-03' });
+  assert.deepStrictEqual([gen.autoDate, none(gen)], ['2027-03-04', true]);
 });
