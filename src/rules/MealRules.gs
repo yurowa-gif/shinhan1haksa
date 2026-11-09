@@ -117,10 +117,12 @@ function mealIsHallOnly_(item, value) {
  *   입퇴실 늦은 입력)·날짜가 아니면·모르는 effectiveRule이면·effectiveRule만 있고 날짜가 없으면 Error. 교사가 고친 날(manual)이
  *   미실시 규칙의 날보다 이르거나 오늘보다 이르면 경고.
  * - **저장:** blocked·superseded가 아니면 kind가 'none'이어도 신청 행(date, 값)을 쓴다 — 신청서 기록이고, 나중에 늦게 입력되는
- *   이전 신청서가 이 신청을 덮지 못하게 한다(값이 같아 상태는 바뀌지 않는다). blocked·superseded면 date·rule은 ''이고 쓰지 않는다.
+ *   이전 신청서가 이 신청을 덮지 못하게 한다(값이 같아 상태는 바뀌지 않는다). blocked면 date·rule은 ''이고 쓰지 않는다.
+ *   superseded면 date·rule은 ''이고 아래 결정 58대로 '취소' 행으로 쓴다.
  * - superseded: 이 신청보다 신청 일시가 늦은 다른 값 신청 행(퇴실 정리 F6 행 제외)이 이미 있고 그 적용일이 이 신청의 적용일 이하이면,
  *   이 신청은 영영 적용되지 않는다(늦게 입력한 이전 신청서). kind 'none' + 경고. supersededBy = 덮은 행 id(적용일이 늦은 순, 같으면
- *   신청 일시가 늦은 순). **저장(결정 58):** 신청서를 status '취소', cancel_reason '[자동] <supersededBy[0]> 더 새 신청'으로 쓴다 —
+ *   신청 일시가 늦은 순). **저장(결정 58):** 신청서를 status '취소', cancel_reason '[자동] <supersededBy[0]> 더 새 신청',
+ *   effective_date = opts.effectiveDate(고친 날)가 있으면 그것, 없으면 autoDate, effective_date_auto = autoDate로 쓴다 —
  *   덮은 행이 나중에 퇴실 정리로 취소되면 movePlan_이 이 행을 되살린다(입력 순서와 무관).
  * - blocked: 후보 적용일에 학사 상태가 '퇴실'이면 조식 '실시'는 늘, 석식 '학사 석식'은 그 퇴실 기록(requested_at)보다 뒤에 신청했으면
  *   켜지 못한다(일반 석식은 된다). **입력 순서가 아니라 신청 일시 순서:** 퇴실 기록보다 먼저 신청한 학사 석식은 늦게 입력해도
@@ -185,8 +187,11 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
   }
   // 늦게 입력한 이전 신청서: 더 새 신청이 이미 그 전에 적용되면 이 신청은 영영 적용되지 않는다
   // 같은 값의 더 새 신청은 이 신청을 뜻 없게 만들지 않는다(재입실이 그 신청을 덮어도 이 대기 신청은 남아야 한다 — 결정 56)
+  // 재입실 급식 행은 퇴실 기록 전에 낸, 재입실일보다 늦게 적용되는 신청을 가리지 않는다(재입실은 그런 대기 신청을 취소하지 않으므로 —
+  // 늦게 입력돼도 같게, 결정 56)
   var newer = mine.filter(function (c) {   // 퇴실 정리(F6) 행은 신청이 아니다
-    return ruleStr_(c.source) !== 'F6' && ruleStr_(c.value) !== to && ruleIso_(c.requested_at) > req && ruleStr_(c.effective_date) <= cand.date;
+    return ruleStr_(c.source) !== 'F6' && ruleStr_(c.value) !== to && ruleIso_(c.requested_at) > req && ruleStr_(c.effective_date) <= cand.date &&
+      !(ruleStr_(c.effective_date) < cand.date && mealReentryKeeps_(rows, c, req));   // 재입실일 당일은 재입실이 정한다
   });
   if (newer.length) {
     out.kind = 'none'; out.date = ''; out.rule = ''; out.superseded = true;
@@ -251,6 +256,20 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
     })) put(to, back, 'F7');
   }
   return out;
+}
+
+/**
+ * 행 c가 재입실(학사 입실 대표에 연결된 급식 행)이고, 신청 일시 req가 그 재입실 직전 학사 퇴실의 기록(requested_at)보다 이르면 true —
+ * 재입실은 퇴실 기록 전에 낸 대기 신청을 취소하지 않는다(MoveRules 재입실 keepBefore와 같은 기준).
+ */
+function mealReentryKeeps_(rows, c, req) {
+  var hid = ruleStr_(c.linked_change_id);
+  var head = hid && rows.filter(function (x) { return ruleStr_(x.id) === hid; })[0];
+  if (!head || ruleStr_(head.item) !== '학사' || ruleStr_(head.value) !== '입실') return false;
+  var leave = rows.filter(function (x) {
+    return ruleStr_(x.item) === '학사' && ruleStr_(x.value) === '퇴실' && ruleStr_(x.effective_date) <= ruleStr_(head.effective_date);
+  }).sort(function (a, b) { return ruleStr_(a.effective_date) < ruleStr_(b.effective_date) ? -1 : 1; }).pop();
+  return !!leave && req < ruleIso_(leave.requested_at);
 }
 
 /**
