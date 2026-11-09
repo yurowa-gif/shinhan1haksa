@@ -69,3 +69,15 @@ test('D6 시안(stage2-screens.js)의 화면 이름이 모두 screens.md 5-2 절
   assert.ok(comp.indexOf('lead?') > 0 && comp.indexOf('lines?') > 0);
   assert.ok(css.readFile('src/ui/Components.html').indexOf("opts.lead") > 0);
 });
+
+test('2단계 선생님 확인 체크리스트: 단계 번호(A1~E4)가 겹치지 않고 모든 줄이 7칸(번호·누가·누르는 것·통과 모습·사진·결과)이며, print-check 9·10절 번호(44~66)가 이어진다', () => {
+  const doc = css.readFile('docs/design/stage2-teacher-checks.md');
+  const rows = doc.split('\n').filter((l) => /^\| [A-E]\d+ \|/.test(l));
+  assert.ok(rows.length >= 40, '단계 수 ' + rows.length);
+  const ids = rows.map((l) => l.split('|')[1].trim());
+  assert.strictEqual(new Set(ids).size, ids.length, '번호 중복');
+  rows.forEach((l) => assert.strictEqual(l.split('|').length, 8, l.slice(0, 40)));
+  const check = css.readFile('docs/design/print-check.md');
+  const nums = check.split('\n').filter((l) => /^\| \d+[a-z]? \|/.test(l)).map((l) => l.split('|')[1].trim());
+  for (let n = 44; n <= 66; n++) assert.ok(nums.indexOf(String(n)) >= 0, '확인표에 ' + n + '번이 없다');
+});
