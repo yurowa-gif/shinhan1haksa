@@ -161,6 +161,8 @@ test('결정 58: 더 새 신청에 덮인 신청서(superseded)도 status 취소
   assert.strictEqual(row.status, '취소');
   assert.ok(/^\[자동\] .*더 새 신청$/.test(row.cancel_reason), row.cancel_reason);
   assert.strictEqual(valueOn(env, a, '석식', '2027-03-05'), '학사 석식');
+  assert.strictEqual(row.effective_date, '2027-03-03', '덮인 행도 적용일이 있어야 나중에 되살릴 수 있다(결정 58)');
+  assert.strictEqual(row.effective_date_auto, '2027-03-03');
 });
 
 test('퇴실 전에 켠 학사 석식 → 규칙이 준 source(F6) 이어 쓰기 행이 대표 행과 함께 쓰인다(linked, 서류 빈칸)', () => {
