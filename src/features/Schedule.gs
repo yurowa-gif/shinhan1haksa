@@ -237,25 +237,14 @@ function saveDaySchedule(input) {
   });
 }
 
-/**
- * 그 날짜를 기본으로 되돌린다(유효 행을 '취소'). 관리자만.
- * 기본이 운영 안 함인 날이면 살아 있는 근무 칸을 위와 같이 확인 뒤 취소한다(confirmIds).
- */
-function cancelDaySchedule(date, confirmIds) {
+/** 그 날짜를 기본으로 되돌린다(유효 행을 '취소'). 관리자만. 기본은 늘 운영이라 근무 칸은 건드리지 않는다. */
+function cancelDaySchedule(date) {
   var user = requirePermission_('schedule.edit');
   var d = String(date || '').trim();
   if (!ymdIsValid_(d)) throw new Error('날짜를 yyyy-MM-dd 형식으로 골라 주세요.');
   return withLock_(function () {
     invalidate_('db', 'day_schedules');
-    invalidate_('db', 'duty_slots');
-    invalidate_('db', 'users');
-    var ctx = calLoadCtx_();
-    var defOp = dtyPlan_(d, { terms: ctx.terms, daySchedules: [], blocks: ctx.blocks, defaults: ctx.defaults }).operating;
-    var chk = defOp ? { rows: [], resp: null } : dtyCancelCheck_(d, { confirmIds: confirmIds });
-    if (chk.resp) return chk.resp;
-    var n = calCancelDay_(d, user.email);
-    dtyCancelSlots_(chk.rows, user.email);
-    return { ok: true, cancelled: n, canceledSlots: chk.rows.length };
+    return { ok: true, cancelled: calCancelDay_(d, user.email) };
   });
 }
 

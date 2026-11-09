@@ -208,7 +208,7 @@ test('saveDaySchedule: 이전 유효 행을 취소하고 새 행을 쓴다 → �
   const rows = s.db.day_schedules.filter((r) => r.date === '2027-03-10');
   assert.deepStrictEqual(rows.map((r) => r.status), ['취소', '유효']);
   assert.deepStrictEqual(plain(s.c.getScheduleData('2027-03')).days.find((d) => d.date === '2027-03-10').blockLabels, ['18–20', '20–22']);
-  assert.deepStrictEqual(plain(s.c.cancelDaySchedule('2027-03-10')), { ok: true, cancelled: 1, canceledSlots: 0 });
+  assert.deepStrictEqual(plain(s.c.cancelDaySchedule('2027-03-10')), { ok: true, cancelled: 1 });
   assert.strictEqual(plain(s.c.getScheduleData('2027-03')).days.find((d) => d.date === '2027-03-10').overridden, false);
   assert.ok(s.db.day_schedules.every((r) => r.status === '취소'), '행은 지우지 않고 모두 취소로 남는다');
 });

@@ -154,7 +154,7 @@ function saveDutyDay(input) {
     frame.forEach(function (f) {
       var e = final[f.slot];
       if (!e) return;
-      if (seen[e]) warnings.push(dtyNameOf_(teachers, e) + ' 선생님이 이 날 이미 ' + DTY_SLOT_LABEL[seen[e]] + '(으)로 편성되어 있습니다.');
+      if (seen[e]) warnings.push(dtyNameOf_(teachers, e) + ' 선생님이 이 날 이미 ' + DTY_SLOT_LABEL[seen[e]] + '에 편성되어 있습니다.');
       else seen[e] = f.slot;
     });
     if (warnings.length && input.acknowledge !== true) return { ok: false, needsConfirm: true, warnings: warnings };

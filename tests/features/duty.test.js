@@ -73,7 +73,7 @@ test('saveDutyDay: 같은 교사가 같은 날 두 칸이면 확인 없이는 �
   const x = makeEnv();
   const w = x.slots().length;
   const r = save(x, DUTY, { date: FRI, slots: { '단독': x.t1, '예비': x.t1 } });
-  assert.strictEqual(r.ok, false); assert.strictEqual(r.needsConfirm, true); assert.ok(r.warnings[0].includes('이미'));
+  assert.strictEqual(r.ok, false); assert.strictEqual(r.needsConfirm, true); assert.ok(r.warnings[0].includes('이미') && r.warnings[0].includes('에 편성되어 있습니다'), r.warnings[0]);
   assert.strictEqual(x.slots().length, w, '경고 응답은 쓰지 않는다');
   assert.deepStrictEqual(plain(save(x, DUTY, { date: FRI, slots: { '단독': x.t1, '예비': x.t1 }, acknowledge: true })), { ok: true, changed: 2 });
 });
@@ -244,13 +244,13 @@ test('수요일을 끄면 금요일 칸은 그대로 유효하다, 이미 운영
   assert.strictEqual(x.slots().filter((q) => q.status === '유효' && q.date === WED).length, 0);
 });
 
-test('cancelDaySchedule: 기본이 운영 안 함이 되는 날이면 칸을 확인 뒤 취소, 기본이 운영이면 칸은 그대로', () => {
+test('cancelDaySchedule: 기본으로 되돌려도 근무 칸은 그대로(기본은 늘 운영)', () => {
   const x = makeEnv();
   x.env.call(ADMIN, 'saveDaySchedule', { date: WED, operating: true, start: '18:30', end: '21:00', day_type: '', memo: '' });
   save(x, DUTY, { date: WED, slots: { '21:30조': x.t1 } });
   const r = x.env.call(ADMIN, 'cancelDaySchedule', WED);
-  assert.deepStrictEqual([r.ok, r.canceledSlots], [true, 0]);
-  assert.strictEqual(x.slots().filter((q) => q.status === '유효').length, 1, '기본이 운영이면 칸은 그대로');
+  assert.deepStrictEqual(plain(r), { ok: true, cancelled: 1 });
+  assert.strictEqual(x.slots().filter((q) => q.status === '유효').length, 1);
 });
 
 test('saveDutyDay: 교대된 칸의 그날 끝 시각만 바뀌면 같은 사람으로 다시 저장해도 교대 기록(원래·실제·교대 일시)이 남고 끝 시각만 고친다', () => {
@@ -290,14 +290,33 @@ test('지난 날짜의 편성(saveDutyDay)도 근무표 담당자는 바꿀 수 
   assert.strictEqual(save(x, DUTY, { date: WED, slots: { '21:30조': x.t1 } }).ok, true, '오늘은 가능');
 });
 
-test('락을 못 잡으면 두 함수 모두 "다른 사람이 저장 중" 오류이고 쓰기가 없다', () => {
+test('바깥 락을 못 잡으면 두 함수 모두 "다른 사람이 저장 중" 오류 — 쓰지 않는 호출(같은 내용 저장·이미 운영 중)도 바깥 락에서 막힌다', () => {
   const x = makeEnv();
+  save(x, DUTY, { date: WED, slots: { '21:30조': x.t1 } });   // 먼저 저장해 두면 같은 내용 재저장은 안쪽 쓰기가 없다
   const w = x.slots().length, d = x.env.rows('day_schedules').length;
   x.env.lock.failNext = 1;
   assert.throws(() => save(x, DUTY, { date: WED, slots: { '21:30조': x.t1 } }), /다른 사람이 저장 중/);
   x.env.lock.failNext = 1;
-  assert.throws(() => x.env.call(DUTY, 'setDutyOperating', { date: WED, operating: false }), /다른 사람이 저장 중/);
+  assert.throws(() => x.env.call(DUTY, 'setDutyOperating', { date: WED, operating: true }), /다른 사람이 저장 중/);
+  x.env.lock.failNext = 1;
+  assert.throws(() => save(x, DUTY, { date: WED, slots: { '23:00조': x.t2 } }), /다른 사람이 저장 중/);
   assert.strictEqual(x.slots().length, w); assert.strictEqual(x.env.rows('day_schedules').length, d);
+});
+
+test('acknowledge:true만으로는 근무 칸을 취소하지 않는다(확인창이 본 칸 id가 필요), 운영 안 하는 날에 남은 칸은 홈 today/next에서 빠지고, 주말 확인 문구는 "예비 감독"', () => {
+  const x = makeEnv();
+  save(x, DUTY, { date: FRI, slots: { '단독': x.t1, '예비': x.t2 } });
+  const r = x.env.call(DUTY, 'setDutyOperating', { date: FRI, operating: false, acknowledge: true });
+  assert.strictEqual(r.needsConfirm, true); assert.ok(r.warnings[0].includes('근무 ' + nameOf(x, x.t1)) && r.warnings[0].includes('예비 감독 ' + nameOf(x, x.t2)), r.warnings[0]);
+  assert.strictEqual(x.slots().filter((q) => q.status === '유효').length, 2);
+  // 옛 상태 재현: 운영 안 함인데 칸이 남아 있다 → 홈의 오늘·다음 근무에서 빠진다
+  save(x, DUTY, { date: WED, slots: { '21:30조': x.t1 } });
+  x.env.call(ADMIN, 'saveDaySchedule', { date: FRI, operating: false, confirmIds: r.confirmIds });
+  const row = x.slots().find((q) => q.date === FRI);
+  x.env.asOwner((c) => c.updateRecord_('duty_slots', row.id, { status: '유효' }, ADMIN));
+  assert.deepStrictEqual(plain(x.env.call(T1, 'getHomeData', 'hall_teacher').duty), { today: { label: '21:30조', end: '21:30' }, next: null }, '운영 안 하는 날은 다음 근무에서 빠진다');
+  x.env.setNow('2027-03-05T20:00:00');
+  assert.strictEqual(x.env.call(T1, 'getHomeData', 'hall_teacher').duty.today, null, '오늘이 운영 안 하는 날이면 오늘 내 근무 없음');
 });
 
 test('빈 예비 감독 칸도 빈 날로 센다(emptyDays·홈 빈 날 목록)', () => {

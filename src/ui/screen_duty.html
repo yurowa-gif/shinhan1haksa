@@ -6,7 +6,8 @@
   .duty-card.today { border-color: var(--accent); }
   .duty-head { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 4px; flex-wrap: wrap; }
   .duty-head h2 { margin: 0; }
-  .duty-slot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-height: 32px; }
+  .duty-slot { display: flex; gap: 8px; align-items: center; justify-content: flex-start; flex-wrap: wrap; min-height: 32px; }
+  .duty-card.readonly { cursor: default; }
   .duty-slot .slot-label { flex: 0 0 5.5em; color: var(--muted-ink); white-space: nowrap; }
   .duty-sheet-slots .field { margin-bottom: 8px; }
   .row-btn { flex: 0 0 auto; white-space: nowrap; }   /* 줄 끝 버튼(C9 교대)이 줄어들어 글자가 깨지지 않게 */
@@ -62,7 +63,7 @@
       clear(head);
       var weekMode = state.mode === 'week';
       var title = weekMode
-        ? (+d.month.slice(5, 7)) + '월 ' + (state.week + 1) + '주 (' + (+ws[state.week][0].date.slice(8, 10)) + '일–' + (+ws[state.week][ws[state.week].length - 1].date.slice(8, 10)) + '일)'
+        ? d.month.slice(0, 4) + '년 ' + (+d.month.slice(5, 7)) + '월 ' + (state.week + 1) + '주 (' + (+ws[state.week][0].date.slice(8, 10)) + '일–' + (+ws[state.week][ws[state.week].length - 1].date.slice(8, 10)) + '일)'
         : d.month.slice(0, 4) + '년 ' + (+d.month.slice(5, 7)) + '월';
       function step(n) {
         if (!weekMode) return load(monthShift(state.month, n));
@@ -95,15 +96,9 @@
     function gapNotice(d) {
       if (!d.canEdit || !d.emptyDays) return null;
       var open = d.days.filter(function (x) { return x.operating && x.slots.some(function (s) { return !s.name; }); });
-      var box = el('div', { class: 'notice warn' }, [el('div', { text: '비어 있는 날 ' + d.emptyDays + '일 — 날짜 줄을 누르면 편성할 수 있습니다.' })]);
-      var row = el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-top:6px' });
-      open.slice(0, 8).forEach(function (x) {
-        row.appendChild(el('button', { type: 'button', class: 'btn secondary row-btn', text: ymdKo(x.date) + '(' + x.weekdayKo + ')',
-          onclick: function () { state.mode = 'week'; state.week = weekIndexOf(x.date); draw(); openSheet(x); } }));
-      });
-      if (open.length > 8) row.appendChild(el('span', { class: 'muted', text: '외 ' + (open.length - 8) + '일' }));
-      box.appendChild(row);
-      return box;
+      var shown = open.slice(0, 3).map(dayKo).join('·') + (open.length > 3 ? ' 외 ' + (open.length - 3) + '일' : '');
+      // 승인된 시안: 글 한 줄(휴대폰 첫 화면을 차지하지 않게 버튼은 두지 않는다. 날짜 줄을 눌러 편성)
+      return el('div', { class: 'notice warn', text: '비어 있는 날 ' + d.emptyDays + '일 — ' + shown + '. 날짜 줄을 누르면 편성할 수 있습니다.' });
     }
 
     /* ───────── 주 목록 ───────── */
