@@ -241,7 +241,7 @@ function dtySwapCheck_(ctx, row, toEmail) {
   if (!row || !ruleRowLive_(row)) return { ok: false, denied: true, why: '없거나 취소된 칸' };
   var cur = dutyEmail_(row.actual_email) || dutyEmail_(row.original_email);
   if (!ctx.canEdit) {
-    if (String(row.slot) === '예비') return { ok: false, denied: true, why: '예비 감독 칸은 담당자가 기록' };
+    if (String(row.slot).trim() === '예비') return { ok: false, denied: true, why: '예비 감독 칸은 담당자가 기록' };
     if (!ctx.email || cur !== dutyEmail_(ctx.email)) return { ok: false, denied: true, why: '본인 칸 아님' };
     if (String(row.date).trim() < ctx.today) return { ok: false, denied: true, why: '지난 날짜' };
   }
@@ -262,11 +262,15 @@ function swapDuty(slotId, toUserId, opts) {
   var canEdit = permissions_()['duty.edit'].roles.some(function (r) { return user.roles.indexOf(r) >= 0; });
   var res = withLock_(function () {
     ['duty_slots', 'day_schedules', 'blocks', 'users'].forEach(function (t) { invalidate_('db', t); });
-    var row = findById_('duty_slots', String(slotId || ''));
+    var sid = String(slotId || '').trim(), all = readAll_('duty_slots');
+    // 같은 id의 줄이 둘 이상(시트에서 복사·붙여넣은 줄)이면 어느 줄인지 알 수 없다 — 고치지 않고 담당자에게 알린다. 빈 id도 칸이 아니다
+    var same = sid ? all.filter(function (r) { return String(r.id).trim() === sid; }) : [];
+    if (same.length > 1) throw new Error('근무표 시트에 같은 칸이 여러 줄입니다. 근무표 담당자에게 알려 주세요.');
+    var row = same[0] || null;
     // 없는 칸·취소된 칸·낡은 화면(그 사이 칸이 바뀜)·같은 (날짜, 칸)에 살아 있는 행이 둘일 때의 옛 행은 공격이 아니라 "화면이 낡음"이다.
-    // R8(dutyOn_)이 쓰는 최신 행만 교대할 수 있다 — 옛 행 id로 남의 근무를 빼앗는 길을 막는다
-    var current = row && ruleRowLive_(row) ? dutyPick_(readAll_('duty_slots'), String(row.date).trim()).bySlot[String(row.slot).trim()] : null;
-    if (!current || current.id !== row.id) throw new Error('근무표가 바뀌었습니다. 새로 고친 뒤 다시 해 주세요.');
+    // R8(dutyOn_)이 쓰는 최신 행만(같은 물리 줄까지 비교) 교대할 수 있다 — 옛 행 id로 남의 근무를 빼앗는 길을 막는다
+    var current = row && ruleRowLive_(row) ? dutyPick_(all, String(row.date).trim()).bySlot[String(row.slot).trim()] : null;
+    if (!current || current._row !== row._row || current.id !== row.id) throw new Error('근무표가 바뀌었습니다. 새로 고친 뒤 다시 해 주세요.');
     var denyIf = function (c) {
       if (!c.denied) return;
       logDenied_(user.email, 'duty.swap', c.why + ' ' + JSON.stringify({ slotId: String(slotId || ''), toUserId: String(toUserId || '') }));
@@ -283,7 +287,7 @@ function swapDuty(slotId, toUserId, opts) {
     // 새 근무자가 그날 다른 칸에도 있으면 경고 후 확인. 예비 감독이 대신 근무하는 것은 정상이라 경고하지 않는다
     var others = readAll_('duty_slots').filter(function (r) {
       return r.id !== row.id && ruleRowLive_(r) && String(r.date).trim() === date && (dutyEmail_(r.actual_email) || dutyEmail_(r.original_email)) === to.email &&
-        !(String(r.slot) === '예비' && String(row.slot) !== '예비');
+        !(String(r.slot).trim() === '예비' && String(row.slot).trim() !== '예비');
     });
     if (others.length && opts.acknowledge !== true) {
       return { ok: false, needsConfirm: true, warnings: [to.name + ' 선생님이 이 날 이미 ' + DTY_SLOT_LABEL[others[0].slot] + '에 편성되어 있습니다.'] };

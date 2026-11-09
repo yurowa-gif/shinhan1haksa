@@ -13,6 +13,10 @@
   .row-btn { flex: 0 0 auto; white-space: nowrap; }   /* 줄 끝 버튼(교대·대신 근무)이 줄어들어 글자가 깨지지 않게 */
   .duty-slot .row-btn { margin-left: auto; min-height: var(--tap); }
   .duty-slot .slot-who { display: flex; gap: 8px; align-items: center; flex: 1 1 0; flex-wrap: wrap; min-width: 0; word-break: keep-all; }
+  @media (max-width: 480px) {   /* 좁은 화면: 라벨은 윗줄, 이름·칩·버튼은 아랫줄 */
+    ul.list li.duty-slot { flex-wrap: wrap; row-gap: 0; }
+    .duty-slot .slot-label { flex: 1 0 100%; }
+  }
   .duty-gap { word-break: keep-all; }
   .nowrap { white-space: nowrap; }
 </style>
@@ -114,7 +118,7 @@
       var who = s.name ? el('b', { text: s.swapped ? s.swappedFrom + ' → ' + s.name : s.name }) : UI.statusPill('requested', '비어 있음');
       var kids = [el('span', { class: 'slot-label', text: s.label }), el('span', { class: 'slot-who' }, [
         who,
-        s.swapped && !s.canSwap ? UI.statusPill('confirmed', '교대') : null,
+        s.swapped ? UI.statusPill('confirmed', '교대') : null,
         s.mine ? UI.statusPill('todo', '내 근무') : null,
         s.slot === '예비' && s.name ? UI.statusPill('mute', '예비') : null
       ])];

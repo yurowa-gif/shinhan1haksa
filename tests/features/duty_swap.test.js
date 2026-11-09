@@ -294,3 +294,31 @@ test('앱 주소를 못 읽어도(ScriptApp 오류) 교대는 저장되고 메�
   assert.ok(sent.length >= 1 && sent.every((m) => !/https?:/.test(JSON.stringify(m))), '주소 없이 발송');
   assert.strictEqual(x.rows()[0].actual_email, R2);
 });
+
+test('같은 id를 가진 줄이 둘(시트 복사·붙여넣기)이면 누구도 그 id로 교대할 수 없고(쓰기 0건), 오늘 근무가 아닌 사람은 out.save도 얻지 못한다. 빈 id는 낡은 칸', () => {
+  const x = makeEnv();
+  x.slot(TODAY, '21:30조', R1);
+  const first = x.rows()[0];
+  x.env.asOwner((c) => c.appendRecord_('duty_slots', { id: first.id, date: TODAY, slot: '21:30조', end_time: '21:30', original_email: R1, actual_email: R1, swapped_at: '', swapped_by: '', status: '유효', memo: '' }, ADMIN));
+  assert.strictEqual(x.rows().length, 2);
+  const w = JSON.stringify(x.rows());
+  for (const who of [R2, R1, RM]) {
+    const e = x.env.errorOf(who, (c) => c.swapDuty(first.id, x.r3));
+    assert.ok(e && /같은 칸이 여러 줄/.test(e.message), who + ': ' + (e && e.message));
+  }
+  assert.strictEqual(JSON.stringify(x.rows()), w, '쓰기 0건');
+  const stu = x.env.rows('students')[0].id;
+  for (const who of [R2, R3]) {
+    const d = x.env.errorOf(who, (c) => c.requirePermission_('out.save', { studentId: stu, ymd: TODAY }));
+    assert.ok(d && /권한이 없습니다/.test(d.message), '오늘 근무가 아닌 ' + who + '는 오늘 out.save 거부');
+  }
+  const e0 = x.env.errorOf(R2, (c) => c.swapDuty('', x.r3));
+  assert.ok(e0 && /바뀌었습니다/.test(e0.message));
+});
+
+test('칸 이름 뒤 공백("예비 ")이 있어도 학사 교사는 예비 칸을 넘길 수 없다(denied)', () => {
+  const x = makeEnv();
+  x.slot(FRI, '단독', R2); x.slot(FRI, '예비 ', R1);
+  const standby = x.rows()[1];
+  expectDenied(x, R1, standby.id, x.r3, '공백 있는 예비 칸');
+});
