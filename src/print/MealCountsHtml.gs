@@ -1,7 +1,7 @@
 /**
  * 식수 집계 HTML 렌더러(D8, 급식실 보고용 임시 양식 — 급식실 양식을 받으면 맞춘다). 소유: DESIGN. 순수 함수.
  *
- *   printRenderMealCounts_(model, opts) → HTML 문서 문자열(A4 세로 한 쪽).
+ *   printRenderMealCounts_(model, opts) → HTML 문서 문자열(A4 세로 한 쪽, 여백 14mm → 인쇄 폭 515.9pt라 내용 폭은 515pt).
  *
  * model 모양은 docs/design/meal-counts-model.md: R12 mealCountsOn_ 결과(counts)를 그대로 받고, 머리말·참고 정보를 더한다.
  * 행 = counts.groups의 줄(여1…·여 합계·남1…·남 합계·N학년·전체), 열 = 학사 / 기숙 / 비기숙 / 조식 / 석식(학사·일반·계).
@@ -29,9 +29,11 @@ function printMealRowOrder_(keys) {
   });
 }
 
+/** 인원 수로 읽는다: 0 이상 정수이거나 숫자만 든 문자열('2', ' 3 ')만 받고, 빈 문자열·null·true·소수·글자 섞인 값은 null(칸에는 ?) */
 function printMealNum_(v) {
-  var n = Number(v);
-  return isFinite(n) && n >= 0 && Math.floor(n) === n ? n : null;
+  if (typeof v === 'number') return isFinite(v) && v >= 0 && Math.floor(v) === v ? v : null;
+  if (typeof v === 'string' && /^\s*\d+\s*$/.test(v)) return Number(v);
+  return null;
 }
 
 /** 합계 검사: 학사 = 기숙 + 비기숙, 성별 합계·학년 합계·전체 = 부분 합. → 어긋난 줄 설명 목록 */
@@ -73,13 +75,13 @@ function printRenderMealCounts_(model, opts) {
     var v = groups[k] || {};
     var total = /합계$/.test(k) || k === '전체' || /^\d+학년$/.test(k);
     var st = total ? 'font-weight:bold;background:#e8e8e8;' : '';
-    var top = (k === '여 합계' || k === '남 합계' || k === '1학년' || k === '전체') ? '' : '';
     var cells = PRINT_MC_COLS.map(function (c) {
       var n = printMealNum_(v[c[0]]);
       return '<td style="' + td + st + '">' + (n === null ? '?' : n) + '</td>';
     });
-    var dn = (printMealNum_(v.hallDinner) || 0) + (printMealNum_(v.generalDinner) || 0);
-    return '<tr style="page-break-inside:avoid"><th scope="row" style="' + td + 'text-align:left;' + st + top + '">' + printEsc_(k) + '</th>' + cells.join('') +
+    var d1 = printMealNum_(v.hallDinner), d2 = printMealNum_(v.generalDinner);
+    var dn = d1 === null || d2 === null ? '?' : d1 + d2;
+    return '<tr style="page-break-inside:avoid"><th scope="row" style="' + td + 'text-align:left;' + st + '">' + printEsc_(k) + '</th>' + cells.join('') +
       '<td style="' + td + 'font-weight:bold;' + (total ? 'background:#e8e8e8;' : 'background:#f4f4f4;') + '">' + dn + '</td></tr>';
   }).join('');
   var table = keys.length ? '<table style="width:100%;border-collapse:collapse;margin-top:10pt"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table>'
@@ -89,13 +91,16 @@ function printRenderMealCounts_(model, opts) {
     '학사 = 기숙 + 비기숙. 석식 계 = 석식 학사 + 석식 일반. 퇴실한 학생도 석식 중단일 전까지는 학사 석식에 포함됩니다.'];
   var after = printMealNum_(counts.afterLeaveHallDinner);
   notes.push('퇴실 후 석식 유지 ' + (after === null ? '?' : after) + '명(학사 퇴실했지만 석식 중단일 전이라 학사 석식에 포함).');
-  if (model.docUnsubmitted !== undefined && model.docUnsubmitted !== null) notes.push('서류 미제출 ' + (printMealNum_(model.docUnsubmitted) === null ? '?' : model.docUnsubmitted) + '명(집계에는 이미 포함, 이름은 담당교사 화면에서 봅니다).');
-  var warnings = printArr_(counts.warnings);
+  if (model.docUnsubmitted !== undefined && model.docUnsubmitted !== null) notes.push('서류 미제출 ' + (printMealNum_(model.docUnsubmitted) === null ? '?' : printMealNum_(model.docUnsubmitted)) + '명(집계에는 이미 포함, 이름은 담당교사 화면에서 봅니다).');
   var unknown = printArr_(counts.unknownGroup);
+  // 학생마다 반복되는 R12 경고("<학생 id> 학생의 성별·학년을 알 수 없어 …")는 급식실에 내는 종이에 싣지 않는다(이름은 교사 화면 몫). 요약 한 줄만 남긴다
+  var warnings = printArr_(counts.warnings).filter(function (w) {
+    return !unknown.some(function (id) { return id !== '' && w.indexOf(id + ' 학생') === 0; });
+  });
   if (unknown.length) warnings.push('성별·학년을 알 수 없는 학생 ' + unknown.length + '명은 어느 줄에도 넣지 않았습니다.');
   printMealCheck_(groups).forEach(function (b) { warnings.push('합계가 맞지 않습니다 — ' + b); });
   var foot = '<div style="font-size:9pt;line-height:13pt;margin-top:10pt">' + notes.map(printEsc_).join('<br>') +
-    (warnings.length ? '<br><b>※ ' + warnings.map(printEsc_).join(' / ') + '</b>' : '') + '</div>';
+    warnings.map(function (w) { return '<br><b>※ ' + printEsc_(w) + '</b>'; }).join('') + '</div>';
 
   var wd = ymdWeekdayKo_(model.date);
   var p = model.date.split('-');
@@ -108,5 +113,5 @@ function printRenderMealCounts_(model, opts) {
   var doc = '<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>' + title + '</title>' +
     '<style>@page { size: A4 portrait; margin: 14mm; } html, body { margin: 0; padding: 0; } ' +
     'body { font-family: ' + PRINT_FONT + '; color: #000; background: #fff; ' + PRINT_COLOR_EXACT + ' } table { empty-cells: show; }</style></head><body>';
-  return doc + '<section class="page" style="width:527pt;' + PRINT_COLOR_EXACT + '">' + top + table + foot + sign + '</section></body></html>';
+  return doc + '<section class="page" style="width:515pt;' + PRINT_COLOR_EXACT + '">' + top + table + foot + sign + '</section></body></html>';
 }
