@@ -175,6 +175,8 @@
   .sheet { width: 100%; max-width: 720px; max-height: 85vh; overflow-y: auto; background: var(--card); border-radius: var(--radius) var(--radius) 0 0;
     padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
   .sheet h2 { font-size: var(--font-lg); margin: 0 0 8px; }
+  /* 한국어는 낱말 중간에서 끊지 않고 띄어쓰기에서만 줄을 바꾼다(360px). 낱말 하나가 줄보다 길 때(긴 영문·숫자)만 강제로 끊는다 */
+  .seg, .sheet h2, .sheet-body, .sheet-lead { word-break: keep-all; overflow-wrap: anywhere; }
   .sheet-body p { margin: 0 0 12px; }
   .sheet-actions { display: flex; gap: var(--gap-sm); margin-top: 8px; }
   .sheet-actions .btn { flex: 1 1 0; }
