@@ -145,3 +145,51 @@ test('기록표 이스케이프·이상한 입력: 이름·교대자의 <script>
   assert.ok(render({ month: '2027-03' }).indexOf('이 달 근무 기록이 없습니다') > 0, 'teachers 없음');
   assert.ok(html.indexOf('@page { size: A4 landscape') > 0);
 });
+
+/** 교대 목록 표를 읽는다 → [{date, slot, who, kind}] */
+function readSwaps(html) {
+  const area = html.slice(html.indexOf('교대 ') , html.indexOf('근무 = 21:30조'));
+  return area.split('<tr style="page-break-inside:avoid">').slice(1).map((tr) => {
+    const c = [...tr.matchAll(/<td style="([^"]*)">(.*?)<\/td>/g)];
+    return { date: c[0][2], slot: c[1][2], who: c[2][2], kind: c[3][2], nowrap: [c[0], c[1], c[3]].every((x) => x[1].indexOf('white-space:nowrap') >= 0) };
+  });
+}
+
+test('교대 표 칸 글자: 날짜·칸·원래 → 실제·구분이 그대로 나오고(구분 없으면 교대), 날짜·칸·구분 칸은 줄바꿈하지 않는다', () => {
+  const m = buildModel();
+  m.swaps[2].kind = undefined;
+  const rows = readSwaps(render(m));
+  assert.deepStrictEqual(rows.map((r) => [r.date, r.slot, r.who, r.kind]), [
+    ['2027년 3월 5일(금)', '단독', '이선생 → <b>최선생</b>', '대신 근무'],
+    ['2027년 3월 11일(목)', '23:00조', '한선생 → <b>김선생</b>', '교대'],
+    ['2027년 3월 20일(토)', '단독', '김선생 → <b>정선생</b>', '교대']]);
+  assert.ok(rows.every((r) => r.nowrap));
+});
+
+test('별표를 붙일 칸이 없는 교대는 조용히 넘기지 않고 경고한다(예비 칸 교대로 새 예비가 그날 대신 근무까지 한 경우 포함), 맞는 교대는 경고 없음', () => {
+  assert.ok(render(buildModel()).indexOf('*를 붙이지 못했습니다') < 0);
+  const m = buildModel();
+  // 3/12(금): 정선생이 예비 → 한선생이 예비 칸을 이어받았지만 한선생은 그날 대신 근무로 '단독' 칸을 가졌다(예 칸이 없다)
+  m.swaps.push({ date: '2027-03-12', slot: '예비', from: '정선생', to: '한선생', kind: '교대' });
+  m.swaps.push({ date: '2027-03-30', slot: '21:30조', from: '박선생', to: '김선생', kind: '교대' });   // 그날 김선생 칸 없음
+  const html = render(m);
+  assert.ok(html.indexOf('교대 5건 중 2건은 실제 근무자 칸이 없어 *를 붙이지 못했습니다(') > 0);
+  assert.ok(html.indexOf('2027년 3월 12일(금) 한선생 예비') > 0 && html.indexOf('2027년 3월 30일(화) 김선생 21:30조') > 0);
+  // 예비 칸 교대가 맞으면 예* 로 붙고 경고 없음
+  const ok = buildModel();
+  ok.swaps.push({ date: '2027-03-06', slot: '예비', from: '박선생', to: '김선생', kind: '교대' });
+  assert.ok(render(ok).indexOf('*를 붙이지 못했습니다') < 0);
+  assert.strictEqual(readGrid(render(ok))[1].cells[5], '예*');
+});
+
+test('model.warnings는 그대로 아래 줄에, 운영 안 한 날은 회색 칸(머리 2 + 교사 6), 운영 안 한 날 근무 이름은 한 번만', () => {
+  const m = buildModel();
+  m.warnings = ['R8: 근무 칸 중복 1건'];
+  m.teachers[0].cells['2027-03-02'] = ['21:30조', '23:00조'];
+  const html = render(m);
+  assert.ok(html.indexOf('<b>※ R8: 근무 칸 중복 1건 / ') > 0);
+  assert.ok(html.indexOf('근무가 기록되어 있습니다: 박선생 —') > 0 && html.indexOf('박선생, 박선생') < 0);
+  assert.strictEqual(count(render(buildModel()), 'background:#c8c8c8'), 8);
+  assert.strictEqual(count(html, 'background:#c8c8c8'), 8, '근무가 있어도 운영 안 한 날 열은 그대로 회색');
+  assert.strictEqual(readGrid(html)[6].cells[1], '2', '두 조 = 2');
+});

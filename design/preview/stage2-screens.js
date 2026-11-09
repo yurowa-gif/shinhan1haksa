@@ -77,14 +77,14 @@ def('home-homeroom', '홈', '담임 홈 (2단계 카드: 우리 반 OUT·입퇴�
   var m = frame(root, { title: '신한1학사', who: '이선생', note: '담임 이선생 화면 · 담임은 우리 반(2-1)만 보고 열람만 한다(결정 45).' });
   m.appendChild(card('2-1 학사생 (9명)', [UI.segmented({ options: [{ value: 'all', label: '모두' }, { value: 'req', label: '요청 중' }], value: 'all', onchange: function () {} }),
     el('ul', { class: 'list' }, [
-      el('li', { style: 'align-items:center' }, [el('b', { text: '2. 이나래' }), UI.statusPill('out2', '퇴실 대상')]),
-      el('li', { style: 'align-items:center' }, [el('b', { text: '2. 정하나' }), UI.statusPill('out1', '1OUT')]),
-      el('li', { style: 'align-items:center' }, [el('b', { text: '2. 오서아' }), UI.statusPill('requested', '요청 1')])]),
+      el('li', { style: 'align-items:center;word-break:keep-all' }, [el('b', { text: '2. 이나래' }), UI.statusPill('out2', '퇴실 대상')]),
+      el('li', { style: 'align-items:center;word-break:keep-all' }, [el('b', { text: '2. 정하나' }), UI.statusPill('out1', '1OUT')]),
+      el('li', { style: 'align-items:center;word-break:keep-all' }, [el('b', { text: '2. 오서아' }), UI.statusPill('requested', '요청 1')])]),
     link('특이사항 요청', 'secondary', 'margin-top:8px')]));
   m.appendChild(card('우리 반 OUT', [row([UI.statusPill('out1', '1OUT 1명'), UI.statusPill('out2', '퇴실 대상 1명')], 'margin:4px 0 8px'), el('div', { class: 'muted', text: 'OUT이 새로 기록되면 메일로 알려 드립니다(학생 이름·메모 없이 날짜·항목·몇 OUT인지만).' }), link('우리 반 OUT 보기', 'secondary', 'margin-top:12px')]));
   m.appendChild(card('우리 반 입퇴실·급식 변경', [el('ul', { class: 'list' }, [
-    el('li', { style: 'align-items:center' }, [el('div', {}, [el('b', { text: '3월 4일 · 2. 정하나' }), el('div', { class: 'muted', text: '조식 미실시(3월 15일부터)' })]), UI.statusPill('requested', '서류 미제출')]),
-    el('li', { style: 'align-items:center' }, [el('div', {}, [el('b', { text: '3월 1일 · 2. 오서아' }), el('div', { class: 'muted', text: '기숙사 입실' })]), UI.statusPill('confirmed', '서류 제출')])]), el('div', { class: 'muted', text: '이번 주 변경만 보입니다. 변경은 담당교사가 합니다.' })]));
+    el('li', { style: 'align-items:center;word-break:keep-all' }, [el('div', {}, [el('b', { text: '3월 4일 · 2. 정하나' }), el('div', { class: 'muted', text: '조식 미실시(3월 15일부터)' })]), UI.statusPill('requested', '서류 미제출')]),
+    el('li', { style: 'align-items:center;word-break:keep-all' }, [el('div', {}, [el('b', { text: '3월 1일 · 2. 오서아' }), el('div', { class: 'muted', text: '기숙사 입실' })]), UI.statusPill('confirmed', '서류 제출')])]), el('div', { class: 'muted', text: '이번 주 변경만 보입니다. 변경은 담당교사가 합니다.' })]));
 });
 
 def('home-duty', '홈', '근무표 담당자 홈 (정선생)', {}, function (root) {
