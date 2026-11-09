@@ -272,6 +272,14 @@ test('getMealContext: 관리자·학사 교사·담임·출결 허용(근무표�
 
 /* ───────── C17a 검토 반영(결정 60 기간 하나, 중복 저장, 경고 문구) ───────── */
 
+/** 다른 기간의 담당교사: 거부 기록(denied:status.edit)은 남고, 오류 문구는 "그 기간 담당교사나 관리자가 신청합니다" 안내 */
+function guided(env, who, fn, ...args) {
+  Object.keys(env.cache).filter((k) => k.indexOf('script:deny:') === 0).forEach((k) => delete env.cache[k]);
+  const before = env.rows('audit_log').length;
+  assert.throws(() => env.call(who, fn, ...args), /부터는 .* 일입니다\. 그 기간 담당교사나 관리자가 신청합니다/);
+  assert.ok(env.rows('audit_log').slice(before).some((r) => r.action === 'denied:status.edit' && r.created_by === who), '거부 기록은 남는다');
+}
+
 function clearListTimes(env) {
   env.asOwner((c) => c.bulkUpdateRecords_('status_changes', env.rows('status_changes').filter((r) => r.source === '명단업로드').map((r) => ({ id: r.id, patch: { requested_at: '' } })), env.owner));
 }
@@ -302,8 +310,8 @@ test('결정 60: 기간은 적용일이 속한 기간 — 3/1(기간 사이)에�
   env.asOwner((c) => c.updateRecord_('enrollments', old.id, { teacher_email: 'fake.teacher1@example.com' }, env.owner));
   clearListTimes(env);
   const i = input(a, 'd_off', '2027-03-01T10:00:00');   // 월요일 신청 → 3/8, 새 기간
-  env.expectDenied('fake.teacher1@example.com', 'status.edit', 'previewMealChange', i);
-  env.expectDenied('fake.teacher1@example.com', 'status.edit', 'saveMealChange', i, '');
+  guided(env, 'fake.teacher1@example.com', 'previewMealChange', i);
+  guided(env, 'fake.teacher1@example.com', 'saveMealChange', i, '');
   assert.strictEqual(saveOk(env, HALL, i).date, '2027-03-08');
   const env2 = makeEnv('2027-03-03T12:00:00');
   clearListTimes(env2);
@@ -346,14 +354,14 @@ test('사유는 200자까지', () => {
   assert.ok(p.errors.some((e) => e.field === 'reason'));
 });
 
-test('getMealContext: 기간 사이 날(3/1)에는 다음 기간 담당 학생을 보여 준다(저장 판정과 같은 기간)', () => {
+test('getMealContext: 기간 사이 날(3/1)에는 막 끝난 기간과 다음 기간의 담당 학생을 모두 보여 준다(저장 판정은 적용일의 기간)', () => {
   const env = makeEnv('2027-03-01T23:00:00');
   const { a } = pick(env);
   const old = env.rows('enrollments').find((e) => e.student_id === a && e.term_id !== term2(env).id);
   env.asOwner((c) => c.updateRecord_('enrollments', old.id, { teacher_email: 'fake.teacher1@example.com' }, env.owner));
   const ids = (who) => env.call(who, 'getMealContext').students.map((s) => s.id);
   assert.ok(ids(HALL).includes(a), '새 기간 담당교사에게는 보인다');
-  assert.ok(!ids('fake.teacher1@example.com').includes(a), '옛 기간 담당교사에게는 보이지 않는다');
+  assert.ok(ids('fake.teacher1@example.com').includes(a), '옛 기간 담당교사도 목록에서 본다(저장하려 하면 안내가 나온다)');
   assert.strictEqual(env.call(ADMIN, 'getMealContext').term.id, term2(env).id);
 });
 
@@ -368,4 +376,62 @@ test('근무교사(C8s)도 급식 변경은 못 한다: 오늘 근무자는 out.
   env.expectDenied(duty, 'status.edit', 'previewMealChange', i);
   env.expectDenied(duty, 'status.edit', 'saveMealChange', i, '');
   assert.strictEqual(rowsOf(env, a).filter((x) => x.source === 'F7').length, 0);
+});
+
+test('기간 경계(결정 60 보충): 2/28(일)·3/1(사이 날)에 옛 담당은 안내와 함께 거부, 새 담당은 저장. 목록은 이번 기간 ∪ 다음 기간', () => {
+  const OLD = 'fake.teacher1@example.com';
+  [['2027-02-28T12:00:00', 'd_off', '2027-02-28T10:00:00', '2027-03-08'], ['2027-03-01T20:00:00', 'd_gen', '2027-03-01T10:00:00', '2027-03-01']].forEach(([now, chip, at, want]) => {
+    const env = makeEnv(now);
+    const { a } = pick(env);
+    const old = env.rows('enrollments').find((e) => e.student_id === a && e.term_id !== term2(env).id);
+    env.asOwner((c) => c.updateRecord_('enrollments', old.id, { teacher_email: OLD }, env.owner));
+    clearListTimes(env);
+    const i = input(a, chip, at);
+    guided(env, OLD, 'previewMealChange', i);
+    guided(env, OLD, 'saveMealChange', i, '');
+    const r = saveOk(env, HALL, i);
+    assert.strictEqual(r.ok, true, now); assert.strictEqual(r.date, want, now);
+    const ids = (who) => env.call(who, 'getMealContext').students.map((x) => x.id);
+    assert.ok(ids(HALL).includes(a) && ids(OLD).includes(a), now + ': 두 담당교사 모두 목록에 보인다(이번 기간 ∪ 다음 기간)');
+  });
+});
+
+test('다음 기간 명단에 학생이 없으면 신청일의 기간(적용일 이전에서 가장 가까운 등록 기간) 담당이 저장한다. 그 기간이 끝났으면 거부', () => {
+  const env = makeEnv('2027-02-25T12:00:00');
+  const t1 = env.rows('terms').find((t) => t.name !== '2027 1학기');
+  const st = env.asOwner((c) => c.appendRecord_('students', { student_no: '39998', name: '가짜전입', gender: '남', grade: '1', class_no: '1', number: '98', track: '', email: '', memo: '가짜' }, env.owner));
+  env.asOwner((c) => c.appendRecord_('enrollments', { term_id: t1.id, student_id: st.id, teacher_email: HALL, veritas: 'FALSE', commute_type: '일반', end_type: '23:00', memo: '' }, env.owner));
+  ['학사', '석식'].forEach((item) => env.asOwner((c) => c.appendRecord_('status_changes', { student_id: st.id, item, value: item === '학사' ? '입실' : '학사 석식', requested_at: '', effective_date: '2026-08-17',
+    effective_date_auto: '2026-08-17', reason: '', doc_submitted: '', linked_change_id: '', source: '명단업로드', status: '유효', memo: '', cancel_reason: '' }, env.owner)));
+  const i = input(st.id, 'd_off', '2027-02-25T10:00:00');   // 목요일 → 적용일 3/8(다음 기간, 이 학생은 등록 없음)
+  env.expectDenied('fake.teacher2@example.com', 'status.edit', 'previewMealChange', i);   // 이 학생과 관계 없는 교사는 그대로 거부
+  const r = saveOk(env, HALL, i);
+  assert.strictEqual(r.ok, true); assert.strictEqual(r.date, '2027-03-08');
+  assert.strictEqual(env.call(ADMIN, 'saveMealChange', input(st.id, 'd_off', '2027-02-25T10:30:00'), env.call(ADMIN, 'previewMealChange', input(st.id, 'd_off', '2027-02-25T10:30:00')).expect).ok, true);
+  env.setNow('2027-03-03T12:00:00');   // 이제 옛 기간은 끝났다 → 등록 없는 새 기간의 학생은 관리자가 명단에 올리기 전에는 저장 불가
+  const late = env.call(ADMIN, 'previewMealChange', input(st.id, 'd_off', '2027-03-03T10:00:00'));
+  assert.strictEqual(late.ok, false); assert.ok(late.errors.some((e) => /끝난 기간|명단에 없는/.test(e.message)));
+});
+
+test('중복 검사: 신청 일시가 다르면 새 행(M6), 사람이 취소한 같은 신청서는 중복이 아니다(M7)', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { a } = pick(env);
+  const r1 = saveOk(env, HALL, input(a, 'd_off', '2027-03-03T09:00:00'));
+  const r2 = saveOk(env, HALL, input(a, 'd_off', '2027-03-03T09:30:00'));
+  assert.notStrictEqual(r2.id, r1.id); assert.ok(!r2.duplicate, '다른 시각의 같은 값은 새 신청');
+  env.asOwner((c) => c.updateRecord_('status_changes', r2.id, { status: '취소', cancel_reason: '잘못 입력' }, env.owner));
+  const r3 = saveOk(env, HALL, input(a, 'd_off', '2027-03-03T09:30:00'));
+  assert.ok(!r3.duplicate && r3.id !== r2.id, '관리자가 취소한 뒤 다시 입력할 수 있다');
+});
+
+test('"덮습니다"·"먼저 적용됩니다" 경고도 교사용 말이고 숫자 날짜가 없다(M5)', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { a, b } = pick(env);
+  saveOk(env, HALL, input(a, 'd_off', '2027-03-03T09:00:00'));   // 3/15 미실시 대기
+  const over = env.call(HALL, 'previewMealChange', input(a, 'd_hall', '2027-03-03T08:00:00', { effectiveDate: '2027-03-03', reason: '급식실 요청' }));
+  const before = env.call(HALL, 'previewMealChange', input(a, 'd_gen', '2027-03-03T10:00:00', { effectiveDate: '2027-03-20', reason: '급식실 요청' }));
+  [over, before].forEach((p) => assert.ok(![].concat(p.warnings).some((t) => /\d{4}-\d{2}-\d{2}/.test(t))));
+  assert.ok(over.warnings.some((t) => t.includes('덮습니다')), '더 새 신청이 이 신청을 덮는다는 안내');
+  assert.ok(before.warnings.some((t) => t.includes('먼저 적용됩니다')), '대기 중인 신청이 먼저 적용된다는 안내');
+  assert.ok(b);
 });

@@ -21,6 +21,7 @@
     call('getMealContext').then(function (c) { ctx = c; draw(); }).catch(function (err) { clear(body); showError(body, err); });
 
     function draw() {
+      resetState();   // 다시 그릴 때마다 이전 선택·서류 체크를 비운다(저장 왕복 중에 누른 것이 새 화면에 몰래 남지 않게)
       clear(body); removeBar();
       body.appendChild(el('h2', { text: (ctx.term ? ctx.term.name + ' · ' : '') + '급식 변경' }));
       if (!ctx.canEdit) {
@@ -107,10 +108,10 @@
         ], { mount: true });
       }
       function refresh(retried) {
+        var mine = ++seq;   // 학생을 비우는 경우에도 진행 중인 미리보기·예약을 무효로 한다
+        clearTimeout(timer);
         last = null; drawResult(); drawBar();
         if (!picked || !chip) return;
-        var mine = ++seq;
-        clearTimeout(timer);
         timer = setTimeout(function () {
           call('previewMealChange', payload()).then(function (p) {
             if (mine !== seq) return;
@@ -137,7 +138,7 @@
               if (!r.ok) { UI.toast((r.errors && r.errors[0] && r.errors[0].message) || r.blocked || '저장하지 못했습니다.', { kind: 'warn', ms: 5000 }); refresh(); return; }
               UI.toast(r.duplicate ? '이미 저장된 신청서입니다.' : r.superseded ? '기록으로 저장했습니다.' : r.dateKo + '부터 ' + r.label + '(으)로 저장했습니다.');
               resetState();   // 다음 학생에게 이전 학생의 선택·서류 체크가 남지 않게 모두 비운다
-              call('getMealContext').then(function (c) { ctx = c; draw(); });
+              call('getMealContext').then(function (c) { ctx = c; draw(); }).catch(function (err) { draw(); fail(err); });
             }).catch(function (err) { busy = false; drawBar(); fail(err); });
           }
         });

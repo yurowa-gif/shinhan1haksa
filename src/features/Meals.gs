@@ -49,12 +49,6 @@ function foodNormAt_(s) {
   return m[1] + 'T' + m[2] + ':' + m[3] + (m[4] || ':00');
 }
 
-/** 권한 검사에 넘길 신청일(yyyy-MM-dd). 형식이 아니면 ''(오늘의 기간) — 형식 오류는 검사 단계가 알려 준다 */
-function foodYmd_(input) {
-  var d = String((input && input.requestedAt) || '').slice(0, 10);
-  return ymdIsValid_(d) ? d : '';
-}
-
 function foodDateKo_(ymd) {
   var p = ymd.split('-');
   return (+p[1]) + '월 ' + (+p[2]) + '일(' + ymdWeekdayKo_(ymd) + ')';
@@ -78,7 +72,7 @@ function foodValidate_(input, ctx) {
   var chip = foodChip_(String(input.chip || ''));
   if (!chip) err('chip', '무엇을 바꿀지 골라 주세요.');
   var at = foodNormAt_(input.requestedAt);
-  if (!at) err('requestedAt', '신청 일시를 날짜와 시각까지 입력해 주세요(예: 2027-03-03T10:45).');
+  if (!at) err('requestedAt', '신청 일시를 날짜와 시각까지 입력해 주세요.');
   else if (at > ctx.now) err('requestedAt', '신청 일시가 지금보다 늦습니다. 서류를 받은 날짜·시각을 입력해 주세요.');
   var eff = String(input.effectiveDate || '').trim();
   if (eff && !ymdIsValid_(eff)) err('effectiveDate', '적용일을 날짜로 입력해 주세요.');
@@ -95,6 +89,23 @@ function foodValidate_(input, ctx) {
 function foodTermOf_(ymd, terms) {
   return termOnDate_(ymd, terms) || terms.filter(function (t) { return t.start_date > ymd; })
     .sort(function (x, y) { return x.start_date < y.start_date ? -1 : 1; })[0] || null;
+}
+
+/**
+ * 급식·입퇴실 신청의 기간(결정 60 + 보충): 적용일이 속한(사이면 다음) 기간이되, 그 기간에 이 학생 등록이 없으면
+ * 적용일 이전에서 가장 가까운 이 학생의 등록 기간(보통 신청일의 기간)을 쓴다. 권한·등록 검사·서류 담당 모두 이 함수 하나로 정한다.
+ */
+function foodTermFor_(studentId, eff, terms, enrollments) {
+  var enrolled = function (t) { return enrollments.some(function (e) { return e.term_id === t.id && e.student_id === studentId; }); };
+  var cand = foodTermOf_(eff, terms);
+  if (cand && enrolled(cand)) return cand;
+  var back = terms.filter(function (t) { return enrolled(t) && t.start_date <= eff; }).sort(function (a, b) { return a.start_date < b.start_date ? 1 : -1; })[0];
+  return back || cand;
+}
+
+/** 권한 검사에 넘길 날짜: 그 기간 안으로 맞춘다(기간 밖 날짜면 학생 범위 판정이 다른 기간을 보지 않게) */
+function foodPermYmd_(term, eff) {
+  return !term ? '' : (eff < term.start_date ? term.start_date : eff > term.end_date ? term.end_date : eff);
 }
 
 /**
@@ -173,21 +184,31 @@ function foodCheck_(input, d) {
   var p = foodPlan_(rec, d.changes, today, d.cutoff);
   var plan = p.plan, errors = p.errors.slice();
   var eff = plan.date || (p.manual ? rec.effectiveDate : plan.autoDate);
-  var term = foodTermOf_(eff, d.terms);
+  var term = foodTermFor_(rec.studentId, eff, d.terms, d.enrollments);
   if (!term) errors.push({ field: 'effectiveDate', message: '적용일이 속한 운영 기간이 없습니다.' });
   else if (term.end_date < today) errors.push({ field: 'effectiveDate', message: '"' + term.name + '"은(는) 끝난 기간입니다. 끝난 기간의 급식 신청은 받지 않습니다.' });
   else if (!d.enrollments.some(function (e) { return e.term_id === term.id && e.student_id === rec.studentId; })) {
     errors.push({ field: 'studentId', message: '"' + term.name + '" 명단에 없는 학생입니다. 관리자에게 명단 등록을 요청해 주세요.' });
   }
   return { errors: errors, rec: rec, term: term, plan: plan, manual: p.manual, eff: eff,
-    permYmd: term ? (eff > term.start_date ? eff : term.start_date) : '',
+    permYmd: foodPermYmd_(term, eff),
     warnings: foodWarnTexts_(rec, plan, p.manual, eff, d.changes, today, d.terms),
     blocked: plan.blocked ? foodDateKo_(eff) + '에는 학사 퇴실 상태라 ' + rec.item + ' ' + rec.value + '을(를) 새로 신청할 수 없습니다.' : '' };
 }
 
 /** 계획의 기간으로 학생 범위(담당교사·관리자)를 판정한다. 읽기 도우미를 거친 뒤에 부른다(오류 응답보다 먼저 거부가 나가게) */
 function foodAuthorize_(input, c) {
-  return requirePermission_('status.edit', { studentId: String((input && input.studentId) || ''), ymd: c.permYmd });
+  var sid = String((input && input.studentId) || '');
+  try {
+    return requirePermission_('status.edit', { studentId: sid, ymd: c.permYmd });
+  } catch (e) {
+    // 다른 기간의 담당교사(예: 2학기 담당이 3월 적용 신청을 하려는 경우)에게는 이유를 알려 준다. 거부 기록은 이미 남았다. 그 학생과 아무 관계 없는 교사는 그대로 거부
+    var u = getCurrentUser_();
+    if (c.term && c.eff && e.message === '권한이 없습니다.' && readAll_('enrollments').some(function (en) { return en.student_id === sid && normalizeEmail_(en.teacher_email) === u.email; })) {
+      throw new Error(foodDateKo_(c.eff) + '부터는 ' + c.term.name + ' 일입니다. 그 기간 담당교사나 관리자가 신청합니다.');
+    }
+    throw e;
+  }
 }
 
 /** 서류 미제출 대표 행 중복 저장 방지용: 같은 신청서(학생·항목·값·신청 일시, F7)가 이미 있나(유효 또는 덮여서 취소된 기록) */
@@ -234,6 +255,10 @@ function getMealContext() {
   // 저장 판정(결정 60)과 같은 기간: 오늘이 기간 사이(예: 3/1)면 곧 시작하는 기간의 학생을 보여 준다. 다음 기간이 없으면 가장 최근 기간
   var terms = readAll_('terms');
   var term = foodTermOf_(today, terms) || getCurrentTerm_();
+  // 목록은 이번 기간 ∪ 곧 시작하는 기간(있으면): 학기 말 신청의 적용일은 다음 기간이라 그 기간 담당교사도 신청할 수 있어야 한다
+  var nextTerm = terms.filter(function (t) { return t.start_date > today && (!term || t.id !== term.id); }).sort(function (a, b) { return a.start_date < b.start_date ? -1 : 1; })[0];
+  var listTerms = {};
+  [term, getCurrentTerm_(), nextTerm].forEach(function (t) { if (t) listTerms[t.id] = true; });   // 사이 날(3/1)에는 막 끝난 기간의 담당교사도 본다
   var out = { now: nowIso_(), today: today, cutoff: foodCutoff_(readAll_('settings', 'config')),
     term: term ? { id: term.id, name: term.name } : null, canEdit: false,
     chips: FOOD_CHIPS.map(function (c) { return { id: c.id, label: c.label }; }), students: [] };
@@ -247,7 +272,7 @@ function getMealContext() {
   var seen = {};
   readAll_('enrollments').forEach(function (e) {
     var s = studentById[e.student_id];
-    if (e.term_id !== term.id || !s || seen[s.id]) return;
+    if (!listTerms[e.term_id] || !s || seen[s.id]) return;
     var facts = { isEnrolled: true, isAssigned: normalizeEmail_(e.teacher_email) === user.email, isOnDuty: false, inHomeroom: false };
     if (!canAccessStudentByFacts_(user.roles, facts, rule.roles)) return;
     seen[s.id] = true;
