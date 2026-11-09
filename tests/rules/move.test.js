@@ -601,3 +601,31 @@ test('(알려진 지름길) 재입실이 덮는 신청 Q(일반 석식 3/19)가 
   const pFirst = R(Q(L(P(HALL())))), pLate = R(P(Q(L(HALL()))));   // P를 먼저 입력 / Q 뒤에 늦게 입력(그때 P는 Q에 가려 취소 행)
   assert.deepStrictEqual([at(pFirst, '석식', '2027-03-20'), at(pLate, '석식', '2027-03-20')], ['미실시', '학사 석식']);
 });
+
+/* ───── 총괄 4차 검토(#55) ───── */
+
+const HALL2 = () => [CH('학사', '입실', '2027-03-01'), CH('기숙사', '퇴실', '2027-03-01'), CH('조식', '실시', '2027-03-01'), CH('석식', '학사 석식', '2027-03-01')];
+
+test('되살린 행의 자기 취소는 같은 계획에서 되살리는 행을 취소하지 않는다(toCancel∩toRestore 없음) — R2>XA>XB>R1>L', () => {
+  let r = HALL2();
+  r = saveReq(r, '석식', '일반 석식', '2027-03-03T09:00:00', '2027-03-04', '2027-03-19');
+  r = saveReq(r, '석식', '학사 석식', '2027-03-04T09:00:00', '2027-03-04', '2027-03-16');
+  r = saveReq(r, '석식', '학사 석식', '2027-03-04T10:00:00', '2027-03-04', '2027-03-17');
+  r = saveReq(r, '석식', '미실시', '2027-03-03T10:00:00', '2027-03-04', '2027-03-18');
+  const p = plan(r, { type: '학사 퇴실', effectiveDate: '2027-03-05', requestedAt: '2027-03-04T15:00:00' }, '2027-03-04');
+  assert.deepStrictEqual(p.toCancel.filter((c) => p.toRestore.some((t) => t.id === c.id)), []);
+  assert.deepStrictEqual(['2027-03-18', '2027-03-19', '2027-04-30'].map((d) => at(saveLeaveP(r, { type: '학사 퇴실', effectiveDate: '2027-03-05', requestedAt: '2027-03-04T15:00:00' }, '2027-03-04'), '석식', d)),
+    ['미실시', '미실시', '미실시']);
+});
+
+test("자기 취소가 이 계획이 쓸 '일반 석식으로' 행을 겨누면 그 행을 쓰지 않는다(toCancel은 시트에 있는 id만) — X>R>L", () => {
+  let r = HALL2();
+  r = saveReq(r, '석식', '학사 석식', '2027-03-04T16:00:00', '2027-03-05', '2027-03-04');
+  r = saveReq(r, '석식', '미실시', '2027-03-04T15:30:00', '2027-03-05', '2027-03-04');
+  const move = { type: '학사 퇴실', effectiveDate: '2027-03-04', requestedAt: '2027-03-04T15:00:00', dinner: '일반 석식' };
+  const p = plan(r, move, '2027-03-05');
+  assert.ok(p.toCancel.every((c) => r.some((x) => x.id === c.id)), JSON.stringify(p.toCancel));
+  assert.deepStrictEqual(p.toCancel.filter((c) => p.toRestore.some((t) => t.id === c.id)), []);
+  assert.ok(!p.rows.some((x) => x.value === '일반 석식') && p.warnings.some((w) => /일반 석식 신청은 쓰지 않습니다/.test(w)), JSON.stringify(p));
+  assert.strictEqual(at(saveLeaveP(r, move, '2027-03-05'), '석식', '2027-03-10'), '미실시');
+});
