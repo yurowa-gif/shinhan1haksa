@@ -33,7 +33,11 @@
       dateField = UI.dateField({
         label: '날짜', value: date, name: 'date',
         shortcuts: [{ label: '오늘', value: today }, { label: '내일', value: addDays(today, 1) }],
-        onchange: function (v) { load(v); }
+        onchange: function (v) {
+          state.duty = ''; state.standby = '';   // 손으로 넣은 이름은 그 날짜의 것이다 — 날짜를 바꾸면 따라가지 않고 비운다
+          if (state.namesMode === '손 입력') buildNames();
+          load(v);
+        }
       });
       head.appendChild(dateField);
     }
@@ -64,9 +68,12 @@
         state.namesMode = '근무표';
         clear(namesCard);
         namesCard.appendChild(el('h2', { text: '인쇄할 이름(근무표에서)' }));
+        var emptyDuty = !(r.dutyNames || []).length;
         namesCard.appendChild(kv([['근무 교사', (r.dutyNames || []).join(', ') || '(비어 있음)'], ['예비 감독', (r.standbyNames || []).join(', ') || '(없음)']]));
+        if (emptyDuty) namesCard.appendChild(el('div', { class: 'sheet-warn', text: '이 날 근무 교사가 비어 있습니다. ' + (r.dutyCanEdit ? '근무표에서 편성해 주세요.' : '근무표 담당자에게 알려 주세요.') }));
         var back = document.querySelector('a.back'), base = back ? back.getAttribute('href') : '';
-        namesCard.appendChild(el('a', { class: 'btn secondary', style: 'margin-top:8px', href: base + '?page=duty', text: '근무표에서 고치기' }));
+        // 시트의 날짜 주로 열린다. 근무표를 고칠 수 없는 역할(출결 담당·학사 교사)에게는 "보기"
+        namesCard.appendChild(el('a', { class: 'btn secondary', style: 'margin-top:8px', href: base + '?page=duty&date=' + encodeURIComponent(r.date), text: r.dutyCanEdit ? '근무표에서 고치기' : '근무표 보기' }));
       } else if (state.namesMode !== '손 입력') {
         state.namesMode = '손 입력';
         buildNames();   // 입력 중에는 다시 그리지 않는다(글자가 사라지지 않게)
