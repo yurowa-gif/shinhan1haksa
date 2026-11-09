@@ -100,44 +100,47 @@ function buildFakeStage2Life_(fake, ruleRows) {
 /** 편집기에서 실행. seedFakeData()·seedFakeStage1() 뒤에, 가짜 학생만 있는 DB에서만 동작한다. 두 번 실행해도 중복 없음. */
 function seedFakeStage2() {
   var owner = assertOwnerRun_();
-  var students = readAll_('students');
-  if (!fake1DbIsAllFake_(students)) {
-    throw new Error('가짜 학생(seedFakeData)만 있는 DB에서만 실행합니다. 실제 데이터가 있는 DB에는 쓰지 않습니다.');
-  }
-  var teacherEmail = normalizeEmail_(props_().getProperty('TEST_TEACHER_EMAIL'));
-  if (!teacherEmail) throw new Error('Script Property TEST_TEACHER_EMAIL(시험 학사 교사)을 먼저 넣으세요.');
-  var fake = buildFakeData_({ teacherEmail: teacherEmail });
-  if (!readAll_('terms').some(function (t) { return t.id === fake.terms[0].id; })) {
-    throw new Error('가짜 운영 기간이 없습니다. seedFakeData()를 먼저 실행하세요.');
-  }
-  var data = buildFakeStage2Duty_(fake);
-  // 근무자는 users에 살아 있는 학사 교사여야 하고, 기록자는 근무표 담당자여야 한다(속성을 늦게 넣은 경우 등)
-  var users = {};
-  readAll_('users').forEach(function (u) { if (String(u.active).toUpperCase() === 'TRUE') users[normalizeEmail_(u.email)] = String(u.roles); });
-  data.teachers.forEach(function (e) {
-    if (!/hall_teacher/.test(users[e] || '')) throw new Error('users에 학사 교사로 없습니다(addUser 먼저): ' + e);
+  return withLock_(function () {   // 검사와 쓰기 사이에 다른 저장이 끼지 않게(bulkAppend_의 락은 다시 들어가도 된다)
+    var students = readAll_('students');
+    if (!fake1DbIsAllFake_(students)) {
+      throw new Error('가짜 학생(seedFakeData)만 있는 DB에서만 실행합니다. 실제 데이터가 있는 DB에는 쓰지 않습니다.');
+    }
+    var teacherEmail = normalizeEmail_(props_().getProperty('TEST_TEACHER_EMAIL'));
+    if (!teacherEmail) throw new Error('Script Property TEST_TEACHER_EMAIL(시험 학사 교사)을 먼저 넣으세요.');
+    var fake = buildFakeData_({ teacherEmail: teacherEmail });
+    var termIds = readAll_('terms').map(function (t) { return t.id; });
+    if (!fake.terms.every(function (t) { return termIds.indexOf(t.id) >= 0; })) {
+      throw new Error('가짜 운영 기간이 없습니다. seedFakeData()를 먼저 실행하세요.');
+    }
+    var data = buildFakeStage2Duty_(fake);
+    // 근무자는 users에 살아 있는 학사 교사여야 하고, 기록자는 근무표 담당자여야 한다(속성을 늦게 넣은 경우 등)
+    var users = {};
+    readAll_('users').forEach(function (u) { if (String(u.active).toUpperCase() === 'TRUE') users[normalizeEmail_(u.email)] = String(u.roles); });
+    data.teachers.forEach(function (e) {
+      if (!/hall_teacher/.test(users[e] || '')) throw new Error('users에 학사 교사로 없습니다(addUser 먼저): ' + e);
+    });
+    if (!/duty_manager/.test(users[data.manager] || '')) throw new Error('users에 근무표 담당자로 없습니다: ' + data.manager);
+    // 이미 있는 1월 근무표·1/1 일정(이 시드가 쓴 것이 아닌 행)을 덮지 않는다
+    var mine = {};
+    data.dutySlots.concat(data.daySchedules).forEach(function (r) { mine[r.id] = true; });
+    var foreign = readAll_('duty_slots').filter(function (r) { return String(r.date).slice(0, 7) === FAKE2_MONTH && !mine[r.id]; })
+      .concat(readAll_('day_schedules').filter(function (r) { return String(r.date) === FAKE2_CLOSED && !mine[r.id]; }));
+    if (foreign.length) throw new Error(FAKE2_MONTH + ' 근무표나 ' + FAKE2_CLOSED + ' 일정에 다른 행이 ' + foreign.length + '개 있어 쓰지 않습니다.');
+    var stage1First = buildFakeStage1_(fake).statusChanges[0].id;
+    if (!readAll_('status_changes').some(function (r) { return r.id === stage1First; })) {
+      throw new Error('1단계 가짜 데이터가 없습니다. seedFakeStage1()을 먼저 실행하세요.');
+    }
+    var life = buildFakeStage2Life_(fake, readAll_('violation_rules'));
+    ensureTermSheets_([]);
+    var lines = [];
+    [['duty_slots', data.dutySlots], ['day_schedules', data.daySchedules],
+      [termSheetName_('violations', life.term.id), life.violations], ['status_changes', life.statusChanges]].forEach(function (pair) {
+      var fresh = fake1OnlyNew_(pair[1], readAll_(pair[0]));
+      bulkAppend_(pair[0], fresh, owner);
+      lines.push(pair[0] + ' +' + fresh.length);
+    });
+    var msg = '가짜 2단계 데이터: ' + lines.join(', ');
+    console.log(msg);
+    return msg;
   });
-  if (!/duty_manager/.test(users[data.manager] || '')) throw new Error('users에 근무표 담당자로 없습니다: ' + data.manager);
-  // 이미 있는 1월 근무표·1/1 일정(이 시드가 쓴 것이 아닌 행)을 덮지 않는다
-  var mine = {};
-  data.dutySlots.concat(data.daySchedules).forEach(function (r) { mine[r.id] = true; });
-  var foreign = readAll_('duty_slots').filter(function (r) { return String(r.date).slice(0, 7) === FAKE2_MONTH && !mine[r.id]; })
-    .concat(readAll_('day_schedules').filter(function (r) { return String(r.date) === FAKE2_CLOSED && !mine[r.id]; }));
-  if (foreign.length) throw new Error(FAKE2_MONTH + ' 근무표나 ' + FAKE2_CLOSED + ' 일정에 다른 행이 ' + foreign.length + '개 있어 쓰지 않습니다.');
-  var stage1First = buildFakeStage1_(fake).statusChanges[0].id;
-  if (!readAll_('status_changes').some(function (r) { return r.id === stage1First; })) {
-    throw new Error('1단계 가짜 데이터가 없습니다. seedFakeStage1()을 먼저 실행하세요.');
-  }
-  var life = buildFakeStage2Life_(fake, readAll_('violation_rules'));
-  ensureTermSheets_([]);
-  var lines = [];
-  [['duty_slots', data.dutySlots], ['day_schedules', data.daySchedules],
-    [termSheetName_('violations', life.term.id), life.violations], ['status_changes', life.statusChanges]].forEach(function (pair) {
-    var fresh = fake1OnlyNew_(pair[1], readAll_(pair[0]));
-    bulkAppend_(pair[0], fresh, owner);
-    lines.push(pair[0] + ' +' + fresh.length);
-  });
-  var msg = '가짜 2단계 데이터: ' + lines.join(', ');
-  console.log(msg);
-  return msg;
 }

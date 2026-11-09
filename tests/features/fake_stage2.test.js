@@ -219,6 +219,29 @@ test('seedFakeStage2: 이미 있는 1월 근무 칸·1/1 일정(다른 행)이 �
   assert.deepStrictEqual(counts(env2), [0, 1]);
 });
 
+test('seedFakeStage2: env.seedFake()처럼 "가짜 데이터(등록 없음)" 학생이 섞이면 거부(가짜 판정은 정확히 일치)', () => {
+  const env = createGasEnv({ owner: 'owner@example.com', now: '2026-12-20T10:00:00' });
+  env.seedFake({ stage1: true });
+  assert.match(env.errorOf(env.owner, (c) => c.seedFakeStage2()).message, /가짜 학생/);
+  assert.deepStrictEqual(counts(env), [0, 2], '1단계 일정 2행만, 2단계는 0행');
+  assert.strictEqual(ctx.fake1DbIsAllFake_([{ memo: '가짜 데이터' }, { memo: '가짜 데이터(등록 없음)' }]), false);
+  assert.strictEqual(ctx.fake1DbIsAllFake_([{ memo: '가짜 데이터' }]), true);
+});
+
+test('seedFakeStage2: 시험 교사 비활성·담당자 역할 없음·가짜 기간 없음이면 쓰지 않는다', () => {
+  const userId = (env, email) => env.rows('users').find((u) => u.email === email).id;
+  const a = seededEnv({}, { stage1: true });
+  a.asOwner((c) => c.updateRecord_('users', userId(a, TESTER), { active: 'FALSE' }, a.owner));
+  assert.match(a.errorOf(a.owner, (c) => c.seedFakeStage2()).message, /학사 교사로 없습니다/);
+  const b = seededEnv({}, { stage1: true });
+  b.asOwner((c) => c.updateRecord_('users', userId(b, T2), { roles: 'hall_teacher' }, b.owner));
+  assert.match(b.errorOf(b.owner, (c) => c.seedFakeStage2()).message, /근무표 담당자/);
+  const e = seededEnv({}, { stage1: true });
+  e.asOwner((c) => c.getSheet_('db', 'terms').getRange(3, 1).setValue('zzzzzzzz-0000-4000-8000-000000000000'));   // 둘째 가짜 기간 id를 바꿈
+  assert.match(e.errorOf(e.owner, (c) => c.seedFakeStage2()).message, /가짜 운영 기간/);
+  for (const env of [a, b, e]) assert.deepStrictEqual(counts(env).slice(0, 1), [0]);
+});
+
 test('seedFakeStage2: TEST_TEACHER_EMAIL이 없거나 users에 학사 교사로 없으면 쓰지 않는다', () => {
   const env = seededEnv();
   delete env.scriptProps.TEST_TEACHER_EMAIL;
