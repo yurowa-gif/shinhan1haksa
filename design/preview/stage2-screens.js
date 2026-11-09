@@ -77,14 +77,14 @@ def('home-homeroom', '홈', '담임 홈 (2단계 카드: 우리 반 OUT·입퇴�
   var m = frame(root, { title: '신한1학사', who: '이선생', note: '담임 이선생 화면 · 담임은 우리 반(2-1)만 보고 열람만 한다(결정 45).' });
   m.appendChild(card('2-1 학사생 (9명)', [UI.segmented({ options: [{ value: 'all', label: '모두' }, { value: 'req', label: '요청 중' }], value: 'all', onchange: function () {} }),
     el('ul', { class: 'list' }, [
-      el('li', { style: 'align-items:center' }, [el('b', { text: '1. 이나래' }), UI.statusPill('out2', '퇴실 대상')]),
+      el('li', { style: 'align-items:center' }, [el('b', { text: '2. 이나래' }), UI.statusPill('out2', '퇴실 대상')]),
       el('li', { style: 'align-items:center' }, [el('b', { text: '2. 정하나' }), UI.statusPill('out1', '1OUT')]),
-      el('li', { style: 'align-items:center' }, [el('b', { text: '3. 오서아' }), UI.statusPill('requested', '요청 1')])]),
+      el('li', { style: 'align-items:center' }, [el('b', { text: '2. 오서아' }), UI.statusPill('requested', '요청 1')])]),
     link('특이사항 요청', 'secondary', 'margin-top:8px')]));
   m.appendChild(card('우리 반 OUT', [row([UI.statusPill('out1', '1OUT 1명'), UI.statusPill('out2', '퇴실 대상 1명')], 'margin:4px 0 8px'), el('div', { class: 'muted', text: 'OUT이 새로 기록되면 메일로 알려 드립니다(학생 이름·메모 없이 날짜·항목·몇 OUT인지만).' }), link('우리 반 OUT 보기', 'secondary', 'margin-top:12px')]));
   m.appendChild(card('우리 반 입퇴실·급식 변경', [el('ul', { class: 'list' }, [
-    el('li', { style: 'align-items:center' }, [el('div', {}, [el('b', { text: '3월 4일 · 2. 정하나' }), el('div', { class: 'muted', text: '조식 미실시(3월 8일부터)' })]), UI.statusPill('requested', '서류 미제출')]),
-    el('li', { style: 'align-items:center' }, [el('div', {}, [el('b', { text: '3월 1일 · 3. 오서아' }), el('div', { class: 'muted', text: '기숙사 입실' })]), UI.statusPill('confirmed', '서류 제출')])]), el('div', { class: 'muted', text: '이번 주 변경만 보입니다. 변경은 담당교사가 합니다.' })]));
+    el('li', { style: 'align-items:center' }, [el('div', {}, [el('b', { text: '3월 4일 · 2. 정하나' }), el('div', { class: 'muted', text: '조식 미실시(3월 15일부터)' })]), UI.statusPill('requested', '서류 미제출')]),
+    el('li', { style: 'align-items:center' }, [el('div', {}, [el('b', { text: '3월 1일 · 2. 오서아' }), el('div', { class: 'muted', text: '기숙사 입실' })]), UI.statusPill('confirmed', '서류 제출')])]), el('div', { class: 'muted', text: '이번 주 변경만 보입니다. 변경은 담당교사가 합니다.' })]));
 });
 
 def('home-duty', '홈', '근무표 담당자 홈 (정선생)', {}, function (root) {
@@ -101,8 +101,8 @@ def('home-duty', '홈', '근무표 담당자 홈 (정선생)', {}, function (roo
 def('home-admin', '홈', '관리자 홈 (오늘 인원·2OUT)', {}, function (root) {
   var m = frame(root, { title: '신한1학사', who: '관리자', note: '시안 · 관리자 홈. 2OUT 대상(면담 필요·확정 가능)과 오늘 인원이 위에 온다.' });
   m.appendChild(card('2OUT 대상', [
-    row([UI.statusPill('out2', '퇴실 대상 2명')], 'margin:4px 0 8px'),
-    row([el('b', { text: '면담 필요 1' }), el('span', { text: '·' }), el('b', { text: '확정 가능 1' })]),
+    row([UI.statusPill('out2', '퇴실 대상 3명')], 'margin:4px 0 8px'),
+    row([el('b', { text: '면담 필요 2' }), el('span', { text: '·' }), el('b', { text: '확정 가능 1' })]),
     el('div', { class: 'muted', style: 'margin-top:4px', text: '확정 가능한 학생은 관리자가 퇴실을 확정합니다.' }),
     link('퇴실 대상 보기', '', 'margin-top:12px')]));
   m.appendChild(card('오늘 3월 3일(수) 인원', [
@@ -121,7 +121,7 @@ function dayCard(date, off, lines, extra, who) {
   var ul = el('ul', { class: 'list' });
   lines.forEach(function (l) {
     var left = el('div', {}, [el('span', { class: 'muted', text: l.slot + '  ' }), l.empty ? UI.statusPill('requested', '비어 있음') : el('b', { text: l.who }), l.swap ? ' ' : null, l.swap ? UI.statusPill('confirmed', '교대') : null, l.mine ? ' ' : null, l.mine ? UI.statusPill('todo', '내 근무') : null, l.standby ? ' ' : null, l.standby ? UI.statusPill('mute', '예비') : null]);
-    left.style.minWidth = '0';
+    left.style.minWidth = '0'; left.style.wordBreak = 'keep-all';
     var li = el('li', { style: 'align-items:center' }, [left]);
     var btn = l.btn || (who === 'mgr' && !l.empty && !l.standby ? '대신 근무' : '');
     if (btn) li.appendChild(el('button', { type: 'button', class: 'btn secondary row-btn', text: btn }));
@@ -157,7 +157,7 @@ function monthCal(root, teacher) {
   var m = frame(root, { title: '근무표', who: teacher ? '박선생' : '정선생', note: '시안 · 월 달력은 PC 권장. 휴대폰에서는 달력 상자 안에서만 가로로 민다. 색만으로 표시하지 않는다(글자 "내 근무"·"운영 안 함"·"비어 있음").' });
   m.appendChild(row([el('button', { type: 'button', class: 'btn secondary', text: '‹' }), el('b', { text: '2027년 3월', style: 'flex:1;text-align:center' }), el('button', { type: 'button', class: 'btn secondary', text: '›' })], 'margin-bottom:12px'));
   m.appendChild(UI.segmented({ options: [{ value: 'week', label: '주 목록' }, { value: 'month', label: '월 달력' }], value: 'month', onchange: function () {} }));
-  var duty = { 1: ['박', '김'], 3: ['박', null], 4: ['이', '정'], 5: ['최*', '예 최'], 6: ['박', '예 김'], 7: ['정', null], 8: ['김', '이'], 9: ['정', '박'], 10: ['이', '김'], 11: ['박', '최'], 12: ['한', '예 정'], 13: ['최', '예 한'], 14: ['김', '예 박'] };
+  var duty = { 1: ['박', '김'], 3: ['박', null], 4: ['이', '정'], 5: ['최*', '예 최'], 6: ['박', '예 김'], 7: ['정', null], 8: ['김', '이'], 9: ['정', '박'], 10: ['이', '김'], 11: ['박', '김*'], 12: ['한', '예 정'], 13: ['최', '예 한'], 14: ['김', '예 박'] };
   var table = el('table', { class: 'duty-cal' });
   table.appendChild(el('thead', {}, [el('tr', {}, ['월', '화', '수', '목', '금', '토', '일'].map(function (d) { return el('th', { text: d }); }))]));
   var body = el('tbody', {});
@@ -255,14 +255,14 @@ function recordScreen(root, teacher) {
   m.appendChild(row([el('button', { type: 'button', class: 'btn secondary', text: '‹' }), el('b', { text: '2027년 3월', style: 'flex:1;text-align:center' }), el('button', { type: 'button', class: 'btn secondary', text: '›' })], 'margin-bottom:12px'));
   var small = 'color:var(--muted-ink);font-size:var(--font-sm)';
   var rows = teacher ? [RECORD[0]] : RECORD;
-  var thead = el('thead', {}, [el('tr', {}, ['교사', '근무', '21:30', '23:00', '단독', '예비 지정'].map(function (h) { return el('th', { scope: 'col', text: h }); }))]);
+  var thead = el('thead', {}, [el('tr', {}, ['교사', '근무', '21:30', '23:00', '단독', '예비'].map(function (h) { return el('th', { scope: 'col', text: h }); }))]);
   var body = rows.map(function (r) {
     return el('tr', {}, [el('th', { scope: 'row', text: r[0] }), el('td', { text: r[1] + '회', style: 'font-size:var(--font-lg);font-weight:700' }),
       el('td', { text: String(r[2]), style: small }), el('td', { text: String(r[3]), style: small }), el('td', { text: String(r[4]), style: small }), el('td', { text: r[5] + '회', style: small })]);
   });
   if (!teacher) body.push(el('tr', { class: 'total' }, [el('th', { scope: 'row', text: '합계' }), el('td', { text: '48회' }), el('td', { text: '18' }), el('td', { text: '18' }), el('td', { text: '12' }), el('td', { text: '11회' })]));
   m.appendChild(el('div', { class: 'tablewrap' }, [el('table', { class: 'data compact' }, [thead, el('tbody', {}, body)])]));
-  m.appendChild(el('div', { class: 'notice info', text: '"근무" 합계가 주 숫자입니다(21:30조·23:00조 수당은 같아 조별 횟수는 참고). "예비 지정"은 따로 세며, 대신 근무한 날은 근무로만 세고 예비 지정에서는 뺍니다.' }));
+  m.appendChild(el('div', { class: 'notice info', text: '"근무" 합계가 주 숫자입니다(21:30조·23:00조 수당은 같아 조별 횟수는 참고). "예비"는 예비 지정 횟수로 따로 세며, 대신 근무한 날은 근무로만 세고 예비 지정에서는 뺍니다.' }));
   if (!teacher) {
     m.appendChild(card('교대 3건', [el('ul', { class: 'list' }, [
       el('li', {}, [el('div', {}, [el('b', { text: '3월 5일(금) 근무' }), el('div', { class: 'muted', text: '이선생 → 최선생 · 예비 감독이 대신 근무(근무로 셈)' })]), UI.statusPill('confirmed', '교대')]),
@@ -275,7 +275,7 @@ def('duty-record', 'F3 근무표', 'F3-3 월말 근무 기록표 (관리자·근
 def('duty-record-teacher', 'F3 근무표', 'F3-3 월말 근무 기록표 (학사 교사: 본인 행만)', {}, function (root) { recordScreen(root, true); });
 
 /* ═════════ F4 OUT ═════════ */
-function outTabs(on) { return [{ t: '기록', on: on === 0 }, { t: '퇴실 대상', on: on === 3, n: 2 }, { t: '오늘', on: on === 2 }, { t: '학기', on: on === 1 }]; }
+function outTabs(on) { return [{ t: '기록', on: on === 0 }, { t: '퇴실 대상', on: on === 3, n: 3 }, { t: '오늘', on: on === 2 }, { t: '학기', on: on === 1 }]; }
 def('outs-record', 'F4 OUT', 'F4-1 OUT 기록 (30초 흐름)', {}, function (root) {
   var m = frame(root, { title: 'OUT', who: '박선생', tabs: outTabs(0), bar: [{ text: '닫기', kind: 'secondary' }, { text: 'OUT 저장' }],
     note: '시안 · 홈에서 [OUT 기록하기] 탭 1 → 학생 찾기(초성 입력 1 + 탭 1) → 항목 탭 1 → [OUT 저장] 탭 1 = 탭 4 + 입력 1 (약 30초). 일시·적발 교사는 기본값(지금·나).' });
@@ -291,17 +291,17 @@ def('outs-record', 'F4 OUT', 'F4-1 OUT 기록 (30초 흐름)', {}, function (roo
 });
 def('outs-term', 'F4 OUT', 'F4-2 이번 학기 현황', {}, function (root) {
   var m = frame(root, { title: 'OUT', who: '관리자', tabs: outTabs(1), note: '시안 · 이번 학기(1학기) 누적. 학기마다 초기화되고 이전 학기는 조회만. 1학사 교사는 학사생 전체를 보고 담임은 우리 반만 본다. [취소 처리]는 관리자만 보인다.' });
-  m.appendChild(el('div', { class: 'stats', style: 'margin-bottom:12px' }, [statBox(8, 'OUT 기록'), statBox(2, '1OUT 학생'), statBox(2, '퇴실 대상')]));
+  m.appendChild(el('div', { class: 'stats', style: 'margin-bottom:12px' }, [statBox(10, 'OUT 기록'), statBox(2, '1OUT 학생'), statBox(3, '퇴실 대상')]));
   m.appendChild(UI.segmented({ options: [{ value: 'mine', label: '내 담당' }, { value: 'all', label: '전체' }], value: 'all', onchange: function () {} }));
   var c = card('', []);
   var ul = el('ul', { class: 'list' });
-  [['3. 박다솜', 'out2', '퇴실 대상', '3월 3일 자습 분위기 방해'], ['2. 이나래', 'out2', '퇴실 대상', '3월 2일 휴대폰·전자기기'], ['1. 김가온', 'out1', '1OUT', '3월 2일 휴대폰·전자기기'], ['2. 최하늘', 'out1', '1OUT', '3월 3일 무단 지각·결석·이탈(자동)'], ['3. 정하윤', 'mute', '퇴실 처리됨', '3월 2일 기숙사 생활 위반']].forEach(function (r) {
+  [['3. 박다솜', 'out2', '퇴실 대상', '3월 3일 자습 분위기 방해'], ['2. 이나래', 'out2', '퇴실 대상', '3월 2일 휴대폰·전자기기'], ['2. 최유나', 'out2', '퇴실 대상', '3월 3일 휴대폰·전자기기'], ['1. 김가온', 'out1', '1OUT', '3월 2일 휴대폰·전자기기'], ['2. 최하늘', 'out1', '1OUT', '3월 3일 무단 지각·결석·이탈(자동)'], ['3. 정하윤', 'mute', '퇴실 처리됨', '3월 2일 기숙사 생활 위반']].forEach(function (r) {
     ul.appendChild(el('li', { style: 'align-items:center' }, [el('div', {}, [el('b', { text: r[0] }), el('div', { class: 'muted', text: '가장 최근: ' + r[3] })]), UI.statusPill(r[1], r[2])]));
   });
   c.appendChild(ul); m.appendChild(c);
   m.appendChild(card('3. 박다솜 · OUT 2건', [el('ul', { class: 'list' }, [
-    el('li', { style: 'align-items:center' }, [el('div', {}, [el('div', { text: '3월 3일(수) 21:40 · 자습 분위기 방해' }), el('div', { class: 'muted', text: '적발 박선생 · 입력 박선생 · 직접' })]), el('button', { type: 'button', class: 'btn secondary', text: '취소 처리' })]),
-    el('li', { style: 'align-items:center' }, [el('div', {}, [el('div', { text: '3월 2일(화) 22:10 · 휴대폰·전자기기' }), el('div', { class: 'muted', text: '적발 김선생 · 입력 이선생 · 직접' })]), el('button', { type: 'button', class: 'btn secondary', text: '취소 처리' })])])]));
+    el('li', { style: 'align-items:center' }, [el('div', {}, [el('div', { text: '3월 3일(수) 21:40 · 자습 분위기 방해' }), el('div', { class: 'muted', text: '적발 박선생 · 입력 박선생 · 직접' })]), el('button', { type: 'button', class: 'btn secondary row-btn', text: '취소 처리' })]),
+    el('li', { style: 'align-items:center' }, [el('div', {}, [el('div', { text: '3월 2일(화) 22:10 · 휴대폰·전자기기' }), el('div', { class: 'muted', text: '적발 김선생 · 입력 이선생 · 직접' })]), el('button', { type: 'button', class: 'btn secondary row-btn', text: '취소 처리' })])])]));
 });
 def('outs-today', 'F4 OUT', 'F4-2 오늘 현황', {}, function (root) {
   var m = frame(root, { title: 'OUT', who: '박선생', tabs: outTabs(2), note: '시안 · 오늘 기록된 OUT. 1학사 교사는 학사생 전체의 오늘 OUT을 본다(입력은 담당 학생·내가 근무한 날만).' });
@@ -321,26 +321,31 @@ function dismissCard(name, detail, pill, msg, btn, disabled) {
 def('dismiss-teacher', 'F4 OUT', 'F4-3 퇴실 대상 (담당교사 박선생)', {}, function (root) {
   var m = frame(root, { title: 'OUT', who: '박선생', tabs: outTabs(3), note: '시안 · 모든 학사생의 퇴실 대상이 보이고, 면담은 담당교사만 기록한다. 기록 뒤에는 관리자가 퇴실을 확정한다(유예 없음).' });
   m.appendChild(UI.segmented({ options: [{ value: 'mine', label: '내 담당' }, { value: 'all', label: '전체' }], value: 'all', onchange: function () {} }));
-  m.appendChild(dismissCard('3. 박다솜 (내 담당)', '2OUT · 3월 1일 휴대폰·전자기기 / 3월 3일 자습 분위기 방해', UI.statusPill('todo', '면담 필요'), '학부모 면담을 하고 기록해 주세요. 기록이 있어야 관리자가 퇴실을 확정할 수 있습니다.', { text: '면담 기록하기' }));
+  m.appendChild(dismissCard('3. 박다솜 (내 담당)', '2OUT · 3월 2일 휴대폰·전자기기 / 3월 3일 자습 분위기 방해', UI.statusPill('todo', '면담 필요'), '학부모 면담을 하고 기록해 주세요. 기록이 있어야 관리자가 퇴실을 확정할 수 있습니다.', { text: '면담 기록하기' }));
   m.appendChild(dismissCard('2. 이나래 (담당 김선생)', '2OUT · 3월 2일 기숙사 생활 위반 / 3월 2일 휴대폰·전자기기', UI.statusPill('confirmed', '면담 기록됨'), '관리자가 퇴실을 확정합니다. 면담은 담당 김선생만 기록합니다.', null));
+  m.appendChild(dismissCard('2. 최유나 (담당 한선생)', '2OUT · 3월 2일 자습 분위기 방해 / 3월 3일 휴대폰·전자기기', UI.statusPill('todo', '면담 필요'), '이전 면담은 연결된 OUT이 취소되어 인정되지 않습니다. 담당 한선생이 면담을 새로 기록해야 합니다.', null));
 });
-def('dismiss-admin', 'F4 OUT', 'F4-3 퇴실 대상 (관리자 낱말: 면담 필요 · 퇴실 확정 가능 · 퇴실 처리됨 + 면담 다시 필요 안내)', {}, function (root) {
+def('dismiss-admin', 'F4 OUT', 'F4-3 퇴실 대상 (관리자 낱말: 면담 필요 · 퇴실 확정 가능 · 퇴실 처리됨, 면담 다시 필요 카드 포함)', {}, function (root) {
   var m = frame(root, { title: 'OUT', who: '관리자', tabs: outTabs(3), note: '시안 · 같은 상태를 보는 사람에 따라 문구가 다르다: 담당교사 "면담 기록됨" = 관리자 "퇴실 확정 가능". 면담 내용은 담당교사와 관리자만 볼 수 있고 이 화면에는 날짜·내용이 나오지 않는다.' });
   m.appendChild(dismissCard('3. 박다솜 (담당 박선생)', '2OUT · 3월 3일 2번째 OUT', UI.statusPill('todo', '면담 필요'), '담당교사가 학부모 면담을 기록하면 확정할 수 있습니다.', { text: '퇴실 확정 — 면담 기록 필요' }, true));
   m.appendChild(dismissCard('2. 이나래 (담당 김선생)', '2OUT · 3월 2일 2번째 OUT', UI.statusPill('confirmed', '퇴실 확정 가능'), '면담이 기록되어 있습니다. 확정하면 입퇴실 신청서가 미리 채워집니다.', { text: '퇴실 확정' }));
-  m.appendChild(el('div', { class: 'notice info', text: '연결된 OUT이 나중에 취소되면 그 면담은 인정되지 않습니다. 카드가 "면담 필요"로 돌아가고 "이전 면담은 연결된 OUT이 취소되어 인정되지 않습니다. 면담을 새로 기록해 주세요."가 붙습니다.' }));
+  m.appendChild(dismissCard('2. 최유나 (담당 한선생)', '2OUT · 3월 3일 2번째 OUT', UI.statusPill('todo', '면담 필요'), '이전 면담은 연결된 OUT이 취소되어 인정되지 않습니다. 면담을 새로 기록해 주세요.', { text: '퇴실 확정 — 면담 기록 필요' }, true));
   m.appendChild(card('퇴실 처리됨 (1)', [el('ul', { class: 'list' }, [el('li', { style: 'align-items:center' }, [el('div', {}, [el('b', { text: '3. 정하윤' }), el('div', { class: 'muted', text: '3월 3일 퇴실 확정 · 입퇴실에서 확인' })]), UI.statusPill('mute', '퇴실 처리됨')])])]));
 });
-def('counsel-sheet', 'F4 OUT', 'F4-3 면담 기록 시트 (담당교사)', { sheet: true }, function (root) {
+function counselSheet(root, value, errorText) {
   var m = frame(root, { title: 'OUT', who: '박선생', tabs: outTabs(3) });
-  m.appendChild(dismissCard('3. 박다솜 (내 담당)', '2OUT · 3월 1일 휴대폰·전자기기 / 3월 3일 자습 분위기 방해', UI.statusPill('todo', '면담 필요'), '', { text: '면담 기록하기' }));
+  m.appendChild(dismissCard('3. 박다솜 (내 담당)', '2OUT · 3월 2일 휴대폰·전자기기 / 3월 3일 자습 분위기 방해', UI.statusPill('todo', '면담 필요'), '', { text: '면담 기록하기' }));
+  var dateField = UI.dateField({ label: '면담 날짜', value: value, min: '2027-03-03', shortcuts: [{ label: '오늘', value: '2027-03-03' }], onchange: function () {} });
+  if (errorText) dateField.setError(errorText);
   var c = el('div', {}, [
     kv([['학생', '3. 박다솜'], ['연결 OUT', '3월 3일 자습 분위기 방해(2OUT)']]),
-    UI.dateField({ label: '면담 날짜', value: '2027-03-03', shortcuts: [{ label: '오늘', value: '2027-03-03' }], onchange: function () {} }),
+    dateField,
     UI.field('면담 내용', el('textarea', { text: '' }), { hint: '면담 내용은 담당교사와 관리자만 볼 수 있습니다. 입퇴실 기록에는 면담 날짜도 쓰이지 않습니다.' })
   ]);
-  UI.bottomSheet({ title: '학부모 면담 기록', content: c, actions: [{ text: '닫기', kind: 'secondary' }, { text: '면담 기록 저장' }] }).open();
-});
+  UI.bottomSheet({ title: '학부모 면담 기록', content: c, actions: [{ text: '닫기', kind: 'secondary' }, { text: '면담 기록 저장', disabled: !!errorText }] }).open();
+}
+def('counsel-sheet', 'F4 OUT', 'F4-3 면담 기록 시트 (담당교사)', { sheet: true }, function (root) { counselSheet(root, '2027-03-03', ''); });
+def('counsel-sheet-error', 'F4 OUT', 'F4-3 면담 날짜가 둘째 OUT보다 이를 때(결정 51)', { sheet: true }, function (root) { counselSheet(root, '2027-03-02', '면담 날짜는 둘째 OUT(3월 3일) 이후여야 합니다.'); });
 def('dismiss-confirm', 'F4 OUT', 'F4-3 관리자 퇴실 확정 확인창', { sheet: true }, function (root) {
   var m = frame(root, { title: 'OUT', who: '관리자', tabs: outTabs(3) });
   m.appendChild(dismissCard('2. 이나래 (담당 김선생)', '2OUT', UI.statusPill('confirmed', '퇴실 확정 가능'), '', { text: '퇴실 확정' }));
