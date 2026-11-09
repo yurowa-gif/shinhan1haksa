@@ -64,7 +64,8 @@ function dtyCancelSlots_(rows, actorEmail) {
 /**
  * 한 달 근무표. month 'yyyy-MM'(빈 값이면 이번 달). 이메일은 내지 않는다.
  * days[].slots[] = {slot, label, end, userId, name, swappedFrom(이름), mine, swapped}
- * emptyDays = 운영하는 날 중 근무 칸(예비 제외)이 빈 날 수, swapCount = 교대된 칸 수.
+ * emptyDays = 오늘 이후(오늘 포함) 운영하는 날 중 근무·예비 감독 칸 하나라도 빈 날 수(지난 빈 날은 근무표 담당자가 못 고치므로 세지 않고
+ * 달력·주 목록의 점선으로만 남긴다), swapCount = 교대된 칸 수.
  */
 function getDutyMonth(month) {
   var user = requirePermission_('duty.view');
@@ -103,7 +104,7 @@ function dtyMonthView_(m, user) {
         swappedFrom: from ? who(from).name : '', swapped: !!from, mine: !!email && email === user.email };
     });
     var open = slots.some(function (x) { return !x.name; });   // 빈 예비 감독 칸도 빈 날(시안·screens.md)
-    if (p.operating && open) emptyDays++;
+    if (p.operating && open && p.date >= today_()) emptyDays++;
     return { date: p.date, weekdayKo: p.weekdayKo, operating: p.operating, memo: p.memo, end: p.end, overridden: p.overridden, slots: slots };
   });
   return { teachers: teachers, days: days, emptyDays: emptyDays, swapCount: swapCount, warnings: warnings.filter(function (w, i, a) { return a.indexOf(w) === i; }) };
@@ -186,7 +187,7 @@ function dtyNameOf_(teachers, email) {
  * 기본과 같아지면(운영, 메모 없음, 다른 값 없음) 그날 행을 '취소'로 되돌린다.
  * 운영 안 함으로 바꾸면 그날 살아 있는 근무 칸은 '취소'로 바꾼다(행은 지우지 않고 audit에 남는다, 총괄 답).
  * 칸이 있으면 {ok:false, needsConfirm:true, warnings:['21:30조 박선생, … 근무 칸이 취소됩니다'], confirmIds}를 먼저 돌려주고,
- * 확인창이 본 칸 id 목록을 input.confirmIds로 다시 보내야 취소한다(그 사이 칸이 바뀌었으면 다시 확인). 자습 일정 화면(saveDaySchedule·cancelDaySchedule)도 같은 규칙.
+ * 확인창이 본 칸 id 목록을 input.confirmIds로 다시 보내야 취소한다(그 사이 칸이 바뀌었으면 다시 확인). 자습 일정 화면의 saveDaySchedule도 같은 규칙.
  * 다시 운영으로 켜도 취소한 칸은 되살리지 않는다(다시 편성). 오늘보다 앞선 날짜는 관리자만 바꾼다(담당자는 거부).
  */
 function setDutyOperating(input) {
@@ -235,7 +236,7 @@ function setDutyOperating(input) {
 function dtyHomeInfo_(user, role) {
   if (role === 'duty_manager' || role === 'admin') {
     var m = today_().slice(0, 7), v = dtyMonthView_(m, user);
-    var open = v.days.filter(function (d) { return d.operating && d.slots.some(function (s) { return !s.name; }); }).slice(0, 3).map(function (d) {
+    var open = v.days.filter(function (d) { return d.operating && d.date >= today_() && d.slots.some(function (s) { return !s.name; }); }).slice(0, 3).map(function (d) {
       return { date: d.date, weekdayKo: d.weekdayKo, labels: d.slots.filter(function (s) { return !s.name; }).map(function (s) { return s.label; }) };
     });
     return { month: m, emptyDays: v.emptyDays, swapCount: v.swapCount, open: open };

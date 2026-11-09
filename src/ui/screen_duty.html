@@ -1,12 +1,12 @@
 <style>
   .duty-nav { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
-  .duty-nav .title { flex: 1; text-align: center; font-weight: 700; }
+  .duty-nav .title { flex: 1; text-align: center; font-weight: 700; word-break: keep-all; }
   .duty-nav .btn { flex: 0 0 auto; white-space: nowrap; }
   .duty-card { cursor: pointer; }
   .duty-card.today { border-color: var(--accent); }
   .duty-head { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 4px; flex-wrap: wrap; }
   .duty-head h2 { margin: 0; }
-  .duty-slot { display: flex; gap: 8px; align-items: center; justify-content: flex-start; flex-wrap: wrap; min-height: 32px; }
+  ul.list li.duty-slot { display: flex; gap: 8px; align-items: center; justify-content: flex-start; flex-wrap: wrap; min-height: 32px; }
   .duty-card.readonly { cursor: default; }
   .duty-slot .slot-label { flex: 0 0 5.5em; color: var(--muted-ink); white-space: nowrap; }
   .duty-sheet-slots .field { margin-bottom: 8px; }
@@ -95,10 +95,10 @@
 
     function gapNotice(d) {
       if (!d.canEdit || !d.emptyDays) return null;
-      var open = d.days.filter(function (x) { return x.operating && x.slots.some(function (s) { return !s.name; }); });
+      // 오늘 이후의 빈 날만 적는다(지난 날은 근무표 담당자가 못 고치므로 달력·주 목록의 점선으로만 남긴다)
+      var open = d.days.filter(function (x) { return x.operating && x.date >= d.today && x.slots.some(function (s) { return !s.name; }); });
       var shown = open.slice(0, 3).map(dayKo).join('·') + (open.length > 3 ? ' 외 ' + (open.length - 3) + '일' : '');
-      // 승인된 시안: 글 한 줄(휴대폰 첫 화면을 차지하지 않게 버튼은 두지 않는다. 날짜 줄을 눌러 편성)
-      return el('div', { class: 'notice warn', text: '비어 있는 날 ' + d.emptyDays + '일 — ' + shown + '. 날짜 줄을 누르면 편성할 수 있습니다.' });
+      return el('div', { class: 'notice warn', text: '남은 빈 날 ' + d.emptyDays + '일 — ' + shown + '. 날짜 줄을 누르면 편성할 수 있습니다.' });
     }
 
     /* ───────── 주 목록 ───────── */

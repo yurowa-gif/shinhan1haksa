@@ -29,7 +29,7 @@ test('getDutyMonth: 달 전체 날짜와 그날 틀(월~목 두 조, 금·토·�
   assert.ok(!JSON.stringify(m).includes('@'), '이메일은 내지 않는다');
   assert.ok(m.canEdit && m.canOperate);
   assert.ok(m.teachers.some((t) => t.id === x.t2 && t.name === '가짜교사2') && m.teachers.every((t) => Object.keys(t).sort().join() === 'id,name'));
-  assert.strictEqual(m.emptyDays, m.days.filter((d) => d.operating).length, '편성 전에는 운영하는 날이 모두 비어 있다');
+  assert.strictEqual(m.emptyDays, m.days.filter((d) => d.operating && d.date >= WED).length, '편성 전에는 오늘 이후 운영하는 날이 모두 비어 있다(지난 날은 세지 않는다)');
 });
 
 test('getDutyMonth 권한: 관리자·근무표 담당자·학사 교사·출결 담당 허용(학사 교사·출결 담당은 편성 못 함), 담임·학생·학부모 거부', () => {
@@ -330,4 +330,16 @@ test('빈 예비 감독 칸도 빈 날로 센다(emptyDays·홈 빈 날 목록)'
   assert.ok(fridays > 0);
   const open = x.env.call(DUTY, 'getHomeData', 'duty_manager').duty.open;
   assert.ok(open.length >= 1 && open.length <= 3 && open.every((o) => o.date && o.weekdayKo && o.labels.length));
+});
+
+test('빈 날 수·홈 빈 날 목록은 오늘 이후만: 지난 빈 날은 세지도 적지도 않는다(달력·주 목록의 점선으로만 남는다)', () => {
+  const x = makeEnv();
+  x.env.setNow('2027-03-17T20:00:00');
+  const m = x.env.call(DUTY, 'getDutyMonth', MAR);
+  const future = m.days.filter((d) => d.operating && d.date >= '2027-03-17');
+  assert.strictEqual(m.emptyDays, future.length);
+  assert.ok(m.days.some((d) => d.operating && d.date < '2027-03-17' && d.slots.some((s) => !s.name)), '지난 빈 날은 days에는 그대로(점선 표시용)');
+  const open = x.env.call(DUTY, 'getHomeData', 'duty_manager').duty.open;
+  assert.ok(open.length === 3 && open.every((o) => o.date >= '2027-03-17'), JSON.stringify(open));
+  assert.strictEqual(open[0].date, future[0].date);
 });
