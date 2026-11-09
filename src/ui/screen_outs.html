@@ -11,7 +11,7 @@
 <script>
   /** OUT 화면: [기록](C11a: 학생 → 항목 → 일시·적발 교사 → 메모 → 저장) · [이번 학기](C11b: 학생별 요약·기록, 관리자 취소) · [오늘 현황]. 면담은 C13. */
   function renderScreen(root) {
-    var state = { timeTouched: false, skewMs: 0, tab: '', termId: '', listStudent: '', list: null, ctx: null, student: null, ruleId: '', date: '', time: '', detectedBy: '', memo: '', busy: false, seq: 0 };
+    var state = { dateTouched: false, timeTouched: false, skewMs: 0, tab: '', termId: '', listStudent: '', list: null, ctx: null, student: null, ruleId: '', date: '', time: '', detectedBy: '', memo: '', busy: false, seq: 0, listSeq: 0 };
     var tabsBox = el('div');
     var body = el('div');
     var listBox = el('div');
@@ -21,10 +21,16 @@
     var bar = null, saveBtn = null, noticeBox = null, statusBox = null, errSetters = {};
 
     function pad(n) { return (n < 10 ? '0' : '') + n; }
-    
-    function pad2(n) { return (n < 10 ? '0' : '') + n; }
     /** 서버 시계 기준 지금(휴대폰 시계가 어긋나도 서버와 같게): 불러올 때 서버 now와 휴대폰 시계의 차이를 기억해 둔다 */
-    function defaultTime() { var d = new Date(Date.now() + state.skewMs); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+    function defaultTime() { var d = new Date(Date.now() + state.skewMs); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+    function serverYmd() { var d = new Date(Date.now() + state.skewMs); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+    /** 자정을 넘겼는데 날짜·시각을 건드리지 않았으면(기본값 그대로) 날짜를 오늘로 옮겨 다시 불러온다 — 어제 날짜에 새벽 시각이 저장되지 않게. 옮겼으면 true */
+    function dayRolled() {
+      if (!state.ctx || state.dateTouched || state.timeTouched || state.date !== state.ctx.today || serverYmd() === state.ctx.today) return false;
+      state.date = serverYmd(); state.student = null; state.time = '';
+      load(state.date, '날짜가 바뀌어 오늘 날짜로 옮겼습니다. 학생을 다시 골라 주세요.');
+      return true;
+    }
     /** 시각을 사용자가 건드리지 않았고 날짜가 오늘이면 지금 시각으로(저장 직전·학생을 고를 때) */
     function refreshTime() {
       if (state.timeTouched || !state.ctx || state.date !== state.ctx.today) return;
@@ -86,20 +92,20 @@
         shortcuts: [{ label: '오늘', value: c.today }, { label: '어제', value: addDaysYmd(c.today, -1) }],
         onchange: function (v) {
           if (!v) return;
-          state.date = v; state.student = null;
+          state.date = v; state.student = null; state.dateTouched = true;
           if (!state.timeTouched) state.time = '';   // 날짜를 바꾸면 기본 시각은 비운다(오늘로 돌아오면 서버 시각, 어제 밤 일은 직접 입력)
           load(v);   // 날짜가 바뀌면 고를 수 있는 학생이 달라져 다시 고른다
         } });
       errSetters.occurredAt = dateField.setError;
       if (!c.dateOk) {   // 역할은 되는데 이 날짜는 안 되는 경우: 날짜 칸은 남겨 다른 날로 갈 수 있게
         body.appendChild(el('div', { class: 'card' }, [el('h2', { text: '언제' }), dateField,
-          el('div', { class: 'notice warn', style: 'margin-top:12px', text: '이 날짜는 기록할 수 없습니다(' + (c.dateReason || '운영 기간 밖·끝난 기간').replace(/\.$/, '') + ') 날짜를 [어제]나 다른 날로 바꿔 주세요.' })]));
+          el('div', { class: 'notice warn', style: 'margin-top:12px', text: '이 날짜는 기록할 수 없습니다(' + (c.dateReason || '운영 기간 밖·끝난 기간').replace(/\.$/, '') + '). ' + (state.date === addDaysYmd(c.today, -1) ? '다른 날짜를 골라 주세요.' : '날짜를 [어제]나 다른 날로 바꿔 주세요.') })]));
         return;
       }
       var studentCard = el('div', { class: 'card' }, [el('h2', { text: '학생' })]);
       errSetters.studentId = cardError(studentCard);
       studentCard.appendChild(UI.studentPicker({ students: c.students, label: '학생', placeholder: '이름·초성(ㅂㄷㅅ)·학번',
-        onpick: function (s) { state.student = s; refreshTime(); updateNotice(); refresh(); } }));   // 입력 중인 폼은 다시 그리지 않는다(고른 학생·글자가 사라지지 않게)
+        onpick: function (s) { if (dayRolled()) return; state.student = s; refreshTime(); updateNotice(); refresh(); } }));   // 입력 중인 폼은 다시 그리지 않는다(고른 학생·글자가 사라지지 않게)
       if (!c.students.length) studentCard.appendChild(el('div', { class: 'muted', text: '이 날짜에 OUT을 기록할 수 있는 학생이 없습니다. 담당 학생이 없거나, 근무한 날(어제 밤까지)이 아닙니다.' }));
       body.appendChild(studentCard);
       noticeBox = el('div');
@@ -134,6 +140,7 @@
       memo.addEventListener('input', function () { state.memo = memo.value; });
       var whoField = UI.field('적발 교사', who), memoField = UI.field('상황 메모(선택)', memo, { hint: '200자까지. 길게 쓰지 않습니다.' });
       var timeField = UI.field('시각', time, { hint: state.date !== c.today && !state.time ? '어제 밤 일이라면 그 시각을 입력해 주세요.' : '' });
+      errSetters.occurredAt = timeField.setError;   // 날짜는 위 카드가 먼저 막으므로 이 단계의 날짜·시각 오류는 시각 칸 아래에
       errSetters.detectedBy = whoField.setError; errSetters.memo = memoField.setError;
       var whenCard = el('div', { class: 'card' }, [el('h2', { text: '언제·누가' }), dateField, timeField, whoField, memoField]);
       body.appendChild(whenCard);
@@ -150,12 +157,15 @@
       var d = new Date(Date.UTC(+ymd.slice(0, 4), +ymd.slice(5, 7) - 1, +ymd.slice(8, 10) + n));
       return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
     }
-    function reset() { state.student = null; state.ruleId = ''; state.memo = ''; state.time = ''; state.timeTouched = false; }
+    function reset() { state.student = null; state.ruleId = ''; state.memo = ''; state.time = ''; state.timeTouched = false; state.dateTouched = false; }
     /** 카드 안 오류 칸(빨간 글씨·테두리): 학생·항목 오류용 */
     function cardError(card) {
-      var fix = el('div', { class: 'fix' }), box = el('div', { class: 'field' }, [fix]);
-      card.appendChild(box);
-      return function (msg) { fix.textContent = msg || ''; if (msg) box.classList.add('invalid'); else box.classList.remove('invalid'); };
+      var box = null, fix = null;   // 오류가 있을 때만 칸을 만든다(빈 칸이 카드 아래 여백을 차지하지 않게)
+      return function (msg) {
+        if (!msg) { if (box) { box.parentNode.removeChild(box); box = fix = null; } return; }
+        if (!box) { fix = el('div', { class: 'fix' }); box = el('div', { class: 'field invalid' }, [fix]); card.appendChild(box); }
+        fix.textContent = msg;
+      };
     }
 
     function inputValue() {
@@ -177,7 +187,7 @@
     }
     function showFailure(message) { showErrors([{ field: '', message: message }]); }
 
-    function onSave() { if (canSave()) doSave(false); }
+    function onSave() { if (dayRolled()) return; if (canSave()) doSave(false); }
     function doSave(ack) {
       state.busy = true; refresh();
       showErrors([]);

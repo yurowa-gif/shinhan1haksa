@@ -365,3 +365,12 @@ test('빈틈 메우기: previewOut 응답에 이메일 없음, 담당교사 이�
   x.env.as(T1, (c) => { const orig = c.ensureTermSheet_; c.ensureTermSheet_ = function () { ensured++; return orig.apply(null, arguments); }; c.MailApp = { sendEmail() {}, getRemainingDailyQuota: () => 100 }; return c.saveOut(x.input({ ruleId: x.dorm.id })); });
   assert.strictEqual(ensured, 0, '탭이 있으면 다시 만들지 않는다');
 });
+
+test('적발 교사 users.email이 대소문자·공백이 섞여 있어도 detected_by는 소문자 이메일로 저장된다', () => {
+  const x = makeEnv();
+  const t3 = x.env.rows('users').find((u) => u.email === T3);
+  x.env.asOwner((c) => c.updateRecord_('users', t3.id, { email: ' ' + T3.toUpperCase() + ' ' }, ADMIN));
+  const { r } = save(x, T1, x.input({ detectedBy: t3.id }));
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.strictEqual(x.tab()[x.tab().length - 1].detected_by, T3);
+});
