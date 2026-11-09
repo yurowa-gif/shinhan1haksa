@@ -19,7 +19,7 @@
 const assert = require('assert');
 const { test, loadGs, plain } = require('../helpers/harness');
 
-const ctx = loadGs(['src/rules/DateRules.gs', 'src/rules/StatusRules.gs', 'src/rules/MealRules.gs']);
+const ctx = loadGs(['src/rules/DateRules.gs', 'src/rules/StatusRules.gs', 'src/rules/MealRules.gs', 'src/rules/MoveRules.gs']);
 
 function rng(seed) {
   let a = seed >>> 0;
@@ -52,7 +52,7 @@ function simulate(seed, steps) {
   const log = ['초기 조식 ' + init['조식'] + ' 석식 ' + init['석식']];
   const created = () => String(++seq).padStart(6, '0');
   const addRow = (o) => rows.push(Object.assign({ id: 'r' + (++rid), student_id: 's1', status: '유효', created_at: created() }, o));
-  const cancel = (list) => list.forEach((c) => { rows.find((r) => r.id === c.id).status = '취소'; });
+  const cancel = (list, why) => list.forEach((c) => { Object.assign(rows.find((r) => r.id === c.id), { status: '취소', cancel_reason: why || '' }); });
 
   function oracleTop(item, d, skip) {
     let top = null;
@@ -86,13 +86,18 @@ function simulate(seed, steps) {
       if (L < '2027-03-02') L = '2027-03-02';                 // 기간 시작(입실 3/1) 뒤
       const t = iso(now);
       leave = { L, t };
-      addRow({ item: '학사', value: '퇴실', effective_date: L, source: 'F6', requested_at: t });
-      for (const item of ['조식', '석식']) {
-        const stop = item === '조식' ? L : ctx.mealEffectiveDate_('stop', t, { leaveDate: L }).date;
-        cancel(plain(ctx.mealPendingToCancel_(rows, 's1', item, stop, { source: 'F6' })));
-        if (isHall(item, ctx.statusOn_(rows, 's1', item, stop))) addRow({ item, value: '미실시', effective_date: stop, source: 'F6', requested_at: t });
+      // F6 학사 퇴실 저장 = movePlan_(R11a) 계획 그대로(되살림 포함). 넷에 하나는 석식 '일반 석식으로' — 퇴실 입력 일시의 일반 석식 신청(의도)
+      const general = R() < 0.25;
+      const mp = plain(ctx.movePlan_(rows, 's1', { type: '학사 퇴실', effectiveDate: L, requestedAt: t, dinner: general ? '일반 석식' : '중단' }, { today }));
+      assert.deepStrictEqual(mp.errors, [], 'seed ' + seed + ' 퇴실 계획 오류');
+      cancel(mp.toCancel, '[자동] r' + (rid + 1) + ' 퇴실 정리');
+      mp.toRestore.forEach((c) => Object.assign(rows.find((r) => r.id === c.id), { status: '유효', cancel_reason: '' }));
+      mp.rows.forEach((r) => addRow({ item: r.item, value: r.value, effective_date: r.effective_date, source: r.source, requested_at: t }));
+      if (general) {
+        const g = ctx.mealEffectiveDate_('to_general', t, { leaveDate: L }).date;
+        intents.push({ item: '석식', value: '일반 석식', eff: g, req: t, seq: ++seq });
       }
-      log.push(today + ' 퇴실 입력: 퇴실일 ' + L);
+      log.push(today + ' 퇴실 입력: 퇴실일 ' + L + (general ? ' 일반 석식으로' : '') + ' 되살림 ' + mp.toRestore.length);
     } else {
       const item = pick(['조식', '석식']), to = pick(VALUES[item]);
       const late = R() < 0.25;
@@ -109,7 +114,7 @@ function simulate(seed, steps) {
       assert.strictEqual(!!p.blocked, !!voidHall, 'seed ' + seed + ' blocked 판정\n' + log.slice(-6).join('\n'));
       if (!voidHall) intents.push({ item, value: to, eff, req, seq: ++seq });
       if (p.blocked) { check(step); continue; }
-      cancel(p.toCancel);
+      cancel(p.toCancel, '[자동] r' + (rid + 1) + ' 새 신청으로 대체');   // 신청 행 id = 다음 addRow
       if (!p.superseded) {
         assert.strictEqual(p.date, eff, 'seed ' + seed + ' 적용일\n' + log.slice(-4).join('\n'));
         addRow({ item, value: to, effective_date: p.date, source: 'F7', requested_at: req });

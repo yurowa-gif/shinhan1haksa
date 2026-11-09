@@ -121,9 +121,10 @@ function mealIsHallOnly_(item, value) {
  *   이 신청은 영영 적용되지 않는다(늦게 입력한 이전 신청서). kind 'none' + 경고, 아무것도 쓰지 않는다.
  * - blocked: 후보 적용일에 학사 상태가 '퇴실'이면 조식 '실시'는 늘, 석식 '학사 석식'은 그 퇴실 기록(requested_at)보다 뒤에 신청했으면
  *   켜지 못한다(일반 석식은 된다). **입력 순서가 아니라 신청 일시 순서:** 퇴실 기록보다 먼저 신청한 학사 석식은 늦게 입력해도
- *   이미 있던 것으로 보고 결정 35 중단일까지 유지한다(아래 followUps가 중단일에 끝낸다).
+ *   이미 있던 것으로 보고 결정 35 중단일까지 유지한다(아래 followUps가 중단일에 끝낸다). 고친 날(effectiveDate)이 결정 35 중단일
+ *   이상이면 먼저 신청했어도 막힌다.
  * - toCancel = mealPendingToCancel_(…, date, {source:'F7', requestedAt, newValue}): 신청 일시가 이 신청 이전이고 적용일이
- *   더 늦은 F6 아닌 행(오늘 이전에 이미 적용된 행이어도) + 뜻이 없어진 퇴실 정리(F6) 행: 이 신청을 저장한 뒤 그 행이 없어도
+ *   더 늦은 F6 아닌 행(오늘 이전에 이미 적용된 행이어도) + 뜻이 없어진 퇴실 정리(F6) 행(적용일이 같은 날 F6 행도): 이 신청을 저장한 뒤 그 행이 없어도
  *   그날 값이 학사생 값이 아니고 그 행 값과 다르면(퇴실 뒤 일반 석식 신청 등) 함께 취소한다.
  * - followUps: 학사생 값 신청이 닿는 학사 퇴실(적용일에 퇴실 상태면 그 퇴실, 아니면 그 뒤 가장 이른 퇴실 — 같은 날 다시 입실한
  *   퇴실은 빼고)이 있고, 중단일(조식 = 퇴실일, 석식 = mealEffectiveDate_('stop', 퇴실 행 requested_at, {leaveDate}) — F6 정리와 같은 날)에
@@ -159,8 +160,9 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
   if (manual) {   // 교사가 고친 적용일(R10, 결정 52)
     rule = rule || 'manual';
     if (!ymdIsValid_(manual)) throw new Error('effectiveDate 형식이 아닙니다(yyyy-MM-dd): ' + opts.effectiveDate);
-    if (manual < at.date) throw new Error('적용일은 신청일(' + at.date + ') 이후여야 합니다: ' + manual);
     if (rule !== 'manual' && rule !== 'entry_date') throw new Error('effectiveRule은 manual 또는 entry_date: ' + opts.effectiveRule);
+    // 입실일(entry_date)은 입퇴실 기록의 사실이라 늦게 입력하면 신청일보다 이를 수 있다. 교사가 고친 날(manual)만 신청일 이후로 막는다.
+    if (rule === 'manual' && manual < at.date) throw new Error('적용일은 신청일(' + at.date + ') 이후여야 합니다: ' + manual);
     cand = { date: manual, rule: rule };
   }
   var from = statusOn_(rows, sid, it, cand.date);
@@ -210,7 +212,7 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
     var e = ruleStr_(c.effective_date), v = ruleStr_(c.value);
     if (v === to) return;
     if (e > cand.date) out.warnings.push(e + '부터 ' + v + '(으)로 바뀌는 행이 있어 이 신청을 덮습니다(' + (ruleStr_(c.source) || '기록') + ')');
-    else if (e > today && e < cand.date) out.warnings.push(e + '부터 ' + v + '(으)로 바뀌는 대기 중인 신청이 먼저 적용됩니다(필요하면 직접 취소)');
+    else if (e > today && e < cand.date && ruleStr_(c.source) !== '명단업로드') out.warnings.push(e + '부터 ' + v + '(으)로 바뀌는 대기 중인 신청이 먼저 적용됩니다(필요하면 직접 취소)');
   });
 
   // 학사생 값이 퇴실 뒤 중단일까지 이어지면 퇴실 정리 행을 함께 쓴다(none이어도 — 이전 미실시 대기 행을 취소한 경우).
