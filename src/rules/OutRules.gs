@@ -1,7 +1,8 @@
 /**
  * OUT 규칙(RULES 세션 소유, docs/contracts/rules-api.md, PRD F1·F4, 결정 4·10·22, vocabulary.md violations).
  *
- * 순수 함수만 둔다. DateRules.gs(ymdIsValid_·ruleStr_·ruleIso_·ruleRowLive_)·AttendanceRules.gs(attTypeBase_·parseBlockSpec_)의 함수를 부른다.
+ * 순수 함수만 둔다. DateRules.gs(ymdIsValid_·isoLocalSplit_·ruleStr_·ruleIso_·ruleRowLive_)·AttendanceRules.gs(attTypeBase_·parseBlockSpec_)·
+ * StatusRules.gs(statusOn_ — outDismissalGate_)의 함수를 부른다.
  * 시트 행(문자열)은 그대로 받는다.
  *   exceptions_<기간>:  id, term_id, group_id, student_id, date, blocks, type, status(요청·확정·취소),
  *                      requested_by, confirmed_by, confirmed_at …
@@ -70,7 +71,7 @@ function outDutyText_(dutyByDate, date) {
  * 용어(행 = 특이사항 행)
  * - 자격 행: status '확정', 날짜가 달력에 있음, 유형이 autoTypes(괄호 설명을 떼고 비교)이고, 그 유형이 autoTypeSince에
  *   있으면 confirmed_at >= 그 시각. **설정 변경은 앞으로만(총괄 결정):** 설정을 넓혀 새로 자동 대상이 된 유형은 넓힌 시각
- *   (설정 행 updated_at)을 autoTypeSince에 넣는다 — 그 전에 확정된 특이사항에는 소급해 OUT을 만들지 않는다. 처음부터 자동
+ *   (outAutoSinceNext_의 since — 설정 행 updated_at은 다른 칸을 고쳐도 바뀌어 쓰지 않는다)을 autoTypeSince에 넣는다 — 그 전에 확정된 특이사항에는 소급해 OUT을 만들지 않는다. 처음부터 자동
  *   대상이던 유형은 넣지 않는다(그래서 취소됐다가 다시 확정된 특이사항의 OUT은 다시 생긴다). 2단계 F4 처음 연결 때
  *   쌓인 특이사항을 한꺼번에 만들 때는 넘기지 않는다.
  * - 단위: per 'group'(기본, 결정 22 "입력 1건 = 1OUT")이면 (학생, group_id) 묶음, group_id가 비면 행 하나. per 'row'면 행마다.
@@ -286,4 +287,67 @@ function outLevel_(violations, studentId, termId) {
   }).length;
   var level = count >= 2 ? 2 : count;
   return { count: count, level: level, label: ['', '1OUT', '퇴실 대상'][level] };
+}
+
+/**
+ * 자동 1OUT 유형 설정의 since 다음 값(결정 40: 설정을 넓힌 시각부터만 자동 OUT, followups R5-2).
+ * 설정 행의 updated_at이 아니라 이 스냅숏으로 유형별 마지막 넓힘 시각을 들고 다닌다(다른 칸을 고쳐도 updated_at이 바뀌므로).
+ * snapshot = {types:[], since:{유형:iso}} | null, currentTypes = 지금 설정 유형, nowIso = 지금, defaultTypes = 설정 기본값.
+ * → {snapshot:{types, since}, since, changed}
+ * - null(처음·분실)이면 기준 유형 = defaultTypes: 기본 그대로면 since {}(처음 연결 때 쌓인 특이사항 일괄 생성),
+ *   기본에 없는 유형은 since = nowIso(스냅숏을 잃어도 넓혔던 유형은 소급하지 않는다).
+ * - 새로 나타난 유형 → since = nowIso(다시 넓혀도 덮어쓴다). 빠진 유형의 since는 남긴다. 괄호 설명은 떼고 비교.
+ * 잘못된 nowIso는 Error.
+ */
+function outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes) {
+  var now = ruleIso_(nowIso);
+  isoLocalSplit_(now);
+  var norm = function (list) {
+    var out = [];
+    (list || []).forEach(function (t) { t = attTypeBase_(t); if (t && out.indexOf(t) < 0) out.push(t); });
+    return out;
+  };
+  var base = norm(snapshot ? snapshot.types : defaultTypes), cur = norm(currentTypes);
+  var since = Object.assign({}, snapshot && snapshot.since);
+  cur.forEach(function (t) { if (base.indexOf(t) < 0) since[t] = now; });
+  var changed = !snapshot || base.length !== cur.length || cur.some(function (t) { return base.indexOf(t) < 0; });
+  return { snapshot: { types: cur, since: since }, since: since, changed: changed };
+}
+
+/**
+ * 2OUT 퇴실 확정 관문(결정 4, PRD F12·F6). 면담 기록 전에는 막는다.
+ * notes = counsel_notes 행 중 id·student_id·type·linked_violation_id·status·date·teacher_email만(내용은 넘기지 않는다).
+ * → {count, level, triggerOutId, meetingNote:{id, date, teacher_email}|null, alreadyLeft, ok, reason:''|'퇴실 대상 아님'|'면담 기록 필요'|'이미 퇴실'}
+ * - 이번 기간 살아 있는 OUT(outLevel_과 같음)을 occurred_at → created_at → id 순으로 놓았을 때 둘째가 triggerOutId.
+ * - 면담 = status 빈칸·유효, 같은 학생, type '2OUT 학부모 면담', 이번 기간 살아 있는 OUT에 연결, 날짜 ≥ triggerOut 발생일.
+ * - alreadyLeft = ymd에 학사 퇴실 상태이거나 앞으로 2OUT 퇴실(memo '[2OUT]…' 또는 reason '2OUT 퇴실')이 잡혀 있음. 보통 미래 퇴실은
+ *   막지 않는다(그 뒤 movePlan_이 '이후 날짜에 입퇴실 기록'으로 그 퇴실을 가리킨다, 총괄 결정). 순서: 이미 퇴실 → 퇴실 대상 아님(2건 미만) → 면담 기록 필요 → ok.
+ * 결정 51: 연결한 OUT이 나중에 취소되면 그 면담은 세지 않는다(다른 2건이 남아도 다시 면담), 둘째 OUT보다 앞선 날짜의 면담도.
+ */
+function outDismissalGate_(violations, notes, changes, studentId, termId, ymd) {
+  var sid = ruleStr_(studentId), tid = ruleStr_(termId);
+  var lv = outLevel_(violations, sid, tid);
+  var live = (violations || []).filter(function (v) {
+    return v && ruleRowLive_(v) && ruleStr_(v.student_id) === sid && ruleStr_(v.term_id) === tid;
+  }).sort(function (a, b) {
+    var ka = [ruleIso_(a.occurred_at), ruleIso_(a.created_at), ruleStr_(a.id)], kb = [ruleIso_(b.occurred_at), ruleIso_(b.created_at), ruleStr_(b.id)];
+    for (var i = 0; i < 3; i++) if (ka[i] !== kb[i]) return ka[i] < kb[i] ? -1 : 1;
+    return 0;
+  });
+  var trigger = live[1] || null;
+  var liveIds = live.map(function (v) { return ruleStr_(v.id); });
+  var n = trigger && (notes || []).filter(function (x) {
+    return x && ruleRowLive_(x) && ruleStr_(x.student_id) === sid && ruleStr_(x.type) === '2OUT 학부모 면담' &&
+      liveIds.indexOf(ruleStr_(x.linked_violation_id)) >= 0 && ruleStr_(x.date) >= ruleIso_(trigger.occurred_at).slice(0, 10);
+  })[0];
+  var out = { count: lv.count, level: lv.level, triggerOutId: trigger ? ruleStr_(trigger.id) : '',
+    meetingNote: n ? { id: ruleStr_(n.id), date: ruleStr_(n.date), teacher_email: ruleStr_(n.teacher_email) } : null,
+    // 이미 퇴실했거나 앞으로 2OUT 퇴실이 잡혀 있으면(2OUT 퇴실을 두 번 만들지 않게) 이미 퇴실
+    alreadyLeft: statusOn_(changes, sid, '학사', ymd) === '퇴실' || (changes || []).some(function (c) {
+      return c && ruleRowLive_(c) && ruleStr_(c.student_id) === sid && ruleStr_(c.item) === '학사' && ruleStr_(c.value) === '퇴실' &&
+        ruleStr_(c.effective_date) > ymd && (ruleStr_(c.memo).indexOf('[2OUT]') === 0 || ruleStr_(c.reason) === '2OUT 퇴실');
+    }), ok: false, reason: '' };
+  out.reason = out.alreadyLeft ? '이미 퇴실' : lv.count < 2 ? '퇴실 대상 아님' : !n ? '면담 기록 필요' : '';
+  out.ok = !out.reason;
+  return out;
 }
