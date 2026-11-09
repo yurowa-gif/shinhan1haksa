@@ -64,8 +64,9 @@
     var kids = [el('h2', { text: '급식·입퇴실 서류' }),
       el('div', { class: n ? '' : 'muted', text: n ? '서류 미제출 ' + n + '건이 남아 있습니다.' : '서류 미제출 기록이 없습니다.' })];
     (f.docList || []).forEach(function (x) {
-      kids.push(el('a', { class: 'btn secondary', style: 'margin-top:8px;justify-content:flex-start;white-space:normal', href: d.appUrl + '?page=moves&tab=history&student=' + encodeURIComponent(x.studentId), text: x.label + ' ' + x.kind }));
+      kids.push(el('a', { class: 'btn secondary', style: 'margin-top:8px;justify-content:flex-start;white-space:normal', href: d.appUrl + '?page=moves&tab=history&student=' + encodeURIComponent(x.studentId) + (x.ymd ? '&date=' + x.ymd : ''), text: x.label + ' ' + x.kind }));
     });
+    if (f.docMore) kids.push(el('div', { class: 'muted', style: 'margin-top:8px', text: '외 ' + f.docMore + '건' }));
     kids.push(el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=moves&tab=meal', text: '급식 변경 신청' }));
     kids.push(el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=moves', text: '입퇴실 신청' }));
     root.appendChild(el('div', { class: 'card' }, kids));
