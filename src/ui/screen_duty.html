@@ -276,7 +276,6 @@
       refresh();
     }
 
-<<<<<<< HEAD
     /* ───────── 기록표 탭(C14): 월말 근무 기록, 근무표 담당자·관리자는 PDF(임시 양식), 학사 교사는 본인 행만 ───────── */
     function drawViewTabs() {
       clear(tabsBox);
@@ -354,12 +353,9 @@
     }
 
     drawViewTabs();
-    load('');
-    showView();   // 기록표로 열리면(?tab=record) 근무표 자료는 뒤에서 불러 두고 기록표를 보인다
-=======
     // ?date=yyyy-MM-dd가 오면 그 날짜의 달·주로 연다(출석부의 "근무표에서 고치기"·보기)
     var wantDate = typeof SCREEN_DATE === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(SCREEN_DATE) ? SCREEN_DATE : '';
     if (wantDate) load(wantDate.slice(0, 7), { date: wantDate }); else load('');
->>>>>>> origin/main
+    showView();   // 기록표로 열리면(?tab=record) 근무표 자료는 뒤에서 불러 두고 기록표를 보인다
   }
 </script>
