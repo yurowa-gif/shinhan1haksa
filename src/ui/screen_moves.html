@@ -120,7 +120,7 @@
             // 신청 일시를 건드리지 않았으면 서버의 지금으로 맞춘다(화면을 오래 열어 둔 뒤 저장해도 옛 시각이 되지 않게)
             if (!atTouched && p.now && p.now.slice(0, 16) !== at.value && retried !== true) { at.value = p.now.slice(0, 16); at.max = at.value; refresh(true); return; }
             last = p; drawResult(); drawBar();
-          }).catch(function (err) { if (mine === seq) fail(err); });
+          }).catch(function (err) { if (alive && mine === seq) fail(err); });
         }, 250);
       }
       function confirmSave() {
@@ -142,7 +142,7 @@
               UI.toast(r.duplicate ? '이미 저장된 신청서입니다.' : r.superseded ? '기록으로 저장했습니다.' : r.dateKo + '부터 ' + r.label + '(으)로 저장했습니다.');
               resetState();   // 다음 학생에게 이전 학생의 선택·서류 체크가 남지 않게 모두 비운다
               call('getMealContext').then(function (c) { if (alive) { ctx = c; draw(); } }).catch(function (err) { if (alive) { draw(); fail(err); } });
-            }).catch(function (err) { busy = false; drawBar(); fail(err); });
+            }).catch(function (err) { if (!alive) return; busy = false; drawBar(); fail(err); });
           }
         });
       }
@@ -156,18 +156,18 @@
   function renderRecordTab(root, wantStudent) {
     var pick = el('div'), out = el('div');
     root.appendChild(pick); root.appendChild(out);
-    var alive = true, seq = 0, current = '', saving = false;
+    var alive = true, seq = 0, current = '', currentYmd = '', saving = false;
     function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
     call('getMealContext').then(function (ctx) {
       if (!alive) return;
       if (!ctx.viewStudents.length) { pick.appendChild(UI.emptyState('볼 수 있는 학생이 없습니다.')); return; }
       var picker = UI.studentPicker({ students: ctx.viewStudents, label: wantStudent ? '다른 학생 보기' : '학생', onpick: function (s) { if (s) load(s.id); else { seq++; current = ''; clear(out); } } });
       pick.appendChild(el('div', { class: 'card' }, [picker]));
-      if (wantStudent) load(wantStudent);   // 홈 카드에서 학생을 눌러 들어오면 그 학생의 기록을 바로 연다
+      if (wantStudent) load(wantStudent, window.SCREEN_DATE || '');   // 홈 카드에서 학생을 눌러 들어오면 그 학생의 기록을 그 기록의 기간 기준으로 바로 연다
     }).catch(function (err) { if (alive) showError(pick, err); });
 
     function line(h, name) {
-      var what = h.item + ' ' + h.value;
+      var what = h.what;
       var left = el('div', { class: 'mv-text' }, [
         el('div', { text: (h.status === '취소' ? '(취소) ' : '') + what + ' · ' + h.dateKo + '부터' }),
         el('div', { class: 'muted', text: [h.requestedKo ? '신청 ' + h.requestedKo : '', h.sourceLabel, h.edited ? '적용일 고침' + (h.reason ? '(' + h.reason + ')' : '') : h.reason].filter(function (x) { return x; }).join(' · ') }),
@@ -178,9 +178,9 @@
         right = el('button', { type: 'button', class: 'btn secondary', text: '제출 표시', onclick: function (e) {
           var btn = e.currentTarget;
           UI.confirmSheet({ title: '서류를 받았습니까?', lead: name + ' · ' + what, lines: [h.dateKo + '부터 적용되는 신청의 서류를 제출로 표시합니다(되돌리지 않습니다)'], confirmText: '제출 표시', onconfirm: function () {
-            if (saving) return;
+            if (saving) { UI.toast('저장 중입니다. 잠시 기다려 주세요.', { kind: 'info' }); return; }
             saving = true; btn.disabled = true;
-            call('setDocSubmitted', h.id).then(function (r) { saving = false; if (!alive) return; if (!r.ok) fail(new Error(r.error)); else UI.toast('제출로 표시했습니다.'); load(current); })
+            call('setDocSubmitted', h.id).then(function (r) { saving = false; if (!alive) return; if (!r.ok) fail(new Error(r.error)); else UI.toast('제출로 표시했습니다.'); load(current, currentYmd); })
               .catch(function (err) { saving = false; btn.disabled = false; fail(err); });
           } });
         } });
@@ -188,10 +188,11 @@
       else if (h.docState === 'done') right = UI.statusPill('mute', '서류 제출');
       return el('div', { class: 'mv-row', style: 'padding:8px 0;border-bottom:1px solid var(--line)' }, [left, right]);
     }
-    function load(id) {
-      current = id;
+    function load(id, ymd) {
+      current = id; currentYmd = ymd || '';
       var mine = ++seq;
-      call('listStudentStatus', id).then(function (d) {
+      clear(out); out.appendChild(el('div', { class: 'muted', text: '기록을 불러오는 중입니다…' }));
+      call('listStudentStatus', id, currentYmd).then(function (d) {
         if (!alive || mine !== seq) return;   // 학생을 빨리 바꾸면 늦은 응답은 버린다(다른 학생 기록·버튼이 그려지지 않게)
         var name = UI.util.studentLabel(d.student);
         clear(out);
