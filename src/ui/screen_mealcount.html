@@ -1,6 +1,75 @@
 <script>
-  /** 식수 집계 화면(2단계, CODING-B). S2-0a 골격: 아직 내용이 없다. */
+  /** 식수 집계 화면(F7-2, 관리자). 숫자는 서버(getMealCounts)가 센 것만 보인다. 신청 기준 인원이다(결석·외박 반영 안 함). */
   function renderScreen(root) {
-    root.appendChild(el('div', { class: 'card' }, [el('div', { class: 'muted', text: '준비 중입니다.' })]));
+    var U = UI.util;
+    var date = window.SCREEN_DATE || '', split = false, seq = 0, busy = false, data = null;
+    var head = el('div'), tableBox = el('div'), notes = el('div');
+    root.appendChild(head); root.appendChild(tableBox); root.appendChild(notes);
+    var pdfBtn = null;
+    function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
+    function shift(n) { var d = new Date((data ? data.date : date) + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); load(d.toISOString().slice(0, 10)); }
+    function b64Blob(b64) {
+      var bin = atob(b64); var arr = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      return new Blob([arr], { type: 'application/pdf' });
+    }
+
+    function load(d) {
+      var mine = ++seq;
+      call('getMealCounts', d || '').then(function (r) { if (mine !== seq) return; data = r; date = r.date; draw(); })
+        .catch(function (err) { if (mine !== seq) return; clear(tableBox); showError(tableBox, err); });
+    }
+
+    function draw() {
+      clear(head); clear(tableBox); clear(notes);
+      var arrow = function (text, n) { return el('button', { type: 'button', class: 'btn secondary', style: 'flex:0 0 auto', 'aria-label': n < 0 ? '전날' : '다음 날', text: text, onclick: function () { shift(n); } }); };
+      head.appendChild(el('div', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:4px' }, [arrow('‹', -1),
+        el('b', { style: 'flex:1;text-align:center', text: data.dateKo }), arrow('›', 1)]));
+      head.appendChild(el('div', { class: 'muted', style: 'text-align:center;margin-bottom:12px', text: data.term.name + ' · ' + (data.operating ? '이 날 자습 운영' : '이 날은 자습 운영 안 함(참고)') }));
+      head.appendChild(UI.segmented({ label: '석식', options: [{ value: 'sum', label: '석식 합계' }, { value: 'split', label: '석식 나눠 보기' }], value: split ? 'split' : 'sum',
+        onchange: function (v) { split = v === 'split'; draw(); } }));
+      var heads = split ? ['학년·성별', '학사', '기숙', '비기숙', '조식', '석식 학사', '석식 일반'] : ['학년·성별', '학사', '기숙', '비기숙', '조식', '석식'];
+      var isTotal = function (k) { return / 합계$|^전체$|학년$/.test(k) && k !== '' && !/^[여남]\d/.test(k); };
+      var tbody = el('tbody', {}, data.rows.map(function (r) {
+        var vals = [r.hall, r.dorm, r.nonDorm, r.breakfast, r.hallDinner, r.generalDinner].map(Number);
+        var show = split ? vals : vals.slice(0, 4).concat([vals[4] + vals[5]]);
+        return el('tr', { class: isTotal(r.key) ? 'total' : '' }, [el('th', { scope: 'row', text: r.key })].concat(show.map(function (v) { return el('td', { text: String(v) }); })));
+      }));
+      var thead = el('thead', {}, [el('tr', {}, heads.map(function (h) { return el('th', { scope: 'col', text: h }); }))]);
+      tableBox.appendChild(el('div', { class: 'tablewrap' }, [el('table', { class: 'data' }, [thead, tbody])]));
+      notes.appendChild(el('div', { class: 'muted', style: 'margin:-4px 0 12px', text: '표는 옆으로 밀 수 있습니다(첫 열은 고정).' }));
+      notes.appendChild(el('div', { class: 'notice info', text: '신청 기준 인원입니다(결석·외박은 반영하지 않습니다).' }));
+      notes.appendChild(el('div', { class: 'card' }, [
+        el('div', { style: 'display:flex;justify-content:space-between;gap:12px' }, [el('span', { text: '퇴실 후 석식 유지' }), el('b', { style: 'flex:0 0 auto', text: data.afterLeaveHallDinner + '명' })]),
+        el('div', { class: 'muted', text: '학사 퇴실했지만 석식 중단일 전이라 학사 석식에 포함됩니다.' }),
+        el('div', { style: 'display:flex;justify-content:space-between;gap:12px;margin-top:12px' }, [el('span', { text: '서류 미제출' }), el('b', { style: 'flex:0 0 auto', text: data.docUnsubmitted + '명' })]),
+        el('div', { class: 'muted', text: '인원에는 이미 포함되어 있습니다. 이름은 담당교사 화면에서 확인합니다.' })
+      ]));
+      if (data.unknown.length) notes.appendChild(el('div', { class: 'notice warn', text: '성별·학년을 알 수 없어 어느 줄에도 넣지 않은 학생 ' + data.unknown.length + '명: ' + data.unknown.map(function (u) { return u.name; }).join(', ') + '. 명단 올리기에서 고쳐 주세요.' }));
+      data.warnings.forEach(function (w) { notes.appendChild(el('div', { class: 'notice warn', text: w })); });
+      removeBar();
+      pdfBtn = null;
+      var bar = UI.actionBar([{ text: '급식실 양식으로 출력', onclick: onPdf }], { mount: true });
+      pdfBtn = bar.querySelector('button');
+      barNode = bar;
+    }
+    var barNode = null;
+    function removeBar() { if (barNode) { barNode.remove(); barNode = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); } }
+
+    function onPdf() {
+      if (busy || !data) return;
+      busy = true; pdfBtn.disabled = true; pdfBtn.textContent = 'PDF 만드는 중…';
+      var mine = seq;
+      call('getMealCountsPdf', data.date).then(function (r) {
+        busy = false; pdfBtn.disabled = false; pdfBtn.textContent = '급식실 양식으로 출력';
+        if (mine !== seq) { UI.toast('날짜가 바뀌어 이 PDF는 쓰지 않았습니다. 다시 눌러 주세요.', { kind: 'warn', ms: 5000 }); return; }
+        if (!r.ok) { UI.toast(r.error || 'PDF를 만들지 못했습니다.', { kind: 'warn', ms: 5000 }); return; }
+        var a = el('a', { class: 'btn', href: URL.createObjectURL(b64Blob(r.base64)), download: r.name, text: r.name + ' 열기' });
+        var old = notes.querySelector('a.btn'); if (old) old.remove();
+        notes.appendChild(a); a.click();
+        UI.toast('PDF를 만들었습니다. 받아지지 않으면 아래 링크를 누르세요.', { kind: 'ok', ms: 5000 });
+      }).catch(function (err) { busy = false; pdfBtn.disabled = false; pdfBtn.textContent = '급식실 양식으로 출력'; fail(err); });
+    }
+    load(date);
   }
 </script>

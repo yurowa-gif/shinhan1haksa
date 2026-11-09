@@ -27,7 +27,33 @@ var FOOD_RULE_TEXT = {
  * 보고 있는 홈 역할(role)이 status.list를 가질 때만 불린다. 던진 오류는 getHomeData가 잡아 {error}로 바꾼다.
  */
 function foodHomeInfo_(user, role) {
-  return null;
+  if (role !== 'admin' && role !== 'hall_teacher') return {};
+  var term = getCurrentTerm_();
+  if (!term) return { docMissing: 0 };
+  var mineIds = {};
+  readAll_('enrollments').forEach(function (e) {
+    if (e.term_id === term.id && (role === 'admin' || normalizeEmail_(e.teacher_email) === user.email)) mineIds[e.student_id] = true;
+  });
+  var out = { docMissing: readAll_('status_changes').filter(function (c) { return foodIsMissingDoc_(c) && mineIds[c.student_id]; }).length };
+  if (role === 'admin') {   // 관리자 홈: 오늘 인원과 자습실·SA 공석(C19). 기숙사 정원 대비 공석은 넣지 않는다(F8)
+    var today = today_();
+    var counts = mealCountsOn_(readAll_('students'), readAll_('enrollments'), readAll_('status_changes'), term.id, today);
+    var all = counts.groups['전체'] || {};
+    out.counts = { date: today, hall: all.hall, dorm: all.dorm, dormMale: (counts.groups['남 합계'] || {}).dorm, dormFemale: (counts.groups['여 합계'] || {}).dorm,
+      nonDorm: all.nonDorm, breakfast: all.breakfast, hallDinner: all.hallDinner, generalDinner: all.generalDinner };
+    out.vacancy = foodVacancy_(term, today);
+  }
+  return out;
+}
+
+/** 자습실·SA 공간별 좌석 수와 공석 수(그날, 퇴실·미배정·미입실 모두 공석) */
+function foodVacancy_(term, ymd) {
+  var d = seatLoad_();
+  var map = seatMapOn_(d.seats, d.assignments, d.enrollments, d.changes, term.id, ymd);
+  return d.spaces.slice().sort(function (a, b) { return Number(a.sort_order || 0) - Number(b.sort_order || 0); }).map(function (sp) {
+    var mine = d.seats.filter(function (x) { return x.space_id === sp.id && x.kind === '좌석' && map.bySeat[x.id]; });
+    return { name: sp.name, gender: sp.gender, total: mine.length, vacant: mine.filter(function (x) { return map.bySeat[x.id].vacant; }).length };
+  });
 }
 
 /* ───────────── 순수·읽기 도우미 ───────────── */
@@ -316,4 +342,56 @@ function saveMealChange(input, expect) {
     return { ok: true, id: w.head.id, superseded: plan.superseded, date: plan.date, dateKo: plan.date ? foodDateKo_(plan.date) : '', label: rec.chipLabel,
       cancelCount: plan.toCancel.length, followUpCount: w.linked.length, doc: rec.doc };
   });
+}
+
+/* ───────────── 식수 집계(C19) ───────────── */
+
+/** 그 날짜의 식수 집계 모델(캐시 없음 — 입력 즉시 반영, PRD 성공 기준). 신청 기준 인원: 결석·외박은 반영하지 않는다 */
+function foodCountsModel_(ymd) {
+  var terms = readAll_('terms');
+  var term = termOnDate_(ymd, terms);
+  if (!term) throw new Error('그 날짜가 속한 운영 기간이 없습니다.');
+  var students = readAll_('students'), enr = readAll_('enrollments'), changes = readAll_('status_changes');
+  var counts = mealCountsOn_(students, enr, changes, term.id, ymd);
+  var plan = resolveDayPlan_(ymd, { termType: calTermTypeOn_(terms, ymd), daySchedule: pickDaySchedule_(readAll_('day_schedules'), ymd),
+    blocks: readAll_('blocks'), defaults: calDefaults_(readAll_('settings', 'config')) });
+  var inTerm = {}, miss = {}, name = {};
+  enr.forEach(function (e) { if (e.term_id === term.id) inTerm[e.student_id] = true; });
+  students.forEach(function (s) { name[s.id] = s.name; });
+  changes.forEach(function (c) { if (inTerm[c.student_id] && foodIsMissingDoc_(c)) miss[c.student_id] = true; });
+  return { date: ymd, term: term, counts: counts, operating: plan.operating, docUnsubmitted: Object.keys(miss).length, name: name };
+}
+
+function foodCountsDate_(date) {
+  var ymd = String(date || '').trim() || today_();
+  if (!ymdIsValid_(ymd)) throw new Error('날짜를 골라 주세요.');
+  return ymd;
+}
+
+/**
+ * 식수 집계(관리자). 행 순서는 여1…전체(출력물과 같다). unknown = 성별·학년을 알 수 없어 줄에 넣지 못한 학생(이름은 관리자 화면에만).
+ * 서류 미제출은 학생 수(이름 없음). 퇴실 후 석식 유지 = 학사 퇴실했지만 석식 중단일 전이라 학사 석식에 포함된 학생.
+ */
+function getMealCounts(date) {
+  requirePermission_('meal.count');
+  var m = foodCountsModel_(foodCountsDate_(date));
+  var c = m.counts;
+  return {
+    date: m.date, dateKo: foodDateKo_(m.date), term: { id: m.term.id, name: m.term.name }, operating: m.operating,
+    rows: printMealRowOrder_(Object.keys(c.groups)).map(function (k) { return Object.assign({ key: k }, c.groups[k]); }),
+    afterLeaveHallDinner: c.afterLeaveHallDinner, docUnsubmitted: m.docUnsubmitted,
+    unknown: c.unknownGroup.map(function (id) { return { id: id, name: m.name[id] || '(알 수 없음)' }; }),
+    warnings: c.warnings.filter(function (w) { return w.indexOf(' 학생의 ') < 0; })
+  };
+}
+
+/** 식수 집계 PDF(급식실 제출용 임시 양식, 방식은 sheetMakePdf_ — C0 결과로 바뀔 수 있다). 공유·저장 없이 base64로 내려준다 */
+function getMealCountsPdf(date) {
+  var user = requirePermission_('meal.count');
+  var m = foodCountsModel_(foodCountsDate_(date));
+  var html = printRenderMealCounts_({ date: m.date, termName: m.term.name, operating: m.operating, counts: m.counts, docUnsubmitted: m.docUnsubmitted,
+    preparedBy: user.name, generatedAt: nowIso_().slice(0, 16).replace('T', ' ') });
+  var name = '식수집계_' + m.date + '(' + ymdWeekdayKo_(m.date) + ').pdf';
+  var bytes = sheetMakePdf_(html, name).getBytes();
+  return { ok: true, name: name, base64: Utilities.base64Encode(bytes), bytes: bytes.length };
 }
