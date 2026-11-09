@@ -90,7 +90,16 @@ test('권한: 관리자만 getMealCounts·getMealCountsPdf(denied:meal.count), �
     .forEach((who) => { env.expectDenied(who, 'meal.count', 'getMealCounts', '2027-03-03'); env.expectDenied(who, 'meal.count', 'getMealCountsPdf', '2027-03-03'); });
   env.expectAllowed('test.admin@example.com', 'getMealCounts', '2027-03-03');
   assert.throws(() => env.call(ADMIN, 'getMealCounts', '2027-13-45'), /날짜/);
-  assert.throws(() => env.call(ADMIN, 'getMealCounts', '2030-01-01'), /운영 기간/);
+});
+
+test('운영 기간이 아닌 날: 오류 대신 안내와 날짜를 돌려주고(term:null, rows 비어 있음) PDF는 만들지 않는다', () => {
+  const env = makeEnv();
+  const r = counts(env, '2030-01-01');
+  assert.strictEqual(r.date, '2030-01-01'); assert.strictEqual(r.term, null); assert.strictEqual(r.operating, false);
+  assert.deepStrictEqual(r.rows, []); assert.match(r.message, /운영 기간이 아닙니다/);
+  assert.strictEqual(typeof r.docRows, 'number');
+  const p = env.call(ADMIN, 'getMealCountsPdf', '2030-01-01');
+  assert.strictEqual(p.ok, false); assert.match(p.error, /운영 기간이 아닌 날/);
 });
 
 test('PDF: 렌더 HTML에 표(여1…전체·학사·기숙·비기숙)와 머리말(날짜·기간·"신청 기준 인원")이 있고, 이름·이메일은 없다. base64로 내려준다', () => {
@@ -112,7 +121,12 @@ test('관리자 홈: 오늘 인원과 공석(자습실·SA)이 나오고 학사 
   const f = env.call(ADMIN, 'getHomeData', 'admin').food;
   assert.strictEqual(f.counts.hall, hallOn(env, '2027-03-03')); assert.strictEqual(f.counts.hall, f.counts.dorm + f.counts.nonDorm);
   assert.ok(f.counts.dormMale + f.counts.dormFemale === f.counts.dorm);
-  assert.ok(f.vacancy.length >= 1 && f.vacancy.every((v) => v.vacant <= v.total));
+  assert.ok(f.vacancy.length >= 1 && f.vacancy.every((v) => v.vacant <= v.total && v.label));
+  assert.ok(f.vacancy.some((v) => v.label === '자습실'));
+  const sheet = env.call(ADMIN, 'getAttendanceSheet', '2027-03-03');
+  assert.strictEqual(f.vacancy.reduce((a, v) => a + v.vacant, 0), sheet.vacantCount, '빈자리 합 = 출석부 빈자리');
+  assert.strictEqual(f.counts.dormMale, Number(row(counts(env, '2027-03-03'), '남 합계').dorm));
+  assert.strictEqual(f.noTerm, false);
   const t = env.call(HALL, 'getHomeData', 'hall_teacher').food;
   assert.strictEqual(t.counts, undefined); assert.strictEqual(t.vacancy, undefined);
 });
@@ -129,4 +143,14 @@ test('서류 미제출 수는 홈과 같은 집계: 변경 신청과 지난 기�
   assert.strictEqual(n(), n0 + 2); assert.strictEqual(home(), h0 + 2);
   env.call(HALL, 'setDocSubmitted', r.id);
   assert.strictEqual(n(), n0 + 1); assert.strictEqual(home(), h0 + 1);
+});
+
+test('서류 수: docRows(건)와 docUnsubmitted(학생 수)는 한 학생의 두 건에서 다르다', () => {
+  const env = makeEnv();
+  const [x] = mineOf(env);
+  const c0 = counts(env, '2027-03-03');
+  [['2027-02-20', '2027-02-22'], ['2027-02-21', '2027-02-23']].forEach(([req, eff]) =>
+    append(env, { student_id: x, item: '조식', value: '미실시', requested_at: req + 'T10:00:00', effective_date: eff, source: 'F7', doc_submitted: 'FALSE' }));
+  const c1 = counts(env, '2027-03-03');
+  assert.strictEqual(c1.docRows - c0.docRows, 2); assert.strictEqual(c1.docUnsubmitted - c0.docUnsubmitted, 1);
 });

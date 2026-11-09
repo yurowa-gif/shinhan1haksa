@@ -42,15 +42,14 @@ function foodHomeInfo_(user, role) {
     list.slice(0, 10).forEach(function (x) { shown[x.studentId + '|' + x.kind] = true; });
     var hidden = miss.filter(function (m) { return !shown[m.studentId + '|' + (m.row.source === 'F6' ? '입퇴실' : '급식 변경')]; }).length;   // 가려진 줄에 속한 행 수(제목의 건수와 맞춘다)
     var out = { docMissing: miss.length, docList: list.slice(0, 10), docMore: hidden };
-    if (role === 'admin') {   // 관리자 홈: 오늘 인원과 자습실·SA 공석(C19). 기숙사 정원 대비 공석은 넣지 않는다(F8)
-      var tm = foodTermOf_(today_(), terms) || getCurrentTerm_();
-      if (tm) {
-        var tday = today_();
-        var counts = mealCountsOn_(students, readAll_('enrollments'), changes, tm.id, tday);
-        var all = counts.groups['전체'] || {};
-        out.counts = { date: tday, hall: all.hall, dorm: all.dorm, dormMale: (counts.groups['남 합계'] || {}).dorm, dormFemale: (counts.groups['여 합계'] || {}).dorm,
-          nonDorm: all.nonDorm, breakfast: all.breakfast, hallDinner: all.hallDinner, generalDinner: all.generalDinner };
-        out.vacancy = foodVacancy_(tm, tday);
+    if (role === 'admin') {   // 관리자 홈: 오늘 인원과 자습실·SA 공석(C19, 식수 집계 화면과 같은 모델). 기숙사 정원 대비 공석은 넣지 않는다(F8)
+      var today = today_(), m = foodCountsModel_(today, { terms: terms, students: students, enrollments: enrollments, changes: changes });
+      out.counts = null; out.noTerm = !m.term;
+      if (m.term) {
+        var all = m.counts.groups['전체'] || {};
+        out.counts = { date: today, dateKo: foodDateKo_(today), termName: m.term.name, hall: all.hall, dorm: all.dorm, dormMale: (m.counts.groups['남 합계'] || {}).dorm,
+          dormFemale: (m.counts.groups['여 합계'] || {}).dorm, nonDorm: all.nonDorm, breakfast: all.breakfast, hallDinner: all.hallDinner, generalDinner: all.generalDinner };
+        out.vacancy = foodVacancy_(m.term, today);
       }
     }
     return out;
@@ -73,14 +72,19 @@ function foodHomeInfo_(user, role) {
   return {};
 }
 
-/** 자습실·SA 공간별 좌석 수와 공석 수(그날, 퇴실·미배정·미입실 모두 공석) */
+/** 자습실·SA실 좌석 수와 공석 수(그날, 퇴실·미배정·미입실 모두 공석). SA1~6은 "SA실" 하나로 묶는다 */
 function foodVacancy_(term, ymd) {
   var d = seatLoad_();
   var map = seatMapOn_(d.seats, d.assignments, d.enrollments, d.changes, term.id, ymd);
-  return d.spaces.slice().sort(function (a, b) { return Number(a.sort_order || 0) - Number(b.sort_order || 0); }).map(function (sp) {
-    var mine = d.seats.filter(function (x) { return x.space_id === sp.id && x.kind === '좌석' && map.bySeat[x.id]; });
-    return { name: sp.name, gender: sp.gender, total: mine.length, vacant: mine.filter(function (x) { return map.bySeat[x.id].vacant; }).length };
+  var groups = { '자습실': { label: '자습실', total: 0, vacant: 0 }, 'SA실': { label: 'SA실', total: 0, vacant: 0 } };
+  var spaceName = {};
+  d.spaces.forEach(function (sp) { spaceName[sp.id] = String(sp.name || ''); });
+  d.seats.forEach(function (x) {
+    if (x.kind !== '좌석' || !map.bySeat[x.id]) return;
+    var g = groups[/^SA/i.test(spaceName[x.space_id] || '') ? 'SA실' : '자습실'];
+    g.total++; if (map.bySeat[x.id].vacant) g.vacant++;
   });
+  return [groups['자습실'], groups['SA실']].filter(function (g) { return g.total > 0; });
 }
 
 /* ───────────── 순수·읽기 도우미 ───────────── */
@@ -491,19 +495,24 @@ function saveMealChange(input, expect) {
 
 /* ───────────── 식수 집계(C19) ───────────── */
 
-/** 그 날짜의 식수 집계 모델(캐시 없음 — 입력 즉시 반영, PRD 성공 기준). 신청 기준 인원: 결석·외박은 반영하지 않는다 */
-function foodCountsModel_(ymd) {
-  var terms = readAll_('terms');
+/**
+ * 그 날짜의 식수 집계 모델(캐시 없음 — 입력 즉시 반영, PRD 성공 기준). 신청 기준 인원: 결석·외박은 반영하지 않는다.
+ * 운영 기간이 아닌 날(기간 사이·첫 기간 전·마지막 기간 뒤)에는 term이 null이고 counts가 없다(화면이 멈추지 않게 던지지 않는다).
+ * docRows = 서류 미제출 행 수(날짜와 무관한 전체), docUnsubmitted = 그 행이 있는 학생 수. src = 이미 읽은 시트 행(홈이 재사용)
+ */
+function foodCountsModel_(ymd, src) {
+  src = src || {};
+  var terms = src.terms || readAll_('terms'), students = src.students || readAll_('students'), enr = src.enrollments || readAll_('enrollments'), changes = src.changes || readAll_('status_changes');
   var term = termOnDate_(ymd, terms);
-  if (!term) throw new Error('그 날짜가 속한 운영 기간이 없습니다.');
-  var students = readAll_('students'), enr = readAll_('enrollments'), changes = readAll_('status_changes');
-  var counts = mealCountsOn_(students, enr, changes, term.id, ymd);
-  var plan = resolveDayPlan_(ymd, { termType: calTermTypeOn_(terms, ymd), daySchedule: pickDaySchedule_(readAll_('day_schedules'), ymd),
-    blocks: readAll_('blocks'), defaults: calDefaults_(readAll_('settings', 'config')) });
-  var miss = {}, name = {};
+  var miss = {}, name = {}, rows = foodMissingDocs_(changes, enr, terms);
   students.forEach(function (s) { name[s.id] = s.name; });
-  foodMissingDocs_(changes, enr, terms).forEach(function (m) { miss[m.studentId] = true; });   // 홈과 같은 집계: 기간이 바뀌어도 표시할 때까지 남는다
-  return { date: ymd, term: term, counts: counts, operating: plan.operating, docUnsubmitted: Object.keys(miss).length, name: name };
+  rows.forEach(function (m) { miss[m.studentId] = true; });   // 홈과 같은 집계: 기간이 바뀌어도 표시할 때까지 남는다
+  var out = { date: ymd, term: term, counts: null, operating: false, docRows: rows.length, docUnsubmitted: Object.keys(miss).length, name: name };
+  if (!term) return out;
+  out.counts = mealCountsOn_(students, enr, changes, term.id, ymd);
+  out.operating = resolveDayPlan_(ymd, { termType: calTermTypeOn_(terms, ymd), daySchedule: pickDaySchedule_(readAll_('day_schedules'), ymd),
+    blocks: readAll_('blocks'), defaults: calDefaults_(readAll_('settings', 'config')) }).operating;
+  return out;
 }
 
 function foodCountsDate_(date) {
@@ -519,11 +528,15 @@ function foodCountsDate_(date) {
 function getMealCounts(date) {
   requirePermission_('meal.count');
   var m = foodCountsModel_(foodCountsDate_(date));
+  if (!m.term) {   // 운영 기간이 아닌 날: 던지지 않고 안내만(화면이 그 날짜에서 ‹ ›로 계속 넘어갈 수 있게)
+    return { date: m.date, dateKo: foodDateKo_(m.date), term: null, operating: false, rows: [], afterLeaveHallDinner: 0, docUnsubmitted: m.docUnsubmitted, docRows: m.docRows,
+      unknown: [], warnings: [], message: '운영 기간이 아닙니다.' };
+  }
   var c = m.counts;
   return {
     date: m.date, dateKo: foodDateKo_(m.date), term: { id: m.term.id, name: m.term.name }, operating: m.operating,
     rows: printMealRowOrder_(Object.keys(c.groups)).map(function (k) { return Object.assign({ key: k }, c.groups[k]); }),
-    afterLeaveHallDinner: c.afterLeaveHallDinner, docUnsubmitted: m.docUnsubmitted,
+    afterLeaveHallDinner: c.afterLeaveHallDinner, docUnsubmitted: m.docUnsubmitted, docRows: m.docRows,
     unknown: c.unknownGroup.map(function (id) { return { id: id, name: m.name[id] || '(알 수 없음)' }; }),
     warnings: c.warnings.filter(function (w) { return w.indexOf(' 학생의 ') < 0; })
   };
@@ -533,6 +546,7 @@ function getMealCounts(date) {
 function getMealCountsPdf(date) {
   var user = requirePermission_('meal.count');
   var m = foodCountsModel_(foodCountsDate_(date));
+  if (!m.term) return { ok: false, error: '운영 기간이 아닌 날은 출력할 수 없습니다.' };
   var html = printRenderMealCounts_({ date: m.date, termName: m.term.name, operating: m.operating, counts: m.counts, docUnsubmitted: m.docUnsubmitted,
     preparedBy: user.name, generatedAt: nowIso_().slice(0, 16).replace('T', ' ') });
   var name = '식수집계_' + m.date + '(' + ymdWeekdayKo_(m.date) + ').pdf';
