@@ -155,7 +155,11 @@ function termOnDate_(ymd, terms) {
  */
 function isOnDutyFor_(email, ymd, windowDays) {
   var rows;
-  try { rows = readAll_('duty_slots'); } catch (e) { return false; }
+  try { rows = readAll_('duty_slots'); } catch (e) {
+    // 탭이 없으면 조용히 거짓. 그 밖의 읽기 오류는 거짓으로 두되 알아볼 수 있게 남긴다
+    if (String(e && e.message).indexOf('탭이 없습니다') < 0) console.warn('근무표를 읽지 못해 근무교사 범위를 적용하지 않았습니다: ' + (e && e.message));
+    return false;
+  }
   var today = today_();
   return dutyIsOn_(rows, email, ymd || today, today, windowDays);
 }
@@ -163,7 +167,7 @@ function isOnDutyFor_(email, ymd, windowDays) {
 /**
  * 학생 한 명에 대한 범위 판정에 필요한 사실을 모은다.
  */
-function studentFacts_(user, student, ymd, windowDays) {
+function studentFacts_(user, student, ymd, windowDays, noDuty) {
   // ymd(YYYY-MM-DD)를 주면 그 날짜가 속한 운영 기간으로 판정한다(다음 기간 신입생 입력 등). 없으면 오늘의 기간.
   // 어떤 기간에도 속하지 않는 날짜는 오늘의 기간으로 판정한다(저장 단계의 입력 검사가 "기간에 속하지 않음"으로 막는다)
   var term = (ymd ? termOnDate_(ymd) : null) || getCurrentTerm_();
@@ -180,7 +184,7 @@ function studentFacts_(user, student, ymd, windowDays) {
         normalizeEmail_(en.teacher_email) === user.email;
     }),
     // 근무교사: 열람 키는 ymd = 오늘의 실제 근무자만(windowDays 0), out.save는 발생일의 근무자가 다음 날까지(규칙의 dutyWindow). 화면이 보낸 ymd로는 넓어지지 않는다
-    isOnDuty: hasRole_(user, 'hall_teacher') && isOnDutyFor_(user.email, ymd || '', windowDays || 0),
+    isOnDuty: !noDuty && hasRole_(user, 'hall_teacher') && isOnDutyFor_(user.email, ymd || '', windowDays || 0),   // noDuty 키는 근무표를 읽지 않는다
     // 담임은 "자기 반 학사생"만: 같은 반 + 이번 운영 기간 등록 학생
     inHomeroom: sameClass_(user.homeroomClass, student.grade, student.class_no) && enrolled
   };
@@ -250,7 +254,7 @@ function requirePermission_(action, context) {
     if (ymd && (typeof ymd !== 'string' || !ymdIsValid_(ymd))) deny('날짜 형식');
     var student = context.studentId ? findById_('students', context.studentId) : null;
     if (!student) deny('학생 없음');
-    var facts = studentFacts_(user, student, ymd, rule.dutyWindow);
+    var facts = studentFacts_(user, student, ymd, rule.dutyWindow, rule.noDuty);
     if (rule.noDuty) facts.isOnDuty = false;
     if (!canAccessStudentByFacts_(user.roles, facts, rule.roles, !!rule.wideView)) deny('범위 밖 학생');
   }

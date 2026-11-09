@@ -155,7 +155,7 @@ function sheetDutyNames_(ymd, plan) {
   var frame = {};
   dutySlotsFor_(plan).forEach(function (f) { frame[f.slot] = true; });
   var inFrame = live.filter(function (r) { return frame[ruleStr_(r.slot)]; });
-  var warnings = inFrame.length < live.length ? [ymd + ' 근무표에 그날 틀에 없는 칸이 있어 머리말에서 뺐습니다. 근무표에서 확인해 주세요.'] : [];
+  var warnings = inFrame.length < live.length ? [ymdKoShort_(ymd) + ' 근무표에 그날 틀에 없는 칸이 있어 머리말에서 뺐습니다. 근무표에서 확인해 주세요.'] : [];
   if (!inFrame.length) return { hasSlots: false, dutyNames: [], standbyNames: [], warnings: warnings };
   var names = Object.create(null);
   readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = u.name; });
