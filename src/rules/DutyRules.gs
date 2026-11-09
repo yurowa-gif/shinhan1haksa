@@ -79,7 +79,7 @@ function dutyIsOn_(rows, email, ymd, today, windowDays) {
 /**
  * 월말 근무 기록(수당 근거, PRD F3). month 'yyyy-MM', opts = {operatingByDate:{date:false}}
  * → {teachers:[{email, total, bySlot:{'21:30조','23:00조','단독'}, dates:[{date,slot,end,swappedFrom}]}],
- *    standby:[{email, count}], swaps:[{date, slot, from, to, at, by}], warnings}   금액은 계산하지 않는다(결정 47).
+ *    standby:[{email, count, dates:[yyyy-MM-dd]}], swaps:[{date, slot, from, to, at, by, kind:'교대'|'대신 근무'}], warnings}   금액은 계산하지 않는다(결정 47).
  * 교사별 합계 = 그날 칸의 실제 근무자(원래 근무자에게는 세지 않음). swaps = 칸마다 마지막 교대(예비 칸 포함). 예비만 있는 교사도 teachers에(total 0).
  * 예비 지정은 standby로 따로 센다(결정 46). 그날 대신 근무한 예비는 근무로만 세고 standby에서는 뺀다(두 번 세지 않음).
  * ASSUMPTION: 운영 안 하는 날(operatingByDate[date] === false)의 행도 센다 + 경고(조용히 빼면 실제 근무를 놓친다).
@@ -109,18 +109,20 @@ function dutyRecord_(rows, month, opts) {
     var swap = function (slot, d) {
       if (!d.swappedFrom) return;
       var r = dutyPick_(byDate[date], date).bySlot[slot];
-      swaps.push({ date: date, slot: slot, from: d.swappedFrom, to: d.email, at: ruleStr_(r.swapped_at), by: dutyEmail_(r.swapped_by) });
+      // 그날 예비가 근무 칸을 받았으면 '대신 근무'(PRD F3 교대 3건 중 하나), 그 밖(예비 칸 자체 교대 포함)은 '교대'
+      var kind = slot !== '예비' && day.standby.some(function (sb) { return sb.email === d.email; }) ? '대신 근무' : '교대';
+      swaps.push({ date: date, slot: slot, from: d.swappedFrom, to: d.email, at: ruleStr_(r.swapped_at), by: dutyEmail_(r.swapped_by), kind: kind });
     };
     day.duty.forEach(function (d) { swap(d.slot, d); });
     day.standby.forEach(function (sb) {
       swap('예비', sb);   // 예비도 수당 근거라 교대를 남긴다(결정 46)
       teacher(sb.email);   // 예비만 있는 교사도 목록에(total 0)
-      if (!day.duty.some(function (d) { return d.email === sb.email; })) standby[sb.email] = (standby[sb.email] || 0) + 1;
+      if (!day.duty.some(function (d) { return d.email === sb.email; })) (standby[sb.email] = standby[sb.email] || []).push(date);
     });
   });
   return {
     teachers: Object.keys(teachers).sort().map(function (e) { return teachers[e]; }),
-    standby: Object.keys(standby).sort().map(function (e) { return { email: e, count: standby[e] }; }),
+    standby: Object.keys(standby).sort().map(function (e) { return { email: e, count: standby[e].length, dates: standby[e] }; }),
     swaps: swaps,
     warnings: warnings
   };

@@ -66,7 +66,7 @@ function printDutyRecordCounts_(model) {
         r.work++; total.work++;
         if (code === '21:30') { r.s2130++; total.s2130++; } else if (code === '23:00') { r.s2300++; total.s2300++; } else { r.solo++; total.solo++; }
         byDay[date] = (byDay[date] || 0) + 1;
-        if (closed[date]) (closedNames[date] = closedNames[date] || []).push(r.name);
+        if (closed[date]) { var list = (closedNames[date] = closedNames[date] || []); if (list.indexOf(r.name) < 0) list.push(r.name); }
       });
     });
     var seen = {};
@@ -95,8 +95,9 @@ function printDutySwapsHtml_(swaps, line) {
     return '<table style="border-collapse:collapse;font-size:7.5pt;width:100%"><thead><tr style="background:#e6e6e6">' + th + '</tr></thead><tbody>' +
       list.map(function (w) {
         var td = 'padding:1pt 3pt;border:' + line + ';';
-        return '<tr style="page-break-inside:avoid">' + printDutyCell_(td, printEsc_(printDateKo_(w.date, ''))) + printDutyCell_(td, printEsc_(w.slot)) +
-          printDutyCell_(td, printEsc_(w.from) + ' → <b>' + printEsc_(w.to) + '</b>') + printDutyCell_(td, printEsc_(w.kind || '교대')) + '</tr>';
+        var nw = td + 'white-space:nowrap;';
+        return '<tr style="page-break-inside:avoid">' + printDutyCell_(nw, printEsc_(printDateKo_(w.date, ''))) + printDutyCell_(nw, printEsc_(w.slot)) +
+          printDutyCell_(td, printEsc_(w.from) + ' → <b>' + printEsc_(w.to) + '</b>') + printDutyCell_(nw, printEsc_(w.kind || '교대')) + '</tr>';
       }).join('') + '</tbody></table>';
   }
   var tds = '';
@@ -112,6 +113,7 @@ function printRenderDutyRecord_(model, opts) {
   var title = printEsc_(model.title || '신한학사 근무 기록표');
   var closed = {};
   printArr_(model.closedDates).forEach(function (d) { closed[d] = true; });
+  var matched = {};   // 별표를 실제로 붙인 키
   var swapTo = {};   // 날짜|이름|칸코드 → true: 교대·대신 근무로 실제 근무자가 된 칸(* 표시). 칸코드는 '예비'(예비 칸끼리 교대)도 된다
   var swaps = (model.swaps || []).filter(function (w) { return w && w.date; });
   swaps.forEach(function (w) {
@@ -163,9 +165,15 @@ function printRenderDutyRecord_(model, opts) {
         if (code === '') return;
         if (code === null) { parts.push('?'); return; }
         work = true;
-        parts.push(code + (swapTo[dt + '|' + r.name + '|' + code] ? '*' : ''));
+        var kk = dt + '|' + r.name + '|' + code;
+        if (swapTo[kk]) matched[kk] = true;
+        parts.push(code + (swapTo[kk] ? '*' : ''));
       });
-      if (standby[dt]) parts.push('예' + (swapTo[dt + '|' + r.name + '|예비'] ? '*' : ''));
+      if (standby[dt]) {
+        var ks = dt + '|' + r.name + '|예비';
+        if (swapTo[ks]) matched[ks] = true;
+        parts.push('예' + (swapTo[ks] ? '*' : ''));
+      }
       var bg = closed[dt] ? 'background:#c8c8c8;' : '';
       var weight = work ? 'font-weight:bold;' : (parts.length ? 'color:#444;' : '');
       tr += printDutyCell_(base + bg + 'font-size:' + printNum_(cellPt) + 'pt;white-space:nowrap;' + weight, parts.map(printEsc_).join('<br>'));
@@ -197,11 +205,16 @@ function printRenderDutyRecord_(model, opts) {
     '예비 지정은 근무로 세지 않고 따로 셉니다(칸의 "예"). 예비 감독이 대신 근무한 날은 근무 칸이 되어 예비 지정에서 빠집니다. 회색 칸은 운영 안 하는 날입니다.'];
   var warnings = printArr_(model.warnings);
   if (counts.unknown) warnings.push('알 수 없는 칸 값 또는 이 달 밖 날짜 ' + counts.unknown + '개는 세지 않았습니다.');
+  var lost = swaps.filter(function (w) {
+    var slot = String(w.slot === undefined ? '' : w.slot).replace(/\s/g, '');
+    return !matched[w.date + '|' + w.to + '|' + (slot === '예비' ? '예비' : printDutyCode_(slot))];
+  });
+  if (lost.length) warnings.push('교대 ' + swaps.length + '건 중 ' + lost.length + '건은 실제 근무자 칸이 없어 *를 붙이지 못했습니다(' + lost.map(function (w) { return printDateKo_(w.date, '') + ' ' + w.to + ' ' + w.slot; }).join(', ') + ').');
   counts.closedWork.forEach(function (c) {
     warnings.push('운영 안 하는 날(' + printDateKo_(c.date, '') + ')에 근무가 기록되어 있습니다: ' + c.names.join(', ') + ' — 근무로 셌습니다. 근무표를 확인해 주세요.');
   });
   var foot = '<div style="font-size:7.5pt;line-height:10pt;margin-top:8pt">' + notes.map(printEsc_).join('<br>') +
-    (warnings.length ? '<br><b>※ ' + warnings.map(printEsc_).join(' / ') + '</b>' : '') + '</div>';
+    warnings.map(function (w) { return '<br><b>※ ' + printEsc_(w) + '</b>'; }).join('') + '</div>';
 
   var head = '<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>' + title + '</title>' +
     '<style>@page { size: A4 landscape; margin: 8mm; } html, body { margin: 0; padding: 0; } ' +
