@@ -40,7 +40,7 @@ function buildFakeStage2Duty_(fake) {
       }
       if (date === FAKE2_CHAIN && f.slot === '23:00조') {
         r.actual_email = who(3); r.swapped_by = who(2); r.swapped_at = '2027-01-12T21:00:00';
-        r.memo = '가짜: 교대의 교대 A→B→C(B = swapped_by, 중간 단계는 audit_log)';
+        r.memo = '가짜: 교대의 교대 A→B→C(B = swapped_by, 중간 단계 감사 기록은 시드에 없음)';
       }
       if (date === FAKE2_COVER && f.slot === '단독') {
         r.actual_email = who(1); r.swapped_by = manager; r.swapped_at = '2027-01-23T08:30:00'; r.memo = '가짜: 예비 대신 근무(담당자 기록)';
@@ -62,7 +62,24 @@ function seedFakeStage2() {
   }
   var teacherEmail = normalizeEmail_(props_().getProperty('TEST_TEACHER_EMAIL'));
   if (!teacherEmail) throw new Error('Script Property TEST_TEACHER_EMAIL(시험 학사 교사)을 먼저 넣으세요.');
-  var data = buildFakeStage2Duty_(buildFakeData_({ count: students.filter(function (s) { return s.memo === FAKE2_MEMO; }).length, teacherEmail: teacherEmail }));
+  var fake = buildFakeData_({ teacherEmail: teacherEmail });
+  if (!readAll_('terms').some(function (t) { return t.id === fake.terms[0].id; })) {
+    throw new Error('가짜 운영 기간이 없습니다. seedFakeData()를 먼저 실행하세요.');
+  }
+  var data = buildFakeStage2Duty_(fake);
+  // 근무자는 users에 살아 있는 학사 교사여야 하고, 기록자는 근무표 담당자여야 한다(속성을 늦게 넣은 경우 등)
+  var users = {};
+  readAll_('users').forEach(function (u) { if (String(u.active).toUpperCase() === 'TRUE') users[normalizeEmail_(u.email)] = String(u.roles); });
+  data.teachers.forEach(function (e) {
+    if (!/hall_teacher/.test(users[e] || '')) throw new Error('users에 학사 교사로 없습니다(addUser 먼저): ' + e);
+  });
+  if (!/duty_manager/.test(users[data.manager] || '')) throw new Error('users에 근무표 담당자로 없습니다: ' + data.manager);
+  // 이미 있는 1월 근무표·1/1 일정(이 시드가 쓴 것이 아닌 행)을 덮지 않는다
+  var mine = {};
+  data.dutySlots.concat(data.daySchedules).forEach(function (r) { mine[r.id] = true; });
+  var foreign = readAll_('duty_slots').filter(function (r) { return String(r.date).slice(0, 7) === FAKE2_MONTH && !mine[r.id]; })
+    .concat(readAll_('day_schedules').filter(function (r) { return String(r.date) === FAKE2_CLOSED && !mine[r.id]; }));
+  if (foreign.length) throw new Error(FAKE2_MONTH + ' 근무표나 ' + FAKE2_CLOSED + ' 일정에 다른 행이 ' + foreign.length + '개 있어 쓰지 않습니다.');
   var lines = [];
   [['duty_slots', data.dutySlots], ['day_schedules', data.daySchedules]].forEach(function (pair) {
     var fresh = fake1OnlyNew_(pair[1], readAll_(pair[0]));

@@ -137,7 +137,7 @@ function buildFakeStage1_(fake) {
 
 /** 이 DB의 학생이 모두 가짜인지(가짜 시드를 실제 DB에 쓰지 않도록) */
 function fake1DbIsAllFake_(students) {
-  return students.length > 0 && students.every(function (s) { return String(s.memo).indexOf(FAKE1_MEMO) === 0; });   // '가짜 데이터(등록 없음)' 등 포함
+  return students.length > 0 && students.every(function (s) { return s.memo === FAKE1_MEMO; });
 }
 
 /** id가 이미 있는 행은 빼고 새 행만 */
