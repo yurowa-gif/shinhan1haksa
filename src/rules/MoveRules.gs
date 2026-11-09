@@ -12,8 +12,9 @@
  *         dinner:'중단'(기본)|'일반 석식', breakfastWithDorm(기본 true), breakfastStopWithDorm(기본 true)}
  * opts = {today(필수), cutoff}
  * → {errors, warnings, rows:[{item, value, effective_date, effective_date_auto, requested_at, reason, source, head}],
- *    toCancel:[{id, cancel_reason}], summary:{date, breakfast:{value, from}|null, dinner:{value, from}|null}}
- * errors가 있으면 rows·toCancel은 비어 있다(쓰지 않는다).
+ *    toCancel:[{id, cancel_reason}], toRestore:[{id}], summary:{date, breakfast:{value, from}|null, dinner:{value, from}|null}}
+ * errors가 있으면 rows·toCancel·toRestore는 비어 있다(쓰지 않는다). toCancel과 toRestore는 겹치지 않고, toCancel은 시트에 있는 id만이다.
+ * cancel_reason이 '[자동] '으로 시작하면 저장 쪽은 그대로 쓰고, 아니면 앞에 '[자동] <대표 행 id> '를 붙인다.
  *
  * - 대표 행(head:true): 학사·기숙사 값, source 'F6', 적용일 = effectiveDate. '학사 및 기숙사 퇴실'은 학사 퇴실(대표) + 기숙사 퇴실(연결).
  *   F6 저장은 연결 행의 linked_change_id = 대표 행 id, toCancel의 cancel_reason 앞에 '[자동] <대표 행 id> '를 붙인다.
@@ -59,10 +60,12 @@ function movePlan_(changes, studentId, move, opts) {
   if (out.errors.length) return out;
   if (E < today) out.warnings.push('적용일(' + E + ')이 오늘보다 이릅니다: 지난 출석부·식수가 바뀝니다');
 
+  var planned = {}, nseq = 0;   // 이 계획이 쓸 행(시트에 아직 없다): live 안 id 'new<n>' → out.rows의 행
   var add = function (item, value, date, auto, reason, source) {
     var row = { item: item, value: value, effective_date: date, effective_date_auto: auto, requested_at: at, reason: reason, source: source, head: !out.rows.length };
     out.rows.push(row);
-    live.push({ id: 'new' + out.rows.length, student_id: sid, item: item, value: value, effective_date: date, requested_at: ruleIso_(at), source: source, status: '유효', created_at: '9999' });
+    planned['new' + (++nseq)] = row;
+    live.push({ id: 'new' + nseq, student_id: sid, item: item, value: value, effective_date: date, requested_at: ruleIso_(at), source: source, status: '유효', created_at: '9999' });
   };
   var cancel = function (list, reason) {
     list.forEach(function (c) {
@@ -110,8 +113,20 @@ function movePlan_(changes, studentId, move, opts) {
     // 못 했거나, 취소돼 있던 동안 늦게 입력된 옛 신청서). 새 신청부터. 꼬리표는 되살린 행 id(그 행이 다시 끊기면 돌아오게)
     back.sort(function (a, b) { return ruleIso_(a.requested_at) > ruleIso_(b.requested_at) ? -1 : 1; }).forEach(function (r) {
       if (!live.some(function (c) { return ruleStr_(c.id) === ruleStr_(r.id); })) return;
-      cancel(mealPendingToCancel_(live, sid, item, ruleStr_(r.effective_date), { source: 'F7', requestedAt: r.requested_at, newValue: ruleStr_(r.value) }),
-        '[자동] ' + ruleStr_(r.id) + ' 되살린 신청으로 대체');
+      var hits = mealPendingToCancel_(live, sid, item, ruleStr_(r.effective_date), { source: 'F7', requestedAt: r.requested_at, newValue: ruleStr_(r.value) });
+      var drop = function (id) { live = live.filter(function (x) { return ruleStr_(x.id) !== id; }); };
+      hits.forEach(function (h) {
+        if (out.toRestore.some(function (t) { return t.id === h.id; })) {   // 이 계획이 되살린 행이면 되살리지 않는다(toCancel∩toRestore 없게)
+          out.toRestore = out.toRestore.filter(function (t) { return t.id !== h.id; });
+          drop(h.id);
+        } else if (planned[h.id]) {   // 이 계획이 쓸 행(퇴실과 함께 고른 급식)은 시트에 없다 → superseded처럼 쓰지 않는다
+          out.rows = out.rows.filter(function (x) { return x !== planned[h.id]; });
+          drop(h.id);
+          out.warnings.push(item + ' ' + planned[h.id].value + ' 신청은 쓰지 않습니다: 더 새 신청이 있습니다');
+          var sk = item === '조식' ? 'breakfast' : 'dinner';
+          if (out.summary[sk] && out.summary[sk].value === planned[h.id].value) out.summary[sk] = null;
+        } else cancel([h], '[자동] ' + ruleStr_(r.id) + ' 되살린 신청으로 대체');
+      });
     });
     var now = statusOn_(live, sid, item, stop);
     if (mealIsHallOnly_(item, now) || (!now && mealIsHallOnly_(item, before))) {
