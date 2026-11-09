@@ -435,3 +435,29 @@ test('"덮습니다"·"먼저 적용됩니다" 경고도 교사용 말이고 숫
   assert.ok(before.warnings.some((t) => t.includes('먼저 적용됩니다')), '대기 중인 신청이 먼저 적용된다는 안내');
   assert.ok(b);
 });
+
+test('M10: 미리보기 뒤 경고만 달라져도(날짜·취소·이어 쓰기는 그대로) 저장은 stale이다', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { a } = pick(env);
+  const i = input(a, 'd_hall', '2027-03-03T08:00:00');   // 이미 학사 석식 → kind none, 경고 없음
+  const p = prev(env, HALL, i);
+  assert.deepStrictEqual(p.warnings, []);
+  env.asOwner((c) => c.appendRecord_('status_changes', { student_id: a, item: '석식', value: '미실시', requested_at: '2027-03-03T09:00:00', effective_date: '2027-03-15',
+    effective_date_auto: '2027-03-15', reason: '', doc_submitted: 'TRUE', linked_change_id: '', source: 'F7', status: '유효', memo: '', cancel_reason: '' }, env.owner));   // 더 새 신청이 이 신청을 덮게 됨(경고만 생김)
+  const n = env.rows('status_changes').length;
+  const r = save(env, HALL, i, p.expect);
+  assert.strictEqual(r.stale, true, JSON.stringify(r));
+  assert.strictEqual(env.rows('status_changes').length, n);
+  assert.ok(prev(env, HALL, i).warnings.some((t) => t.includes('덮습니다')));
+});
+
+test('M15: 고친 적용일이 어느 기간에도 속하지 않는 사이 날이면 "등록된 운영 기간 밖" 경고', () => {
+  const env = makeEnv('2027-02-26T12:00:00');
+  const { a } = pick(env);
+  clearListTimes(env);
+  const p = prev(env, ADMIN, input(a, 'd_hall', '2027-02-26T10:00:00', { effectiveDate: '2027-03-01', reason: '급식실 요청' }));
+  assert.strictEqual(p.manual, true);
+  assert.ok(p.warnings.some((t) => t.includes('등록된 운영 기간 밖')), JSON.stringify(p.warnings));
+  const q = prev(env, ADMIN, input(a, 'd_hall', '2027-02-26T10:00:00', { effectiveDate: '2027-03-03', reason: '급식실 요청' }));
+  assert.ok(!q.warnings.some((t) => t.includes('등록된 운영 기간 밖')), '기간 안 날짜에는 경고가 없다');
+});
