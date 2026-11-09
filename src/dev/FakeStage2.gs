@@ -4,7 +4,8 @@
  * buildFakeStage2Duty_(fake) : 순수 함수. buildFakeData_ 결과(fake)로 2027-01 근무표(duty_slots)와
  *                              운영 안 함 1일(day_schedules)을 만든다. 같은 입력이면 같은 결과(id도 고정).
  * buildFakeStage2Life_(fake, ruleRows) : 순수 함수. 2027-03(2027 1학기) 생활 기록 — 직접 OUT 2건인 학생 1명(퇴실 대상)·
- *                              1건인 학생 1명(violations), 서류 미제출 F7 급식 신청 2건(status_changes). 면담 기록은 넣지 않는다.
+ *                              1건인 학생 1명(violations), 서류 미제출 F7 급식 신청 2건 + 적용 전 대기 신청 1건(status_changes).
+ *                              면담 기록은 넣지 않는다(시험이 직접 넣는다).
  *                              ruleRows = violation_rules 행(setup이 만든 id를 rule_id로 쓴다).
  * seedFakeStage2()           : 편집기에서 실행. seedFakeStage1() 뒤에. 두 번 실행해도 중복 없음(id가 이미 있으면 건너뜀).
  *
@@ -57,7 +58,7 @@ function buildFakeStage2Duty_(fake) {
 }
 
 /* 생활 기록 학생: 1단계가 쓰지 않는 번호(특이사항 0~8, 고정 일정 10~17, 퇴실 28, 입실 29) */
-var FAKE2_OUT2 = 19, FAKE2_OUT1 = 20, FAKE2_NODOC = [21, 22];
+var FAKE2_OUT2 = 19, FAKE2_OUT1 = 20, FAKE2_NODOC = [21, 22], FAKE2_PENDING = 23;
 
 function buildFakeStage2Life_(fake, ruleRows) {
   var stage1 = buildFakeStage1_(fake);
@@ -80,19 +81,20 @@ function buildFakeStage2Life_(fake, ruleRows) {
 
   /* 서류 미제출 F7 신청 2건(결정 3: 미제출이어도 적용). 적용일은 mealPlanChange_ 계산 그대로 */
   var statusChanges = [];
-  var addMeal = function (i, item, value, requestedAt) {
+  var addMeal = function (i, item, value, requestedAt, doc) {
     var mine = stage1.statusChanges.filter(function (c) { return c.student_id === st[i].id; });
     var p = mealPlanChange_(mine, st[i].id, item, value, requestedAt, { today: requestedAt.slice(0, 10) });
     if (p.blocked || p.superseded || p.toCancel.length || p.followUps.length) throw new Error('가짜 급식 신청 계획이 단순하지 않습니다: ' + st[i].id);
     statusChanges.push({ id: fakeId_('f8300000', statusChanges.length + 1), student_id: st[i].id, item: item, value: value,
       requested_at: requestedAt, effective_date: p.date, effective_date_auto: p.autoDate, reason: '가짜 신청',
-      doc_submitted: 'FALSE', linked_change_id: '', source: 'F7', status: '유효', memo: FAKE2_MEMO, cancel_reason: '' });
+      doc_submitted: doc, linked_change_id: '', source: 'F7', status: '유효', memo: FAKE2_MEMO, cancel_reason: '' });
   };
-  addMeal(FAKE2_NODOC[0], '석식', '일반 석식', '2027-03-08T10:00:00');   // 11:30 전 → 당일
-  addMeal(FAKE2_NODOC[1], '석식', '일반 석식', '2027-03-09T14:00:00');   // 11:30 뒤 → 다음 날
+  addMeal(FAKE2_NODOC[0], '석식', '일반 석식', '2027-03-08T10:00:00', 'FALSE');   // 11:30 전 → 당일
+  addMeal(FAKE2_NODOC[1], '석식', '일반 석식', '2027-03-09T14:00:00', 'FALSE');   // 11:30 뒤 → 다음 날
+  addMeal(FAKE2_PENDING, '석식', '미실시', '2027-03-10T09:00:00', 'TRUE');        // 대기 행: 수요일 신청 → 다다음 주 월요일(3/22)
 
   return { term: term, violations: violations, statusChanges: statusChanges,
-    out2Id: st[FAKE2_OUT2].id, out1Id: st[FAKE2_OUT1].id, noDocIds: FAKE2_NODOC.map(function (i) { return st[i].id; }) };
+    out2Id: st[FAKE2_OUT2].id, out1Id: st[FAKE2_OUT1].id, noDocIds: FAKE2_NODOC.map(function (i) { return st[i].id; }), pendingId: st[FAKE2_PENDING].id };
 }
 
 /** 편집기에서 실행. seedFakeData()·seedFakeStage1() 뒤에, 가짜 학생만 있는 DB에서만 동작한다. 두 번 실행해도 중복 없음. */

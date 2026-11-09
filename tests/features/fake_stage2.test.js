@@ -4,7 +4,7 @@ const { test, loadGs, plain } = require('../helpers/harness');
 const { createGasEnv } = require('../helpers/gas-fakes');
 
 const ctx = loadGs(['src/Schema.gs', 'src/rules/DateRules.gs', 'src/rules/ScheduleRules.gs', 'src/rules/StatusRules.gs',
-  'src/rules/MealRules.gs', 'src/rules/OutRules.gs', 'src/rules/DutyRules.gs',
+  'src/rules/MealRules.gs', 'src/rules/MoveRules.gs', 'src/rules/OutRules.gs', 'src/rules/DutyRules.gs',
   'src/dev/FakeData.gs', 'src/dev/FakeSeats.gs', 'src/dev/FakeStage1.gs', 'src/dev/FakeStage2.gs']);
 const TESTER = 'test.teacher@example.com';
 const fake = ctx.buildFakeData_({ ownerEmail: 'owner@test.invalid', teacherEmail: TESTER });
@@ -99,8 +99,8 @@ const stage1 = plain(ctx.buildFakeStage1_(fake));
 test('생활 기록 학생은 1단계가 쓰는 학생(특이사항·고정 일정·퇴실·중도 입실)과 겹치지 않는다', () => {
   const used = new Set([].concat(stage1.exceptions.map((e) => e.student_id), stage1.fixedSchedules.map((f) => f.student_id),
     [stage1.leaverId, stage1.lateEntrantId]));
-  const mine = [life.out2Id, life.out1Id].concat(life.noDocIds);
-  assert.strictEqual(new Set(mine).size, 4);
+  const mine = [life.out2Id, life.out1Id, life.pendingId].concat(life.noDocIds);
+  assert.strictEqual(new Set(mine).size, 5);
   for (const id of mine) assert.ok(!used.has(id), id);
 });
 
@@ -124,7 +124,7 @@ test('2027-03 직접 OUT: 2건 학생 1명(퇴실 대상) · 1건 학생 1명, 1
 });
 
 test('서류 미제출 F7 급식 신청 2건: 미제출이어도 적용(결정 3), 적용일 = 11:30 규칙(당일·다음 날)', () => {
-  const rows = life.statusChanges;
+  const rows = life.statusChanges.filter((r) => r.doc_submitted === 'FALSE');
   assert.strictEqual(rows.length, 2);
   assert.deepStrictEqual(rows.map((r) => r.student_id), life.noDocIds);
   assert.ok(rows.every((r) => r.doc_submitted === 'FALSE' && r.source === 'F7' && r.status === '유효' && r.linked_change_id === ''));
@@ -136,8 +136,18 @@ test('서류 미제출 F7 급식 신청 2건: 미제출이어도 적용(결정 3
     assert.strictEqual(ctx.statusOn_(all, r.student_id, '석식', before), '학사 석식');
     assert.strictEqual(ctx.statusOn_(all, r.student_id, '석식', r.effective_date), '일반 석식');
   }
-  const ids = life.violations.concat(rows, stage1.statusChanges, d.dutySlots).map((r) => r.id);
+  const ids = life.violations.concat(life.statusChanges, stage1.statusChanges, d.dutySlots).map((r) => r.id);
   assert.strictEqual(new Set(ids).size, ids.length, 'id 고유');
+});
+
+test('F7 대기 행 1건: 수요일 미실시 신청 → 다다음 주 월요일(3/22), 그 전까지는 학사 석식', () => {
+  const p = life.statusChanges.filter((r) => r.doc_submitted !== 'FALSE');
+  assert.strictEqual(p.length, 1);
+  assert.deepStrictEqual([p[0].student_id, p[0].item, p[0].value, p[0].requested_at, p[0].effective_date, p[0].doc_submitted, p[0].source],
+    [life.pendingId, '석식', '미실시', '2027-03-10T09:00:00', '2027-03-22', 'TRUE', 'F7']);
+  const all = stage1.statusChanges.concat(life.statusChanges);
+  assert.strictEqual(ctx.statusOn_(all, life.pendingId, '석식', '2027-03-21'), '학사 석식');
+  assert.strictEqual(ctx.statusOn_(all, life.pendingId, '석식', '2027-03-22'), '미실시');
 });
 
 test('seedFakeStage2: 가짜 DB에 쓰고, 두 번 실행해도 중복 없음', () => {
@@ -146,7 +156,7 @@ test('seedFakeStage2: 가짜 DB에 쓰고, 두 번 실행해도 중복 없음', 
   const before = env.rows('day_schedules').length;
   const vtab = ctx.termSheetName_('violations', life.term.id);
   assert.strictEqual(env.asOwner((c) => c.seedFakeStage2()),
-    '가짜 2단계 데이터: duty_slots +62, day_schedules +1, ' + vtab + ' +3, status_changes +2');
+    '가짜 2단계 데이터: duty_slots +62, day_schedules +1, ' + vtab + ' +3, status_changes +3');
   assert.strictEqual(env.asOwner((c) => c.seedFakeStage2()),
     '가짜 2단계 데이터: duty_slots +0, day_schedules +0, ' + vtab + ' +0, status_changes +0');
   const vs = env.rows(vtab);
