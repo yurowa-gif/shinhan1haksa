@@ -25,7 +25,11 @@ async function main() {
   await browser.close();
   // 실제 PDF 쪽을 그림으로 찍어 여백·축소가 보이게 한다
   const pdfFile = path.join(OUT, 'meal-counts.pdf');
-  execFileSync('pdftoppm', ['-png', '-r', '110', '-singlefile', pdfFile, path.join(OUT, 'meal-counts')]);
+  try {
+    execFileSync('pdftoppm', ['-png', '-r', '110', '-singlefile', pdfFile, path.join(OUT, 'meal-counts')]);
+  } catch (e) {
+    console.log('pdftoppm이 없어 PDF 쪽 그림(meal-counts.png)은 건너뜀. PDF: ' + pdfFile + ', 내용 그림: ' + path.join(OUT, 'meal-counts-section.png'));
+  }
   const fit = w.section <= 515.9 * 4 / 3 + 0.5 && w.inner <= w.section + 0.5;
   console.log('식수 집계: PDF ' + pages + '쪽(기대 1쪽), 내용 폭 ' + Math.round(w.section * 3 / 4 * 10) / 10 + 'pt(인쇄 폭 515.9pt 이내여야 함)' + (pages === 1 && fit ? ' ✓' : ' ✗'));
   if (pages !== 1 || !fit) process.exit(1);
