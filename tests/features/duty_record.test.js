@@ -117,3 +117,14 @@ test('운영 안 하는 날에 근무 행이 남아 있으면 세고 경고(R8),
   const empty = rec(x, DUTY, '2027-05');
   assert.deepStrictEqual([empty.teachers, empty.swaps, empty.totals.total], [[], [], 0]);
 });
+
+test('users에 없는 근무자·이름이 빈 사용자는 "(등록 안 된 교사)"로 보이고 이메일은 응답·PDF HTML에 나오지 않는다', () => {
+  const x = makeEnv();
+  x.env.asOwner((c) => c.appendRecord_('duty_slots', { date: '2027-01-30', slot: '단독', end_time: '', original_email: 'fake.ghost@example.com', actual_email: 'fake.ghost@example.com',
+    swapped_at: '', swapped_by: '', status: '유효', memo: '' }, ADMIN));
+  const r = rec(x, DUTY);
+  assert.ok(r.teachers.some((t) => t.name === '(등록 안 된 교사)'), JSON.stringify(r.teachers.map((t) => t.name)));
+  assert.ok(!JSON.stringify(r).includes('ghost') && !JSON.stringify(r).includes('@'));
+  const { html } = file(x, DUTY, MON, 'pdf');
+  assert.ok(html.includes('(등록 안 된 교사)') && !html.includes('ghost'));
+});
