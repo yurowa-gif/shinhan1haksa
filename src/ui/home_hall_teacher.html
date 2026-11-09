@@ -13,6 +13,7 @@
             UI.statusPill('todo', '내 근무'), el('b', { text: x.today.label + (x.today.end ? ' (' + x.today.end + '까지)' : '') })]));
         } else line.appendChild(el('div', { text: '오늘은 근무가 없습니다.' }));
         if (x.next) line.appendChild(el('div', { class: 'muted', text: '다음 근무: ' + (+x.next.date.slice(5, 7)) + '월 ' + (+x.next.date.slice(8, 10)) + '일(' + x.next.weekdayKo + ') ' + x.next.label }));
+        if (x.today || x.next) line.appendChild(el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=duty', text: '내 근무 교대' }));
       }
     }
     root.appendChild(el('div', { class: 'card' }, [

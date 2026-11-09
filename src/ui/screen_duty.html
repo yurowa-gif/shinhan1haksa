@@ -10,7 +10,11 @@
   .duty-card.readonly { cursor: default; }
   .duty-slot .slot-label { flex: 0 0 5.5em; color: var(--muted-ink); white-space: nowrap; }
   .duty-sheet-slots .field { margin-bottom: 8px; }
-  .row-btn { flex: 0 0 auto; white-space: nowrap; }   /* 줄 끝 버튼(C9 교대)이 줄어들어 글자가 깨지지 않게 */
+  .row-btn { flex: 0 0 auto; white-space: nowrap; }   /* 줄 끝 버튼(교대·대신 근무)이 줄어들어 글자가 깨지지 않게 */
+  .duty-slot .row-btn { margin-left: auto; min-height: var(--tap); }
+  .duty-slot .slot-who { display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; min-width: 0; }
+  .duty-gap { word-break: keep-all; }
+  .nowrap { white-space: nowrap; }
 </style>
 <script>
   /** 근무표 화면(C8a): 주 목록(휴대폰 기본)·월 달력(PC 기본), 편성·운영 안 함은 날짜를 눌러 연 시트에서(근무표 담당자·관리자). 교대는 C9. */
@@ -54,17 +58,17 @@
         else if (opts.date) state.week = weekIndexOf(opts.date);
         else state.week = data.today.slice(0, 7) === data.month ? weekIndexOf(data.today) : 0;
         state.week = Math.max(0, Math.min(state.week, ws.length - 1));
-        draw(opts.note);
+        draw(opts.note, opts.noteWarn);
       }).catch(function (err) { if (my !== state.seq) return; clear(head); clear(body); showError(body, err); });
     }
 
-    function draw(note) {
+    function draw(note, noteWarn) {
       var d = state.data, ws = weeksOf(d.days);
       clear(head);
       var weekMode = state.mode === 'week';
-      var title = weekMode
-        ? d.month.slice(0, 4) + '년 ' + (+d.month.slice(5, 7)) + '월 ' + (state.week + 1) + '주 (' + (+ws[state.week][0].date.slice(8, 10)) + '일–' + (+ws[state.week][ws[state.week].length - 1].date.slice(8, 10)) + '일)'
-        : d.month.slice(0, 4) + '년 ' + (+d.month.slice(5, 7)) + '월';
+      // 제목은 연·월·주 / 날짜 범위 두 덩어리로, 날짜 범위는 중간에서 끊지 않는다
+      var titleHead = d.month.slice(0, 4) + '년 ' + (+d.month.slice(5, 7)) + '월' + (weekMode ? ' ' + (state.week + 1) + '주' : '');
+      var titleTail = weekMode ? '(' + (+ws[state.week][0].date.slice(8, 10)) + '일–' + (+ws[state.week][ws[state.week].length - 1].date.slice(8, 10)) + '일)' : '';
       function step(n) {
         if (!weekMode) return load(monthShift(state.month, n));
         var w = state.week + n;
@@ -75,12 +79,12 @@
       head.appendChild(el('div', { class: 'card' }, [
         el('div', { class: 'duty-nav' }, [
           el('button', { type: 'button', class: 'btn secondary', 'aria-label': weekMode ? '이전 주' : '이전 달', text: '‹', onclick: function () { step(-1); } }),
-          el('span', { class: 'title', text: title }),
+          el('span', { class: 'title' }, [titleHead, titleTail ? ' ' : null, titleTail ? el('span', { class: 'nowrap', text: titleTail }) : null]),
           el('button', { type: 'button', class: 'btn secondary', 'aria-label': weekMode ? '다음 주' : '다음 달', text: '›', onclick: function () { step(1); } })
         ]),
         UI.segmented({ label: '보기 방식', options: [{ value: 'week', label: '주 목록' }, { value: 'month', label: '월 달력' }], value: state.mode,
           onchange: function (v) { state.mode = v; draw(); } }),
-        note ? el('div', { class: 'notice info', text: note }) : null,
+        note ? el('div', { class: 'notice ' + (noteWarn ? 'warn' : 'info'), text: note }) : null,
         gapNotice(d),
         d.warnings.length ? el('div', { class: 'notice warn', text: d.warnings.slice(0, 3).join(' / ') }) : null
       ]));
@@ -97,19 +101,29 @@
       if (!d.canEdit || !d.emptyDays) return null;
       // 오늘 이후의 빈 날만 적는다(지난 날은 근무표 담당자가 못 고치므로 달력·주 목록의 점선으로만 남긴다)
       var open = d.days.filter(function (x) { return x.operating && x.date >= d.today && x.slots.some(function (s) { return !s.name; }); });
-      var shown = open.slice(0, 3).map(dayKo).join('·') + (open.length > 3 ? ' 외 ' + (open.length - 3) + '일' : '');
-      return el('div', { class: 'notice warn', text: '남은 빈 날 ' + d.emptyDays + '일 — ' + shown + '. 날짜 줄을 누르면 편성할 수 있습니다.' });
+      var parts = ['남은 빈 날 ' + d.emptyDays + '일 — '];
+      open.slice(0, 3).forEach(function (x, i) { if (i) parts.push('·'); parts.push(el('span', { class: 'nowrap', text: dayKo(x) })); });
+      if (open.length > 3) parts.push(' 외 ' + (open.length - 3) + '일');
+      parts.push('. ' + (state.mode === 'month' ? '날짜 칸' : '날짜 줄') + '을 누르면 편성할 수 있습니다.');
+      return el('div', { class: 'notice warn duty-gap' }, parts);
     }
 
     /* ───────── 주 목록 ───────── */
-    function slotRow(s) {
+    function slotRow(s, x) {
       var who = s.name ? el('b', { text: s.swapped ? s.swappedFrom + ' → ' + s.name : s.name }) : UI.statusPill('requested', '비어 있음');
-      return el('li', { class: 'duty-slot' }, [
-        el('span', { class: 'slot-label', text: s.label }), who,
+      var kids = [el('span', { class: 'slot-label', text: s.label }), el('span', { class: 'slot-who' }, [
+        who,
         s.swapped ? UI.statusPill('confirmed', '교대') : null,
         s.mine ? UI.statusPill('todo', '내 근무') : null,
         s.slot === '예비' && s.name ? UI.statusPill('mute', '예비') : null
-      ]);
+      ])];
+      if (s.canSwap) {
+        var proxy = state.data.canEdit;
+        kids.push(el('button', { type: 'button', class: 'btn secondary row-btn', text: proxy ? '대신 근무' : '교대',
+          'aria-label': dayKo(x) + ' ' + s.label + (proxy ? ' 대신 근무 기록' : ' 근무 교대'),
+          onclick: function (e) { e.stopPropagation(); openSwap(x, s); } }));
+      }
+      return el('li', { class: 'duty-slot' }, kids);
     }
     function dayCard(x) {
       var editable = state.data.canEdit || state.data.canOperate;
@@ -123,7 +137,7 @@
         card.appendChild(el('div', { class: 'muted', text: (x.memo ? '메모: ' + x.memo + ' · ' : '') + (state.data.canOperate ? '눌러서 운영으로 바꿀 수 있습니다.' : '근무표 담당자·관리자가 바꿉니다.') }));
       } else {
         if (x.memo) card.appendChild(el('div', { class: 'muted', text: '메모: ' + x.memo }));
-        card.appendChild(el('ul', { class: 'list' }, x.slots.map(slotRow)));
+        card.appendChild(el('ul', { class: 'list' }, x.slots.map(function (s) { return slotRow(s, x); })));
       }
       if (editable) {
         card.setAttribute('role', 'button'); card.setAttribute('tabindex', '0');
@@ -171,6 +185,56 @@
         el('div', { class: 'tablewrap', style: 'padding:4px' }, [table]),
         el('div', { class: 'muted', text: '칸의 성은 교사 이름(박 = 박선생), * = 교대로 실제 근무자가 바뀐 날, 예 = 예비 감독입니다. 날짜 칸을 누르면 ' + (d.canEdit || d.canOperate ? '편성 시트가 열립니다.' : '그날 줄로 이동합니다.') })
       ]);
+    }
+
+    /* ───────── 교대·대신 근무 시트(C9) ───────── */
+    function openSwap(x, s) {
+      var d = state.data, proxy = d.canEdit, busy = false, sheet = null;
+      var standby = x.slots.filter(function (z) { return z.slot === '예비' && z.name; })[0];
+      var sel = el('select');
+      sel.appendChild(el('option', { value: '', text: '(고르기)' }));
+      d.teachers.filter(function (t) { return t.id !== s.userId; }).forEach(function (t) { sel.appendChild(el('option', { value: t.id, text: t.name })); });
+      if (proxy && standby && standby.userId !== s.userId) sel.value = standby.userId;   // 예비 감독이 대신 근무하는 경우가 기본
+      var reason = proxy ? el('input', { type: 'text', maxlength: '100' }) : null;
+      var err = el('div', { class: 'fix' });
+      var content = el('div', {}, [
+        kv([['날짜', dayKo(x)], ['근무', s.label + ' · ' + s.name]]),
+        UI.field(proxy ? '실제 근무자' : '바꿀 선생님', sel),
+        reason ? UI.field('이유(선택)', reason, { hint: '예: 병가, 학교 행사' }) : null,
+        el('div', { class: 'notice info', text: proxy
+          ? '예비 감독이 대신 근무하면 근무표 담당자가 기록합니다. 실제 근무자가 되면 월말 근무 기록표에 근무로 들어가고 예비 지정에서는 빠집니다. 예비 본인에게는 교대 버튼이 없습니다.'
+          : '상대 선생님과 근무표 담당자에게 알림이 갑니다. 승인 절차는 없습니다.' }),
+        err
+      ]);
+      function chosenName() { var o = sel.options[sel.selectedIndex]; return o ? o.text : ''; }
+      function refresh() { if (sheet) sheet.buttons[1].disabled = busy || !sel.value; }
+      sel.addEventListener('change', refresh);
+      function doSwap(ack) {
+        busy = true; refresh(); err.textContent = '';
+        call('swapDuty', s.slotId, sel.value, { acknowledge: !!ack, reason: reason ? reason.value.trim() : '' }).then(function (r) {
+          if (r.needsConfirm) {
+            busy = false; refresh();
+            return UI.confirmSheet({ title: '같은 날 다른 칸에도 있습니다', lead: r.warnings[0], lines: ['그래도 교대하면 한 선생님이 두 칸을 맡습니다'], confirmText: '그대로 교대',
+              onconfirm: function () { doSwap(true); } });
+          }
+          if (!r.ok) { busy = false; refresh(); err.textContent = r.errors.map(function (e) { return e.message; }).join(' '); return; }
+          sheet.close();
+          var msg = proxy ? '대신 근무로 기록했습니다.' : '교대했습니다.';
+          if (r.notified) UI.toast(msg + ' 상대 선생님과 근무표 담당자에게 메일을 보냈습니다.');
+          load(state.month, { week: state.week, note: r.notified ? msg + ' 메일을 보냈습니다.' : msg + ' 메일을 보내지 못했습니다. 상대 선생님께 직접 알려 주세요.', noteWarn: !r.notified });
+        }).catch(function (e) { busy = false; refresh(); err.textContent = (e && e.message) || String(e); });
+      }
+      sheet = UI.bottomSheet({
+        title: proxy ? '대신 근무 기록' : '근무 교대', content: content,
+        actions: [{ text: '취소', kind: 'secondary', onclick: function () { sheet.close(); } },
+          { text: proxy ? '기록하기' : '교대하기', disabled: true, onclick: function () {
+            if (busy || !sel.value) return;
+            UI.confirmSheet({ title: proxy ? '대신 근무를 기록합니다' : '근무를 교대합니다', lead: dayKo(x) + ' ' + s.label + ': ' + s.name + ' → ' + chosenName(),
+              lines: [(proxy ? '실제 근무자로 기록되고 ' : '') + '상대 선생님과 근무표 담당자에게 메일이 갑니다', '승인 절차가 없어 바로 바뀝니다'],
+              confirmText: proxy ? '기록하기' : '교대하기', onconfirm: function () { doSwap(false); } });
+          } }]
+      });
+      sheet.open(); refresh();
     }
 
     /* ───────── 편성·운영 시트 ───────── */
