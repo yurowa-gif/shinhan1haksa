@@ -55,7 +55,7 @@ function permissions_() {
     'duty.record': { roles: ['admin', 'duty_manager'] },   // 기록표 파일(엑셀): 관리자·근무표 담당자(결정 48)
     // OUT(F4): 보기 범위는 함수 안(vioVisibleIds_). 1학사 교사(학사 교사·출결 담당)는 학사생 전체, 담임은 자기 반(결정 45)
     'out.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] },
-    // dutyWindow: 발생일(ymd)의 실제 근무자가 ymd ≤ 오늘 ≤ ymd+N 동안 통과(값은 Q2 답) — C8s(isOnDutyFor_) 전까지 쓰이지 않는다
+    // dutyWindow: 발생일(ymd)의 실제 근무자가 ymd ≤ 오늘 ≤ ymd+N 동안 통과(isOnDutyFor_, C8s). 없으면 0 = ymd가 오늘인 근무자만
     'out.save': { roles: ['admin', 'hall_teacher'], scope: 'student', dutyWindow: 1 },
     'out.cancel': { roles: ['admin'] },
     'out.rules': { roles: ['admin'] },
@@ -149,17 +149,21 @@ function termOnDate_(ymd, terms) {
 }
 
 /**
- * 근무교사(오늘 근무자)인지. F3 근무표(duty_slots)가 생기면 채운다.
- * TODO(F3): duty_slots에서 오늘 날짜의 실제 근무자 이메일과 비교
+ * 근무교사 시간 범위(PRD §12): ymd(발생일, 없으면 오늘)의 실제 근무자이고 ymd ≤ 오늘 ≤ ymd + windowDays면 참(windowDays 기본 0).
+ * 예비 지정만·교대로 넘긴 원래 근무자·취소된 칸은 거짓. 근무표(duty_slots)를 읽지 못하면(탭 없음 등) 오류 없이 거짓 — 권한은 넓히지 않는다.
+ * 규칙은 R8 dutyIsOn_가 판정하고 여기서는 시트를 읽기만 한다(readAll_은 실행당 한 번 읽어 쓴다).
  */
-function isOnDutyToday_(email) {
-  return false;
+function isOnDutyFor_(email, ymd, windowDays) {
+  var rows;
+  try { rows = readAll_('duty_slots'); } catch (e) { return false; }
+  var today = today_();
+  return dutyIsOn_(rows, email, ymd || today, today, windowDays);
 }
 
 /**
  * 학생 한 명에 대한 범위 판정에 필요한 사실을 모은다.
  */
-function studentFacts_(user, student, ymd) {
+function studentFacts_(user, student, ymd, windowDays) {
   // ymd(YYYY-MM-DD)를 주면 그 날짜가 속한 운영 기간으로 판정한다(다음 기간 신입생 입력 등). 없으면 오늘의 기간.
   // 어떤 기간에도 속하지 않는 날짜는 오늘의 기간으로 판정한다(저장 단계의 입력 검사가 "기간에 속하지 않음"으로 막는다)
   var term = (ymd ? termOnDate_(ymd) : null) || getCurrentTerm_();
@@ -175,7 +179,8 @@ function studentFacts_(user, student, ymd) {
       return en.term_id === termId && en.student_id === student.id &&
         normalizeEmail_(en.teacher_email) === user.email;
     }),
-    isOnDuty: hasRole_(user, 'hall_teacher') && isOnDutyToday_(user.email),
+    // 근무교사: 열람 키는 ymd = 오늘의 실제 근무자만(windowDays 0), out.save는 발생일의 근무자가 다음 날까지(규칙의 dutyWindow). 화면이 보낸 ymd로는 넓어지지 않는다
+    isOnDuty: hasRole_(user, 'hall_teacher') && isOnDutyFor_(user.email, ymd || '', windowDays || 0),
     // 담임은 "자기 반 학사생"만: 같은 반 + 이번 운영 기간 등록 학생
     inHomeroom: sameClass_(user.homeroomClass, student.grade, student.class_no) && enrolled
   };
@@ -201,7 +206,8 @@ function canAccessStudentByFacts_(roles, facts, allowedRoles, wide) {
   if (allowed('admin')) return true;
   // 출결 담당: 이번 기간 학사생 전체
   if (allowed('attendance') && facts.isEnrolled) return true;
-  if (allowed('hall_teacher') && (facts.isAssigned || facts.isOnDuty || (wide && facts.isEnrolled))) return true;
+  // 근무일이어도 이번 기간 등록 학생에게만(미등록 학생은 제외). 보기 키(wide)는 학사생 전체
+  if (allowed('hall_teacher') && (facts.isAssigned || (facts.isOnDuty && facts.isEnrolled) || (wide && facts.isEnrolled))) return true;
   if (allowed('homeroom') && facts.inHomeroom) return true;
   if (allowed('student') && facts.isOwn) return true;
   if (allowed('parent') && facts.isGuardian) return true;
@@ -244,7 +250,7 @@ function requirePermission_(action, context) {
     if (ymd && (typeof ymd !== 'string' || !ymdIsValid_(ymd))) deny('날짜 형식');
     var student = context.studentId ? findById_('students', context.studentId) : null;
     if (!student) deny('학생 없음');
-    var facts = studentFacts_(user, student, ymd);
+    var facts = studentFacts_(user, student, ymd, rule.dutyWindow);
     if (rule.noDuty) facts.isOnDuty = false;
     if (!canAccessStudentByFacts_(user.roles, facts, rule.roles, !!rule.wideView)) deny('범위 밖 학생');
   }
