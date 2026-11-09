@@ -323,15 +323,12 @@ function foodWrite_(head, linked, cancels, actorEmail, restores) {
     return Object.assign({}, base, { student_id: h.student_id, requested_at: h.requested_at }, l, { id: Utilities.getUuid(), linked_change_id: id });
   });
   bulkAppend_('status_changes', [h].concat(rows), actorEmail);
-  if (cancels && cancels.length) {
-    bulkUpdateRecords_('status_changes', cancels.map(function (c) {   // 규칙이 이미 '[자동] <원인 행 id> …'를 준 사유(되살린 신청이 다시 취소하는 행)는 그대로 쓴다
-      var r = String(c.cancel_reason || '');
-      return { id: c.id, patch: { status: '취소', cancel_reason: /^\[자동\] /.test(r) ? r : '[자동] ' + id + ' ' + (r || '새 신청으로 대체') } };
-    }), actorEmail);
-  }
-  if (restores && restores.length) {
-    bulkUpdateRecords_('status_changes', restores.map(function (r) { return { id: r.id, patch: { status: '유효', cancel_reason: '' } }; }), actorEmail);
-  }
+  // 취소와 되살림은 한 번의 bulkUpdateRecords_(한 번의 setValues)로 쓴다 — 둘 사이에서 끊겨 되살림만 빠지는 일이 없게
+  var patches = (cancels || []).map(function (c) {   // 규칙이 이미 '[자동] <원인 행 id> …'를 준 사유(되살린 신청이 다시 취소하는 행)는 그대로 쓴다
+    var r = String(c.cancel_reason || '');
+    return { id: c.id, patch: { status: '취소', cancel_reason: /^\[자동\] /.test(r) ? r : '[자동] ' + id + ' ' + (r || '새 신청으로 대체') } };
+  }).concat((restores || []).map(function (r) { return { id: r.id, patch: { status: '유효', cancel_reason: '' } }; }));
+  if (patches.length) bulkUpdateRecords_('status_changes', patches, actorEmail);
   return { head: h, linked: rows };
 }
 
@@ -346,14 +343,15 @@ var FOOD_UNFINISHED = '이전 저장이 중간에 끊겨 덜 끝났습니다. �
 
 /**
  * 저장했다는 대표 행이 있는데 취소 쓰기가 빠졌나(다시 눌렀을 때 "이미 저장"으로 넘기지 않으려고).
- * 대표+연결 행은 한 번에 쓰므로 반쯤 쓰이는 일은 없고, 끊길 수 있는 곳은 그 뒤의 취소 쓰기뿐이다.
+ * 대표+연결 행은 한 번에, 취소·되살림도 한 번에 쓰므로 반쯤 쓰이는 일은 없고, 끊길 수 있는 곳은 그 둘 사이뿐이다.
  * plan = 저장 전 모양(foodBefore_)으로 다시 세운 계획. 그 계획이 취소할 행이 있는데 이 대표 행의 "[자동] <대표 id>" 꼬리표가 붙은 행이 하나도 없으면 덜 끝난 것이다.
  * 나중 저장이 이 저장의 행을 취소·되살려도 꼬리표는 남으므로 끝난 저장을 거짓으로 덜 끝났다고 하지 않는다.
  * 덮여서 취소된 신청서(superseded 기록)는 취소 쓰기가 없으니 검사하지 않는다(부르는 쪽).
  */
 function foodUnfinished_(plan, changes, headId) {
   if (!plan.toCancel.length) return false;
-  return !changes.some(function (c) { return String(c.cancel_reason || '').indexOf('[자동] ' + headId + ' ') === 0; });
+  // '더 새 신청'으로 끝나는 꼬리표는 덮인 신청서(superseded 기록)가 덮은 행 id를 달고 있는 것이라 이 대표의 취소 꼬리표가 아니다
+  return !changes.some(function (c) { var r = String(c.cancel_reason || ''); return r.indexOf('[자동] ' + headId + ' ') === 0 && !/더 새 신청$/.test(r); });
 }
 
 /* ───────────── 화면에서 부르는 서버 함수 ───────────── */

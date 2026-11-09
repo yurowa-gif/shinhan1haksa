@@ -307,3 +307,70 @@ test('끝난 저장을 나중에 다시 보내도 거짓 "덜 끝났습니다"�
   const again = save(env, ADMIN, i, p.expect);
   assert.strictEqual(again.ok, true, JSON.stringify(again)); assert.strictEqual(again.duplicate, true);
 });
+
+/* ───────── 총괄 확인 후속(W2·L6·U7·U8·취소+되살림 한 번) ───────── */
+
+test('W2: 대표 행 쓰기(bulkAppend_)가 실패하면 대기 신청은 취소되지 않고 그대로 유효하다(취소를 먼저 쓰는 순서면 대표 없이 취소만 남는다)', () => {
+  const env = makeEnv('2027-03-03T16:00:00');
+  const { dorm } = pick(env);
+  env.asOwner((c) => c.bulkUpdateRecords_('status_changes', env.rows('status_changes').filter((r) => r.source === '명단업로드').map((r) => ({ id: r.id, patch: { requested_at: '' } })), env.owner));
+  const mi = { studentId: dorm, chip: 'd_hall', requestedAt: '2027-03-03T15:30:00', docSubmitted: true, effectiveDate: '2027-03-20', reason: '급식실 요청' };
+  const H = env.call(ADMIN, 'saveMealChange', mi, env.call(ADMIN, 'previewMealChange', mi).expect);   // 3/20 학사 석식 대기 → 퇴실이 취소할 행
+  const i = input(dorm, '학사 및 기숙사 퇴실', '2027-03-03T15:00:00', '2027-03-05');
+  const p = prev(env, ADMIN, i);
+  assert.strictEqual(p.cancel, 1);
+  const n = env.rows('status_changes').length;
+  assert.throws(() => env.as(ADMIN, (c) => { c.bulkAppend_ = () => { throw new Error('시험: 쓰기 실패'); }; return c.saveMove(JSON.parse(JSON.stringify(i)), p.expect); }), /쓰기 실패/);
+  assert.strictEqual(env.rows('status_changes').length, n, '아무 행도 쓰이지 않았다');
+  assert.strictEqual(rowsOf(env, dorm).find((x) => x.id === H.id).status, '유효', '대기 신청은 취소되지 않았다');
+});
+
+test('취소와 되살림은 한 번의 쓰기(bulk_update 한 줄)이고, 끊긴 뒤 다른 저장의 [자동] 꼬리표가 있어도 덜 끝난 저장은 덜 끝났다고 한다(U8)', () => {
+  const env = makeEnv('2027-03-03T16:00:00');
+  const { dorm } = pick(env);
+  env.asOwner((c) => c.bulkUpdateRecords_('status_changes', env.rows('status_changes').filter((r) => r.source === '명단업로드').map((r) => ({ id: r.id, patch: { requested_at: '' } })), env.owner));
+  const mealSave = (chip, at, extra) => {
+    const mi = Object.assign({ studentId: dorm, chip, requestedAt: at, docSubmitted: true }, extra || {});
+    return env.call(ADMIN, 'saveMealChange', mi, env.call(ADMIN, 'previewMealChange', mi).expect);
+  };
+  const R = mealSave('d_off', '2027-03-03T09:00:00', { effectiveDate: '2027-03-25', reason: '급식실 요청' });
+  const H = mealSave('d_hall', '2027-03-03T10:00:00', { effectiveDate: '2027-03-20', reason: '급식실 요청' });   // R을 취소(H의 꼬리표가 R에)
+  const i = input(dorm, '학사 및 기숙사 퇴실', '2027-03-03T15:00:00', '2027-03-05');
+  const p = prev(env, ADMIN, i);
+  const b0 = env.auditActions('bulk_update').length;
+  const leave = save(env, ADMIN, i, p.expect);
+  assert.strictEqual(leave.cancelCount, 1); assert.strictEqual(leave.restoreCount, 1);
+  assert.strictEqual(env.auditActions('bulk_update').length - b0, 1, '취소(H)와 되살림(R)이 한 번의 쓰기');
+  // 끊긴 저장: 퇴실이 취소한 H를 다시 살려 둔다(꼬리표 제거). R에는 다른 저장(H)의 [자동] 꼬리표가 아니라 되살림 흔적만 있다
+  env.asOwner((c) => c.appendRecord_('status_changes', { student_id: dorm, item: '조식', value: '실시', requested_at: '2027-03-02T09:00:00', effective_date: '2027-03-30', effective_date_auto: '2027-03-30', reason: '',
+    doc_submitted: 'TRUE', linked_change_id: '', source: 'F7', status: '취소', memo: '', cancel_reason: '[자동] 다른저장의-대표-id 새 신청으로 대체' }, env.owner));   // 다른 저장이 남긴 [자동] 꼬리표
+  const hRow = rowsOf(env, dorm).find((x) => x.id === H.id);
+  env.asOwner((c) => c.updateRecord_('status_changes', hRow.id, { status: '유효', cancel_reason: '' }, env.owner));
+  const again = save(env, ADMIN, i, p.expect);
+  assert.strictEqual(again.ok, false); assert.ok(again.errors[0].message.includes('덜 끝났습니다'), JSON.stringify(again));
+});
+
+test('덮인 신청서(취소 기록)의 재시도는 덮은 행이 나중에 취소돼도 duplicate(U7)이고, "더 새 신청" 꼬리표를 대표 꼬리표로 착각하지 않는다', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { dorm } = pick(env);
+  const S1 = { studentId: dorm, chip: 'd_hall', requestedAt: '2027-03-03T10:30:00', docSubmitted: true };
+  const r1 = env.call(ADMIN, 'saveMealChange', S1, env.call(ADMIN, 'previewMealChange', S1).expect);
+  const S2 = { studentId: dorm, chip: 'd_gen', requestedAt: '2027-03-03T09:00:00', docSubmitted: true };
+  const p2 = env.call(ADMIN, 'previewMealChange', S2);
+  const r2 = env.call(ADMIN, 'saveMealChange', S2, p2.expect);
+  assert.strictEqual(r2.superseded, true);
+  env.asOwner((c) => c.updateRecord_('status_changes', r1.id, { status: '취소', cancel_reason: '잘못 입력' }, env.owner));   // 덮은 행이 사람 손으로 취소됨
+  const again = env.call(ADMIN, 'saveMealChange', S2, p2.expect);
+  assert.strictEqual(again.ok, true, JSON.stringify(again)); assert.strictEqual(again.duplicate, true);
+});
+
+test('L6: 사이 날(3/1) 학생 목록은 막 끝난 기간·다음 기간만 — 두 기간 뒤(3번째 기간)에만 등록된 학생은 없다', () => {
+  const env = makeEnv('2027-03-01T20:00:00');
+  env.asOwner((c) => c.appendRecord_('terms', { name: '2027 2학기', type: '학기', start_date: '2027-08-01', end_date: '2027-12-20', memo: '시험' }, env.owner));
+  const t3 = env.rows('terms').find((t) => t.name === '2027 2학기');
+  const st = env.asOwner((c) => c.appendRecord_('students', { student_no: '39989', name: '가짜후배', gender: '남', grade: '1', class_no: '1', number: '89', track: '', email: '', memo: '가짜' }, env.owner));
+  env.asOwner((c) => c.appendRecord_('enrollments', { term_id: t3.id, student_id: st.id, teacher_email: HALL, veritas: 'FALSE', commute_type: '일반', end_type: '23:00', memo: '' }, env.owner));
+  const ctx = env.call(HALL, 'getMealContext');
+  assert.ok(!ctx.students.some((x) => x.id === st.id) && !ctx.viewStudents.some((x) => x.id === st.id), '두 기간 뒤에만 등록된 학생은 목록에 없다');
+  assert.ok(ctx.students.length > 0);
+});
