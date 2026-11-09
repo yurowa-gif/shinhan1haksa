@@ -338,6 +338,8 @@
       refresh();
     }
 
-    load('');
+    // ?date=yyyy-MM-dd가 오면 그 날짜의 달·주로 연다(출석부의 "근무표에서 고치기"·보기)
+    var wantDate = typeof SCREEN_DATE === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(SCREEN_DATE) ? SCREEN_DATE : '';
+    if (wantDate) load(wantDate.slice(0, 7), { date: wantDate }); else load('');
   }
 </script>

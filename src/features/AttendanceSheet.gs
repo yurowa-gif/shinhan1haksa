@@ -5,11 +5,12 @@
  *                          sheet-model.md 모양의 모델을 만든다. 서비스·현재 시각을 쓰지 않는다(시각은 src.now).
  *   getAttendanceSheet(date, names)     미리보기 HTML(DESIGN 렌더러 printRenderSheet_) + 요약. 관리자·출결 담당·학사 교사만.
  *   getAttendanceSheetPdf(date, names)  PDF를 base64로 내려준다(공유·Drive 저장 없음). 같은 권한, 같은 모델 함수(결정 39).
- *   names = {dutyNames, standbyNames}: 인쇄 화면에서 손으로 넣은 근무·예비 감독 이름. 저장하지 않고 이번 모델 사본에만 넣는다.
+ *   머리말 근무·예비 감독 이름(C10): 근무표(duty_slots)에 그날 틀 안의 칸이 하나라도 있으면 근무표 이름(근무 2명·예비 1명), 하나도 없을 때만
+ *   names = {dutyNames, standbyNames}(인쇄 화면에서 손으로 넣은 이름, 4명·2명)를 쓴다. 저장하지 않고 이번 모델 사본에만 넣는다. 응답의 dutySource가 출처다.
  *
  * 개인정보: 모델의 occupant에는 학년·이름·display만 넣는다. 특이사항 사유 메모·이메일·학번은 모델에 넣지 않는다(칸에는 유형 약어만).
  * ASSUMPTION: 설정 attendance.legend는 아직 쓰지 않고 범례는 PRD F2 기본값을 쓴다.
- * ASSUMPTION: 근무자·예비 감독 이름은 F3(2단계) 전까지 손으로 넣은 값만 쓴다(없으면 빈 배열, 머리말 "근무: ____").
+ * 이름이 하나도 없으면 빈 배열이고 머리말은 "근무: ____"이다. 이메일은 인쇄하지 않는다(users에 없거나 이름이 빈 사용자는 '(등록 안 된 교사)').
  * ASSUMPTION: PDF는 HTML → PDF 변환(스파이크 A안)으로 시작한다. C0 결과로 B안이 정해지면 sheetMakePdf_ 한 곳만 바꾼다.
  * 모델 캐시(CacheService)는 두지 않는다(결정 39: 실측 뒤에 정한다). 대신 단계별 소요 시간(load·build·render·pdf, ms)을
  * Logger와 응답의 timings에 남겨 실측할 수 있게 한다(개인정보 없음).
@@ -130,12 +131,47 @@ function sheetLoad_(ymd) {
   if (!term) return null;
   var tab = [];
   try { tab = readAll_(termSheetName_('exceptions', term.id)); } catch (e) { if (String(e.message).indexOf('탭이 없습니다') < 0) throw e; }
-  return {
+  var src = {
     date: ymd, now: nowIso_(), terms: terms, term: term, daySchedules: readAll_('day_schedules'), blocks: readAll_('blocks'),
     defaults: calDefaults_(readAll_('settings', 'config')), settings: sheetSettings_(readAll_('settings', 'config')),
     spaces: readAll_('spaces'), seats: readAll_('seats'), assignments: readAll_('seat_assignments'), enrollments: readAll_('enrollments'),
     students: readAll_('students'), changes: readAll_('status_changes'), fixedSchedules: readAll_('fixed_schedules'), exceptions: tab, dutyNames: [], standbyNames: []
   };
+  src.dutyTable = sheetDutyNames_(ymd, dtyPlan_(ymd, src));
+  return src;
+}
+
+/**
+ * 근무표(duty_slots)의 그날 근무자 이름(F3). plan = 그날 운영 계획(틀). 그날 틀 안의 살아 있는 칸이 하나라도 있으면 hasSlots: true(취소된 칸·틀 밖 칸·다른 날 칸은 칸이 아니다).
+ * 근무 칸은 21:30조 → 23:00조 / 단독 순서(근무 2명까지), 예비 감독은 1명까지, 대신 근무로 근무에 든 예비는 예비에서 뺀다. 이름은 users에서 읽고 12자까지.
+ * 탭이 없으면 칸이 없는 것으로 본다. 이메일은 내보내지 않는다.
+ * @return {{hasSlots:boolean, dutyNames:string[], standbyNames:string[]}}
+ */
+function sheetDutyNames_(ymd, plan) {
+  var rows = [];
+  try { rows = readAll_('duty_slots'); } catch (e) { if (String(e.message).indexOf('탭이 없습니다') < 0) throw e; }
+  var live = rows.filter(function (r) { return ruleRowLive_(r) && String(r.date).trim() === ymd; });
+  // 그날 틀 안의 칸만 쓴다(손으로 고친 시트의 틀 밖 칸이 진짜 근무자를 밀어내지 않게). 틀 안의 칸이 없으면 칸이 없는 것으로 본다
+  var frame = {};
+  dutySlotsFor_(plan).forEach(function (f) { frame[f.slot] = true; });
+  var inFrame = live.filter(function (r) { return frame[ruleStr_(r.slot)]; });
+  var warnings = inFrame.length < live.length ? [ymd + ' 근무표에 그날 틀에 없는 칸이 있어 머리말에서 뺐습니다. 근무표에서 확인해 주세요.'] : [];
+  if (!inFrame.length) return { hasSlots: false, dutyNames: [], standbyNames: [], warnings: warnings };
+  var names = Object.create(null);
+  readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = u.name; });
+  var day = dutyOn_(inFrame, ymd);
+  var who = function (email) { return names[email] || '(등록 안 된 교사)'; };
+  var onDuty = {};
+  day.duty.forEach(function (d) { onDuty[d.email] = true; });
+  // 같은 이름의 두 교사를 하나로 합치지 않는다(중복 제거는 이메일로 dutyOn_가 이미 했다)
+  return { hasSlots: true, warnings: warnings.concat(day.warnings),
+    dutyNames: day.duty.map(function (d) { return sheetCleanName_(who(d.email)); }).slice(0, 2),
+    standbyNames: day.standby.filter(function (sb) { return !onDuty[sb.email]; }).map(function (sb) { return sheetCleanName_(who(sb.email)); }).slice(0, 1) };
+}
+
+/** 머리말에 넣을 이름 하나: 제어문자·겹공백을 다듬고 12자까지(순수) */
+function sheetCleanName_(x) {
+  return String(x === null || x === undefined ? '' : x).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 12);
 }
 
 /**
@@ -171,9 +207,12 @@ function sheetModelFor_(ymd, names, timer) {
   var src = sheetLoad_(ymd);
   if (timer) timer.lap('loadMs');
   if (!src) return null;
-  var n = sheetNames_(names);
+  // 근무표에 그날 칸이 있으면 그 이름을(손 입력은 무시), 하나도 없을 때만 손으로 넣은 이름을 쓴다(4-2)
+  var n = src.dutyTable.hasSlots ? src.dutyTable : sheetNames_(names);
   src.dutyNames = n.dutyNames; src.standbyNames = n.standbyNames;
-  var built = { model: sheetBuildModel_(src), settings: src.settings };
+  var built = { model: sheetBuildModel_(src), settings: src.settings,
+    dutySource: src.dutyTable.hasSlots ? '근무표' : (n.dutyNames.length || n.standbyNames.length ? '손 입력' : '') };
+  (src.dutyTable.warnings || []).forEach(function (w) { built.model.warnings.push(w); });   // 근무표 쪽 경고(틀 밖 칸 등)도 머리말 경고로
   if (timer) timer.lap('buildMs');
   return built;
 }
@@ -189,7 +228,8 @@ function sheetRender_(ymd, names, timer) {
   var built = sheetModelFor_(ymd, names, timer);
   if (!built) return { ok: false, date: ymd, error: '이 날짜가 속한 운영 기간이 없습니다. 운영 기간을 먼저 만들어 주세요.' };
   var model = built.model;
-  var base = { date: ymd, weekdayKo: model.weekdayKo, warnings: model.warnings };
+  // dutySource: 머리말 이름의 출처('근무표'·'손 입력'·''). 모델이 아니라 응답에 둔다(렌더러는 모른다)
+  var base = { date: ymd, weekdayKo: model.weekdayKo, warnings: model.warnings, dutySource: built.dutySource, dutyNames: model.dutyNames, standbyNames: model.standbyNames };
   if (!model.operating) {
     return Object.assign(base, { ok: true, operating: false, message: ymd + '(' + model.weekdayKo + ')은(는) 운영하지 않는 날입니다. 출석부는 만들지 않습니다.' });
   }
@@ -217,10 +257,11 @@ function sheetRender_(ymd, names, timer) {
  * names = {dutyNames, standbyNames}(선택): 손으로 넣은 근무·예비 감독 이름(저장하지 않음). 응답의 timings는 단계별 소요 ms.
  */
 function getAttendanceSheet(date, names) {
-  requirePermission_('sheet.view');
+  var user = requirePermission_('sheet.view');
   var timer = sheetTimer_();
   var r = sheetRender_(sheetDateArg_(date), names, timer);
   r.today = today_();   // 화면의 "오늘" 칩은 ?date=로 들어와도 실제 오늘을 가리킨다
+  r.dutyCanEdit = hasAnyAllowedRole_(user.roles, permissions_()['duty.edit'].roles);   // 근무표를 고칠 수 있는 역할인지(화면의 링크 글자)
   r.timings = timer.result();
   Logger.log('[출석부 미리보기 ms] ' + JSON.stringify(r.timings));
   return r;

@@ -150,3 +150,16 @@ test('좌석 격자는 상자 안에서만 가로로 민다(overflow-x:auto), �
   assert.ok(ratio(css.declsFor(rules, '.seat-cell.vacant').color, css.declsFor(rules, '.seat-cell.vacant').background) >= 4.5, '공석 칸');
   assert.ok(ratio(css.declsFor(rules, '.range-summary').color, '#ffffff') >= 4.5);
 });
+
+test('시트 두 번 탭 방지: 열린 직후 350ms는 시트 안 버튼 클릭을 무시하고(경계 포함), bottomSheet 의 모든 버튼이 이 판정을 거친다', () => {
+  assert.strictEqual(U.SHEET_GUARD_MS, 350);
+  const t0 = 1000000;
+  assert.strictEqual(U.sheetClickAllowed(t0, t0), false, '열자마자');
+  assert.strictEqual(U.sheetClickAllowed(t0, t0 + 349), false);
+  assert.strictEqual(U.sheetClickAllowed(t0, t0 + 350), true, '350ms 뒤');
+  assert.strictEqual(U.sheetClickAllowed(t0, t0 + 5000), true);
+  assert.strictEqual(U.sheetClickAllowed(0, t0), true, '아직 안 열렸으면(openedAt 0) 막지 않는다');
+  const fn = html.slice(html.indexOf('UI.bottomSheet = function'), html.indexOf('UI.confirmSheet = function'));
+  assert.ok(fn.indexOf('util.sheetClickAllowed(openedAt, Date.now())') > 0 && fn.indexOf('openedAt = Date.now()') > 0, 'open()이 시각을 남기고 버튼이 판정을 거친다');
+  assert.ok(fn.indexOf('.map(makeBtn)') < 0, '시트 버튼을 가드 없이 만들지 않는다');
+});
