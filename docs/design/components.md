@@ -52,7 +52,7 @@
 ## 시트(아래에서 올라오는 창)
 
 ### UI.bottomSheet
-`UI.bottomSheet({title, content:Node, actions:[{text,onclick,kind,disabled}], onclose, initialFocus?:0})` → `{open(), close(), el, buttons}`. 바깥 누르기·Esc로 닫히고, 닫으면 포커스가 원래 자리로 돌아간다.
+`UI.bottomSheet({title, content:Node, actions:[{text,onclick,kind,disabled}], onclose, initialFocus?:0})` → `{open(), close(), el, buttons}`. 바깥 누르기·Esc로 닫히고, 닫으면 포커스가 원래 자리로 돌아간다. **열린 직후 350ms 동안은 시트 안 버튼 클릭을 무시한다**(화면 아래 바 버튼을 빠르게 두 번 누르면 두 번째 탭이 같은 자리에 막 열린 확인 시트의 버튼을 눌러, 확인창을 보지도 않고 저장되는 것을 막는다. `confirmSheet`·`confirmWithReason` 모두 같다).
 
 ### UI.confirmSheet
 `UI.confirmSheet({title, lead?, lines?, message?, confirmText?:'확인', cancelText?:'취소', danger?, onconfirm, oncancel})` → 열린 시트. 포커스는 **취소** 쪽. 무엇이 바뀌는지 `message`에 한 줄로 쓴다(rules.md 6절). 적용일처럼 꼭 봐야 할 한 줄은 `lead`(크고 굵게, 예 "3월 5일(금)부터 학사 퇴실"), 그 아래 바뀌는 것 목록은 `lines`(문자열 배열). `lead`·`lines`만 주면 `message`는 없어도 된다.
@@ -81,3 +81,4 @@
 | `studentLabel(s)` | `'1. 김가온'` |
 | `seatSelect(state, key, mode)` | 칸 선택 상태기계 → `{picked, done}` |
 | `blockSpec(blocks, value)` | 블록 선택 → `'ALL'`·`'HH:mm-HH:mm;…'`·`''` |
+| `sheetClickAllowed(openedAt, now)` | 시트 안 버튼 클릭을 받아도 되나(열린 지 `SHEET_GUARD_MS`=350ms 이상일 때만 참, 열기 전 0이면 참) |
