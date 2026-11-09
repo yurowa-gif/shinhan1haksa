@@ -33,12 +33,16 @@
       dateField = UI.dateField({
         label: '날짜', value: date, name: 'date',
         shortcuts: [{ label: '오늘', value: today }, { label: '내일', value: addDays(today, 1) }],
-        onchange: function (v) { load(v); }
+        onchange: function (v) {
+          state.duty = ''; state.standby = '';   // 손으로 넣은 이름은 그 날짜의 것이다 — 날짜를 바꾸면 따라가지 않고 비운다
+          if (state.namesMode === '손 입력') buildNames();
+          load(v);
+        }
       });
       head.appendChild(dateField);
     }
 
-    // 근무·예비 감독 이름: 인쇄할 때만 쓰고 저장하지 않는다(F3 근무표가 생기기 전까지 손으로 넣는다)
+    // 근무·예비 감독 이름: 근무표에 그날 칸이 없을 때만 손으로 넣는다(인쇄할 때만 쓰고 저장하지 않는다)
     function names() { return { dutyNames: state.duty, standbyNames: state.standby }; }
     function buildNames() {
       clear(namesCard);
@@ -57,6 +61,25 @@
       duty.addEventListener('input', changed); standby.addEventListener('input', changed);
     }
 
+    // 이름의 출처: 근무표에 그날 칸이 있으면 근무표 이름(읽기만, 고치는 곳은 근무표), 하나도 없을 때만 손 입력 칸(C10)
+    function showNames(r) {
+      var fromTable = r.dutySource === '근무표';
+      if (fromTable) {
+        state.namesMode = '근무표';
+        clear(namesCard);
+        namesCard.appendChild(el('h2', { text: '인쇄할 이름(근무표에서)' }));
+        var emptyDuty = !(r.dutyNames || []).length;
+        namesCard.appendChild(kv([['근무 교사', (r.dutyNames || []).join(', ') || '(비어 있음)'], ['예비 감독', (r.standbyNames || []).join(', ') || '(없음)']]));
+        if (emptyDuty) namesCard.appendChild(el('div', { class: 'sheet-warn', text: '이 날 근무 교사가 비어 있습니다. ' + (r.dutyCanEdit ? '근무표에서 편성해 주세요.' : '근무표 담당자에게 알려 주세요.') }));
+        var back = document.querySelector('a.back'), base = back ? back.getAttribute('href') : '';
+        // 시트의 날짜 주로 열린다. 근무표를 고칠 수 없는 역할(출결 담당·학사 교사)에게는 "보기"
+        namesCard.appendChild(el('a', { class: 'btn secondary', style: 'margin-top:8px', href: base + '?page=duty&date=' + encodeURIComponent(r.date), text: r.dutyCanEdit ? '근무표에서 고치기' : '근무표 보기' }));
+      } else if (state.namesMode !== '손 입력') {
+        state.namesMode = '손 입력';
+        buildNames();   // 입력 중에는 다시 그리지 않는다(글자가 사라지지 않게)
+      }
+    }
+
     window.addEventListener('resize', function () { if (state.fit) state.fit(); });   // 한 번만 등록(다시 불러올 때마다 늘리지 않는다)
 
     function load(date) {
@@ -67,7 +90,8 @@
       call('getAttendanceSheet', date || '', names()).then(function (r) {
         if (mine !== state.seq) return;
         state.busy = false; state.data = r; clear(preview);
-        if (!dateField) { buildHead(r.date, r.today || r.date); buildNames(); }
+        if (!dateField) buildHead(r.date, r.today || r.date);
+        showNames(r);
         dateField.setValue(r.date);   // 날짜 칸을 비웠어도 응답 날짜로 맞춘다
         if (r.warnings && r.warnings.length) r.warnings.forEach(function (w) { info.appendChild(el('div', { class: 'sheet-warn', text: w })); });
         if (!r.ok) { preview.appendChild(el('div', { class: 'error', text: r.error })); return; }

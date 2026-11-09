@@ -12,13 +12,15 @@
  *         dinner:'중단'(기본)|'일반 석식', breakfastWithDorm(기본 true), breakfastStopWithDorm(기본 true)}
  * opts = {today(필수), cutoff}
  * → {errors, warnings, rows:[{item, value, effective_date, effective_date_auto, requested_at, reason, source, head}],
- *    toCancel:[{id, cancel_reason}], summary:{date, breakfast:{value, from}|null, dinner:{value, from}|null}}
- * errors가 있으면 rows·toCancel은 비어 있다(쓰지 않는다).
+ *    toCancel:[{id, cancel_reason}], toRestore:[{id}], summary:{date, breakfast:{value, from}|null, dinner:{value, from}|null}}
+ * errors가 있으면 rows·toCancel·toRestore는 비어 있다(쓰지 않는다). toCancel과 toRestore는 겹치지 않고, toCancel은 시트에 있는 id만이다.
+ * cancel_reason이 '[자동] '으로 시작하면 저장 쪽은 그대로 쓰고, 아니면 앞에 '[자동] <대표 행 id> '를 붙인다.
  *
  * - 대표 행(head:true): 학사·기숙사 값, source 'F6', 적용일 = effectiveDate. '학사 및 기숙사 퇴실'은 학사 퇴실(대표) + 기숙사 퇴실(연결).
  *   F6 저장은 연결 행의 linked_change_id = 대표 행 id, toCancel의 cancel_reason 앞에 '[자동] <대표 행 id> '를 붙인다.
  * - 학사 퇴실 정리(rules-api.md R6 순서): 조식 중단일 = 퇴실일, 석식 중단일 = mealEffectiveDate_('stop', 신청 일시, {leaveDate})
- *   (결정 35). 중단일 이상 학사생 값 행을 취소하고, 그래도 중단일 값이 학사생 값이면 그날 '미실시'(source 'F6').
+ *   (결정 35). 중단일 이상 학사생 값 행(석식은 퇴실 기록 이후에 신청한 퇴실일 이상 학사 석식도)을 취소하고, 그래도 중단일 값이
+ *   학사생 값이면(정리 전 학사생 값이었는데 값이 없어져도) 그날 '미실시'(source 'F6'). 취소한 행의 꼬리표로 되살림(결정 55·58).
  *   석식 '일반 석식'을 고르면 일반 석식 신청(source 'F7', 11:30 규칙 — 퇴실일보다 이르지 않게, 값이 같아도 쓴다 — 늦게 입력된 옛
  *   신청서가 덮지 못하게)을 쓰고, 학사 석식 정리는 그 날(쓰지 못했으면 결정 35 중단일)부터 늘 한다.
  * - 기숙사 입실 + 조식: 조식 실시 @입실일(rule entry_date, source 'F7'). 기숙사 퇴실 + 조식 미실시: 미실시 규칙, 기숙사 퇴실일보다
@@ -58,10 +60,12 @@ function movePlan_(changes, studentId, move, opts) {
   if (out.errors.length) return out;
   if (E < today) out.warnings.push('적용일(' + E + ')이 오늘보다 이릅니다: 지난 출석부·식수가 바뀝니다');
 
+  var planned = {}, nseq = 0;   // 이 계획이 쓸 행(시트에 아직 없다): live 안 id 'new<n>' → out.rows의 행
   var add = function (item, value, date, auto, reason, source) {
     var row = { item: item, value: value, effective_date: date, effective_date_auto: auto, requested_at: at, reason: reason, source: source, head: !out.rows.length };
     out.rows.push(row);
-    live.push({ id: 'new' + out.rows.length, student_id: sid, item: item, value: value, effective_date: date, requested_at: ruleIso_(at), source: source, status: '유효', created_at: '9999' });
+    planned['new' + (++nseq)] = row;
+    live.push({ id: 'new' + nseq, student_id: sid, item: item, value: value, effective_date: date, requested_at: ruleIso_(at), source: source, status: '유효', created_at: '9999' });
   };
   var cancel = function (list, reason) {
     list.forEach(function (c) {
@@ -69,30 +73,63 @@ function movePlan_(changes, studentId, move, opts) {
       live = live.filter(function (x) { return ruleStr_(x.id) !== c.id; });
     });
   };
+  // 퇴실 기록 이후에 신청한 퇴실일 이상 학사 석식(mealPlanChange_ blocked의 거울) — 이 퇴실 정리가 취소한다
+  var postLeaveHall = function (c) {
+    return ruleStr_(c.item) === '석식' && ruleStr_(c.value) === '학사 석식' && ruleStr_(c.source) !== 'F6' &&
+      ruleStr_(c.effective_date) >= E && ruleIso_(c.requested_at) >= ruleIso_(at);
+  };
   var meal = function (item, to, mopts, reason, always) {   // 급식 신청(F7)을 같은 계획에 넣는다 → 쓴 날 또는 ''(always면 값이 같아도 쓴다)
-    var p = mealPlanChange_(live, sid, item, to, at, Object.assign({ today: today, cutoff: opts.cutoff }, mopts));
-    out.warnings = out.warnings.concat(p.warnings);
+    // 퇴실과 함께 고른 급식은 이 퇴실 정리가 곧 취소할 행(퇴실 뒤 학사 석식)에 밀리지 않는다(입력 순서와 무관)
+    var src = mopts.leaveDate ? live.filter(function (c) { return !postLeaveHall(c); }) : live;
+    var p = mealPlanChange_(src, sid, item, to, at, Object.assign({ today: today, cutoff: opts.cutoff }, mopts));
     if (p.blocked || p.superseded) { out.warnings.push(item + ' ' + to + ' 신청은 쓰지 않습니다: ' + (p.blocked || '더 새 신청이 있습니다')); return ''; }
-    if (!always && p.kind === 'none' && !p.toCancel.length && !p.followUps.length) return '';   // 이미 그 값이면 행을 늘리지 않는다
+    if (!always && p.kind === 'none' && !p.toCancel.length && !p.followUps.length) return '';   // 이미 그 값이면 행을 늘리지 않는다(경고도 없음)
+    out.warnings = out.warnings.concat(p.warnings);
     cancel(p.toCancel, reason);
     add(item, to, p.date, mopts.effectiveRule === 'entry_date' ? p.date : p.autoDate, reason, 'F7');
     p.followUps.forEach(function (f) { add(f.item, f.value, f.effective_date, f.effective_date, reason, f.source); });
     out.summary[item === '조식' ? 'breakfast' : 'dinner'] = { value: to, from: p.date };
     return p.date;
   };
-  // 퇴실 정리(F6): 중단일 이상 학사생 값 취소 → 그 행들이 '[자동] <그 행 id>'로 취소했던 행 중 더 새 신청에 덮이지 않는 것을
-  // 되살린다(입력 순서와 무관하게, 총괄 결정 (a)) → 그래도 중단일 값이 학사생 값이면 미실시
+  // 퇴실 정리(F6): 중단일 이상 학사생 값 취소(석식은 퇴실 기록 이후에 신청한 퇴실일 이상 학사 석식도 — mealPlanChange_ 막힘의 거울)
+  // → 그 행들이 '[자동] <그 행 id>'로 취소했던 행 중 더 새 신청에 덮이지 않는 것을 되살린다(입력 순서와 무관하게, 결정 55·58)
+  // → 그래도 중단일 값이 학사생 값이면(정리 전 학사생 값이었는데 이제 값이 없어도) 미실시
   var stopHall = function (item, stop, reason) {
+    var before = statusOn_(live, sid, item, stop);
     var gone = mealPendingToCancel_(live, sid, item, stop, { source: 'F6' });
+    live.forEach(function (c) { if (postLeaveHall(c) && ruleStr_(c.effective_date) < stop) gone.push({ id: ruleStr_(c.id) }); });
     cancel(gone, reason);
+    var back = [];
     gone.forEach(function (x) {
-      moveRestorable_(changes, live, x.id).forEach(function (r) {
-        if (mealIsHallOnly_(item, ruleStr_(r.value)) && ruleStr_(r.effective_date) >= stop) return;   // 되살려도 이 정리가 다시 취소할 행
+      moveRestorable_(changes, live, x.id, function (r) {   // 되살려도 이 정리가 다시 취소할 행은 처음부터 뺀다(더 이른 행을 막지 않게)
+        return (mealIsHallOnly_(item, ruleStr_(r.value)) && ruleStr_(r.effective_date) >= stop) || postLeaveHall(r);
+      }).forEach(function (r) {
         out.toRestore.push({ id: ruleStr_(r.id) });
         live.push(Object.assign({}, r, { status: '유효' }));
+        back.push(r);
       });
     });
-    if (mealIsHallOnly_(item, statusOn_(live, sid, item, stop))) {
+    // 되살린 신청은 처음 저장될 때처럼 그보다 먼저 신청했는데 더 늦게 적용되는 다른 값의 행을 취소한다(superseded로 저장돼 자기 취소를
+    // 못 했거나, 취소돼 있던 동안 늦게 입력된 옛 신청서). 새 신청부터. 꼬리표는 되살린 행 id(그 행이 다시 끊기면 돌아오게)
+    back.sort(function (a, b) { return ruleIso_(a.requested_at) > ruleIso_(b.requested_at) ? -1 : 1; }).forEach(function (r) {
+      if (!live.some(function (c) { return ruleStr_(c.id) === ruleStr_(r.id); })) return;
+      var hits = mealPendingToCancel_(live, sid, item, ruleStr_(r.effective_date), { source: 'F7', requestedAt: r.requested_at, newValue: ruleStr_(r.value) });
+      var drop = function (id) { live = live.filter(function (x) { return ruleStr_(x.id) !== id; }); };
+      hits.forEach(function (h) {
+        if (out.toRestore.some(function (t) { return t.id === h.id; })) {   // 이 계획이 되살린 행이면 되살리지 않는다(toCancel∩toRestore 없게)
+          out.toRestore = out.toRestore.filter(function (t) { return t.id !== h.id; });
+          drop(h.id);
+        } else if (planned[h.id]) {   // 이 계획이 쓸 행(퇴실과 함께 고른 급식)은 시트에 없다 → superseded처럼 쓰지 않는다
+          out.rows = out.rows.filter(function (x) { return x !== planned[h.id]; });
+          drop(h.id);
+          out.warnings.push(item + ' ' + planned[h.id].value + ' 신청은 쓰지 않습니다: 더 새 신청이 있습니다');
+          var sk = item === '조식' ? 'breakfast' : 'dinner';
+          if (out.summary[sk] && out.summary[sk].value === planned[h.id].value) out.summary[sk] = null;
+        } else cancel([h], '[자동] ' + ruleStr_(r.id) + ' 되살린 신청으로 대체');
+      });
+    });
+    var now = statusOn_(live, sid, item, stop);
+    if (mealIsHallOnly_(item, now) || (!now && mealIsHallOnly_(item, before))) {
       add(item, '미실시', stop, stop, reason, 'F6');
       out.summary[item === '조식' ? 'breakfast' : 'dinner'] = { value: '미실시', from: stop };
     }
@@ -104,6 +141,14 @@ function movePlan_(changes, studentId, move, opts) {
     // 일반 석식을 골라도 학사 석식 정리는 늘 한다(일반 석식 신청이 막히거나 더 새 학사 석식이 있으면 끝없이 학사 석식으로 남는다)
     var general = ruleStr_(move.dinner) === '일반 석식' ? meal('석식', '일반 석식', { leaveDate: E }, '학사 퇴실 일반 석식으로', true) : '';   // 고른 값은 그날부터의 의도라 늘 쓴다
     stopHall('석식', general || mealEffectiveDate_('stop', at, { leaveDate: E }).date, '학사 퇴실 석식 중단');
+    // 일반 석식 신청의 "X일부터 학사 석식 행이 이 신청을 덮습니다" 경고 중 이 계획이 취소한 행을 가리키는 것은 뺀다
+    var goneIds = {};
+    out.toCancel.forEach(function (c) { goneIds[c.id] = true; });
+    out.warnings = out.warnings.filter(function (w) {
+      return !(changes || []).some(function (c) {
+        return goneIds[ruleStr_(c.id)] && ruleStr_(c.item) === '석식' && w.indexOf(ruleStr_(c.effective_date) + '부터 ' + ruleStr_(c.value) + '(으)로 바뀌는 행이 있어') === 0;
+      });
+    });
   }
   if (type === '기숙사 입실' && move.breakfastWithDorm !== false) meal('조식', '실시', { effectiveDate: E, effectiveRule: 'entry_date' }, '기숙사 입실 조식');
   if (type === '기숙사 퇴실' && move.breakfastStopWithDorm !== false) meal('조식', '미실시', { leaveDate: E }, '기숙사 퇴실 조식 미실시');
@@ -111,17 +156,24 @@ function movePlan_(changes, studentId, move, opts) {
 }
 
 /**
- * 행 tagId가 '[자동] <tagId>'로 취소했던 행(cancel_reason, 없으면 memo) 중 되살려도 더 새 신청에 덮이지 않는 것.
- * 덮임 = 같은 학생·항목의 살아 있는 신청 행(F6 제외)이 신청 일시가 더 늦고 적용일이 그 행 이하. live = 지금 살아 있는 행(계획 반영).
+ * 행 tagId가 '[자동] <tagId> …'로 취소했던 행(cancel_reason, 결정 41) 중 되살려도 더 새 신청에 덮이지 않는 것.
+ * 덮임 = 같은 학생·항목의 신청 행(F6 제외)이 신청 일시가 더 늦고 적용일이 그 행 이하 — live(지금 살아 있는 행, 계획 반영)와
+ * 함께 되살아나는 행 모두에서 본다(신청 일시가 늦은 것부터 정해 서로 덮는 것도 거른다).
+ * 꼬리표 = superseded 신청서(결정 58)·F7 신청이 대체한 행(C17a)·퇴실 정리가 취소한 행(F6). skip(행)이 참인 행은 처음부터 뺀다
+ * (되살려도 곧 다시 취소할 행 — 덮임 검사에도 넣지 않는다).
  */
-function moveRestorable_(changes, live, tagId) {
-  var tag = '[자동] ' + ruleStr_(tagId);
-  return (changes || []).filter(function (c) {
-    if (!c || ruleRowLive_(c) || (ruleStr_(c.cancel_reason).indexOf(tag) !== 0 && ruleStr_(c.memo).indexOf(tag) < 0)) return false;
-    var req = ruleIso_(c.requested_at), e = ruleStr_(c.effective_date);
-    return !live.some(function (x) {
-      return ruleRowLive_(x) && ruleStr_(x.student_id) === ruleStr_(c.student_id) && ruleStr_(x.item) === ruleStr_(c.item) && ruleStr_(x.source) !== 'F6' &&
-        ruleIso_(x.requested_at) > req && ruleStr_(x.effective_date) <= e;
-    });
+function moveRestorable_(changes, live, tagId, skip) {
+  var tag = '[자동] ' + ruleStr_(tagId) + ' ';
+  var covers = function (x, c) {
+    return ruleStr_(x.student_id) === ruleStr_(c.student_id) && ruleStr_(x.item) === ruleStr_(c.item) && ruleStr_(x.source) !== 'F6' &&
+      ruleIso_(x.requested_at) > ruleIso_(c.requested_at) && ruleStr_(x.effective_date) <= ruleStr_(c.effective_date);
+  };
+  var back = [];
+  (changes || []).filter(function (c) {
+    return c && !ruleRowLive_(c) && (ruleStr_(c.cancel_reason) + ' ').indexOf(tag) === 0;
+  }).sort(function (a, b) { return ruleIso_(a.requested_at) > ruleIso_(b.requested_at) ? -1 : 1; }).forEach(function (c) {
+    if (skip && skip(c)) return;
+    if (!live.some(function (x) { return ruleRowLive_(x) && covers(x, c); }) && !back.some(function (x) { return covers(x, c); })) back.push(c);
   });
+  return back;
 }

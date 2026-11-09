@@ -95,6 +95,10 @@ var UI = {};
       .map(function (b) { return b.start + '-' + b.end; });
     return parts.join(';');
   };
+  /** 시트가 열린 직후 이 시간(ms) 동안은 시트 안 버튼 클릭을 무시한다: 화면 아래 바 버튼을 빠르게 두 번 누르면 두 번째 탭이 같은 자리에 막 열린 시트의 확인 버튼을 눌러 확인창을 보지도 않고 저장되기 때문(rules.md 6절) */
+  util.SHEET_GUARD_MS = 350;
+  /** 시트 안 버튼 클릭을 받아도 되는가: 아직 안 열렸거나(openedAt 0) 열린 지 SHEET_GUARD_MS 이상 지났을 때만 true */
+  util.sheetClickAllowed = function (openedAt, now) { return !openedAt || now - openedAt >= util.SHEET_GUARD_MS; };
   UI.util = util;
 
   /* ───────── 작은 도우미(전역 아님) ───────── */
@@ -341,7 +345,12 @@ var UI = {};
   UI.bottomSheet = function (opts) {
     opts = opts || {};
     var prev = null;
-    var buttons = (opts.actions || []).map(makeBtn);
+    var openedAt = 0;
+    var buttons = (opts.actions || []).map(function (a) {
+      var spec = { text: a.text, kind: a.kind, disabled: a.disabled };
+      if (a.onclick) spec.onclick = function (e, b) { if (!util.sheetClickAllowed(openedAt, Date.now())) return; a.onclick(e, b); };
+      return makeBtn(spec);
+    });
     var sheet = el('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': opts.title || '확인' }, [
       el('h2', { text: opts.title || '' }),
       el('div', { class: 'sheet-body' }, [opts.content || null]),
@@ -353,6 +362,7 @@ var UI = {};
     scrim.addEventListener('click', function (e) { if (e.target === scrim) api.close(); });
     api.open = function () {
       prev = document.activeElement;
+      openedAt = Date.now();
       document.body.appendChild(scrim);
       document.addEventListener('keydown', onKey);
       var first = buttons[opts.initialFocus || 0];

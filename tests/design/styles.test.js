@@ -175,3 +175,10 @@ test('Styles.html 은 자습 일정 화면이 자기 <style>에서 쓰는 이름
   assert.ok(!/\.cal-(day|nav|tag|warn)\b/.test(styles));
   assert.ok(/\.duty-day\b/.test(styles));
 });
+
+test('한국어 줄바꿈: .seg·.sheet h2·.sheet-body·.sheet-lead 는 word-break:keep-all + overflow-wrap:anywhere(낱말 중간에서 끊지 않고, 낱말이 줄보다 길 때만 강제로)', () => {
+  const styles = css.readFile('src/ui/Styles.html');
+  const m = /([^{}\n]*)\{\s*word-break:\s*keep-all;\s*overflow-wrap:\s*anywhere;\s*\}/.exec(styles);
+  assert.ok(m, 'keep-all 규칙이 없다');
+  ['.seg', '.sheet h2', '.sheet-body', '.sheet-lead'].forEach((sel) => assert.ok(m[1].split(',').map((x) => x.trim()).indexOf(sel) >= 0, sel));
+});
