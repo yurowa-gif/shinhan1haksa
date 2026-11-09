@@ -1,0 +1,246 @@
+/** C11a F4 OUT 직접 입력: R4 gas-fakes 환경에서 실제 공개 함수를 부른다. 메일은 실행 안에서 MailApp을 바꿔 끼운다. 가짜 데이터만. */
+const assert = require('assert');
+const { test, plain } = require('../helpers/harness');
+const { createGasEnv } = require('../helpers/gas-fakes');
+
+const ADMIN = 'test.admin@example.com', DUTY = 'test.duty@example.com', ATT = 'test.attendance@example.com', T1 = 'test.teacher@example.com',
+  T2 = 'fake.t2@example.com', T3 = 'fake.t3@example.com', HOMEROOM = 'test.homeroom@example.com', STUDENT = 'test.student@example.com', PARENT = 'test.parent@example.com';
+const TODAY = '2027-03-03', YESTERDAY = '2027-03-02', TWO_AGO = '2027-03-01';
+const AT = (d, hm) => d + 'T' + (hm || '19:40');
+
+function makeEnv(opts) {
+  const env = createGasEnv({ now: TODAY + 'T20:00:00' });
+  const acc = env.seedFake({ stage1: true });
+  env.asOwner((c) => { c.addUser(T2, '가짜교사2', 'hall_teacher'); c.addUser(T3, '가짜교사3', 'hall_teacher'); });
+  const term = env.rows('terms').find((t) => t.name === '2027 1학기');
+  const enr = env.rows('enrollments').filter((e) => e.term_id === term.id);
+  const students = env.rows('students');
+  const active = (s) => !env.rows('status_changes').some((c) => c.student_id === s.id && c.item === '학사' && c.effective_date > TODAY);   // 3/15 입실 예정자는 제외
+  const mine = students.find((s) => active(s) && enr.some((e) => e.student_id === s.id && e.teacher_email === T1));
+  const notMine = students.find((s) => active(s) && enr.some((e) => e.student_id === s.id && e.teacher_email !== T1) && s.id !== mine.id);
+  const late = env.rows('status_changes').find((c) => c.item === '학사' && c.effective_date === '2027-03-15').student_id;
+  const rules = env.rows('violation_rules');
+  const phone = rules.find((r) => r.name.startsWith('휴대폰')), dorm = rules.find((r) => r.name.startsWith('기숙사')), auto = rules.find((r) => r.name.startsWith('무단'));
+  if (!opts || opts.mail !== false) env.scriptProps.MAIL_ENABLED = 'true';
+  const tab = () => env.rows('violations_' + term.id.slice(0, 8));
+  const duty = (date, slot, original, actual) => env.asOwner((c) => c.appendRecord_('duty_slots', { date, slot, end_time: '21:30', original_email: original, actual_email: actual === undefined ? original : actual,
+    swapped_at: '', swapped_by: '', status: '유효', memo: '' }, ADMIN));
+  const input = (o) => Object.assign({ studentId: mine.id, occurredAt: AT(TODAY), ruleId: phone.id, detectedBy: '', memo: '자습 중 휴대폰 사용' }, o || {});
+  return { env, acc, term, mine, notMine, late, phone, dorm, auto, tab, duty, input, id: (e) => env.rows('users').find((u) => u.email === e).id };
+}
+/** MailApp을 바꿔 끼우고 saveOut을 부른다 → {r, sent, locks} */
+function save(x, who, input, mailOpts) {
+  mailOpts = mailOpts || {};
+  const sent = [], locks = [];
+  const r = plain(x.env.as(who, (c) => {
+    c.MailApp = { sendEmail(to, subject, body) { locks.push(c.LockService.getScriptLock().hasLock()); if (mailOpts.fail) throw new Error('발송 실패(가짜)'); sent.push({ to, subject, body }); },
+      getRemainingDailyQuota: () => 100 };
+    return c.saveOut(input);
+  }));
+  return { r, sent, locks };
+}
+const call = (x, who, fn, ...args) => plain(x.env.call(who, fn, ...args));
+const pure = require('../helpers/harness').loadGs(['src/Schema.gs', 'src/Auth.gs', 'src/rules/DateRules.gs', 'src/rules/OutRules.gs', 'src/features/Outs.gs']);
+
+/* ───── vioYmd_: 권한 날짜와 저장 일시가 같은 값에서 나온다 ───── */
+test('vioYmd_: 로컬 yyyy-MM-ddTHH:mm(:ss)만 받고 Z·오프셋·공백·날짜만·없는 날짜·범위 밖 시각은 null', () => {
+  const v = (s) => plain(pure.vioYmd_({ occurredAt: s }));
+  assert.deepStrictEqual(v('2027-03-03T21:40'), { ymd: '2027-03-03', at: '2027-03-03T21:40:00' });
+  assert.deepStrictEqual(v(' 2027-03-03T21:40:15 '), { ymd: '2027-03-03', at: '2027-03-03T21:40:15' }, '앞뒤 공백은 같은 값으로 다듬는다');
+  for (const bad of ['2027-03-03T21:40Z', '2027-03-03T21:40:00+09:00', '2027-03-03T21:40+0900', '2027-03-03 21:40', '2027-03-03', '2027-02-30T10:00', '2027-03-03T24:00', '2027-03-03T10:60', '2027-03-03T10:00:60', 'x', '', null, undefined, 20270303, '2027-03-03T21:40\n2027-03-01']) {
+    assert.strictEqual(pure.vioYmd_({ occurredAt: bad }), null, String(bad));
+  }
+  assert.strictEqual(pure.vioYmd_({ ymd: '2027-03-03' }), null, '따로 보낸 ymd는 받지 않는다');
+  assert.strictEqual(pure.vioYmd_(null), null);
+});
+
+/* ───── getOutContext ───── */
+test('getOutContext: 담당교사는 담당 학생만, 항목은 켜진 것에서 자동 항목 제외, 이메일 없음, 학생별 이번 기간 OUT 수', () => {
+  const x = makeEnv();
+  const c = call(x, T1, 'getOutContext', '');
+  assert.ok(c.canRecord && c.students.length > 0);
+  assert.ok(c.students.every((s) => x.env.rows('enrollments').some((e) => e.student_id === s.id && e.teacher_email === T1)));
+  assert.ok(!c.students.some((s) => s.id === x.notMine.id) && !c.students.some((s) => s.id === x.late), '담당 아님·입실 전 학생은 없다');
+  assert.deepStrictEqual(c.rules.map((r) => r.id), x.env.rows('violation_rules').filter((r) => !r.name.startsWith('무단')).map((r) => r.id));
+  assert.ok(c.teachers.some((t) => t.me) && !JSON.stringify(c).includes('@'));
+  assert.strictEqual(c.levels[x.mine.id], 0);
+  x.env.asOwner((cc) => cc.updateRecord_('violation_rules', x.dorm.id, { active: 'FALSE' }, ADMIN));
+  assert.ok(!call(x, T1, 'getOutContext', '').rules.some((r) => r.id === x.dorm.id), '꺼진 항목은 고를 수 없다');
+});
+
+test('getOutContext: 오늘 근무자는 그날 등록 학생 전체, 어제 근무자는 어제 날짜로, 근무 아닌 교사는 담당만, 관리자는 전체, 담임·출결 담당은 기록 못 함', () => {
+  const x = makeEnv();
+  x.duty(TODAY, '21:30조', T2); x.duty(YESTERDAY, '23:00조', T3);
+  const n = (who, date) => call(x, who, 'getOutContext', date || '').students.length;
+  const all = n(ADMIN);
+  assert.ok(all > n(T1));
+  assert.strictEqual(n(T2, TODAY), all, '오늘 근무자 = 전체(입실 전 제외)');
+  assert.ok(n(T2, YESTERDAY) < all, '오늘 근무자가 어제 날짜로 열면 담당만');
+  assert.strictEqual(n(T3, YESTERDAY), all, '어제 근무자는 어제 날짜(다음 날까지)');
+  assert.ok(n(T3, TODAY) < all, '어제 근무자가 오늘 날짜로 열면 담당만');
+  for (const who of [HOMEROOM, ATT]) { const c = call(x, who, 'getOutContext', ''); assert.deepStrictEqual([c.canRecord, c.students.length], [false, 0], who); }
+  for (const who of [STUDENT, PARENT, DUTY]) x.env.expectDenied(who, 'out.view', 'getOutContext', '');
+});
+
+/* ───── saveOut: 허용·거부 ───── */
+test('담당교사 saveOut: 기간 탭에 한 줄(직접·유효), entered_by는 접속자, 적발 교사 이름, audit create, 응답 after = 1OUT', () => {
+  const x = makeEnv();
+  const w = x.tab().length;
+  const { r } = save(x, T1, x.input({ detectedBy: x.id(T2) }));
+  assert.deepStrictEqual([r.ok, r.after.count, r.after.label], [true, 1, '1OUT']);
+  assert.strictEqual(x.tab().length, w + 1);
+  const row = x.tab()[x.tab().length - 1];
+  assert.deepStrictEqual([row.student_id, row.occurred_at, row.rule_id, row.rule_name, row.memo, row.detected_by, row.entered_by, row.status, row.source, row.source_exception_id],
+    [x.mine.id, AT(TODAY) + ':00', x.phone.id, x.phone.name, '자습 중 휴대폰 사용', '가짜교사2', T1, '유효', '직접', '']);
+  assert.ok(x.env.rows('audit_log').some((a) => a.action === 'create' && a.sheet.indexOf('violations_') === 0 && a.row_id === row.id));
+});
+
+test('거부: 담당이 아닌 학생(denied:out.save)·담임·학생·학부모·근무표 담당자만 가진 계정·출결 담당만 가진 계정, 쓰기 0건', () => {
+  const x = makeEnv();
+  const w = x.tab().length;
+  x.env.expectDenied(T1, 'out.save', 'saveOut', x.input({ studentId: x.notMine.id }));
+  x.env.expectDenied(T1, 'out.save', 'previewOut', x.input({ studentId: x.notMine.id }));
+  for (const who of [HOMEROOM, STUDENT, PARENT, DUTY, ATT]) x.env.expectDenied(who, 'out.save', 'saveOut', x.input());
+  assert.strictEqual(x.tab().length, w);
+  x.env.expectAllowed(ADMIN, 'saveOut', x.input({ studentId: x.notMine.id }));
+});
+
+test('근무교사(C8s): 오늘 근무자는 오늘, 어제 근무자는 어제 사건(다음 날까지)만 — 이틀 전 occurredAt·남의 날·예비·교대로 넘긴 원래 근무자·Z/오프셋 형식은 거부이고 0행', () => {
+  const x = makeEnv();
+  x.duty(TODAY, '21:30조', T2); x.duty(YESTERDAY, '23:00조', T3); x.duty(TWO_AGO, '21:30조', T2);
+  x.duty(TODAY, '23:00조', T1, T3);   // T1이 T3에게 넘김
+  x.duty(TODAY, '예비', T3);
+  const stu = x.notMine.id, w = x.tab().length;
+  assert.strictEqual(save(x, T2, x.input({ studentId: stu, occurredAt: AT(TODAY) })).r.ok, true, '오늘 근무자 오늘 사건');
+  assert.strictEqual(save(x, T3, x.input({ studentId: stu, occurredAt: AT(YESTERDAY), ruleId: x.dorm.id })).r.ok, true, '어제 근무자 어제 사건');
+  const n = x.tab().length; assert.strictEqual(n, w + 2);
+  const denied = (who, o) => x.env.expectDenied(who, 'out.save', 'saveOut', x.input(Object.assign({ studentId: stu }, o)));
+  denied(T2, { occurredAt: AT(TWO_AGO) });                        // 오늘 근무자가 이틀 전 occurredAt
+  denied(T2, { occurredAt: AT(YESTERDAY), ruleId: x.dorm.id });  // 오늘 근무자가 근무가 아니었던 어제
+  denied(T3, { occurredAt: AT(TODAY), ruleId: x.dorm.id });      // 어제 근무자가 오늘(근무 아님) 사건
+  denied(T1, { occurredAt: AT(TODAY) });                          // 교대로 넘긴 원래 근무자는 담당 학생이 아니면 거부
+  // 예비 지정만(T3가 오늘 예비이면서 23:00조를 받았으므로 다른 교사로 확인): 새 교사
+  x.env.asOwner((c) => c.addUser('fake.t4@example.com', '가짜교사4', 'hall_teacher'));
+  x.duty(TODAY, '예비', 'fake.t4@example.com');
+  denied('fake.t4@example.com', { occurredAt: AT(TODAY) });
+  denied(T2, { occurredAt: AT(TODAY) + 'Z' });                    // 시간대 표시가 붙은 값은 날짜를 믿을 수 없다 → 날짜 없음으로 보고 검사에서 거부(아래 오류)
+  assert.strictEqual(x.tab().length, n, '거부된 호출은 0행');
+});
+
+test('이상한 occurredAt(Z·오프셋·날짜만)은 권한이 통과한 담당교사여도 입력 오류로 0행: 따로 보낸 ymd·두 값 섞기도 소용없다', () => {
+  const x = makeEnv();
+  const w = x.tab().length;
+  for (const bad of ['2027-03-03T19:40Z', '2027-03-03T19:40:00+09:00', '2027-03-03', 'abc']) {
+    const r = save(x, T1, x.input({ occurredAt: bad })).r;
+    assert.strictEqual(r.ok, false, bad); assert.strictEqual(r.errors[0].field, 'occurredAt');
+  }
+  assert.strictEqual(save(x, T1, Object.assign(x.input({ occurredAt: '2027-03-02T19:40Z' }), { ymd: TODAY })).r.ok, false);
+  assert.strictEqual(x.tab().length, w);
+});
+
+/* ───── 입력 검사 표 ───── */
+test('입력 검사: 꺼진·자동 항목·없는 항목, 미래 일시, 입실 전·미등록 학생, 메모 201자, 적발 교사가 활성 교사가 아님 — 모두 오류이고 0행', () => {
+  const x = makeEnv();
+  const w = x.tab().length;
+  x.env.asOwner((c) => c.updateRecord_('violation_rules', x.dorm.id, { active: 'FALSE' }, ADMIN));
+  const bad = (o, field) => { const r = save(x, ADMIN, x.input(o)).r; assert.strictEqual(r.ok, false, JSON.stringify(o)); assert.ok(r.errors.some((e) => e.field === field), JSON.stringify(r.errors)); };
+  bad({ ruleId: x.dorm.id }, 'ruleId'); bad({ ruleId: x.auto.id }, 'ruleId'); bad({ ruleId: 'nope' }, 'ruleId'); bad({ ruleId: '' }, 'ruleId');
+  bad({ occurredAt: AT(TODAY, '20:30') }, 'occurredAt');            // 지금(20:00)보다 미래
+  bad({ occurredAt: AT('2027-03-04', '09:00') }, 'occurredAt');
+  bad({ studentId: x.late }, 'studentId');                          // 3/15 입실 예정
+  bad({ studentId: x.acc.unenrolledStudentId }, 'studentId');
+  bad({ studentId: '' }, 'studentId');
+  bad({ memo: 'ㄱ'.repeat(201) }, 'memo');
+  bad({ detectedBy: 'nope' }, 'detectedBy');
+  bad({ detectedBy: x.id(STUDENT) }, 'detectedBy');                  // 학생 계정은 교사가 아니다
+  x.env.asOwner((c) => c.updateRecord_('users', x.id(T3), { active: 'FALSE' }, ADMIN));
+  bad({ detectedBy: x.id(T3) }, 'detectedBy');                       // 비활성 교사
+  assert.strictEqual(x.tab().length, w);
+  assert.strictEqual(save(x, ADMIN, x.input({ memo: 'ㄱ'.repeat(200) })).r.ok, true, '메모 200자는 가능');
+  assert.strictEqual(save(x, ADMIN, x.input({ occurredAt: AT(TODAY, '20:00'), ruleId: x.phone.id, detectedBy: '' })).r.needsConfirm, true, '지금과 같은 시각은 미래가 아니다(같은 항목 중복 확인은 별도)');
+});
+
+test('끝난 기간: 종료 다음 날까지만 입력할 수 있다(종료일·다음 날 가능, 그다음 날부터 거부)', () => {
+  const x = makeEnv();
+  const end = x.term.end_date;
+  const next = (d, n) => { const t = new Date(d + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+  x.env.setNow(next(end, 1) + 'T10:00:00');
+  assert.strictEqual(save(x, ADMIN, x.input({ occurredAt: AT(end, '10:00') })).r.ok, true, '종료 다음 날에도 종료일 사건은 입력할 수 있다');
+  x.env.setNow(next(end, 2) + 'T10:00:00');
+  const r = save(x, ADMIN, x.input({ occurredAt: AT(end, '11:00'), ruleId: x.dorm.id })).r;
+  assert.strictEqual(r.ok, false); assert.ok(r.errors[0].message.includes('끝난 운영 기간'));
+});
+
+/* ───── 경고·2OUT ───── */
+test('같은 학생·날·항목이 있거나 그날 자동 OUT이 있으면 확인(acknowledge) 뒤에만 저장, 다른 항목·다른 날은 경고 없음', () => {
+  const x = makeEnv();
+  assert.strictEqual(save(x, T1, x.input()).r.ok, true);
+  const w = x.tab().length;
+  const dup = save(x, T1, x.input()).r;
+  assert.deepStrictEqual([dup.ok, dup.needsConfirm], [false, true]); assert.ok(dup.warnings[0].includes('같은 항목'));
+  assert.strictEqual(x.tab().length, w, '확인 전에는 쓰지 않는다');
+  assert.strictEqual(save(x, T1, x.input({ ruleId: x.dorm.id })).r.ok, true, '다른 항목은 경고 없음');
+  const y = makeEnv();
+  y.env.asOwner((c) => c.appendRecord_('violations_' + y.term.id.slice(0, 8), { term_id: y.term.id, student_id: y.mine.id, occurred_at: AT(TODAY, '19:00') + ':00', rule_id: y.auto.id,
+    rule_name: '무단 지각·결석·이탈(미인정결석)', memo: '', detected_by: '', entered_by: ADMIN, status: '유효', source: 'F1자동', source_exception_id: 'e1', cancel_reason: '' }, ADMIN));
+  const a = save(y, T1, y.input()).r;
+  assert.strictEqual(a.needsConfirm, true); assert.ok(a.warnings[0].includes('자동'));
+  assert.strictEqual(save(y, T1, y.input({ acknowledge: true })).r.ok, true);
+});
+
+test('previewOut: 쓰지 않고 "저장하면 N OUT" 안내(1건 → 1OUT, 이미 1건이면 2OUT 퇴실 대상), 다음 기간은 0건에서 시작', () => {
+  const x = makeEnv();
+  const w = x.tab().length, a0 = x.env.rows('audit_log').length;
+  const p1 = call(x, T1, 'previewOut', x.input());
+  assert.ok(p1.ok, JSON.stringify(p1)); assert.deepStrictEqual([p1.before.count, p1.after.label], [0, '1OUT']);
+  assert.strictEqual(x.tab().length, w); assert.strictEqual(x.env.rows('audit_log').length, a0, '미리보기는 아무것도 쓰지 않는다');
+  save(x, T1, x.input());
+  const p2 = call(x, T1, 'previewOut', x.input({ ruleId: x.dorm.id }));
+  assert.deepStrictEqual([p2.before.label, p2.after.label, p2.after.level], ['1OUT', '퇴실 대상', 2]);
+  assert.strictEqual(save(x, T1, x.input({ ruleId: x.dorm.id })).r.after.label, '퇴실 대상');
+  const prev = x.env.rows('terms').find((t) => t.name.startsWith('2026'));
+  const prevEn = x.env.rows('enrollments').find((e) => e.term_id === prev.id && e.student_id === x.mine.id);
+  if (prevEn) {   // 이전 기간에도 등록되어 있으면 그 기간의 OUT 수는 따로 센다
+    x.env.setNow(prev.start_date + 'T10:00:00');
+    const r = save(x, ADMIN, x.input({ occurredAt: AT(prev.start_date, '09:00') })).r;
+    assert.deepStrictEqual([r.ok, r.after.count], [true, 1], '기간마다 초기화');
+  }
+});
+
+/* ───── 메일 ───── */
+test('알림 메일(결정 49): 담당교사·담임(2OUT이면 관리자도)에게, 입력한 사람은 빼고, 학생 이름·메모 없이 날짜·항목·몇 OUT인지만, 락 밖, 메일이 실패해도 행은 저장', () => {
+  const R1 = 'fake.r1@fakeschool.invalid', RH = 'fake.rh@fakeschool.invalid', RA = 'fake.ra@fakeschool.invalid';
+  const x = makeEnv();
+  const en = x.env.rows('enrollments').find((e) => e.term_id === x.term.id && e.student_id === x.mine.id);
+  x.env.asOwner((c) => {
+    c.addUser(R1, '실가짜담당', 'hall_teacher'); c.addUser(RA, '실가짜관리', 'admin');
+    c.addUser(RH, '실가짜담임', 'homeroom');
+    c.updateRecord_('users', x.env.rows('users').find((u) => u.email === RH).id, { homeroom_class: x.mine.grade + '-' + x.mine.class_no }, ADMIN);
+    c.updateRecord_('enrollments', en.id, { teacher_email: R1 }, ADMIN);
+  });
+  const secretMemo = '비밀상황메모XYZ';
+  const a = save(x, ADMIN, x.input({ memo: secretMemo }));
+  assert.deepStrictEqual([a.r.ok, a.r.notified], [true, true]);
+  assert.deepStrictEqual(a.sent.map((m) => m.to).sort(), [R1, RH].sort(), '1OUT: 담당교사·담임(관리자 ADMIN은 입력한 사람이라 빠지고 실가짜관리는 2OUT 때만)');
+  assert.deepStrictEqual(a.locks, a.sent.map(() => false), '메일은 락 밖에서');
+  for (const m of a.sent) assert.ok(!m.body.includes(x.mine.name) && !m.body.includes(secretMemo) && m.body.includes('3월 3일(수)') && m.body.includes(x.phone.name) && m.body.includes('1OUT'), m.body);
+  const b = save(x, ADMIN, x.input({ ruleId: x.dorm.id }));
+  assert.deepStrictEqual(b.sent.map((m) => m.to).sort(), [R1, RA, RH].sort(), '2OUT: 관리자도');
+  assert.ok(b.sent[0].body.includes('퇴실 대상'));
+  const before = x.tab().length;
+  const c = save(x, ADMIN, x.input({ occurredAt: AT(YESTERDAY), ruleId: x.phone.id }), { fail: true });
+  assert.deepStrictEqual([c.r.ok, c.r.notified], [true, false]);
+  assert.strictEqual(x.tab().length, before + 1, 'sendEmail 오류에도 행은 저장');
+});
+
+test('락: 바깥 락을 못 잡으면 "다른 사람이 저장 중" 오류·0행·메일 0통, 거부·검사 오류·확인 대기 때는 메일을 보내지 않는다', () => {
+  const x = makeEnv();
+  const w = x.tab().length;
+  x.env.lock.failNext = 1;
+  assert.throws(() => save(x, T1, x.input()), /다른 사람이 저장 중/);
+  assert.strictEqual(x.tab().length, w);
+  save(x, T1, x.input());
+  const dup = save(x, T1, x.input());                          // 확인 대기
+  assert.deepStrictEqual([dup.r.needsConfirm, dup.sent.length], [true, 0]);
+  assert.deepStrictEqual(save(x, T1, x.input({ ruleId: 'nope' })).sent, []);
+});

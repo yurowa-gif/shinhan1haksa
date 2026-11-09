@@ -15,6 +15,18 @@
     "setDutyOperating": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getOutContext": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "previewOut": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveOut": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }
