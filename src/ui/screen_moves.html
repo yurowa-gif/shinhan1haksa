@@ -90,10 +90,10 @@
       function drawResult() {
         clear(result); clear(dateText);
         var p = last;
-        if (!p) { dateText.appendChild(el('span', { class: 'muted', text: '학생과 무엇을 바꿀지 고르면 적용일이 나옵니다.' })); return; }
+        if (!p) { dateText.appendChild(el('span', { class: 'muted', text: picked && chip ? '적용일을 계산하는 중…' : '학생과 무엇을 바꿀지 고르면 적용일이 나옵니다.' })); return; }
         if (p.errors && p.errors.length) p.errors.forEach(function (e) { result.appendChild(el('div', { class: 'notice warn', text: e.message })); });
         if (p.blocked) { dateText.appendChild(el('span', { class: 'muted', text: '신청할 수 없습니다' })); result.appendChild(el('div', { class: 'notice warn', text: p.blocked })); return; }
-        if (!p.date && !p.superseded) { dateText.appendChild(el('span', { class: 'muted', text: '—' })); return; }
+        if (!p.date && !p.superseded) { dateText.appendChild(el('span', { class: 'muted', text: '신청할 수 없습니다' })); return; }   // 사유는 아래 안내에 있다
         dateText.appendChild(el('span', { class: 'mv-date', text: p.superseded ? '적용되지 않음' : p.dateKo }));
         if (!p.superseded) result.appendChild(el('div', { class: 'notice info', text: p.reasonText }));
         (p.warnings || []).forEach(function (w) { result.appendChild(el('div', { class: 'notice warn', text: w })); });
@@ -135,13 +135,15 @@
           onconfirm: function () {
             busy = true; drawBar();
             call('saveMealChange', payload(), p.expect).then(function (r) {
+              if (r.ok) UI.toast(r.duplicate ? '이미 저장된 신청서입니다.' : r.superseded ? '기록으로 저장했습니다.' : r.dateKo + '부터 ' + r.label + '(으)로 저장했습니다.');   // 다른 탭으로 옮긴 뒤 와도 결과는 알린다
               if (!alive) return;
-              busy = false;
-              if (r.stale) { UI.toast(r.error, { kind: 'warn', ms: 5000 }); refresh(); return; }
-              if (!r.ok) { UI.toast((r.errors && r.errors[0] && r.errors[0].message) || r.blocked || '저장하지 못했습니다.', { kind: 'warn', ms: 5000 }); refresh(); return; }
-              UI.toast(r.duplicate ? '이미 저장된 신청서입니다.' : r.superseded ? '기록으로 저장했습니다.' : r.dateKo + '부터 ' + r.label + '(으)로 저장했습니다.');
+              if (r.stale) { busy = false; UI.toast(r.error, { kind: 'warn', ms: 5000 }); refresh(); return; }
+              if (!r.ok) { busy = false; UI.toast((r.errors && r.errors[0] && r.errors[0].message) || r.blocked || '저장하지 못했습니다.', { kind: 'warn', ms: 5000 }); refresh(); return; }
               resetState();   // 다음 학생에게 이전 학생의 선택·서류 체크가 남지 않게 모두 비운다
-              call('getMealContext').then(function (c) { if (alive) { ctx = c; draw(); } }).catch(function (err) { if (alive) { draw(); fail(err); } });
+              window.scrollTo(0, 0);
+              // 다시 불러오는 동안은 busy를 유지한다(그 사이 눌린 버튼이 빈 학생으로 저장되지 않게)
+              call('getMealContext').then(function (c) { if (alive) { busy = false; ctx = c; draw(); } })
+                .catch(function (err) { if (alive) { busy = false; draw(); UI.toast('저장했습니다. 화면을 다시 불러오지 못했습니다. 새로고침해 주세요.', { kind: 'warn', ms: 6000 }); } });
             }).catch(function (err) { if (!alive) return; busy = false; drawBar(); fail(err); });
           }
         });
@@ -161,7 +163,7 @@
     call('getMealContext').then(function (ctx) {
       if (!alive) return;
       if (!ctx.viewStudents.length) { pick.appendChild(UI.emptyState('볼 수 있는 학생이 없습니다.')); return; }
-      var picker = UI.studentPicker({ students: ctx.viewStudents, label: wantStudent ? '다른 학생 보기' : '학생', onpick: function (s) { if (s) load(s.id); else { seq++; current = ''; clear(out); } } });
+      var picker = UI.studentPicker({ students: ctx.viewStudents, label: wantStudent ? '다른 학생 보기' : '학생', onpick: function (s) { if (s) load(s.id, s.ymd || ''); else { seq++; current = ''; currentYmd = ''; clear(out); } } });   // ymd = 다음·막 끝난 기간에만 등록된 학생의 기간 안 날짜
       pick.appendChild(el('div', { class: 'card' }, [picker]));
       if (wantStudent) load(wantStudent, window.SCREEN_DATE || '');   // 홈 카드에서 학생을 눌러 들어오면 그 학생의 기록을 그 기록의 기간 기준으로 바로 연다
     }).catch(function (err) { if (alive) showError(pick, err); });
@@ -180,7 +182,7 @@
           UI.confirmSheet({ title: '서류를 받았습니까?', lead: name + ' · ' + what, lines: [h.dateKo + '부터 적용되는 신청의 서류를 제출로 표시합니다(되돌리지 않습니다)'], confirmText: '제출 표시', onconfirm: function () {
             if (saving) { UI.toast('저장 중입니다. 잠시 기다려 주세요.', { kind: 'info' }); return; }
             saving = true; btn.disabled = true;
-            call('setDocSubmitted', h.id).then(function (r) { saving = false; if (!alive) return; if (!r.ok) fail(new Error(r.error)); else UI.toast('제출로 표시했습니다.'); load(current, currentYmd); })
+            call('setDocSubmitted', h.id).then(function (r) { saving = false; if (!alive) return; if (!r.ok) fail(new Error(r.error)); else UI.toast('제출로 표시했습니다.'); if (current) load(current, currentYmd); })
               .catch(function (err) { saving = false; btn.disabled = false; fail(err); });
           } });
         } });
