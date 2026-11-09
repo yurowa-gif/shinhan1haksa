@@ -53,6 +53,10 @@ const DEMO = `<script>
         UI.confirmSheet({ title: '자리를 맞바꿉니다', message: '1. 김가온(1번)과 2. 이나래(2번)의 자리가 바뀝니다.', confirmText: '맞바꾸기', onconfirm: function () { window.__log.push('confirmed'); UI.toast('저장했습니다.'); } }); } }),
       el('button', { type: 'button', class: 'btn danger block', id: 'open-reason', style: 'margin-top:8px', text: '특이사항 취소 처리', onclick: function () {
         UI.confirmWithReason({ title: '특이사항을 취소합니다', message: '3월 3일(수) 병결 기록을 취소 처리합니다. 기록은 남습니다.', confirmText: '취소 처리', onconfirm: function (reason) { window.__log.push('reason:' + reason); } }); } })]);
+    card('긴 한국어 줄바꿈(360px)', [
+      UI.segmented({ options: [{ value: 'a', label: '서류 미제출 학생 보기' }, { value: 'b', label: '이번 학기 전체 기록' }], value: 'a', onchange: function () {} }),
+      el('button', { type: 'button', class: 'btn secondary block', id: 'open-long', text: '긴 문구 확인창', onclick: function () {
+        UI.confirmSheet({ title: '학사 및 기숙사 퇴실을 저장합니다', lead: '3월 15일(월)부터 학사 및 기숙사 퇴실', lines: ['조식은 3월 15일(월)부터 미실시로 바뀝니다', '석식은 다다음 주 월요일부터 적용됩니다'], message: '서류 미제출로 기록되며 담당교사 홈에 남습니다.', confirmText: '입퇴실 저장' }); } })]);
     UI.actionBar([{ text: '닫기', kind: 'secondary' }, { text: '저장' }], { mount: true });
     document.body.setAttribute('data-ready', '1');
   });
@@ -126,6 +130,29 @@ async function main() {
   await page.waitForTimeout(400);
   await page.locator('.sheet .btn', { hasText: '맞바꾸기' }).click();
   assert.strictEqual((await log()).filter((x) => x === 'confirmed').length, before + 1, '350ms 뒤 확인은 실행');
+
+  // 한국어 줄바꿈: 긴 라벨·lead·본문의 낱말이 줄 중간에서 끊기지 않는다(낱말마다 글자 상자가 한 줄 안에 있는지 Range로 본다)
+  const brokenWords = (sel) => page.evaluate((selector) => {
+    const bad = [];
+    document.querySelectorAll(selector).forEach((node) => {
+      const w = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+      for (let t = w.nextNode(); t; t = w.nextNode()) {
+        const re = /\S+/g; let m;
+        while ((m = re.exec(t.textContent))) {
+          const r = document.createRange(); r.setStart(t, m.index); r.setEnd(t, m.index + m[0].length);
+          const tops = new Set(Array.from(r.getClientRects()).map((x) => Math.round(x.top)));
+          if (tops.size > 1) bad.push(m[0]);
+        }
+      }
+    });
+    return bad;
+  }, sel);
+  assert.deepStrictEqual(await brokenWords('.seg'), [], '분절 라벨이 낱말 중간에서 끊김');
+  await page.click('#open-long');
+  await page.screenshot({ path: path.join(OUT, 'components-long-360.png') });
+  assert.deepStrictEqual(await brokenWords('.sheet h2, .sheet-body'), [], '시트 제목·lead·본문이 낱말 중간에서 끊김');
+  await page.waitForTimeout(400);
+  await page.keyboard.press('Escape');
 
   // 사유 시트: 사유가 짧으면 꺼져 있다
   await page.click('#open-reason');
