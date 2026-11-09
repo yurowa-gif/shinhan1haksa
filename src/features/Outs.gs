@@ -293,7 +293,7 @@ function listOuts(filter) {
     term = terms.filter(function (t) { return t.id === String(filter.termId); })[0];
     if (!term) throw new Error('운영 기간을 찾을 수 없습니다. 새로 고친 뒤 다시 해 주세요.');
   } else term = getCurrentTerm_();
-  var out = { ok: true, term: null, terms: terms.map(function (t) { return { id: t.id, name: t.name }; }), items: [], summary: [], canCancel: false };
+  var out = { ok: true, date: today, term: null, terms: terms.map(function (t) { return { id: t.id, name: t.name }; }), items: [], summary: [], canCancel: false };
   if (!term) return out;
   var enrollments = readAll_('enrollments'), students = readAll_('students'), changes = readAll_('status_changes');
   var visible = vioVisibleIds_(user, enrollments, students, term.id, vioViewWide_());
@@ -341,10 +341,16 @@ function listOuts(filter) {
       isMine: !!myStudents[id], left: statusOn_(changes, id, '학사', today_()) === '퇴실',
       latest: mine ? { occurredAt: String(mine.occurred_at), ruleName: mine.rule_name, source: mine.source } : null });
   });
+  // 퇴실 처리된 학생은 맨 뒤로 보내고 1OUT·퇴실 대상 학생 수에서 뺀다
+  out.hasMine = Object.keys(myStudents).length > 0;
   out.stats = { records: 0, out1Students: 0, out2Students: 0 };
   rows.forEach(function (v) { if (ruleRowLive_(v)) out.stats.records++; });
-  Object.keys(count).forEach(function (id) { if (count[id] >= 2) out.stats.out2Students++; else if (count[id] === 1) out.stats.out1Students++; });
-  out.summary.sort(function (a, b) { return b.count - a.count || String(a.student.studentNo).localeCompare(String(b.student.studentNo)); });
+  Object.keys(count).forEach(function (id) {
+    var sm = out.summary.filter(function (x) { return x.studentId === id; })[0];
+    if (sm && sm.left) return;
+    if (count[id] >= 2) out.stats.out2Students++; else if (count[id] === 1) out.stats.out1Students++;
+  });
+  out.summary.sort(function (a, b) { return (a.left ? 1 : 0) - (b.left ? 1 : 0) || b.count - a.count || String(a.student.studentNo).localeCompare(String(b.student.studentNo)); });   // 퇴실 처리됨은 맨 뒤
   return out;
 }
 

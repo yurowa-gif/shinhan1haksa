@@ -245,7 +245,7 @@
     }
 
     /* ───────── 목록(C11b): [학기] 학생별 현황(펼치면 기록), [오늘] 그날 기록 ───────── */
-    function dayKo(ymd) { return (+ymd.slice(5, 7)) + '월 ' + (+ymd.slice(8, 10)) + '일'; }
+    function dayKo(ymd) { return (+ymd.slice(5, 7)) + '월 ' + (+ymd.slice(8, 10)) + '일(' + '일월화수목금토'.charAt(new Date(+ymd.slice(0, 4), +ymd.slice(5, 7) - 1, +ymd.slice(8, 10)).getDay()) + ')'; }
     function hm(at) { return dayKo(at) + ' ' + at.slice(11, 16); }
     function loadList(note, noteWarn) {
       var my = ++state.listSeq;   // 기록 탭의 load()와 따로 센다(저장 직후 탭을 바꿔도 목록 응답이 버려지지 않게)
@@ -273,7 +273,7 @@
       if (state.tab === 'today') { drawToday(r); return; }
       // [학기]: 숫자 3개 → (내 담당 | 전체) → 학생 줄(펼치면 기록)
       listBox.appendChild(el('div', { class: 'stats', style: 'margin-bottom:12px;grid-template-columns:repeat(3,1fr)' }, [statBox(r.stats.records, 'OUT 기록'), statBox(r.stats.out1Students, '1OUT 학생'), statBox(r.stats.out2Students, '퇴실 대상')]));
-      var hasMine = r.summary.some(function (x) { return x.isMine; });
+      var hasMine = !!r.hasMine;   // 내 담당 학생이 있으면(OUT이 0건이어도) 내 담당/전체를 보인다
       if (hasMine) {
         listBox.appendChild(UI.segmented({ label: '보기', value: state.scope, options: [{ value: 'mine', label: '내 담당' }, { value: 'all', label: '전체' }],
           onchange: function (v) { state.scope = v; drawList(); } }));
@@ -299,12 +299,13 @@
       ]);
       if (open) {
         var mine = r.items.filter(function (i) { return i.studentId === x.studentId; });
-        li.appendChild(el('ul', { class: 'list out-sub' }, mine.map(itemRow)));
+        li.appendChild(el('ul', { class: 'list out-sub' }, mine.map(function (i) { return itemRow(i); })));
       }
       return li;
     }
     function drawToday(r) {
-      var card = el('div', { class: 'card' }, [el('h2', { text: dayKo(r.date || state.ctx && state.ctx.today || r.term.start_date) + ' ' + r.items.length + '건' })]);
+      var live = r.items.filter(function (i) { return i.status === '유효'; }).length;
+      var card = el('div', { class: 'card' }, [el('h2', { text: dayKo(r.date || state.ctx && state.ctx.today || r.term.start_date) + ' ' + live + '건' + (live !== r.items.length ? ' (취소 ' + (r.items.length - live) + '건 포함해 ' + r.items.length + '줄)' : '') })]);
       if (!r.items.length) {
         card.appendChild(UI.emptyState('오늘 기록된 OUT이 없습니다.', state.ctx && state.ctx.canRecord ? { text: 'OUT 기록하기', onclick: function () { state.tab = 'record'; drawTabs(); showTab(); } } : null));
       } else {
