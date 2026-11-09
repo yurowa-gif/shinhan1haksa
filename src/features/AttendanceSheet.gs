@@ -134,8 +134,33 @@ function sheetLoad_(ymd) {
     date: ymd, now: nowIso_(), terms: terms, term: term, daySchedules: readAll_('day_schedules'), blocks: readAll_('blocks'),
     defaults: calDefaults_(readAll_('settings', 'config')), settings: sheetSettings_(readAll_('settings', 'config')),
     spaces: readAll_('spaces'), seats: readAll_('seats'), assignments: readAll_('seat_assignments'), enrollments: readAll_('enrollments'),
-    students: readAll_('students'), changes: readAll_('status_changes'), fixedSchedules: readAll_('fixed_schedules'), exceptions: tab, dutyNames: [], standbyNames: []
+    students: readAll_('students'), changes: readAll_('status_changes'), fixedSchedules: readAll_('fixed_schedules'), exceptions: tab, dutyNames: [], standbyNames: [],
+    dutyTable: sheetDutyNames_(ymd)
   };
+}
+
+/**
+ * 근무표(duty_slots)의 그날 근무자 이름(F3). 그날 살아 있는 칸이 하나라도 있으면 hasSlots: true.
+ * 근무 칸은 21:30조 → 23:00조 / 단독 순서(근무 2명까지), 예비 감독은 1명까지, 대신 근무로 근무에 든 예비는 예비에서 뺀다. 이름은 users에서 읽고 12자까지.
+ * 탭이 없으면 칸이 없는 것으로 본다. 이메일은 내보내지 않는다.
+ * @return {{hasSlots:boolean, dutyNames:string[], standbyNames:string[]}}
+ */
+function sheetDutyNames_(ymd) {
+  var rows = [];
+  try { rows = readAll_('duty_slots'); } catch (e) { if (String(e.message).indexOf('탭이 없습니다') < 0) throw e; }
+  var live = rows.filter(function (r) { return ruleRowLive_(r) && String(r.date).trim() === ymd; });
+  if (!live.length) return { hasSlots: false, dutyNames: [], standbyNames: [] };
+  var names = Object.create(null);
+  readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = u.name; });
+  var day = dutyOn_(live, ymd);
+  var who = function (email) { return names[email] || '(미등록)'; };
+  var onDuty = {};
+  day.duty.forEach(function (d) { onDuty[d.email] = true; });
+  var clean = sheetNames_({
+    dutyNames: day.duty.map(function (d) { return who(d.email); }),
+    standbyNames: day.standby.filter(function (sb) { return !onDuty[sb.email]; }).map(function (sb) { return who(sb.email); })
+  });
+  return { hasSlots: true, dutyNames: clean.dutyNames.slice(0, 2), standbyNames: clean.standbyNames.slice(0, 1) };
 }
 
 /**
@@ -171,9 +196,11 @@ function sheetModelFor_(ymd, names, timer) {
   var src = sheetLoad_(ymd);
   if (timer) timer.lap('loadMs');
   if (!src) return null;
-  var n = sheetNames_(names);
+  // 근무표에 그날 칸이 있으면 그 이름을(손 입력은 무시), 하나도 없을 때만 손으로 넣은 이름을 쓴다(4-2)
+  var n = src.dutyTable.hasSlots ? src.dutyTable : sheetNames_(names);
   src.dutyNames = n.dutyNames; src.standbyNames = n.standbyNames;
-  var built = { model: sheetBuildModel_(src), settings: src.settings };
+  var built = { model: sheetBuildModel_(src), settings: src.settings,
+    dutySource: src.dutyTable.hasSlots ? '근무표' : (n.dutyNames.length || n.standbyNames.length ? '손 입력' : '') };
   if (timer) timer.lap('buildMs');
   return built;
 }
@@ -189,7 +216,8 @@ function sheetRender_(ymd, names, timer) {
   var built = sheetModelFor_(ymd, names, timer);
   if (!built) return { ok: false, date: ymd, error: '이 날짜가 속한 운영 기간이 없습니다. 운영 기간을 먼저 만들어 주세요.' };
   var model = built.model;
-  var base = { date: ymd, weekdayKo: model.weekdayKo, warnings: model.warnings };
+  // dutySource: 머리말 이름의 출처('근무표'·'손 입력'·''). 모델이 아니라 응답에 둔다(렌더러는 모른다)
+  var base = { date: ymd, weekdayKo: model.weekdayKo, warnings: model.warnings, dutySource: built.dutySource, dutyNames: model.dutyNames, standbyNames: model.standbyNames };
   if (!model.operating) {
     return Object.assign(base, { ok: true, operating: false, message: ymd + '(' + model.weekdayKo + ')은(는) 운영하지 않는 날입니다. 출석부는 만들지 않습니다.' });
   }
