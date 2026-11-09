@@ -72,9 +72,9 @@ function foodChip_(id) {
 }
 
 /**
- * 입력 검사(순수). input = {studentId, chip, requestedAt, effectiveDate, reason, docSubmitted}
- * ctx = {now, terms, enrollments} → {errors:[{field, message}], rec, term}
- * 적용일이 자동 계산값과 같은지는 계획을 세운 뒤 foodPlan_이 본다(사유 필수 여부도 거기서).
+ * 입력 검사(순수). input = {studentId, chip, requestedAt, effectiveDate, reason, docSubmitted}, ctx = {now}
+ * 기간·명단 검사는 계획을 세운 뒤 foodCheck_가 한다(결정 60: 급식 신청의 기간 = 적용일이 속한 기간).
+ * → {errors:[{field, message}], rec}
  */
 function foodValidate_(input, ctx) {
   input = input || {};
@@ -90,21 +90,18 @@ function foodValidate_(input, ctx) {
   var eff = String(input.effectiveDate || '').trim();
   if (eff && !ymdIsValid_(eff)) err('effectiveDate', '적용일을 날짜로 입력해 주세요.');
   else if (eff && at && eff < at.slice(0, 10)) err('effectiveDate', '적용일은 신청일 이후여야 합니다.');
-  var term = null;
-  if (studentId && at) {
-    // 기간 사이(예: 2/28 끝·3/2 시작 사이 3/1)에 받은 신청은 곧 시작하는 기간의 명단으로 본다
-    term = termOnDate_(at.slice(0, 10), ctx.terms) || ctx.terms.filter(function (t) { return t.start_date > at.slice(0, 10); })
-      .sort(function (x, y) { return x.start_date < y.start_date ? -1 : 1; })[0] || null;
-    if (!term) err('requestedAt', '그 날짜가 속한 운영 기간이 없습니다.');
-    else if (term.end_date < ctx.today) err('requestedAt', '"' + term.name + '"은(는) 끝난 기간입니다. 끝난 기간의 급식 신청은 받지 않습니다.');
-    else if (!ctx.enrollments.some(function (e) { return e.term_id === term.id && e.student_id === studentId; })) {
-      err('studentId', '"' + term.name + '" 명단에 없는 학생입니다. 명단 올리기에서 먼저 등록해 주세요.');
-    }
-  }
-  return { errors: errors, term: term, rec: chip && at ? {
+  var reason = String(input.reason || '').trim();
+  if (reason.length > EXC_REASON_MAX) err('reason', '사유는 ' + EXC_REASON_MAX + '자 안으로 적어 주세요.');
+  return { errors: errors, rec: chip && at ? {
     studentId: studentId, item: chip.item, value: chip.value, chipLabel: chip.label, requestedAt: at, effectiveDate: eff,
-    reason: String(input.reason || '').trim(), doc: input.docSubmitted === true
+    reason: reason, doc: input.docSubmitted === true
   } : null };
+}
+
+/** 급식 신청의 기간(결정 60): 적용일이 속한 기간, 기간 사이(예: 3/1)면 곧 시작하는 기간. 없으면 null */
+function foodTermOf_(ymd, terms) {
+  return termOnDate_(ymd, terms) || terms.filter(function (t) { return t.start_date > ymd; })
+    .sort(function (x, y) { return x.start_date < y.start_date ? -1 : 1; })[0] || null;
 }
 
 /**
@@ -127,17 +124,36 @@ function foodPlan_(rec, changes, today, cutoff) {
 /** 화면에 보이는 이유 한 줄(screens.md F7-1) */
 function foodReasonText_(plan, manual, today, cutoff) {
   var when = plan.date === today ? '오늘(' + foodDateKo_(plan.date) + ')' : foodDateKo_(plan.date);
-  var text = when + '부터 적용됩니다. ' + (FOOD_RULE_TEXT[manual ? plan.rule : plan.rule] || '');
-  if (manual) text += ' 자동 계산: ' + foodDateKo_(plan.autoDate) + '.';
-  else if (plan.rule === 'same_day') text = when + '부터 적용됩니다. ' + cutoff + ' 전 신청입니다.';
-  else if (plan.rule === 'next_day') text = when + '부터 적용됩니다. ' + cutoff + ' 이후 신청이라 다음 날부터입니다.';
-  return text;
+  if (manual) return when + '부터 적용됩니다. ' + FOOD_RULE_TEXT.manual + ' 자동 계산: ' + foodDateKo_(plan.autoDate) + '.';
+  if (plan.rule === 'same_day') return when + '부터 적용됩니다. ' + cutoff + ' 전 신청입니다.';
+  if (plan.rule === 'next_day') return when + '부터 적용됩니다. ' + cutoff + ' 이후 신청이라 다음 날부터입니다.';
+  return when + '부터 적용됩니다. ' + (FOOD_RULE_TEXT[plan.rule] || '');
 }
 
-/** 저장 직전 화면 값과 락 안 계획이 같은지 보는 서명. 쓸 행(적용일·취소할 행·이어 쓸 행)이 하나라도 달라지면 달라진다. */
-function foodSignature_(plan) {
+/** 규칙 원문 대신 교사에게 보일 경고(숫자 날짜는 입력 칸에만 — design/rules.md 5절). 구조 정보로 만든다 */
+function foodWarnTexts_(rec, plan, manual, eff, changes, today, terms) {
+  var w = [], add = function (t) { if (w.indexOf(t) < 0) w.push(t); };
+  if (plan.superseded) add('이미 더 새 신청이 먼저 적용되어 이 신청은 값을 바꾸지 않습니다. 기록으로만 남습니다.');
+  if (manual && rec.value === '미실시' && rec.effectiveDate < plan.autoDate) add('급식실 준비 기간(다음 주 월요일 규칙)보다 이른 날짜입니다. 그래도 저장하면 이 날짜로 적용됩니다.');
+  if (eff && eff < today) add('지난 날짜의 식수 집계가 바뀝니다.');
+  if (manual && !termOnDate_(eff, terms)) add('그 날짜는 등록된 운영 기간 밖입니다.');
+  if (!plan.superseded && !plan.blocked) {
+    var gone = {};
+    plan.toCancel.forEach(function (c) { gone[c.id] = true; });
+    changes.forEach(function (c) {
+      var e = String(c.effective_date);
+      if (c.item !== rec.item || String(c.status || '유효') !== '유효' || gone[c.id] || c.value === rec.value || !ymdIsValid_(e)) return;
+      if (e > eff) add(foodDateKo_(e) + '부터 ' + c.value + '(으)로 바뀌는 신청이 있어 이 신청을 덮습니다.');
+      else if (e > today && e < eff) add(foodDateKo_(e) + '부터 ' + c.value + '(으)로 바뀌는 대기 신청이 먼저 적용됩니다. 필요하면 직접 취소해 주세요.');
+    });
+  }
+  return w;
+}
+
+/** 저장 직전 화면 값과 락 안 계획이 같은지 보는 서명. 쓸 행(적용일·취소할 행·이어 쓸 행)과 경고가 달라지면 달라진다. */
+function foodSignature_(plan, warnings) {
   return JSON.stringify({
-    d: plan.date, k: plan.kind, b: plan.blocked, s: plan.superseded,
+    d: plan.date, k: plan.kind, b: plan.blocked, s: plan.superseded, w: warnings,
     c: plan.toCancel.map(function (c) { return c.id; }).sort(),
     f: plan.followUps.map(function (f) { return [f.item, f.value, f.effective_date, f.source]; })
   });
@@ -152,12 +168,41 @@ function foodLoad_(studentId) {
   };
 }
 
-/** 미리보기·저장이 같이 쓰는 검사 + 계획. → {errors, rec, term, plan, manual} (오류가 있으면 plan 없음) */
+/**
+ * 미리보기·저장이 같이 쓰는 검사 + 계획. 기간은 적용일이 속한 기간 하나(결정 60)로 등록·끝난 기간을 보고,
+ * 권한 검사의 날짜(permYmd)도 그 기간 안의 날짜로 정한다. 오류가 있으면 plan이 없을 수 있다.
+ */
 function foodCheck_(input, d) {
-  var v = foodValidate_(input, { now: nowIso_(), today: today_(), terms: d.terms, enrollments: d.enrollments });
-  if (v.errors.length) return { errors: v.errors };
-  var p = foodPlan_(v.rec, d.changes, today_(), d.cutoff);
-  return { errors: p.errors, rec: v.rec, term: v.term, plan: p.plan, manual: p.manual };
+  var today = today_();
+  var v = foodValidate_(input, { now: nowIso_() });
+  if (v.errors.length) return { errors: v.errors, permYmd: '' };
+  var rec = v.rec;
+  var p = foodPlan_(rec, d.changes, today, d.cutoff);
+  var plan = p.plan, errors = p.errors.slice();
+  var eff = plan.date || (p.manual ? rec.effectiveDate : plan.autoDate);
+  var term = foodTermOf_(eff, d.terms);
+  if (!term) errors.push({ field: 'effectiveDate', message: '적용일이 속한 운영 기간이 없습니다.' });
+  else if (term.end_date < today) errors.push({ field: 'effectiveDate', message: '"' + term.name + '"은(는) 끝난 기간입니다. 끝난 기간의 급식 신청은 받지 않습니다.' });
+  else if (!d.enrollments.some(function (e) { return e.term_id === term.id && e.student_id === rec.studentId; })) {
+    errors.push({ field: 'studentId', message: '"' + term.name + '" 명단에 없는 학생입니다. 명단 올리기에서 먼저 등록해 주세요.' });
+  }
+  return { errors: errors, rec: rec, term: term, plan: plan, manual: p.manual, eff: eff,
+    permYmd: term ? (eff > term.start_date ? eff : term.start_date) : '',
+    warnings: foodWarnTexts_(rec, plan, p.manual, eff, d.changes, today, d.terms),
+    blocked: plan.blocked ? foodDateKo_(eff) + '에는 학사 퇴실 상태라 ' + rec.item + ' ' + rec.value + '을(를) 새로 신청할 수 없습니다.' : '' };
+}
+
+/** 계획의 기간으로 학생 범위(담당교사·관리자)를 판정한다. 읽기 도우미를 거친 뒤에 부른다(오류 응답보다 먼저 거부가 나가게) */
+function foodAuthorize_(input, c) {
+  return requirePermission_('status.edit', { studentId: String((input && input.studentId) || ''), ymd: c.permYmd });
+}
+
+/** 서류 미제출 대표 행 중복 저장 방지용: 같은 신청서(학생·항목·값·신청 일시, F7)가 이미 있나(유효 또는 덮여서 취소된 기록) */
+function foodFindDuplicate_(rec, changes) {
+  return changes.filter(function (c) {
+    return c.item === rec.item && c.value === rec.value && c.requested_at === rec.requestedAt && c.source === 'F7' && !String(c.linked_change_id || '') &&
+      (String(c.status || '유효') === '유효' || /더 새 신청$/.test(String(c.cancel_reason || '')));
+  })[0] || null;
 }
 
 /** 서류 미제출 대표 행: 유효 + 연결 행 아님 + doc_submitted FALSE. 명단업로드 행은 서류가 없으므로(가짜 데이터에 FALSE가 남아 있어도) 세지 않는다 */
@@ -244,52 +289,60 @@ function getMealContext() {
 
 /** 저장 전 확인: 적용일·이유·같이 취소될 행·이어 쓸 행·경고. 아무것도 쓰지 않는다. */
 function previewMealChange(input) {
-  requirePermission_('status.edit', { studentId: input && input.studentId, ymd: foodYmd_(input) });
-  var c = foodCheck_(input, foodLoad_(String(input.studentId)));
-  if (!c.plan) return { ok: false, errors: c.errors };
+  requirePermission_('status.list');
+  var d = foodLoad_(String((input && input.studentId) || ''));
+  var c = foodCheck_(input, d);
+  foodAuthorize_(input, c);
+  if (!c.plan) return { ok: false, errors: c.errors, now: nowIso_() };
   var plan = c.plan;
-  var ok = !c.errors.length && !plan.blocked;   // 덮인 신청서(superseded)도 기록으로 저장한다(결정 58)
   return {
-    ok: ok, errors: c.errors, blocked: plan.blocked, superseded: plan.superseded, kind: plan.kind,
+    ok: !c.errors.length && !c.blocked, errors: c.errors, blocked: c.blocked, superseded: plan.superseded, kind: plan.kind,
     date: plan.date, dateKo: plan.date ? foodDateKo_(plan.date) : '', autoDate: plan.autoDate, autoDateKo: foodDateKo_(plan.autoDate),
-    manual: c.manual, rule: plan.rule, reasonText: plan.date ? foodReasonText_(plan, c.manual, today_(), foodLoad_(String(input.studentId)).cutoff) : '',
-    warnings: plan.warnings, cancel: plan.toCancel.map(function (x) { return { date: x.effective_date, value: x.value }; }),
+    manual: c.manual, rule: plan.rule, reasonText: plan.date ? foodReasonText_(plan, c.manual, today_(), d.cutoff) : '',
+    warnings: c.warnings, now: nowIso_(),
+    cancel: plan.toCancel.map(function (x) { return { date: x.effective_date, value: x.value }; }),
     followUps: plan.followUps.map(function (f) { return { item: f.item, value: f.value, date: f.effective_date }; }),
-    label: c.rec.chipLabel, expect: foodSignature_(plan)
+    label: c.rec.chipLabel, expect: foodSignature_(plan, c.warnings)
   };
 }
 
 /**
- * 급식 변경 저장. 락 안에서 다시 읽고 다시 계획한다(화면 값을 믿지 않는다).
- * expect(미리보기가 준 서명)와 계획이 다르면 {ok:false, stale:true}. blocked·superseded이면 쓰지 않는다.
- * 대표 행(source F7, 서류 TRUE/FALSE) + 이어 쓰기(규칙이 준 source 그대로) + 대체된 대기 행 취소. 메일은 없다.
+ * 급식 변경 저장. 락 안에서 다시 읽고 다시 계획한다(화면 값을 믿지 않는다). 첫 줄은 역할만 보고(status.list),
+ * 학생 범위(status.edit)는 계획한 기간으로 락 안에서 판정한다.
+ * 같은 신청서(학생·항목·값·신청 일시)가 이미 있으면 쓰지 않고 {ok:true, duplicate:true}(다시 눌러도 한 번만).
+ * expect(미리보기가 준 서명)와 계획이 다르면 {ok:false, stale:true}. blocked이면 쓰지 않는다.
+ * 대표 행(source F7, 서류 TRUE/FALSE) + 이어 쓰기(규칙이 준 source 그대로) + 대체된 대기 행 취소. 덮인 신청서는 취소 행으로(결정 58). 메일은 없다.
  */
 function saveMealChange(input, expect) {
-  var user = requirePermission_('status.edit', { studentId: input && input.studentId, ymd: foodYmd_(input) });
+  requirePermission_('status.list');
   return withLock_(function () {
     ['terms', 'students', 'enrollments', 'status_changes'].forEach(function (n) { invalidate_('db', n); });
     invalidate_('config', 'settings');
-    var c = foodCheck_(input, foodLoad_(String(input.studentId)));
+    var d = foodLoad_(String((input && input.studentId) || ''));
+    var c = foodCheck_(input, d);
+    var user = foodAuthorize_(input, c);
     if (!c.plan || c.errors.length) return { ok: false, errors: c.errors };
-    var plan = c.plan;
-    if (plan.blocked) return { ok: false, blocked: plan.blocked };
-    if (String(expect || '') !== foodSignature_(plan)) {
+    var rec = c.rec, plan = c.plan;
+    var dup = foodFindDuplicate_(rec, d.changes);
+    if (dup) return { ok: true, duplicate: true, id: dup.id, superseded: String(dup.status) === '취소', date: dup.effective_date,
+      dateKo: ymdIsValid_(String(dup.effective_date)) ? foodDateKo_(dup.effective_date) : '', label: rec.chipLabel, cancelCount: 0, followUpCount: 0, doc: rec.doc };
+    if (c.blocked) return { ok: false, blocked: c.blocked };
+    if (String(expect || '') !== foodSignature_(plan, c.warnings)) {
       return { ok: false, stale: true, error: '확인한 뒤 다른 변경이 있었습니다. 다시 확인해 주세요.' };
     }
-    var rec = c.rec;
     // 결정 58: 더 새 신청에 덮인 신청서도 종이 기록으로 남긴다(status 취소). 덮은 행이 나중에 취소되면 되살릴 수 있다.
     // supersededBy는 규칙(R11a)이 주는 필드 — 아직 없으면 id 없이 꼬리표만 쓴다.
     var dead = plan.superseded ? { status: '취소', cancel_reason: '[자동] ' + ((plan.supersededBy || [])[0] ? plan.supersededBy[0] + ' ' : '') + '더 새 신청' } : {};
     var w = foodWrite_(Object.assign({
       student_id: rec.studentId, item: rec.item, value: rec.value, requested_at: rec.requestedAt,
-      effective_date: plan.superseded ? (c.manual ? rec.effectiveDate : plan.autoDate) : plan.date,
+      effective_date: plan.superseded ? c.eff : plan.date,
       effective_date_auto: plan.autoDate, reason: c.manual ? rec.reason : '', doc_submitted: rec.doc ? 'TRUE' : 'FALSE', source: 'F7'
     }, dead), plan.followUps.map(function (f) {
       return { item: f.item, value: f.value, effective_date: f.effective_date, effective_date_auto: f.effective_date, source: f.source,
         reason: f.source === 'F6' ? '학사 퇴실 정리' : '재입실일부터 이어짐' };
     }), plan.toCancel.map(function (x) { return { id: x.id, cancel_reason: '새 신청으로 대체' }; }), user.email);
-    return { ok: true, id: w.head.id, superseded: plan.superseded, date: plan.date, dateKo: plan.date ? foodDateKo_(plan.date) : '', label: rec.chipLabel, cancelCount: plan.toCancel.length,
-      followUpCount: w.linked.length, doc: rec.doc };
+    return { ok: true, id: w.head.id, superseded: plan.superseded, date: plan.date, dateKo: plan.date ? foodDateKo_(plan.date) : '', label: rec.chipLabel,
+      cancelCount: plan.toCancel.length, followUpCount: w.linked.length, doc: rec.doc };
   });
 }
 
