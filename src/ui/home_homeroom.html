@@ -52,6 +52,11 @@
 
   /** 2단계 B 카드(CODING-B: 입퇴실·급식·서류). 이 함수의 몸통만 고친다(docs/plan/stage2.md 1절) */
   function renderStage2B(d, root) {
-    return;
+    if (!d.food || d.food.error) return;
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '우리 반 급식·입퇴실' }),
+      el('div', { class: 'muted', text: '학생별 급식 변경과 입퇴실 기록을 볼 수 있습니다(보기만).' }),
+      el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=moves&tab=history', text: '학생 기록 보기' })
+    ]));
   }
 </script>

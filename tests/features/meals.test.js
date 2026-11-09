@@ -251,3 +251,72 @@ test('getMealContext: 관리자·학사 교사·담임·출결 허용(근무표�
   ['test.duty@example.com', 'test.student@example.com', 'test.parent@example.com'].forEach((who) => env.expectDenied(who, 'status.list', 'getMealContext'));
   assert.ok(!JSON.stringify([adm, hall]).includes('@'), '응답에 이메일 없음');
 });
+
+/* ───────── C17b 학생 기록·서류 ───────── */
+
+const hr = (env) => env.rows('users').find((u) => u.email === 'test.homeroom@example.com').homeroom_class;
+const studentsOf = (env) => env.rows('students');
+function inClass(env, klass, yes) {
+  const [g, c] = klass.split('-');
+  const ids = new Set(env.rows('enrollments').filter((e) => e.term_id === term2(env).id).map((e) => e.student_id));
+  return studentsOf(env).filter((s) => ids.has(s.id) && ((String(s.grade) === g && String(s.class_no) === String(+c)) === yes))[0].id;
+}
+
+test('listStudentStatus: 오늘 값·대기·기록·비고 문장이 나오고 memo·이메일은 없다', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { a } = pick(env);
+  const r = saveOk(env, HALL, input(a, 'd_off', '2027-03-03T10:00:00'));
+  const row = rowsOf(env, a).find((x) => x.id === r.id);
+  env.asOwner((c) => c.updateRecord_('status_changes', row.id, { memo: '[2OUT] out:ZZ-메모-표식' }, env.owner));
+  const d = env.expectAllowed(HALL, 'listStudentStatus', a);
+  assert.strictEqual(d.now['석식'], '학사 석식');
+  assert.deepStrictEqual(d.pending.map((p) => [p.item, p.value, p.date]), [['석식', '미실시', '2027-03-15']]);
+  assert.strictEqual(d.remark, '3.3 석식 미실시(3.15~)');
+  assert.ok(d.history.some((h) => h.id === r.id && h.doc === 'FALSE' && h.canMarkDoc));
+  const wire = JSON.stringify(d);
+  assert.ok(!wire.includes('ZZ-메모-표식') && !wire.includes('@'), 'memo·이메일 없음');
+});
+
+test('listStudentStatus 권한: 관리자·출결·학사 교사(담당 아닌 학생도)·담임(우리 반) 허용, 다른 반 담임·근무표·학생·학부모는 거부(denied:status.view)', () => {
+  const env = makeEnv();
+  const { a, other } = pick(env);
+  [ADMIN, HALL, 'test.attendance@example.com'].forEach((who) => { env.expectAllowed(who, 'listStudentStatus', a); env.expectAllowed(who, 'listStudentStatus', other); });
+  const klass = hr(env);
+  const mineId = inClass(env, klass, true), otherId = inClass(env, klass, false);
+  const home = env.expectAllowed('test.homeroom@example.com', 'listStudentStatus', mineId);
+  assert.strictEqual(home.canEdit, false);
+  env.expectDenied('test.homeroom@example.com', 'status.view', 'listStudentStatus', otherId);
+  ['test.duty@example.com', 'test.student@example.com', 'test.parent@example.com'].forEach((who) => env.expectDenied(who, 'status.view', 'listStudentStatus', a));
+  const ctx = env.call('test.homeroom@example.com', 'getMealContext');
+  assert.ok(ctx.viewStudents.length > 0 && ctx.viewStudents.every((s) => s.classNo === String(+klass.split('-')[1]) || s.classNo === klass.split('-')[1]));
+});
+
+test('서류 미제출: 관리자가 입력해도 담당교사 홈에 1건, setDocSubmitted 뒤 원래대로. 명단 행은 세지 않는다', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { a } = pick(env);
+  const home = (who, role) => env.call(who, 'getHomeData', role).food.docMissing;
+  // 가짜 데이터에는 이미 서류 미제출 퇴실이 있을 수 있다(명단 행의 FALSE는 세지 않는다). 늘어나는 수로 본다.
+  const base = { hall: home(HALL, 'hall_teacher'), other: home('fake.teacher1@example.com', 'hall_teacher'), admin: home(ADMIN, 'admin') };
+  const r = saveOk(env, ADMIN, input(a, 'd_off', '2027-03-03T10:00:00'));
+  assert.strictEqual(home(HALL, 'hall_teacher'), base.hall + 1);
+  assert.strictEqual(home('fake.teacher1@example.com', 'hall_teacher'), base.other, '담당이 아닌 교사 홈은 그대로');
+  assert.strictEqual(home(ADMIN, 'admin'), base.admin + 1);
+  assert.strictEqual(env.expectAllowed(HALL, 'setDocSubmitted', r.id).ok, true);
+  assert.strictEqual(rowsOf(env, a).find((x) => x.id === r.id).doc_submitted, 'TRUE');
+  assert.ok(env.auditActions('update').length > 0);
+  assert.strictEqual(home(HALL, 'hall_teacher'), base.hall);
+  assert.strictEqual(env.call(HALL, 'setDocSubmitted', r.id).already, true, '두 번 눌러도 안전');
+});
+
+test('setDocSubmitted 권한: 남의 학생 행 id → denied:status.edit(락 안 재검사), 담임·출결 denied:status.edit, 근무표·학생·학부모 denied:status.list, 연결 행·없는 id는 ok:false', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { a } = pick(env);
+  const r = saveOk(env, ADMIN, input(a, 'd_off', '2027-03-03T10:00:00', { docSubmitted: false }));
+  ['fake.teacher1@example.com', 'test.homeroom@example.com', 'test.attendance@example.com'].forEach((who) => env.expectDenied(who, 'status.edit', 'setDocSubmitted', r.id));
+  ['test.duty@example.com', 'test.student@example.com', 'test.parent@example.com'].forEach((who) => env.expectDenied(who, 'status.list', 'setDocSubmitted', r.id));
+  assert.strictEqual(rowsOf(env, a).find((x) => x.id === r.id).doc_submitted, 'FALSE');
+  const list = rowsOf(env, a).find((x) => x.item === '석식' && x.source === '명단업로드');
+  assert.strictEqual(env.call(ADMIN, 'setDocSubmitted', list.id).ok, false, '명단 행은 대상 아님');
+  assert.strictEqual(env.call(ADMIN, 'setDocSubmitted', 'no-such-id').ok, false);
+  assert.strictEqual(env.call(ADMIN, 'setDocSubmitted', r.id).ok, true);
+});
