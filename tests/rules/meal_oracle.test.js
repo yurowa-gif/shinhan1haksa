@@ -11,15 +11,17 @@
  *   - 석식: 결정 35 중단일(퇴실 입력일이 월·화면 다음 주 월요일, 수~일이면 다다음 주 월요일, 퇴실일보다 이르면 퇴실일 — 이 파일에서
  *     따로 계산)부터는 중단일 이후에 시작하는 학사 석식 의도를 세지 않고(고친 적용일로 생길 수 있다), 남은 가장 늦은 의도가
  *     학사 석식이면 '미실시', 아니면 그 값. 중단일 전에는 정확히 가장 늦은 의도의 값.
- * 사건(무작위): F7 신청(늦게 입력한 이전 신청서, 교사가 고친 적용일 포함 — R10), 학사 퇴실(미리·당일·늦게 입력). 신청마다 같은 계획을 바로 다시 세우면
+ *   퇴실 기록보다 뒤에 신청한(신청 일시) 퇴실일 이후 학사 석식은 처음부터 없던 것으로 본다(먼저 입력돼 있어도 — 입력 순서와 무관).
+ * superseded 신청서도 '취소' 행으로 저장한다(결정 58 — 덮은 행이 퇴실 정리로 취소되면 되살아난다).
+ * 사건(무작위): F7 신청(늦게 입력한 이전 신청서, 교사가 고친 적용일 포함 — R10), 학사 퇴실(미리·당일·늦게 입력, 퇴실 기록 일시도 넷에 하나는 입력보다 이름). 신청마다 같은 계획을 바로 다시 세우면
  * 할 일이 없어야 한다(수렴). 사건마다 3/1~4/30 모든 날을 비교한다.
  * 사건마다 날짜 7개 중 하나씩 돌아가며(9일 정도) 비교하고, 마지막 사건 뒤에는 모든 날을 비교한다(npm test 시간).
- * 기본 400가지, ORACLE_FULL=1이면 사건 수를 그대로 두고 매 사건 모든 날을 비교한다.
+ * 기본 400가지(ORACLE_SEEDS로 늘림), ORACLE_FULL=1이면 사건 수를 그대로 두고 매 사건 모든 날을 비교한다.
  */
 const assert = require('assert');
 const { test, loadGs, plain } = require('../helpers/harness');
 
-const ctx = loadGs(['src/rules/DateRules.gs', 'src/rules/StatusRules.gs', 'src/rules/MealRules.gs']);
+const ctx = loadGs(['src/rules/DateRules.gs', 'src/rules/StatusRules.gs', 'src/rules/MealRules.gs', 'src/rules/MoveRules.gs']);
 
 function rng(seed) {
   let a = seed >>> 0;
@@ -52,7 +54,7 @@ function simulate(seed, steps) {
   const log = ['초기 조식 ' + init['조식'] + ' 석식 ' + init['석식']];
   const created = () => String(++seq).padStart(6, '0');
   const addRow = (o) => rows.push(Object.assign({ id: 'r' + (++rid), student_id: 's1', status: '유효', created_at: created() }, o));
-  const cancel = (list) => list.forEach((c) => { rows.find((r) => r.id === c.id).status = '취소'; });
+  const cancel = (list, why) => list.forEach((c) => { Object.assign(rows.find((r) => r.id === c.id), { status: '취소', cancel_reason: why || '' }); });
 
   function oracleTop(item, d, skip) {
     let top = null;
@@ -70,8 +72,9 @@ function simulate(seed, steps) {
       const tb = oracleTop('조식', d, leave && d >= leave.L ? (i) => isHall('조식', i.value) : null);
       assert.strictEqual(b, tb ? tb.value : '미실시', where + '\n조식 ' + d);
       // 중단일부터: 중단일 이후에 시작하는 학사 석식 의도는 세지 않고(F6 정리가 취소), 남은 가장 늦은 의도가 학사 석식이면 미실시
+      // 퇴실 기록보다 뒤에 신청한 퇴실일 이후 학사 석식은 처음부터 없던 것(입력 순서와 무관 — 먼저 입력돼 있어도)
       const stop = leave ? stop35(leave.t, leave.L) : null;
-      const top = oracleTop('석식', d, stop && d >= stop ? (i) => isHall('석식', i.value) && i.eff >= stop : null).value;
+      const top = oracleTop('석식', d, leave ? (i) => isHall('석식', i.value) && ((d >= stop && i.eff >= stop) || (i.eff >= leave.L && i.req >= leave.t)) : null).value;
       const want = stop && d >= stop && isHall('석식', top) ? '미실시' : top;
       assert.strictEqual(ctx.statusOn_(rows, 's1', '석식', d), want, where + '\n석식 ' + d);
     }
@@ -84,15 +87,20 @@ function simulate(seed, steps) {
     if (!leave && R() < 0.12) {
       let L = ctx.ymdAddDays_(today, Math.floor(R() * 14) - 3);
       if (L < '2027-03-02') L = '2027-03-02';                 // 기간 시작(입실 3/1) 뒤
-      const t = iso(now);
+      const t = iso(R() < 0.25 ? Math.max(0, now - Math.floor(R() * 4 * 24 * 60)) : now);   // 넷에 하나는 늦게 입력한 퇴실 기록
       leave = { L, t };
-      addRow({ item: '학사', value: '퇴실', effective_date: L, source: 'F6', requested_at: t });
-      for (const item of ['조식', '석식']) {
-        const stop = item === '조식' ? L : ctx.mealEffectiveDate_('stop', t, { leaveDate: L }).date;
-        cancel(plain(ctx.mealPendingToCancel_(rows, 's1', item, stop, { source: 'F6' })));
-        if (isHall(item, ctx.statusOn_(rows, 's1', item, stop))) addRow({ item, value: '미실시', effective_date: stop, source: 'F6', requested_at: t });
+      // F6 학사 퇴실 저장 = movePlan_(R11a) 계획 그대로(되살림 포함). 넷에 하나는 석식 '일반 석식으로' — 퇴실 입력 일시의 일반 석식 신청(의도)
+      const general = R() < 0.25;
+      const mp = plain(ctx.movePlan_(rows, 's1', { type: '학사 퇴실', effectiveDate: L, requestedAt: t, dinner: general ? '일반 석식' : '중단' }, { today }));
+      assert.deepStrictEqual(mp.errors, [], 'seed ' + seed + ' 퇴실 계획 오류');
+      mp.toCancel.forEach((c) => cancel([c], /^\[자동\] /.test(c.cancel_reason) ? c.cancel_reason : '[자동] r' + (rid + 1) + ' 퇴실 정리'));   // 규칙이 준 꼬리표는 그대로
+      mp.toRestore.forEach((c) => Object.assign(rows.find((r) => r.id === c.id), { status: '유효', cancel_reason: '' }));
+      mp.rows.forEach((r) => addRow({ item: r.item, value: r.value, effective_date: r.effective_date, source: r.source, requested_at: t }));
+      if (general) {
+        const g = ctx.mealEffectiveDate_('to_general', t, { leaveDate: L }).date;
+        intents.push({ item: '석식', value: '일반 석식', eff: g, req: t, seq: ++seq });
       }
-      log.push(today + ' 퇴실 입력: 퇴실일 ' + L);
+      log.push(today + ' 퇴실 입력: 퇴실일 ' + L + (general ? ' 일반 석식으로' : '') + ' 되살림 ' + mp.toRestore.length);
     } else {
       const item = pick(['조식', '석식']), to = pick(VALUES[item]);
       const late = R() < 0.25;
@@ -109,11 +117,11 @@ function simulate(seed, steps) {
       assert.strictEqual(!!p.blocked, !!voidHall, 'seed ' + seed + ' blocked 판정\n' + log.slice(-6).join('\n'));
       if (!voidHall) intents.push({ item, value: to, eff, req, seq: ++seq });
       if (p.blocked) { check(step); continue; }
-      cancel(p.toCancel);
+      cancel(p.toCancel, '[자동] r' + (rid + 1) + ' 새 신청으로 대체');   // 신청 행 id = 다음 addRow
       if (!p.superseded) {
         assert.strictEqual(p.date, eff, 'seed ' + seed + ' 적용일\n' + log.slice(-4).join('\n'));
         addRow({ item, value: to, effective_date: p.date, source: 'F7', requested_at: req });
-      }
+      } else addRow({ item, value: to, effective_date: eff, source: 'F7', requested_at: req, status: '취소', cancel_reason: '[자동] ' + p.supersededBy[0] + ' 더 새 신청' });   // 결정 58
       for (const f of p.followUps) addRow({ item: f.item, value: f.value, effective_date: f.effective_date, source: 'F6', requested_at: req });
       // 수렴: 같은 신청으로 바로 다시 계획하면 할 일이 없다
       const again = plain(ctx.mealPlanChange_(rows, 's1', item, to, req, popts));
@@ -126,7 +134,7 @@ function simulate(seed, steps) {
   return { rows: rows.length, leave: !!leave };
 }
 
-const FULL = !!process.env.ORACLE_FULL, SEEDS = 400;
+const FULL = !!process.env.ORACLE_FULL, SEEDS = +process.env.ORACLE_SEEDS || 400;   // 넓게: ORACLE_SEEDS=6000
 test('오라클 무작위 시험 ' + SEEDS + '가지(사건 40개씩, 3/1~4/30 표본 날짜 + 끝에 매일 비교): 조식·석식 값, 결정 35 중단일, 퇴실 처리, 늦은 입력, 수렴', () => {
   let leaves = 0, rows = 0;
   for (let seed = 1; seed <= SEEDS; seed++) { const r = simulate(seed, 40); leaves += r.leave ? 1 : 0; rows += r.rows; }

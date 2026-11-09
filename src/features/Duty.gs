@@ -231,6 +231,113 @@ function setDutyOperating(input) {
   });
 }
 
+/* ───────────── 월말 근무 기록표(C14) ───────────── */
+
+/** 기록표를 전부 볼 수 있는 역할(duty.record: 관리자·근무표 담당자). 그 밖(학사 교사·출결 담당)은 본인 행만 */
+function dtyRecordFull_(user) {
+  return hasAnyAllowedRole_(user.roles, permissions_()['duty.record'].roles);
+}
+
+/** 그 달 R8 기록 + 이름표(읽기만). → {month, rec, who(email), closedDates, lastChangedAt, plans} */
+function dtyRecordData_(month) {
+  var m = dtyMonth_(month);
+  var rows = readAll_('duty_slots');
+  var plans = calMonthPlans_(m, calLoadCtx_());
+  var operatingByDate = {}, closedDates = [];
+  plans.forEach(function (p) { if (!p.operating) { operatingByDate[p.date] = false; closedDates.push(p.date); } });
+  var rec = dutyRecord_(rows, m, { operatingByDate: operatingByDate });
+  var names = Object.create(null);
+  readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = String(u.name || '').trim(); });
+  // 사용자 목록에 없는 주소는 여러 명이어도 구분되게 번호를 붙이고, 이름이 빈 등록 사용자는 따로 적는다(이메일은 내보내지 않는다)
+  var emails = [];
+  var see = function (e) { if (e && emails.indexOf(e) < 0) emails.push(e); };
+  rec.teachers.forEach(function (t) { see(t.email); });
+  rec.standby.forEach(function (t) { see(t.email); });
+  rec.swaps.forEach(function (w) { see(w.from); see(w.to); });
+  var unknown = emails.filter(function (e) { return !(e in names); }), blank = emails.filter(function (e) { return (e in names) && !names[e]; });
+  if (unknown.length || blank.length) rec.warnings = rec.warnings.concat(['사용자 목록에 없거나 이름이 비어 있는 선생님이 근무표에 있습니다. 근무표와 사용자 목록을 확인해 주세요.']);
+  var last = '';
+  rows.forEach(function (r) { if (String(r.date).slice(0, 7) === m && String(r.updated_at) > last) last = String(r.updated_at); });
+  return { month: m, rec: rec, closedDates: closedDates, plans: plans,
+    who: function (email) {
+      if (email in names) return names[email] || '(이름 없는 교사)';
+      return unknown.length > 1 ? '(등록 안 된 교사 ' + (unknown.indexOf(email) + 1) + ')' : '(등록 안 된 교사)';
+    },
+    lastChangedAt: last ? last.replace('T', ' ').slice(0, 16) : '' };
+}
+
+/** R8 경고의 yyyy-MM-dd를 '3월 5일(금)'로(화면·PDF 공통) */
+function dtyWarnText_(w) { return String(w).replace(/\d{4}-\d{2}-\d{2}/g, function (d) { return ymdIsValid_(d) ? (+d.slice(5, 7)) + '월 ' + (+d.slice(8, 10)) + '일(' + ymdWeekdayKo_(d) + ')' : d; }); }
+
+function dtyStamp_(iso) { return String(iso).replace('T', ' ').slice(0, 16); }
+
+/**
+ * 월말 근무 기록(수당 근거, PRD F3). 근무표 담당자·관리자(duty.record)는 교사별 전체 합계와 교대 목록, 그 밖의 근무표 보기 역할은 본인 행과 본인이 낀 교대만.
+ * 합계는 R8 dutyRecord_가 센 실제 근무자 기준(원래 근무자에게는 세지 않음). 예비 지정만 된 날은 따로(standby). 금액은 계산하지 않는다(결정 47). 이메일은 내지 않는다.
+ * generatedAt·lastChangedAt: 출력 뒤 근무표가 바뀌었는지 알아보라고 함께 준다.
+ */
+function getDutyRecord(month) {
+  var user = requirePermission_('duty.view');
+  var d = dtyRecordData_(month), full = dtyRecordFull_(user);
+  var standbyBy = Object.create(null);
+  d.rec.standby.forEach(function (s) { standbyBy[s.email] = s.count; });
+  var teachers = d.rec.teachers.filter(function (t) { return full || t.email === user.email; }).map(function (t) {
+    return { name: d.who(t.email), total: t.total, bySlot: t.bySlot, standby: standbyBy[t.email] || 0 };
+  });
+  var swaps = d.rec.swaps.filter(function (s) { return full || s.from === user.email || s.to === user.email; }).map(function (s) {
+    return { date: s.date, weekdayKo: ymdWeekdayKo_(s.date), slot: s.slot, label: DTY_SLOT_LABEL[s.slot], from: d.who(s.from), to: d.who(s.to), kind: s.kind };
+  });
+  var out = { month: d.month, today: today_(), canFile: full, generatedAt: dtyStamp_(nowIso_()), lastChangedAt: d.lastChangedAt,
+    closedDates: d.closedDates, teachers: teachers, swaps: swaps,
+    warnings: full ? d.rec.warnings.map(dtyWarnText_) : [] };   // 근무표 경고는 고칠 수 있는 담당자·관리자에게만(본인 행만 보는 교사에게는 손쓸 수 없는 경고)
+  if (full) out.totals = teachers.reduce(function (t, x) {
+    t.total += x.total; t.standby += x.standby;
+    Object.keys(x.bySlot).forEach(function (k) { t.bySlot[k] = (t.bySlot[k] || 0) + x.bySlot[k]; });
+    return t;
+  }, { total: 0, standby: 0, bySlot: {} });
+  return out;
+}
+
+/** R8 결과 → 렌더러(printRenderDutyRecord_) 모델. 칸 = 교사별 날짜별 저장값 그대로, 예비 지정은 날짜 배열(docs/design/duty-record-model.md) */
+function dtyRecordModel_(d) {
+  var standbyDates = Object.create(null);
+  d.rec.standby.forEach(function (s) { standbyDates[s.email] = s.dates; });
+  var term = termOnDate_(d.month + '-01') || termOnDate_(d.month + '-15');
+  return {
+    month: d.month, title: '신한학사 근무 기록표', termName: term ? term.name : '', closedDates: d.closedDates,
+    teachers: d.rec.teachers.map(function (t) {
+      var cells = {};
+      t.dates.forEach(function (x) { (cells[x.date] = cells[x.date] || []).push(x.slot); });
+      return { name: d.who(t.email), cells: cells, standby: standbyDates[t.email] || [] };
+    }),
+    swaps: d.rec.swaps.map(function (s) { return { date: s.date, slot: s.slot, from: d.who(s.from), to: d.who(s.to), kind: s.kind }; }),
+    generatedAt: dtyStamp_(nowIso_()), lastChangedAt: d.lastChangedAt,
+    // 운영 안 하는 날의 근무 경고는 그날 근무 칸이 있으면 렌더러가 칸에서 찾아 같은 말로 적는다(중복 방지). 예비만 있는 날은 렌더러가 못 보므로 경고를 남긴다
+    warnings: d.rec.warnings.filter(function (w) {
+      if (w.indexOf('운영 안 하는 날의 근무 행을 셌습니다') < 0) return true;
+      var date = w.slice(0, 10);
+      return !d.rec.teachers.some(function (t) { return t.dates.some(function (x) { return x.date === date; }); });
+    }).map(dtyWarnText_)
+  };
+}
+
+/**
+ * 월말 근무 기록표 파일(임시 양식 PDF, 결정 48의 엑셀은 학교 양식을 받은 뒤 C14b). 근무표 담당자·관리자(duty.record).
+ * 공유·Drive 저장 없이 base64로 바로 내려준다(출석부 PDF와 같음).
+ */
+function getDutyRecordFile(month, format) {
+  requirePermission_('duty.record');
+  var fmt = format === undefined || format === null || format === '' ? 'pdf' : (typeof format === 'string' ? format.trim().toLowerCase() : '');
+  if (fmt !== 'pdf') return { ok: false, error: '지금은 PDF(임시 양식)만 받을 수 있습니다. 엑셀은 학교 양식을 받은 뒤에 붙습니다.' };
+  var d = dtyRecordData_(month);
+  var model = dtyRecordModel_(d);
+  var html = printRenderDutyRecord_(model);
+  var name = '근무기록표_' + d.month + '.pdf';
+  var blob = sheetMakePdf_(html, name);
+  var bytes = blob.getBytes();
+  return { ok: true, name: name, base64: Utilities.base64Encode(bytes), bytes: bytes.length, warnings: model.warnings };
+}
+
 /**
  * 교대·대신 근무 판정(순수). ctx = {email(누른 사람), canEdit(duty.edit 보유), today}, row = duty_slots 행, toEmail = 새 근무자.
  * → {ok:true} | {ok:false, denied:true, why}(권한 없음, 거부 기록 대상) | {ok:false, error}(입력 오류).
