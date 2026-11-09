@@ -9,6 +9,7 @@
   .duty-slot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-height: 32px; }
   .duty-slot .slot-label { flex: 0 0 5.5em; color: var(--muted-ink); white-space: nowrap; }
   .duty-sheet-slots .field { margin-bottom: 8px; }
+  .row-btn { flex: 0 0 auto; white-space: nowrap; }   /* 줄 끝 버튼(C9 교대)이 줄어들어 글자가 깨지지 않게 */
 </style>
 <script>
   /** 근무표 화면(C8a): 주 목록(휴대폰 기본)·월 달력(PC 기본), 편성·운영 안 함은 날짜를 눌러 연 시트에서(근무표 담당자·관리자). 교대는 C9. */
@@ -93,11 +94,11 @@
 
     function gapNotice(d) {
       if (!d.canEdit || !d.emptyDays) return null;
-      var open = d.days.filter(function (x) { return x.operating && x.slots.some(function (s) { return s.slot !== '예비' && !s.name; }); });
-      var box = el('div', { class: 'notice warn' }, [el('div', { text: '비어 있는 날 ' + d.emptyDays + '일 — 눌러서 편성합니다.' })]);
+      var open = d.days.filter(function (x) { return x.operating && x.slots.some(function (s) { return !s.name; }); });
+      var box = el('div', { class: 'notice warn' }, [el('div', { text: '비어 있는 날 ' + d.emptyDays + '일 — 날짜 줄을 누르면 편성할 수 있습니다.' })]);
       var row = el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-top:6px' });
       open.slice(0, 8).forEach(function (x) {
-        row.appendChild(el('button', { type: 'button', class: 'btn secondary', style: 'flex:0 0 auto;white-space:nowrap', text: (+x.date.slice(8, 10)) + '일',
+        row.appendChild(el('button', { type: 'button', class: 'btn secondary row-btn', text: ymdKo(x.date) + '(' + x.weekdayKo + ')',
           onclick: function () { state.mode = 'week'; state.week = weekIndexOf(x.date); draw(); openSheet(x); } }));
       });
       if (open.length > 8) row.appendChild(el('span', { class: 'muted', text: '외 ' + (open.length - 8) + '일' }));
@@ -157,7 +158,7 @@
           var pre = s.slot === '예비' ? '예 ' : (s.slot === '단독' ? '근무 ' : s.slot.slice(0, 5) + ' ');
           lines.push(s.name ? pre + short : (s.slot === '예비' ? '예 -' : '⚠ 비어 있음'));
         });
-        if (x.operating && x.slots.some(function (s) { return s.slot !== '예비' && !s.name; }) && x.slots.some(function (s) { return s.name; })) cls += ' gap';
+        if (x.operating && x.slots.some(function (s) { return !s.name; }) && x.slots.some(function (s) { return s.name; })) cls += ' gap';
         if (mine) cls += ' mine';
         var btn = el('button', { type: 'button', class: cls, 'aria-label': dayKo(x) }, [el('b', { text: (+x.date.slice(8, 10)) + '일' })].concat(lines.map(function (t) { return el('div', { text: t }); })));
         if (mine) btn.appendChild(el('div', { text: '● 내 근무' }));
@@ -173,7 +174,7 @@
       table.appendChild(tb);
       return el('div', {}, [
         el('div', { class: 'tablewrap', style: 'padding:4px' }, [table]),
-        el('div', { class: 'muted', text: '칸의 글자는 교사 이름의 첫 글자, * = 교대로 실제 근무자가 바뀐 날, 예 = 예비 감독입니다.' })
+        el('div', { class: 'muted', text: '칸의 성은 교사 이름(박 = 박선생), * = 교대로 실제 근무자가 바뀐 날, 예 = 예비 감독입니다. 날짜 칸을 누르면 ' + (d.canEdit || d.canOperate ? '편성 시트가 열립니다.' : '그날 줄로 이동합니다.') })
       ]);
     }
 
@@ -181,7 +182,7 @@
     function openSheet(x) {
       var d = state.data, sheet = null, busy = false;
       var op = x.operating, memo0 = x.memo || '';
-      var pastLocked = d.canOperate && x.date < d.today && !d.canOperatePast;   // 지난 날짜는 관리자만 운영 여부를 바꾼다
+      var pastLocked = (d.canOperate || d.canEdit) && x.date < d.today && !d.canEditPast;   // 지난 날짜는 관리자만 편성·운영 여부를 바꾼다(결정 54)
       var opSeg = d.canOperate && !pastLocked ? UI.segmented({ label: '운영 여부', options: [{ value: 'on', label: '운영' }, { value: 'off', label: '운영 안 함' }], value: op ? 'on' : 'off',
         onchange: function () { drawSlots(); refresh(); } }) : null;
       var memoIn = el('input', { type: 'text', maxlength: '60', value: memo0 });
@@ -210,14 +211,16 @@
             sel.addEventListener('change', refresh);
             selects[s.slot] = sel;
           }
-          var label = s.slot === '21:30조' ? '21:30까지' : (s.slot === '23:00조' ? '23:00까지' : s.label);
-          slotBox.appendChild(UI.field(label, sel, s.swapped ? { hint: '교대된 칸(' + s.swappedFrom + ' → ' + s.name + ')은 편성으로 바꿀 수 없습니다.' } : {}));
-          sel.disabled = s.swapped;
+          var label = s.slot === '21:30조' || s.slot === '23:00조' ? (s.end || s.slot.slice(0, 5)) + '까지' : s.label;
+          var hint = s.swapped ? '교대된 칸(' + s.swappedFrom + ' → ' + s.name + ')은 편성으로 바꿀 수 없습니다.'
+            : (s.slot === '예비' ? '예비로 지정된 날은 근무 기록표에 따로 셉니다. 대신 근무하면 근무로만 셉니다.' : '');
+          slotBox.appendChild(UI.field(label, sel, hint ? { hint: hint } : {}));
+          sel.disabled = s.swapped || pastLocked;
         });
       }
       function slotChanges() {
         var out = {};
-        if (!d.canEdit || !x.operating || !wantOn()) return out;
+        if (!d.canEdit || pastLocked || !x.operating || !wantOn()) return out;
         x.slots.forEach(function (s) { if (selects[s.slot] && !s.swapped && selects[s.slot].value !== initial[s.slot]) out[s.slot] = selects[s.slot].value; });
         return out;
       }
@@ -226,7 +229,7 @@
       function refresh() { if (sheet) sheet.buttons[1].disabled = busy || !dirty(); }
 
       var content = el('div', {}, [
-        pastLocked ? el('div', { class: 'notice warn', text: '지난 날짜는 바꿀 수 없습니다. 필요하면 관리자에게 알려 주세요.' }) : null,
+        pastLocked ? el('div', { class: 'notice warn', text: '지난 날짜는 바꿀 수 없습니다. 실제로 바뀐 근무는 교대로 기록해 주세요. 운영 여부는 필요하면 관리자에게 알려 주세요.' }) : null,
         opSeg ? UI.field('운영 여부', opSeg) : null,
         opSeg ? UI.field('메모(선택)', memoIn, { hint: '예: 수능 전날, 학교 행사' }) : (x.memo ? el('div', { class: 'muted', text: '메모: ' + x.memo }) : null),
         slotBox, el('div', { class: 'fix', id: 'duty-err' })
@@ -250,14 +253,14 @@
           busy = false; refresh(); err(r.errors.map(function (e) { return e.message; }).join(' '));
         }).catch(fail);
       }
-      function saveOp(ack) {
-        call('setDutyOperating', { date: x.date, operating: wantOn(), memo: memoIn.value.trim(), acknowledge: !!ack }).then(function (r) {
+      function saveOp(ids) {
+        call('setDutyOperating', { date: x.date, operating: wantOn(), memo: memoIn.value.trim(), confirmIds: ids }).then(function (r) {
           if (r.ok) return saveSlots(false);
           if (r.needsConfirm) {
             busy = false; refresh();
             return UI.confirmSheet({ title: dayKo(x) + '을 운영 안 함으로 바꿉니다', lead: '그날 출석부가 사라집니다',
               lines: r.warnings.concat(['특이사항·OUT 기록은 그대로 남습니다', '다시 운영으로 바꾸면 출석부가 다시 만들어집니다']),
-              confirmText: '운영 안 함으로 바꾸기', danger: true, onconfirm: function () { busy = true; refresh(); saveOp(true); } });
+              confirmText: '운영 안 함으로 바꾸기', danger: true, onconfirm: function () { busy = true; refresh(); saveOp(r.confirmIds); } });
           }
           busy = false; refresh(); err(r.errors.map(function (e) { return e.message; }).join(' '));
         }).catch(fail);
@@ -266,7 +269,7 @@
         if (busy || !dirty()) return;
         busy = true; refresh(); err('');
         if (opChanged() && !wantOn() && x.operating && !d.canOperate) return fail(new Error('권한이 없습니다.'));
-        if (opChanged()) saveOp(false); else saveSlots(false);
+        if (opChanged()) saveOp(null); else saveSlots(false);
       }
       sheet = UI.bottomSheet({
         title: dayKo(x) + (d.canEdit ? ' 근무 편성' : ' 운영 여부'), content: content,

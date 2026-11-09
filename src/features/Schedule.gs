@@ -214,28 +214,48 @@ function saveBlocks(termType, dayType, blocks) {
   });
 }
 
-/** 날짜별 일정을 새로 정한다(그 날짜의 이전 유효 행은 '취소'). 관리자만. */
+/**
+ * 날짜별 일정을 새로 정한다(그 날짜의 이전 유효 행은 '취소'). 관리자만.
+ * 운영 안 함이 되는 날에 살아 있는 근무 칸은 취소한다(결정 54): 칸이 있으면 먼저 {ok:false, needsConfirm:true, warnings, confirmIds}를 돌려주고,
+ * 확인창이 본 칸 id를 input.confirmIds로 다시 보내면 저장과 함께 칸을 '취소'로 바꾼다. 이미 운영 안 함인 날을 다시 저장해도 남은 칸을 정리한다.
+ */
 function saveDaySchedule(input) {
   var user = requirePermission_('schedule.edit');
   return withLock_(function () {
     invalidate_('db', 'blocks');
     invalidate_('db', 'day_schedules');
+    invalidate_('db', 'duty_slots');
+    invalidate_('db', 'users');
     var check = calValidateDay_(input, calKnownDayTypes_(readAll_('blocks')));
     if (!check.ok) return { ok: false, errors: check.errors };
+    var chk = check.record.operating === 'FALSE' ? dtyCancelCheck_(check.record.date, input) : { rows: [], resp: null };
+    if (chk.resp) return chk.resp;
     calCancelDay_(check.record.date, user.email);
     appendRecord_('day_schedules', check.record, user.email);
-    return { ok: true };
+    dtyCancelSlots_(chk.rows, user.email);
+    return { ok: true, canceledSlots: chk.rows.length };
   });
 }
 
-/** 그 날짜를 기본으로 되돌린다(유효 행을 '취소'). 관리자만. */
-function cancelDaySchedule(date) {
+/**
+ * 그 날짜를 기본으로 되돌린다(유효 행을 '취소'). 관리자만.
+ * 기본이 운영 안 함인 날이면 살아 있는 근무 칸을 위와 같이 확인 뒤 취소한다(confirmIds).
+ */
+function cancelDaySchedule(date, confirmIds) {
   var user = requirePermission_('schedule.edit');
   var d = String(date || '').trim();
   if (!ymdIsValid_(d)) throw new Error('날짜를 yyyy-MM-dd 형식으로 골라 주세요.');
   return withLock_(function () {
     invalidate_('db', 'day_schedules');
-    return { ok: true, cancelled: calCancelDay_(d, user.email) };
+    invalidate_('db', 'duty_slots');
+    invalidate_('db', 'users');
+    var ctx = calLoadCtx_();
+    var defOp = dtyPlan_(d, { terms: ctx.terms, daySchedules: [], blocks: ctx.blocks, defaults: ctx.defaults }).operating;
+    var chk = defOp ? { rows: [], resp: null } : dtyCancelCheck_(d, { confirmIds: confirmIds });
+    if (chk.resp) return chk.resp;
+    var n = calCancelDay_(d, user.email);
+    dtyCancelSlots_(chk.rows, user.email);
+    return { ok: true, cancelled: n, canceledSlots: chk.rows.length };
   });
 }
 

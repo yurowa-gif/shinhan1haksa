@@ -29,6 +29,38 @@ function dtyPlan_(ymd, ctx) {
   return plan;
 }
 
+/** 그날 살아 있는 근무 칸 행들 */
+function dtyLiveSlots_(date) {
+  return readAll_('duty_slots').filter(function (r) { return ruleRowLive_(r) && String(r.date).trim() === date; });
+}
+
+/**
+ * 운영 안 함으로 바꿀 때 취소될 칸의 확인(결정 54). 락 안에서 부른다.
+ * 취소할 칸이 없으면 {rows:[], resp:null}. 있으면 input.confirmIds(확인창이 본 칸 id 목록)가 지금 목록과 같을 때만 {rows, resp:null},
+ * 아니면(처음이거나 그 사이 칸이 바뀜) {rows, resp:{ok:false, needsConfirm:true, warnings, confirmIds}} — 낡은 확인창이 못 본 칸을 지우지 않는다.
+ */
+function dtyCancelCheck_(date, input) {
+  var rows = dtyLiveSlots_(date);
+  if (!rows.length) return { rows: rows, resp: null };
+  var ids = rows.map(function (r) { return r.id; }).sort();
+  var given = input && Array.isArray(input.confirmIds) ? input.confirmIds.map(String).sort() : null;
+  if (given && given.join(',') === ids.join(',')) return { rows: rows, resp: null };
+  var names = Object.create(null);
+  readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = u.name; });
+  var list = rows.map(function (r) {
+    var e = dutyEmail_(r.actual_email) || dutyEmail_(r.original_email);
+    return DTY_SLOT_LABEL[r.slot] + ' ' + (names[e] || '(등록 안 된 교사)');
+  }).join(', ');
+  return { rows: rows, resp: { ok: false, needsConfirm: true, confirmIds: ids,
+    warnings: [list + ' 근무 칸이 취소됩니다. 다시 운영으로 켜도 되살아나지 않으니 그때 다시 편성해 주세요.'] } };
+}
+
+/** 확인을 거친 칸을 '취소'로(행은 지우지 않는다, audit에 남는다). 락 안에서 부른다. 취소한 칸 수 */
+function dtyCancelSlots_(rows, actorEmail) {
+  rows.forEach(function (r) { updateRecord_('duty_slots', r.id, { status: '취소' }, actorEmail); });
+  return rows.length;
+}
+
 /**
  * 한 달 근무표. month 'yyyy-MM'(빈 값이면 이번 달). 이메일은 내지 않는다.
  * days[].slots[] = {slot, label, end, userId, name, swappedFrom(이름), mine, swapped}
@@ -43,7 +75,7 @@ function getDutyMonth(month) {
     month: m, today: today_(),
     canEdit: hasAnyAllowedRole_(user.roles, perms['duty.edit'].roles),
     canOperate: hasAnyAllowedRole_(user.roles, perms['duty.operating'].roles),
-    canOperatePast: user.roles.indexOf('admin') >= 0,   // 지난 날짜의 운영 여부는 관리자만(수당 기록이 빠지므로)
+    canEditPast: user.roles.indexOf('admin') >= 0,   // 지난 날짜의 편성·운영 여부는 관리자만(이미 근무한 기록이 수당에서 바뀌므로, 결정 54)
     teachers: view.teachers.map(function (t) { return { id: t.id, name: t.name }; }),
     days: view.days, emptyDays: view.emptyDays, swapCount: view.swapCount, warnings: view.warnings
   };
@@ -70,7 +102,7 @@ function dtyMonthView_(m, user) {
       return { slot: f.slot, label: DTY_SLOT_LABEL[f.slot], end: f.end, userId: w.id, name: w.name,
         swappedFrom: from ? who(from).name : '', swapped: !!from, mine: !!email && email === user.email };
     });
-    var open = slots.some(function (x) { return x.slot !== '예비' && !x.name; });
+    var open = slots.some(function (x) { return !x.name; });   // 빈 예비 감독 칸도 빈 날(시안·screens.md)
     if (p.operating && open) emptyDays++;
     return { date: p.date, weekdayKo: p.weekdayKo, operating: p.operating, memo: p.memo, end: p.end, overridden: p.overridden, slots: slots };
   });
@@ -90,6 +122,7 @@ function saveDutyDay(input) {
   var fail = function (field, message) { return { ok: false, errors: [{ field: field, message: message }] }; };
   if (!ymdIsValid_(date)) return fail('date', '날짜를 yyyy-MM-dd 형식으로 골라 주세요.');
   var want = input.slots && typeof input.slots === 'object' ? input.slots : {};
+  if (date < today_() && user.roles.indexOf('admin') < 0) return fail('date', '지난 날짜는 바꿀 수 없습니다. 실제로 바뀐 근무는 교대로 기록해 주세요.');
   return withLock_(function () {
     ['duty_slots', 'day_schedules', 'blocks', 'users'].forEach(function (t) { invalidate_('db', t); });
     var ctx = calLoadCtx_(), plan = dtyPlan_(date, ctx);
@@ -127,8 +160,11 @@ function saveDutyDay(input) {
     if (warnings.length && input.acknowledge !== true) return { ok: false, needsConfirm: true, warnings: warnings };
     var changed = 0;
     plan2.forEach(function (c) {
-      if (c.r && c.next === c.cur && hmNorm_(c.r.end_time) === c.f.end) return;      // 같은 내용
       if (!c.r && !c.next) return;
+      if (c.r && c.next === c.cur) {   // 사람이 그대로면 교대 기록(original·actual·swapped)은 건드리지 않고 끝 시각만 맞춘다
+        if (hmNorm_(c.r.end_time) !== c.f.end) { updateRecord_('duty_slots', c.r.id, { end_time: c.f.end }, user.email); changed++; }
+        return;
+      }
       if (c.r && !c.next) { updateRecord_('duty_slots', c.r.id, { status: '취소' }, user.email); changed++; return; }
       if (c.r) { updateRecord_('duty_slots', c.r.id, { original_email: c.next, actual_email: c.next, end_time: c.f.end, swapped_at: '', swapped_by: '' }, user.email); changed++; return; }
       appendRecord_('duty_slots', { date: date, slot: c.f.slot, end_time: c.f.end, original_email: c.next, actual_email: c.next,
@@ -145,11 +181,12 @@ function dtyNameOf_(teachers, email) {
 }
 
 /**
- * 그날 "운영 안 함" 켜고 끄기(결정 44). input = {date, operating(boolean), memo(생략하면 그대로), acknowledge}.
+ * 그날 "운영 안 함" 켜고 끄기(결정 44). input = {date, operating(boolean), memo(생략하면 그대로), confirmIds}.
  * 근무표 담당자·관리자(duty.operating). day_schedules의 운영 여부·메모만 바꾼다(시각·요일 유형은 있던 값 그대로).
  * 기본과 같아지면(운영, 메모 없음, 다른 값 없음) 그날 행을 '취소'로 되돌린다.
  * 운영 안 함으로 바꾸면 그날 살아 있는 근무 칸은 '취소'로 바꾼다(행은 지우지 않고 audit에 남는다, 총괄 답).
- * 칸이 있으면 {ok:false, needsConfirm:true, warnings:['21:30조 박선생, … 근무 칸이 취소됩니다']}를 먼저 돌려준다.
+ * 칸이 있으면 {ok:false, needsConfirm:true, warnings:['21:30조 박선생, … 근무 칸이 취소됩니다'], confirmIds}를 먼저 돌려주고,
+ * 확인창이 본 칸 id 목록을 input.confirmIds로 다시 보내야 취소한다(그 사이 칸이 바뀌었으면 다시 확인). 자습 일정 화면(saveDaySchedule·cancelDaySchedule)도 같은 규칙.
  * 다시 운영으로 켜도 취소한 칸은 되살리지 않는다(다시 편성). 오늘보다 앞선 날짜는 관리자만 바꾼다(담당자는 거부).
  */
 function setDutyOperating(input) {
@@ -170,31 +207,23 @@ function setDutyOperating(input) {
     var ex = pickDaySchedule_(ctx.daySchedules, date);
     var memo = memoGiven ? memoIn : (ex ? String(ex.memo || '') : '');
     var curOp = dtyPlan_(date, ctx).operating;
+    // 운영 안 함이 되는(또는 이미 그런) 날에 살아 있는 칸은 취소한다. 이미 운영 안 함인 날에 남은 칸도 정리한다
+    var chk = input.operating ? { rows: [], resp: null } : dtyCancelCheck_(date, input);
+    if (chk.resp) return chk.resp;
     var same = curOp === input.operating && (ex ? String(ex.memo || '') : '') === memo;
-    if (same) return { ok: true, changed: false };
-    var cancelRows = [];
-    if (!input.operating && curOp) {
-      cancelRows = readAll_('duty_slots').filter(function (r) { return ruleRowLive_(r) && String(r.date).trim() === date; });
-      if (cancelRows.length && input.acknowledge !== true) {
-        var names = Object.create(null);
-        readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = u.name; });
-        var list = cancelRows.map(function (r) {
-          var e = dutyEmail_(r.actual_email) || dutyEmail_(r.original_email);
-          return r.slot + ' ' + (names[e] || '(등록 안 된 교사)');
-        }).join(', ');
-        return { ok: false, needsConfirm: true, warnings: [list + ' 근무 칸이 취소됩니다. 다시 운영으로 켜도 되살아나지 않으니 그때 다시 편성해 주세요.'] };
-      }
-    }
+    if (same && !chk.rows.length) return { ok: true, changed: false };
     var defOp = dtyPlan_(date, { terms: ctx.terms, daySchedules: [], blocks: ctx.blocks, defaults: ctx.defaults }).operating;
     var keep = ex ? { start: ex.start || '', end: ex.end || '', day_type: ex.day_type || '' } : { start: '', end: '', day_type: '' };
     var backToDefault = input.operating === defOp && !memo && !keep.start && !keep.end && !keep.day_type;
-    if (ex) calCancelDay_(date, user.email);
-    if (!backToDefault) {
-      appendRecord_('day_schedules', { date: date, operating: input.operating ? 'TRUE' : 'FALSE', start: keep.start, end: keep.end,
-        day_type: keep.day_type, memo: memo, status: '유효' }, user.email);
+    if (!same) {
+      if (ex) calCancelDay_(date, user.email);
+      if (!backToDefault) {
+        appendRecord_('day_schedules', { date: date, operating: input.operating ? 'TRUE' : 'FALSE', start: keep.start, end: keep.end,
+          day_type: keep.day_type, memo: memo, status: '유효' }, user.email);
+      }
     }
-    cancelRows.forEach(function (r) { updateRecord_('duty_slots', r.id, { status: '취소' }, user.email); });
-    return { ok: true, changed: true, canceledSlots: cancelRows.length };
+    var canceled = dtyCancelSlots_(chk.rows, user.email);
+    return { ok: true, changed: !same || canceled > 0, canceledSlots: canceled };
   });
 }
 
@@ -205,18 +234,28 @@ function setDutyOperating(input) {
  */
 function dtyHomeInfo_(user, role) {
   if (role === 'duty_manager' || role === 'admin') {
-    var v = dtyMonthView_(today_().slice(0, 7), user);
-    return { emptyDays: v.emptyDays, swapCount: v.swapCount };
+    var m = today_().slice(0, 7), v = dtyMonthView_(m, user);
+    var open = v.days.filter(function (d) { return d.operating && d.slots.some(function (s) { return !s.name; }); }).slice(0, 3).map(function (d) {
+      return { date: d.date, weekdayKo: d.weekdayKo, labels: d.slots.filter(function (s) { return !s.name; }).map(function (s) { return s.label; }) };
+    });
+    return { month: m, emptyDays: v.emptyDays, swapCount: v.swapCount, open: open };
   }
   if (role !== 'hall_teacher') return null;
   var today = today_(), rows = readAll_('duty_slots');
-  var mineSlot = function (ymd) {
+  // 그날 내 칸: {label, end}(근무 칸이면 끝 시각, 예비 감독이면 end ''), 없으면 null
+  var mine = function (ymd) {
     var d = dutyOn_(rows, ymd), hit = d.duty.filter(function (x) { return x.email === user.email; })[0];
-    return hit ? DTY_SLOT_LABEL[hit.slot] : (d.standby.some(function (sb) { return sb.email === user.email; }) ? DTY_SLOT_LABEL['예비'] : '');
+    if (hit) return { label: DTY_SLOT_LABEL[hit.slot], end: hit.end };
+    return d.standby.some(function (sb) { return sb.email === user.email; }) ? { label: DTY_SLOT_LABEL['예비'], end: '' } : null;
   };
   var dates = {};
   rows.forEach(function (r) { var d = String(r.date || '').trim(); if (d > today && ruleRowLive_(r)) dates[d] = true; });
-  var next = null;
-  Object.keys(dates).sort().some(function (d) { var l = mineSlot(d); if (l) { next = { date: d, label: l }; return true; } return false; });
-  return { today: mineSlot(today), next: next };
+  var ctx = calLoadCtx_(), next = null;
+  Object.keys(dates).sort().some(function (d) {
+    var l = mine(d);
+    if (!l || !dtyPlan_(d, ctx).operating) return false;   // 운영 안 하는 날은 건너뛴다
+    next = { date: d, weekdayKo: ymdWeekdayKo_(d), label: l.label };
+    return true;
+  });
+  return { today: dtyPlan_(today, ctx).operating ? mine(today) : null, next: next };
 }

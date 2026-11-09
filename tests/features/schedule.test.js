@@ -2,7 +2,7 @@
 const assert = require('assert');
 const { test, loadGs, plain } = require('../helpers/harness');
 
-const FILES = ['src/Schema.gs', 'src/Auth.gs', 'src/rules/DateRules.gs', 'src/rules/ScheduleRules.gs', 'src/features/Schedule.gs'];
+const FILES = ['src/Schema.gs', 'src/Auth.gs', 'src/rules/DateRules.gs', 'src/rules/ScheduleRules.gs', 'src/rules/DutyRules.gs', 'src/features/Schedule.gs', 'src/features/Duty.gs'];
 const ctx = loadGs(FILES);
 const defaults = plain(ctx.calDefaults_([]));
 const blocks = plain(ctx.defaultBlockRows_()).map((b, i) => Object.assign({ id: 'b' + i, updated_at: '2027-01-01T00:00:00' }, b));
@@ -160,7 +160,7 @@ test('calBlocksDiff_: 겹침·역순·형식 오류·빈 목록·너무 많음�
 /* ───── 서버 함수(가짜 서비스) ───── */
 
 function makeServer(email, roles, seed) {
-  const db = { terms: terms.map((t) => Object.assign({}, t)), blocks: blocks.map((b) => Object.assign({}, b)), day_schedules: [], settings: [] };
+  const db = { terms: terms.map((t) => Object.assign({}, t)), blocks: blocks.map((b) => Object.assign({}, b)), day_schedules: [], settings: [], duty_slots: [] };
   Object.assign(db, seed || {});
   const denied = [], writes = [];
   let uid = 0, depth = 0;
@@ -201,14 +201,14 @@ test('getScheduleData: 교사 역할은 보기 가능(canEdit false), 관리자�
 
 test('saveDaySchedule: 이전 유효 행을 취소하고 새 행을 쓴다 → 미리보기에 반영 → 되돌리면 기본', () => {
   const s = makeServer('a@example.com', ['admin']);
-  assert.deepStrictEqual(plain(s.c.saveDaySchedule({ date: '2027-03-10', operating: false, memo: '수능' })), { ok: true });
+  assert.deepStrictEqual(plain(s.c.saveDaySchedule({ date: '2027-03-10', operating: false, memo: '수능' })), { ok: true, canceledSlots: 0 });
   assert.strictEqual(plain(s.c.getScheduleData('2027-03')).days.find((d) => d.date === '2027-03-10').operating, false);
   // 같은 날을 다시 저장하면 이전 행이 '취소'되고 유효 행은 하나
   s.c.saveDaySchedule({ date: '2027-03-10', operating: true, end: '22:00' });
   const rows = s.db.day_schedules.filter((r) => r.date === '2027-03-10');
   assert.deepStrictEqual(rows.map((r) => r.status), ['취소', '유효']);
   assert.deepStrictEqual(plain(s.c.getScheduleData('2027-03')).days.find((d) => d.date === '2027-03-10').blockLabels, ['18–20', '20–22']);
-  assert.deepStrictEqual(plain(s.c.cancelDaySchedule('2027-03-10')), { ok: true, cancelled: 1 });
+  assert.deepStrictEqual(plain(s.c.cancelDaySchedule('2027-03-10')), { ok: true, cancelled: 1, canceledSlots: 0 });
   assert.strictEqual(plain(s.c.getScheduleData('2027-03')).days.find((d) => d.date === '2027-03-10').overridden, false);
   assert.ok(s.db.day_schedules.every((r) => r.status === '취소'), '행은 지우지 않고 모두 취소로 남는다');
 });

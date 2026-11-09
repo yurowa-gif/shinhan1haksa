@@ -4,11 +4,15 @@
     var x = d.duty;
     if (!x) return;
     if (x.error) { root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '근무표' }), el('div', { class: 'muted', text: x.error })])); return; }
-    root.appendChild(el('div', { class: 'card' }, [
-      el('h2', { text: '근무표' }),
-      el('div', { class: 'muted', text: '이번 달 비어 있는 날 ' + x.emptyDays + '일 · 교대 ' + x.swapCount + '건' }),
-      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=duty', text: '근무표 열기' })
-    ]));
+    // 승인된 시안: "N월 근무표" 카드 — 빈 날·이번 달 교대, 빈 날 2~3개(날짜·조), [근무 편성하기]
+    var openText = x.open.map(function (o) { return (+o.date.slice(5, 7)) + '월 ' + (+o.date.slice(8, 10)) + '일(' + o.weekdayKo + ') ' + o.labels.join('·'); }).join(', ');
+    var c = el('div', { class: 'card' }, [
+      el('h2', { text: (+x.month.slice(5, 7)) + '월 근무표' }),
+      el('div', { class: 'stats', style: 'margin:4px 0 12px' }, [statBox(x.emptyDays, '빈 날(편성이 덜 된 날)'), statBox(x.swapCount, '이번 달 교대')]),
+      el('div', { class: 'muted', text: x.open.length ? '비어 있는 날: ' + openText + (x.emptyDays > x.open.length ? ' 외 ' + (x.emptyDays - x.open.length) + '일' : '') : '비어 있는 날이 없습니다.' }),
+      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=duty', text: '근무 편성하기' })
+    ]);
+    root.appendChild(c);
   }
 
   /** 관리자 홈: 전체 현황 (PRD 8절) */

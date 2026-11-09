@@ -137,7 +137,7 @@ test('setDutyOperating: 이미 정한 시각·요일 유형은 그대로 두고,
   assert.ok(r.warnings[0].includes('21:30조 ' + nameOf(x, x.t1)) && r.warnings[0].includes('취소됩니다'), r.warnings[0]);
   assert.strictEqual(day(x, DUTY, WED).operating, true, '확인 전에는 바뀌지 않는다');
   assert.strictEqual(x.slots().filter((q) => q.status === '유효').length, 1, '확인 전에는 칸도 그대로');
-  const ok = x.env.call(DUTY, 'setDutyOperating', { date: WED, operating: false, acknowledge: true });
+  const ok = x.env.call(DUTY, 'setDutyOperating', { date: WED, operating: false, confirmIds: r.confirmIds });
   assert.deepStrictEqual([ok.ok, ok.canceledSlots], [true, 1]);
   const row = x.env.rows('day_schedules').find((q) => q.date === WED && q.status !== '취소');
   assert.deepStrictEqual([row.operating, row.start, row.end], ['FALSE', '18:30', '21:00']);
@@ -150,7 +150,7 @@ test('운영 안 함으로 취소된 칸은 다시 운영으로 켜도 되살아
   save(x, DUTY, { date: WED, slots: { '21:30조': x.t1, '23:00조': x.t2 } });
   const total = () => plain(x.env.as(ADMIN, (c) => c.dutyRecord_(c.readAll_('duty_slots'), MAR, {}))).teachers.reduce((n, t) => n + t.total, 0);
   assert.strictEqual(total(), 2);
-  x.env.call(DUTY, 'setDutyOperating', { date: WED, operating: false, acknowledge: true });
+  x.env.call(DUTY, 'setDutyOperating', { date: WED, operating: false, confirmIds: x.env.call(DUTY, 'setDutyOperating', { date: WED, operating: false }).confirmIds });
   assert.strictEqual(total(), 0, '취소된 칸은 기록표에 없다');
   assert.strictEqual(x.env.call(DUTY, 'setDutyOperating', { date: WED, operating: true }).ok, true);
   assert.strictEqual(total(), 0, '다시 켜도 되살아나지 않는다');
@@ -167,7 +167,7 @@ test('지난 날짜는 근무표 담당자가 운영 여부를 바꿀 수 없다
   assert.strictEqual(x.env.rows('day_schedules').length, w); assert.strictEqual(x.env.rows('audit_log').length, a, '쓰기 0건');
   assert.strictEqual(x.env.call(ADMIN, 'setDutyOperating', { date: past, operating: false }).ok, true);
   assert.strictEqual(x.env.call(DUTY, 'setDutyOperating', { date: WED, operating: false }).ok, true);
-  assert.deepStrictEqual([x.env.call(DUTY, 'getDutyMonth', MAR).canOperatePast, x.env.call(ADMIN, 'getDutyMonth', MAR).canOperatePast], [false, true]);
+  assert.deepStrictEqual([x.env.call(DUTY, 'getDutyMonth', MAR).canEditPast, x.env.call(ADMIN, 'getDutyMonth', MAR).canEditPast], [false, true]);
 });
 
 test('setDutyOperating 권한·입력: 관리자·담당자만(학사 교사·출결 담당·담임 거부 + denied:duty.operating), 잘못된 값은 거부', () => {
@@ -187,7 +187,128 @@ test('홈 훅: 근무표 담당자는 이번 달 빈 날·교대, 학사 교사�
   assert.ok(mgr.emptyDays > 0 && mgr.swapCount === 0);
   assert.deepStrictEqual(plain(x.env.call(ADMIN, 'getHomeData', 'admin').duty), plain(mgr), '관리자 홈도 같은 숫자');
   const t1 = x.env.call(T1, 'getHomeData', 'hall_teacher').duty;
-  assert.deepStrictEqual(plain(t1), { today: '21:30조', next: { date: FRI, label: '예비 감독' } });
+  assert.deepStrictEqual(plain(t1), { today: { label: '21:30조', end: '21:30' }, next: { date: FRI, weekdayKo: '금', label: '예비 감독' } });
   const t3 = x.env.call(T3, 'getHomeData', 'hall_teacher').duty;
-  assert.deepStrictEqual(plain(t3), { today: '', next: { date: FRI, label: '근무' } });
+  assert.deepStrictEqual(plain(t3), { today: null, next: { date: FRI, weekdayKo: '금', label: '근무' } });
+});
+
+/* ───── 총괄 검토 반영(#66) ───── */
+
+const confirmIdsOf = (x, who, call, ...args) => x.env.call(who, call, ...args).confirmIds;
+
+test('관리자가 자습 일정(saveDaySchedule)에서 운영 안 함으로 바꿔도 근무 칸이 취소된다 — 확인창을 한 번 거치고, 홈·기록표에서 빠진다', () => {
+  const x = makeEnv();
+  save(x, DUTY, { date: WED, slots: { '21:30조': x.t1, '23:00조': x.t2 } });
+  save(x, DUTY, { date: FRI, slots: { '단독': x.t1 } });
+  const off = { date: WED, operating: false, memo: '행사' };
+  const first = x.env.call(ADMIN, 'saveDaySchedule', off);
+  assert.strictEqual(first.ok, false); assert.strictEqual(first.needsConfirm, true);
+  assert.ok(first.warnings[0].includes('21:30조 ' + nameOf(x, x.t1)) && first.warnings[0].includes('23:00조'), first.warnings[0]);
+  assert.strictEqual(x.env.rows('day_schedules').filter((q) => q.date === WED && q.status !== '취소').length, 0, '확인 전에는 쓰지 않는다');
+  assert.strictEqual(x.slots().filter((q) => q.status === '유효').length, 3);
+  const r = x.env.call(ADMIN, 'saveDaySchedule', Object.assign({ confirmIds: first.confirmIds }, off));
+  assert.deepStrictEqual([r.ok, r.canceledSlots], [true, 2]);
+  assert.deepStrictEqual(x.slots().filter((q) => q.status === '유효').map((q) => q.date), [FRI], '수요일 칸만 취소, 금요일은 그대로');
+  const home = x.env.call(T1, 'getHomeData', 'hall_teacher').duty;
+  assert.strictEqual(home.today, null, '운영 안 하는 날은 오늘 내 근무에서 빠진다');
+  assert.strictEqual(home.next.date, FRI);
+  const total = plain(x.env.as(ADMIN, (c) => c.dutyRecord_(c.readAll_('duty_slots'), MAR, {}))).teachers.reduce((n, t) => n + t.total, 0);
+  assert.strictEqual(total, 1);
+});
+
+test('확인창이 본 칸 목록이 지금과 다르면(낡은 확인창) 취소하지 않고 다시 확인을 요구한다', () => {
+  const x = makeEnv();
+  save(x, DUTY, { date: WED, slots: { '21:30조': x.t1 } });
+  const stale = confirmIdsOf(x, DUTY, 'setDutyOperating', { date: WED, operating: false });
+  save(x, DUTY, { date: WED, slots: { '23:00조': x.t2 } });   // 확인창을 보는 사이 다른 칸이 편성됨
+  const r = x.env.call(DUTY, 'setDutyOperating', { date: WED, operating: false, confirmIds: stale });
+  assert.strictEqual(r.needsConfirm, true); assert.notDeepStrictEqual(r.confirmIds, stale);
+  assert.strictEqual(x.slots().filter((q) => q.status === '유효').length, 2, '아무것도 취소되지 않았다');
+  assert.strictEqual(day(x, DUTY, WED).operating, true);
+  assert.strictEqual(x.env.call(DUTY, 'setDutyOperating', { date: WED, operating: false, confirmIds: r.confirmIds }).ok, true);
+  assert.strictEqual(x.env.call(DUTY, 'setDutyOperating', { date: WED, operating: false, acknowledge: true }).ok, true, 'acknowledge만으로는 이미 끈 날이라 변화 없음');
+});
+
+test('수요일을 끄면 금요일 칸은 그대로 유효하다, 이미 운영 안 함인 날에 남은 칸도 다시 끄면 정리된다', () => {
+  const x = makeEnv();
+  save(x, DUTY, { date: WED, slots: { '21:30조': x.t1 } });
+  save(x, DUTY, { date: FRI, slots: { '단독': x.t2, '예비': x.t3 } });
+  x.env.call(DUTY, 'setDutyOperating', { date: WED, operating: false, confirmIds: confirmIdsOf(x, DUTY, 'setDutyOperating', { date: WED, operating: false }) });
+  assert.deepStrictEqual(x.slots().filter((q) => q.status === '유효').map((q) => q.date).sort(), [FRI, FRI]);
+  // 관리자가 칸을 취소하지 않은 채 운영 안 함이 된 옛 상태를 만들어 본다: 행 하나를 되살린다
+  const row = x.slots().find((q) => q.date === WED);
+  x.env.asOwner((c) => c.updateRecord_('duty_slots', row.id, { status: '유효' }, ADMIN));
+  const ids = confirmIdsOf(x, DUTY, 'setDutyOperating', { date: WED, operating: false, memo: '다시' });
+  assert.ok(ids && ids.length === 1, '이미 운영 안 함이어도 남은 칸을 정리하자고 묻는다');
+  assert.strictEqual(x.env.call(DUTY, 'setDutyOperating', { date: WED, operating: false, memo: '다시', confirmIds: ids }).ok, true);
+  assert.strictEqual(x.slots().filter((q) => q.status === '유효' && q.date === WED).length, 0);
+});
+
+test('cancelDaySchedule: 기본이 운영 안 함이 되는 날이면 칸을 확인 뒤 취소, 기본이 운영이면 칸은 그대로', () => {
+  const x = makeEnv();
+  x.env.call(ADMIN, 'saveDaySchedule', { date: WED, operating: true, start: '18:30', end: '21:00', day_type: '', memo: '' });
+  save(x, DUTY, { date: WED, slots: { '21:30조': x.t1 } });
+  const r = x.env.call(ADMIN, 'cancelDaySchedule', WED);
+  assert.deepStrictEqual([r.ok, r.canceledSlots], [true, 0]);
+  assert.strictEqual(x.slots().filter((q) => q.status === '유효').length, 1, '기본이 운영이면 칸은 그대로');
+});
+
+test('saveDutyDay: 교대된 칸의 그날 끝 시각만 바뀌면 같은 사람으로 다시 저장해도 교대 기록(원래·실제·교대 일시)이 남고 끝 시각만 고친다', () => {
+  const x = makeEnv();
+  save(x, DUTY, { date: WED, slots: { '21:30조': x.t1 } });
+  const row = x.slots().find((q) => q.slot === '21:30조');
+  x.env.asOwner((c) => c.updateRecord_('duty_slots', row.id, { actual_email: T2, swapped_at: '2027-03-02T10:00:00', swapped_by: T1, end_time: '21:00' }, ADMIN));
+  const r = save(x, DUTY, { date: WED, slots: { '21:30조': x.t2 } });
+  assert.deepStrictEqual(plain(r), { ok: true, changed: 1 });
+  const after = x.slots().find((q) => q.id === row.id);
+  assert.deepStrictEqual([after.original_email, after.actual_email, after.swapped_at, after.swapped_by, after.end_time], [T1, T2, '2027-03-02T10:00:00', T1, '21:30']);
+});
+
+test('saveDutyDay: 교대된 칸을 비우려 해도 거부, 비활성 교사·학사 교사가 아닌 계정 배정 거부(쓰기 0건)', () => {
+  const x = makeEnv();
+  save(x, DUTY, { date: WED, slots: { '21:30조': x.t1 } });
+  const row = x.slots().find((q) => q.slot === '21:30조');
+  x.env.asOwner((c) => c.updateRecord_('duty_slots', row.id, { actual_email: T2, swapped_at: '2027-03-02T10:00:00', swapped_by: T1 }, ADMIN));
+  const snap = JSON.stringify(x.slots());
+  const r = save(x, DUTY, { date: WED, slots: { '21:30조': '' } });
+  assert.strictEqual(r.ok, false); assert.ok(r.errors[0].message.includes('교대'));
+  x.env.asOwner((c) => c.updateRecord_('users', x.t3, { active: 'FALSE' }, ADMIN));
+  const r2 = save(x, DUTY, { date: WED, slots: { '23:00조': x.t3 } });
+  assert.strictEqual(r2.ok, false);
+  assert.strictEqual(JSON.stringify(x.slots()), snap);
+});
+
+test('지난 날짜의 편성(saveDutyDay)도 근무표 담당자는 바꿀 수 없고(쓰기 0건), 관리자는 바꿀 수 있다', () => {
+  const x = makeEnv();
+  const past = '2027-03-02';
+  const w = x.slots().length, a = x.env.rows('audit_log').length;
+  const r = save(x, DUTY, { date: past, slots: { '21:30조': x.t1 } });
+  assert.deepStrictEqual([r.ok, r.errors[0].field], [false, 'date']);
+  assert.ok(r.errors[0].message.includes('지난 날짜는 바꿀 수 없습니다') && r.errors[0].message.includes('교대로 기록'));
+  assert.strictEqual(x.slots().length, w); assert.strictEqual(x.env.rows('audit_log').length, a);
+  assert.strictEqual(save(x, ADMIN, { date: past, slots: { '21:30조': x.t1 } }).ok, true);
+  assert.strictEqual(save(x, DUTY, { date: WED, slots: { '21:30조': x.t1 } }).ok, true, '오늘은 가능');
+});
+
+test('락을 못 잡으면 두 함수 모두 "다른 사람이 저장 중" 오류이고 쓰기가 없다', () => {
+  const x = makeEnv();
+  const w = x.slots().length, d = x.env.rows('day_schedules').length;
+  x.env.lock.failNext = 1;
+  assert.throws(() => save(x, DUTY, { date: WED, slots: { '21:30조': x.t1 } }), /다른 사람이 저장 중/);
+  x.env.lock.failNext = 1;
+  assert.throws(() => x.env.call(DUTY, 'setDutyOperating', { date: WED, operating: false }), /다른 사람이 저장 중/);
+  assert.strictEqual(x.slots().length, w); assert.strictEqual(x.env.rows('day_schedules').length, d);
+});
+
+test('빈 예비 감독 칸도 빈 날로 센다(emptyDays·홈 빈 날 목록)', () => {
+  const x = makeEnv();
+  const fridays = x.env.call(DUTY, 'getDutyMonth', MAR).days.filter((d) => d.operating && d.slots.some((s) => s.slot === '단독')).length;
+  const before = x.env.call(DUTY, 'getDutyMonth', MAR).emptyDays;
+  save(x, DUTY, { date: FRI, slots: { '단독': x.t1 } });
+  assert.strictEqual(x.env.call(DUTY, 'getDutyMonth', MAR).emptyDays, before, '근무만 채우고 예비가 비어 있으면 아직 빈 날');
+  save(x, DUTY, { date: FRI, slots: { '예비': x.t2 } });
+  assert.strictEqual(x.env.call(DUTY, 'getDutyMonth', MAR).emptyDays, before - 1);
+  assert.ok(fridays > 0);
+  const open = x.env.call(DUTY, 'getHomeData', 'duty_manager').duty.open;
+  assert.ok(open.length >= 1 && open.length <= 3 && open.every((o) => o.date && o.weekdayKo && o.labels.length));
 });

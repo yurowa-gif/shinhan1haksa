@@ -4,10 +4,15 @@
     var x = d.duty, line = document.getElementById('home-duty');
     if (!x) return;
     if (line) {
+      clear(line);
       if (x.error) line.textContent = '근무 정보를 불러오지 못했습니다.';
       else {
-        var nx = x.next ? ' · 다음 근무 ' + (+x.next.date.slice(5, 7)) + '월 ' + (+x.next.date.slice(8, 10)) + '일(' + x.next.label + ')' : '';
-        line.textContent = (x.today ? '오늘 내 근무: ' + x.today : '오늘 내 근무 없음') + nx;
+        // 승인된 시안: "● 내 근무 21:30조 (21:30까지)" + "다음 근무: 3월 6일(토) 근무", 없으면 "오늘은 근무가 없습니다"
+        if (x.today) {
+          line.appendChild(el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0' }, [
+            UI.statusPill('todo', '내 근무'), el('b', { text: x.today.label + (x.today.end ? ' (' + x.today.end + '까지)' : '') })]));
+        } else line.appendChild(el('div', { text: '오늘은 근무가 없습니다.' }));
+        if (x.next) line.appendChild(el('div', { class: 'muted', text: '다음 근무: ' + (+x.next.date.slice(5, 7)) + '월 ' + (+x.next.date.slice(8, 10)) + '일(' + x.next.weekdayKo + ') ' + x.next.label }));
       }
     }
     root.appendChild(el('div', { class: 'card' }, [
