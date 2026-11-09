@@ -49,7 +49,7 @@ function dtyCancelCheck_(date, input) {
   readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = u.name; });
   var list = rows.map(function (r) {
     var e = dutyEmail_(r.actual_email) || dutyEmail_(r.original_email);
-    return DTY_SLOT_LABEL[r.slot] + ' ' + (names[e] || '(등록 안 된 교사)');
+    return dtySlotLabel_(r.slot) + ' ' + (names[e] || '(등록 안 된 교사)');
   }).join(', ');
   return { rows: rows, resp: { ok: false, needsConfirm: true, confirmIds: ids,
     warnings: [list + ' 근무 칸이 취소됩니다. 다시 운영으로 켜도 되살아나지 않으니 그때 다시 편성해 주세요.'] } };
@@ -158,7 +158,7 @@ function saveDutyDay(input) {
     frame.forEach(function (f) {
       var e = final[f.slot];
       if (!e) return;
-      if (seen[e]) warnings.push(dtyNameOf_(teachers, e) + ' 선생님이 이 날 이미 ' + DTY_SLOT_LABEL[seen[e]] + '에 편성되어 있습니다.');
+      if (seen[e]) warnings.push(dtyNameOf_(teachers, e) + ' 선생님이 이 날 이미 ' + dtySlotLabel_(seen[e]) + '에 편성되어 있습니다.');
       else seen[e] = f.slot;
     });
     if (warnings.length && input.acknowledge !== true) return { ok: false, needsConfirm: true, warnings: warnings };
@@ -265,7 +265,7 @@ function swapDuty(slotId, toUserId, opts) {
     var sid = String(slotId || '').trim(), all = readAll_('duty_slots');
     // 같은 id의 줄이 둘 이상(시트에서 복사·붙여넣은 줄)이면 어느 줄인지 알 수 없다 — 고치지 않고 담당자에게 알린다. 빈 id도 칸이 아니다
     var same = sid ? all.filter(function (r) { return String(r.id).trim() === sid; }) : [];
-    if (same.length > 1) throw new Error('근무표 시트에 같은 칸이 여러 줄입니다. 근무표 담당자에게 알려 주세요.');
+    if (same.length > 1) throw new Error('근무표 시트에 같은 칸이 여러 줄입니다. 관리자(시트 소유자)에게 알려 주세요.');
     var row = same[0] || null;
     // 없는 칸·취소된 칸·낡은 화면(그 사이 칸이 바뀜)·같은 (날짜, 칸)에 살아 있는 행이 둘일 때의 옛 행은 공격이 아니라 "화면이 낡음"이다.
     // R8(dutyOn_)이 쓰는 최신 행만(같은 물리 줄까지 비교) 교대할 수 있다 — 옛 행 id로 남의 근무를 빼앗는 길을 막는다
@@ -290,7 +290,7 @@ function swapDuty(slotId, toUserId, opts) {
         !(String(r.slot).trim() === '예비' && String(row.slot).trim() !== '예비');
     });
     if (others.length && opts.acknowledge !== true) {
-      return { ok: false, needsConfirm: true, warnings: [to.name + ' 선생님이 이 날 이미 ' + DTY_SLOT_LABEL[others[0].slot] + '에 편성되어 있습니다.'] };
+      return { ok: false, needsConfirm: true, warnings: [to.name + ' 선생님이 이 날 이미 ' + dtySlotLabel_(others[0].slot) + '에 편성되어 있습니다.'] };
     }
     var from = dutyEmail_(row.actual_email) || dutyEmail_(row.original_email);
     var patch = { actual_email: to.email, swapped_at: nowIso_(), swapped_by: user.email };
@@ -305,7 +305,7 @@ function swapDuty(slotId, toUserId, opts) {
     if (!managers.length) managers = readAll_('users').filter(function (u) { return isTruthy_(u.active) && parseRoles_(u.roles).indexOf('admin') >= 0; });
     var mail = {
       to: [from, to.email].concat(managers.map(function (u) { return normalizeEmail_(u.email); })).filter(function (e) { return e && e !== user.email; }),
-      body: [ymdKoShort_(date) + ' ' + DTY_SLOT_LABEL[row.slot] + ' 근무가 바뀌었습니다.', (names[from] || '(등록 안 된 교사)') + ' → ' + to.name,
+      body: [ymdKoShort_(date) + ' ' + dtySlotLabel_(row.slot) + ' 근무가 바뀌었습니다.', (names[from] || '(등록 안 된 교사)') + ' → ' + to.name,
         '바꾼 사람: ' + (names[user.email] || user.name || '')].join('\n')
     };
     return { ok: true, changed: true, mail: mail };
@@ -321,6 +321,9 @@ function swapDuty(slotId, toUserId, opts) {
   } catch (e) { console.warn('교대 알림 실패: ' + e.message); }
   return { ok: true, changed: true, notified: notified };
 }
+
+/** 칸 이름 앞뒤 공백이 있어도 라벨을 찾는다(없으면 'undefined' 대신 원래 글자) */
+function dtySlotLabel_(slot) { var k = String(slot === undefined || slot === null ? '' : slot).trim(); return DTY_SLOT_LABEL[k] || k; }
 
 function ymdKoShort_(ymd) {
   return (+ymd.slice(5, 7)) + '월 ' + (+ymd.slice(8, 10)) + '일(' + ymdWeekdayKo_(ymd) + ')';
