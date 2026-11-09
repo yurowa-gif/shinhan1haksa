@@ -222,13 +222,22 @@ function moveUndoPlan_(changes, headId, opts) {
   // 결정 59: 그 뒤 살아 있는 재입실(다음 학사 퇴실 전의 학사 입실 대표)도 함께 취소 — '퇴실이 없었던 것처럼'
   var hall = function (v) { return live.filter(function (c) { return ruleStr_(c.item) === '학사' && ruleStr_(c.value) === v && ruleStr_(c.id) !== hid; }); };
   var next = hall('퇴실').map(function (c) { return ruleStr_(c.effective_date); }).filter(function (e) { return e > L; }).sort()[0];
-  var re = hall('입실').filter(function (c) {
-    var e = ruleStr_(c.effective_date);
-    return !ruleStr_(c.linked_change_id) && e >= L && (!next || e < next);
-  }).sort(function (a, b) { return ruleStr_(a.effective_date) < ruleStr_(b.effective_date) ? -1 : 1; })[0];
+  // 입실 대표(F6, 퇴실보다 뒤에 기록 — 명단 행·이전 입실은 아니다) 중 L과 다음 퇴실 사이의 가장 이른 것
+  var after_ = function (rowsOf) {
+    return rowsOf.filter(function (c) {
+      var e = ruleStr_(c.effective_date);
+      return ruleStr_(c.source) === 'F6' && !ruleStr_(c.linked_change_id) && moveNewer_(c, head) && e >= L && (!next || e < next);
+    }).sort(function (a, b) { return ruleStr_(a.effective_date) < ruleStr_(b.effective_date) ? -1 : 1; })[0];
+  };
+  var re = after_(hall('입실'));
   var heads = {};
   heads[hid] = true;
   if (re) { heads[ruleStr_(re.id)] = true; out.warnings.push('재입실 기록(' + ruleStr_(re.effective_date) + ')도 함께 취소됩니다'); }
+  // 결정 59 보충(기숙사생): 취소하는 퇴실에 기숙사 퇴실 연결 행이 있으면 그 뒤 기숙사 입실 대표도 함께 — 남으면 고친 퇴실이 영영 막힌다
+  if (live.some(function (c) { return ruleStr_(c.linked_change_id) === hid && ruleStr_(c.item) === '기숙사' && ruleStr_(c.value) === '퇴실'; })) {
+    var dre = after_(live.filter(function (c) { return ruleStr_(c.item) === '기숙사' && ruleStr_(c.value) === '입실'; }));
+    if (dre) { heads[ruleStr_(dre.id)] = true; out.warnings.push('기숙사 입실 기록(' + ruleStr_(dre.effective_date) + ')도 함께 취소됩니다'); }
+  }
   var stops = function (leave) {
     var at = ruleStr_(leave.requested_at), e = ruleStr_(leave.effective_date), st = { '조식': e, '석식': '' };
     try { st['석식'] = mealEffectiveDate_('stop', at, { leaveDate: e }).date; } catch (err) { st['석식'] = ''; }
@@ -256,7 +265,8 @@ function moveUndoPlan_(changes, headId, opts) {
     var e = ruleStr_(c.effective_date);
     var newer = after.concat(restore).filter(function (x) {
       return ruleStr_(x.item) === ruleStr_(c.item) && ruleStr_(x.source) !== 'F6' &&
-        ruleStr_(x.value) !== ruleStr_(c.value) && moveNewer_(x, c) && ruleStr_(x.effective_date) <= e;
+        ruleStr_(x.value) !== ruleStr_(c.value) && moveNewer_(x, c) && ruleStr_(x.effective_date) <= e &&
+        !(ruleStr_(x.effective_date) < e && mealReentryKeeps_(live, x, ruleIso_(c.requested_at)));   // 재입실 행은 퇴실 전 신청을 덮지 않는다
     });
     if (newer.length) out.warnings.push(e + ' ' + ruleStr_(c.item) + ' ' + ruleStr_(c.value) + ' 행은 더 새 신청이 있어 되살리지 않습니다');
     else restore.push(c);
@@ -292,7 +302,8 @@ function moveRestorable_(changes, live, tagId, skip) {
   var covers = function (x, c) {
     return ruleStr_(x.student_id) === ruleStr_(c.student_id) && ruleStr_(x.item) === ruleStr_(c.item) && ruleStr_(x.source) !== 'F6' &&
       ruleStr_(x.value) !== ruleStr_(c.value) &&
-      moveNewer_(x, c) && ruleStr_(x.effective_date) <= ruleStr_(c.effective_date);
+      moveNewer_(x, c) && ruleStr_(x.effective_date) <= ruleStr_(c.effective_date) &&
+      !(ruleStr_(x.effective_date) < ruleStr_(c.effective_date) && mealReentryKeeps_(live, x, ruleIso_(c.requested_at)));   // 재입실 행은 퇴실 전 신청을 덮지 않는다(결정 56)
   };
   var back = [];
   (changes || []).filter(function (c) {
@@ -307,5 +318,5 @@ function moveRestorable_(changes, live, tagId, skip) {
 /** x가 c보다 더 새 신청인지: 신청 일시가 늦거나, 같으면 나중에 저장된 행(created_at — statusOn_·mealPendingToCancel_의 동점 규칙과 같다). */
 function moveNewer_(x, c) {
   var a = ruleIso_(x.requested_at), b = ruleIso_(c.requested_at);
-  return a > b || (a === b && ruleStr_(x.created_at) > ruleStr_(c.created_at));
+  return a > b || (a === b && ruleIso_(x.created_at) > ruleIso_(c.created_at));
 }

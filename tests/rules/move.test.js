@@ -629,3 +629,59 @@ test("자기 취소가 이 계획이 쓸 '일반 석식으로' 행을 겨누면 
   assert.ok(!p.rows.some((x) => x.value === '일반 석식') && p.warnings.some((w) => /일반 석식 신청은 쓰지 않습니다/.test(w)), JSON.stringify(p));
   assert.strictEqual(at(saveLeaveP(r, move, '2027-03-05'), '석식', '2027-03-10'), '미실시');
 });
+
+/* ───── 총괄 4차 검토(#57) ───── */
+
+test('결정 59 연쇄는 명단 학사 입실 행을 건드리지 않는다(명단 입실 날 퇴실 취소, 다음 기간 명단 입실도)', () => {
+  const base = [CH('학사', '입실', '2027-03-02'), CH('기숙사', '퇴실', '2027-03-02'), CH('조식', '실시', '2027-03-02'), CH('석식', '학사 석식', '2027-03-02')];
+  const left = saveMove(base, { type: '학사 퇴실', effectiveDate: '2027-03-02', requestedAt: '2027-03-02T09:00:00' }, '2027-03-02');
+  const rows = left.rows.concat([CH('학사', '입실', '2027-04-20')]);   // 그 뒤 올린 다음 기간 명단(명단업로드, 신청 일시 빈칸)
+  const u = undo(rows, left.head, '2027-03-02');
+  assert.ok(!u.warnings.some((w) => /재입실 기록/.test(w)), JSON.stringify(u.warnings));
+  assert.ok(!u.toCancel.some((c) => rows.some((b) => b.id === c.id && b.item === '학사' && b.source === '명단업로드')), JSON.stringify(u.toCancel));
+  const s = applyUndo(rows, u);
+  assert.deepStrictEqual(['2027-03-05', '2027-04-25'].map((d) => at(s, '학사', d)), ['입실', '입실']);
+});
+
+test('결정 59: 같은 날 재입실(입실일 = 퇴실일, 나중에 기록)도 함께 취소', () => {
+  const left = saveMove(HALL(), { type: '학사 퇴실', effectiveDate: '2027-03-10', requestedAt: '2027-03-09T10:00:00' }, '2027-03-09');
+  const back = saveMove(left.rows, { type: '학사 입실', effectiveDate: '2027-03-10', requestedAt: '2027-03-09T12:00:00' }, '2027-03-09');
+  const u = undo(back.rows, left.head);
+  assert.ok(u.toCancel.some((c) => c.id === back.head) && u.warnings.includes('재입실 기록(2027-03-10)도 함께 취소됩니다'), JSON.stringify(u));
+});
+
+test('재입실 행은 되살림 덮임에서도 퇴실 전 신청을 덮지 않는다 — 두 번째 퇴실(늦은 입력)과 X의 두 순서가 같다', () => {
+  let r = saveMove(HALL(), { type: '학사 퇴실', effectiveDate: '2027-03-10', requestedAt: '2027-03-08T10:00:00' }, '2027-03-08').rows;
+  r = saveMove(r, { type: '학사 입실', effectiveDate: '2027-03-12', requestedAt: '2027-03-11T09:00:00' }, '2027-03-11').rows;
+  r = saveReq(r, '석식', '일반 석식', '2027-03-07T09:00:00', '2027-03-20', '2027-03-29');   // 퇴실 전 종이 신청서(늦은 입력)
+  const X = (x, today) => saveReq(x, '석식', '학사 석식', '2027-03-25T09:00:00', today, '2027-03-28');
+  const L2 = (x) => saveMove(x, { type: '학사 퇴실', effectiveDate: '2027-03-27', requestedAt: '2027-03-24T10:00:00' }, '2027-03-26').rows;
+  const days = ['2027-03-28', '2027-03-29', '2027-04-05', '2027-04-12', '2027-04-20'];
+  const a = L2(X(r, '2027-03-25')), b = X(L2(r), '2027-03-26');
+  assert.deepStrictEqual(days.map((d) => at(a, '석식', d)), days.map((d) => at(b, '석식', d)));
+  assert.deepStrictEqual(days.map((d) => at(a, '석식', d)), ['학사 석식', '일반 석식', '일반 석식', '일반 석식', '일반 석식']);
+});
+
+test('결정 59 보충(기숙사생): 학사 및 기숙사 퇴실을 취소하면 뒤 기숙사 입실 대표도 함께(경고) → 고친 퇴실(3/11)을 다시 넣을 수 있다', () => {
+  let r = saveMove(DORM(), { type: '학사 및 기숙사 퇴실', effectiveDate: '2027-03-10', requestedAt: '2027-03-08T10:00:00' }, '2027-03-08');
+  const head = r.head;
+  r = saveMove(r.rows, { type: '학사 입실', effectiveDate: '2027-03-15', requestedAt: '2027-03-09T10:00:00' }, '2027-03-09');
+  const dorm = saveMove(r.rows, { type: '기숙사 입실', effectiveDate: '2027-03-15', requestedAt: '2027-03-09T11:00:00' }, '2027-03-09');
+  const u = undo(dorm.rows, head);
+  assert.ok(u.warnings.includes('재입실 기록(2027-03-15)도 함께 취소됩니다') && u.warnings.includes('기숙사 입실 기록(2027-03-15)도 함께 취소됩니다'), JSON.stringify(u.warnings));
+  const s = applyUndo(dorm.rows, u);
+  assert.deepStrictEqual(['2027-03-12', '2027-03-20'].map((d) => [at(s, '학사', d), at(s, '기숙사', d)]), [['입실', '입실'], ['입실', '입실']]);
+  assert.deepStrictEqual(plan(s, { type: '학사 및 기숙사 퇴실', effectiveDate: '2027-03-11', requestedAt: '2027-03-09T12:00:00' }, '2027-03-09').errors, []);
+});
+
+test('퇴실 취소의 되살림도 재입실 행을 퇴실 전 신청의 덮개로 보지 않는다 — 두 번째 퇴실(일반 석식으로) 취소 뒤 퇴실 전 신청서가 돌아온다', () => {
+  let r = saveMove(HALL(), { type: '학사 퇴실', effectiveDate: '2027-03-10', requestedAt: '2027-03-08T10:00:00' }, '2027-03-08').rows;
+  r = saveMove(r, { type: '학사 입실', effectiveDate: '2027-03-12', requestedAt: '2027-03-11T09:00:00' }, '2027-03-11').rows;
+  r = saveReq(r, '석식', '미실시', '2027-03-07T09:00:00', '2027-03-20', '2027-03-29');   // 퇴실 전 종이 신청서(재입실 행에 가려지지 않음)
+  const never = r;
+  const l2 = saveMove(r, { type: '학사 퇴실', effectiveDate: '2027-03-27', requestedAt: '2027-03-24T10:00:00', dinner: '일반 석식' }, '2027-03-24');
+  const s = applyUndo(l2.rows, undo(l2.rows, l2.head, '2027-03-24'));
+  const days = ['2027-03-28', '2027-03-29', '2027-04-20'];
+  assert.deepStrictEqual(days.map((d) => at(s, '석식', d)), days.map((d) => at(never, '석식', d)));
+  assert.strictEqual(at(s, '석식', '2027-03-29'), '미실시');
+});
