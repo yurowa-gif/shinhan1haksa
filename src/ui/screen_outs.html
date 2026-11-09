@@ -39,7 +39,7 @@
         state.ctx = ctx;
         if (!state.tab) {   // 처음: 주소의 tab, 없으면 기록할 수 있는 사람은 [기록], 아니면 [이번 학기]
           var want = window.SCREEN_TAB;
-          state.tab = want === 'term' || want === 'today' ? want : (want === 'record' && ctx.canRecord) || (!want && ctx.canRecord) ? 'record' : 'term';
+          state.tab = want === 'term' || want === 'today' || want === 'dismiss' ? want : (want === 'record' && ctx.canRecord) || (!want && ctx.canRecord) ? 'record' : 'term';
           if (state.tab === 'record' && !ctx.canRecord) state.tab = 'term';
           if (window.SCREEN_STUDENT && state.tab !== 'record') { state.tab = 'term'; state.listStudent = window.SCREEN_STUDENT; }
           drawTabs(); setVisible();
@@ -212,7 +212,7 @@
       clear(tabsBox);
       var opts = [];
       if (state.ctx && state.ctx.canRecord) opts.push({ value: 'record', label: '기록' });
-      opts.push({ value: 'term', label: state.ctx && state.ctx.periodWord === '이번 기간' ? '기간' : '학기' }, { value: 'today', label: '오늘' });
+      opts.push({ value: 'term', label: state.ctx && state.ctx.periodWord === '이번 기간' ? '기간' : '학기' }, { value: 'today', label: '오늘' }, { value: 'dismiss', label: '2OUT' });
       tabsBox.appendChild(UI.segmented({ label: '화면', value: state.tab, options: opts, onchange: function (v) { state.tab = v; state.listStudent = ''; showTab(); } }));
     }
     function setVisible() {
@@ -231,7 +231,7 @@
     function hm(at) { return (+at.slice(5, 7)) + '월 ' + (+at.slice(8, 10)) + '일 ' + at.slice(11, 16); }
     function loadList(note) {
       var my = ++state.seq;
-      var filter = state.tab === 'today' ? { scope: 'today', termId: state.termId } : state.listStudent ? { scope: 'student', studentId: state.listStudent, termId: state.termId } : { scope: 'term', termId: state.termId };
+      var filter = state.tab === 'dismiss' ? { scope: 'targets', termId: state.termId } : state.tab === 'today' ? { scope: 'today', termId: state.termId } : state.listStudent ? { scope: 'student', studentId: state.listStudent, termId: state.termId } : { scope: 'term', termId: state.termId };
       call('listOuts', filter).then(function (r) {
         if (my !== state.seq || state.tab === 'record') return;
         state.list = r; drawList(note);
@@ -251,6 +251,7 @@
         head.appendChild(UI.field('기간', sel));
       }
       listBox.appendChild(head);
+      if (state.tab === 'dismiss') { drawTargets(r); return; }
       if (state.tab === 'term' && !state.listStudent) {
         var sum = el('div', { class: 'card' }, [el('h2', { text: '학생별' })]);
         if (!r.summary.length) sum.appendChild(UI.emptyState('이 기간에 기록된 OUT이 없습니다.'));
@@ -277,6 +278,82 @@
       }
       listBox.appendChild(card);
     }
+    /* ───────── 2OUT 퇴실 대상(C13): 면담 필요 → 면담 기록됨(관리자 확정 가능) → 퇴실 처리됨 ───────── */
+    function targetRow(x) {
+      var st = x.state;
+      var pill = st === 'need' ? UI.statusPill('todo', '면담 필요') : st === 'recorded' ? UI.statusPill('confirmed', '면담 기록됨') : st === 'left' ? UI.statusPill('mute', '퇴실 처리됨') : UI.statusPill('out2');
+      var li = el('li', { class: 'out-item' }, [
+        el('div', { class: 'out-line' }, [el('b', { class: 'out-who', text: UI.util.studentLabel(x.student) }), el('span', { class: 'muted', text: x.student.grade + '-' + x.student.classNo + ' ' + x.student.number + '번' }), pill]),
+        x.meeting ? el('div', { class: 'muted', text: '면담 ' + (+x.meeting.date.slice(5, 7)) + '월 ' + (+x.meeting.date.slice(8, 10)) + '일 · ' + x.meeting.teacher }) : null,
+        !st ? el('div', { class: 'muted', text: 'OUT ' + x.count + '건 — 면담 기록은 담당교사·담임·관리자만 봅니다.' }) : null
+      ]);
+      var row = el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' });
+      if (x.canMeeting) row.appendChild(el('button', { type: 'button', class: 'btn row-btn', text: '학부모 면담 기록', onclick: function () { openMeeting(x); } }));
+      if (x.meeting && x.meeting.noteId && st === 'recorded') row.appendChild(el('button', { type: 'button', class: 'btn secondary row-btn', text: '면담 취소', onclick: function () { openMeetingCancel(x); } }));
+      if (x.canConfirm) row.appendChild(el('button', { type: 'button', class: 'btn row-btn', text: '퇴실 확정', onclick: function () { confirmDismissal(x); } }));
+      if (row.childNodes.length) li.appendChild(row);
+      return li;
+    }
+    function drawTargets(r) {
+      var card = el('div', { class: 'card' }, [el('h2', { text: 'OUT 2건 이상(퇴실 대상)' })]);
+      if (!r.summary.length) card.appendChild(UI.emptyState('지금 퇴실 대상인 학생이 없습니다.'));
+      else card.appendChild(el('ul', { class: 'list' }, r.summary.map(targetRow)));
+      listBox.appendChild(card);
+      listBox.appendChild(el('div', { class: 'muted', text: '2OUT이 되면 담당교사가 학부모 면담을 기록하고, 그 뒤 관리자가 퇴실을 확정합니다(유예 없음).' }));
+    }
+    function openMeeting(x) {
+      var sheet = null, busy = false;
+      var dateIn = UI.dateField({ label: '면담 날짜', value: state.ctx ? state.ctx.today : '', max: state.ctx ? state.ctx.today : undefined, name: 'mdate' });
+      var content = el('textarea', { maxlength: '2000', rows: '5', 'aria-label': '면담 내용' });
+      var err = el('div', { class: 'error', role: 'alert', style: 'display:none' });
+      var fc = UI.field('면담 내용', content, { hint: '학부모와 나눈 이야기를 적습니다. 상담일지 파일에만 저장되고 이 목록에는 나오지 않습니다.' });
+      var body = el('div', {}, [el('div', { text: UI.util.studentLabel(x.student) + ' 학부모 면담' }), dateIn, fc, err]);
+      function refresh() { if (sheet) sheet.buttons[1].disabled = busy || !content.value.trim() || !dateIn.getValue(); }
+      content.addEventListener('input', refresh);
+      sheet = UI.bottomSheet({ title: '학부모 면담 기록', content: body, actions: [
+        { text: '돌아가기', kind: 'secondary', onclick: function () { sheet.close(); } },
+        { text: '저장', kind: 'primary', disabled: true, onclick: function () {
+          if (busy) return; busy = true; refresh(); err.style.display = 'none';
+          call('saveOutMeeting', { studentId: x.studentId, date: dateIn.getValue(), content: content.value.trim() }).then(function (r) {
+            busy = false;
+            if (!r.ok) { refresh(); err.textContent = r.errors.map(function (e) { return e.message; }).join(' '); err.style.display = ''; return; }
+            sheet.close(); UI.toast('면담을 기록했습니다.'); loadList('면담을 기록했습니다. 관리자가 퇴실을 확정할 수 있습니다.'); window.scrollTo(0, 0);
+          }).catch(function (e) { busy = false; refresh(); err.textContent = (e && e.message) || String(e); err.style.display = ''; });
+        } }] });
+      sheet.open(); refresh();
+    }
+    function openMeetingCancel(x) {
+      var sheet = null, busy = false;
+      var reason = el('textarea', { maxlength: '200', 'aria-label': '취소 사유' });
+      var err = el('div', { class: 'error', role: 'alert', style: 'display:none' });
+      var body = el('div', {}, [el('div', { text: UI.util.studentLabel(x.student) + ' 면담을 취소합니다.' }), el('div', { class: 'muted', style: 'margin:8px 0', text: '기록은 지워지지 않고 취소로 남습니다. 취소하면 퇴실 확정이 다시 막힙니다.' }), UI.field('취소 사유(2~200자)', reason), err]);
+      function refresh() { if (sheet) sheet.buttons[1].disabled = busy || reason.value.trim().length < 2; }
+      reason.addEventListener('input', refresh);
+      sheet = UI.bottomSheet({ title: '면담 취소', content: body, actions: [
+        { text: '돌아가기', kind: 'secondary', onclick: function () { sheet.close(); } },
+        { text: '취소하기', kind: 'primary', disabled: true, onclick: function () {
+          if (busy) return; busy = true; refresh(); err.style.display = 'none';
+          call('cancelOutMeeting', x.meeting.noteId, reason.value.trim()).then(function (r) {
+            busy = false;
+            if (!r.ok) { refresh(); err.textContent = r.errors.map(function (e) { return e.message; }).join(' '); err.style.display = ''; return; }
+            sheet.close(); UI.toast('면담을 취소했습니다.'); loadList('면담을 취소했습니다.'); window.scrollTo(0, 0);
+          }).catch(function (e) { busy = false; refresh(); err.textContent = (e && e.message) || String(e); err.style.display = ''; });
+        } }] });
+      sheet.open(); refresh();
+    }
+    function confirmDismissal(x) {
+      UI.confirmSheet({ title: '퇴실을 확정합니다', lead: '면담 기록(날짜·교사)을 확인했습니다',
+        lines: [UI.util.studentLabel(x.student) + ' · 면담 ' + (+x.meeting.date.slice(5, 7)) + '월 ' + (+x.meeting.date.slice(8, 10)) + '일 · ' + x.meeting.teacher, '다음 화면에서 퇴실 신청서를 마무리합니다'],
+        confirmText: '확인했습니다',
+        onconfirm: function () {
+          call('confirmOutDismissal', x.studentId).then(function (r) {
+            if (!r.ok) { loadList(r.reason + ' — 상태가 바뀌었습니다. 새로 고쳤습니다.'); return; }
+            var back = document.querySelector('a.back'), base = back ? back.href : '';
+            window.top.location.href = base + '?page=moves&student=' + encodeURIComponent(x.studentId) + '&prefill=out2';
+          }).catch(function (e) { UI.toast((e && e.message) || String(e), { kind: 'warn', ms: 5000 }); });
+        } });
+    }
+
     function itemRow(i) {
       var gone = i.status === '취소';
       var li = el('li', { class: 'out-item' }, [

@@ -35,6 +35,18 @@
     "cancelOut": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "saveOutMeeting": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "cancelOutMeeting": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "confirmOutDismissal": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }

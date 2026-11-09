@@ -18,6 +18,14 @@ function vioHomeInfo_(user, role) {
   var per = Object.create(null), today = today_();
   live.forEach(function (v) { per[v.student_id] = (per[v.student_id] || 0) + 1; if (String(v.occurred_at).slice(0, 10) === today) out.today++; });
   Object.keys(per).forEach(function (id) { if (per[id] >= 2) out.out2++; else out.out1++; if (role === 'homeroom') out.perStudent[id] = per[id]; });
+  if (role === 'admin') {   // 2OUT 대상 N명 · 면담 필요 N · 확정 가능 N
+    var byId = {};
+    readAll_('students').forEach(function (s) { byId[s.id] = s; });
+    var ids = Object.keys(per).filter(function (id) { return per[id] >= 2; });
+    var info = vioMeetingInfo_(vu, term, ids, byId, vioViolations_(term));
+    out.targets = { n: ids.length, need: 0, ready: 0 };
+    Object.keys(info).forEach(function (id) { if (info[id].state === 'need') out.targets.need++; if (info[id].state === 'recorded') out.targets.ready++; });
+  }
   return out;
 }
 
@@ -273,7 +281,7 @@ function listOuts(filter) {
   var user = requirePermission_('out.view');
   filter = filter || {};
   var scope = String(filter.scope || 'term');
-  if (['student', 'term', 'today'].indexOf(scope) < 0) throw new Error('볼 범위를 다시 골라 주세요.');
+  if (['student', 'term', 'today', 'targets'].indexOf(scope) < 0) throw new Error('볼 범위를 다시 골라 주세요.');
   var terms = readAll_('terms').filter(function (t) { return t.start_date && t.end_date; }).sort(function (a, b) { return a.start_date < b.start_date ? 1 : -1; });
   var term = (filter.termId ? terms.filter(function (t) { return t.id === String(filter.termId); })[0] : null) || getCurrentTerm_();
   var out = { ok: true, term: null, terms: terms.map(function (t) { return { id: t.id, name: t.name }; }), items: [], summary: [], canCancel: false };
@@ -297,6 +305,7 @@ function listOuts(filter) {
   var today = String(filter.date || '').trim() || today_();
   if (scope === 'today' && !ymdIsValid_(today)) throw new Error('날짜를 골라 주세요.');
   var shown = rows.filter(function (v) {
+    if (scope === 'targets') return false;
     if (scope === 'student') return String(v.student_id) === String(filter.studentId);
     if (scope === 'today') return String(v.occurred_at).slice(0, 10) === today;
     return true;
@@ -311,12 +320,17 @@ function listOuts(filter) {
       canCancel: out.canCancel && live, level: live ? label(count[v.student_id] || 0) : '' };
   });
   var seen = Object.create(null);
-  (scope === 'term' ? Object.keys(count) : shown.map(function (v) { return v.student_id; })).forEach(function (id) {
+  (scope === 'term' || scope === 'targets' ? Object.keys(count) : shown.map(function (v) { return v.student_id; })).forEach(function (id) {
     if (seen[id]) return; seen[id] = true;
     var s = byId[id] || {};
     out.summary.push({ studentId: id, student: { name: s.name || '', grade: +s.grade, classNo: s.class_no, number: s.number, studentNo: s.student_no }, count: count[id] || 0, label: label(count[id] || 0) });
   });
   out.summary.sort(function (a, b) { return b.count - a.count || String(a.student.studentNo).localeCompare(String(b.student.studentNo)); });
+  // 2OUT 학생의 면담 칸(상담 보기 범위를 통과한 학생만)
+  var targetIds = out.summary.filter(function (x) { return x.count >= 2; }).map(function (x) { return x.studentId; });
+  var info = vioMeetingInfo_(user, term, targetIds, byId, vioViolations_(term));
+  out.summary.forEach(function (x) { if (info[x.studentId]) Object.assign(x, info[x.studentId]); });
+  if (scope === 'targets') out.summary = out.summary.filter(function (x) { return x.count >= 2; });
   return out;
 }
 
@@ -344,4 +358,58 @@ function cancelOut(termId, id, reason) {
     var rows = vioViolations_(term);
     return { ok: true, after: outLevel_(rows, row.student_id, term.id) };
   });
+}
+
+
+/* ───── C13: 2OUT 면담 칸·퇴실 확정 관문 ───── */
+
+/**
+ * 2OUT(살아 있는 OUT 2건 이상) 학생마다 면담 상태. 면담 날짜·교사는 상담 보기 범위(counsel.view, 근무 여부 안 봄)를 통과한 학생에게만 준다 — 담당이 아닌 학사 교사·출결 담당은 빈칸.
+ * 이번 기간(getCurrentTerm_)만 본다(지난 기간은 조회용). 상담 파일은 볼 수 있는 학생이 있을 때만 읽는다. 내용(content)은 어디에도 없다.
+ * → {studentId: {state:'need'|'recorded'|'left', meeting:{date, teacher, noteId?}|null, canMeeting, canConfirm}} (볼 수 없는 학생은 키가 없다)
+ */
+function vioMeetingInfo_(user, term, studentIds, byId, rows) {
+  var cur = getCurrentTerm_();
+  var out = {};
+  if (!cur || cur.id !== term.id || !studentIds.length) return out;
+  var allowedRoles = permissions_()['counsel.view'].roles, ok = [], facts = {};
+  studentIds.forEach(function (id) {
+    var s = byId[id];
+    if (!s) return;
+    var f = studentFacts_(user, s, today_(), 0, true);   // 근무 여부는 보지 않는다(noDuty)
+    if (canAccessStudentByFacts_(user.roles, f, allowedRoles, false)) { ok.push(id); facts[id] = f; }
+  });
+  if (!ok.length) return out;
+  var notes = cnsNotesForGate_(), changes = readAll_('status_changes'), names = {};
+  readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = String(u.name || ''); });
+  var isTeacher = hasRole_(user, 'hall_teacher'), isAdmin = hasRole_(user, 'admin');
+  ok.forEach(function (id) {
+    var g = outDismissalGate_(rows, notes, changes, id, term.id, today_());
+    var state = g.alreadyLeft ? 'left' : g.meetingNote ? 'recorded' : 'need';
+    var mine = g.meetingNote && normalizeEmail_(g.meetingNote.teacher_email) === user.email;
+    out[id] = { state: state,
+      meeting: g.meetingNote ? { date: g.meetingNote.date, teacher: names[normalizeEmail_(g.meetingNote.teacher_email)] || '(등록 안 된 교사)', noteId: mine ? g.meetingNote.id : undefined } : null,
+      canMeeting: isTeacher && !!facts[id].isAssigned && state === 'need', canConfirm: isAdmin && state === 'recorded' };
+  });
+  return out;
+}
+
+/**
+ * 퇴실 확정 관문(관리자): 통과하면 {ok:true, prefill} — 입퇴실 화면이 이 값으로 신청서를 미리 채운다(Q8: 사유 '2OUT 퇴실', 적용일 확정 다음 날, 유형은 고르게).
+ * 막히면 {ok:false, reason}(업무 차단이라 거부 기록은 남기지 않는다): '퇴실 대상 아님' | '면담 기록 필요' | '이미 퇴실'.
+ * 면담 날짜·교사는 이 응답의 면담 칸에만 있다. 내용은 없다.
+ */
+function confirmOutDismissal(studentId) {
+  requirePermission_('out.dismiss');
+  var student = findById_('students', String(studentId || ''));
+  if (!student) return { ok: false, reason: '학생을 찾을 수 없습니다.' };
+  var g = cnsGateFor_(student.id);
+  if (!g.gate.ok) return { ok: false, reason: g.gate.reason };
+  var names = {};
+  readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = String(u.name || ''); });
+  var m = g.gate.meetingNote;
+  return { ok: true, prefill: {
+    studentId: student.id, student: { name: student.name, grade: +student.grade, classNo: student.class_no, number: student.number },
+    reason: '2OUT 퇴실', effectiveDate: ymdAddDays_(today_(), 1),
+    meeting: { date: m.date, teacher: names[normalizeEmail_(m.teacher_email)] || '(등록 안 된 교사)' } } };
 }
