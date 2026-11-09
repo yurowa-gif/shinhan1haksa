@@ -102,8 +102,8 @@ function mealIsHallOnly_(item, value) {
 /**
  * F7 급식 변경 신청 하나를 계획한다(아무것도 쓰지 않음). tests/rules/meal_oracle.test.js가 단순한 오라클과 비교한다.
  * changes = 그 학생의 status_changes 행(학사·조식·석식, 취소 포함 그대로), requestedAt = 신청 일시(KST, 교사가 넣는 신청서 일시),
- * opts = {cutoff, leaveDate, today:'yyyy-MM-dd'(필수, 입력하는 날)}
- * → {kind, date, rule, from, blocked:''|사유, superseded:boolean, toCancel:[{id, effective_date, value}],
+ * opts = {cutoff, leaveDate, today:'yyyy-MM-dd'(필수, 입력하는 날), effectiveDate, effectiveRule:'manual'(기본)|'entry_date'}
+ * → {kind, date, rule, autoDate, from, blocked:''|사유, superseded:boolean, toCancel:[{id, effective_date, value}],
  *    followUps:[{item, value, effective_date, source:'F6'}], warnings:[]}
  *
  * 기준(오라클과 같은 뜻): 어떤 날의 값 = 그날까지 적용일이 지난 신청 중 **신청 일시가 가장 늦은** 신청의 값.
@@ -112,6 +112,9 @@ function mealIsHallOnly_(item, value) {
  * - kind: 후보 적용일(미실시면 미실시 규칙의 날, 그 밖에는 11:30 규칙의 날)에 실제로 적용되는 값과 비교. 같으면 'none'(상태는
  *   바뀌지 않는다 — 예: 미실시 대기 중에 다시 학사 석식을 신청하면 그날 값은 아직 학사 석식이라 'none'이고, 더 늦게 적용될 이전
  *   미실시 대기 행을 toCancel로 취소한다). 미실시인데 그날 먹는 급식이 없으면 'initial'(신청일).
+ * - 고친 적용일(R10, 결정 52): effectiveDate를 주면 그 날로 계산한다(kind·blocked·superseded·toCancel·followUps·경고 모두).
+ *   autoDate = 규칙 계산값(늘 들어 있다 — 고치지 않으면 date와 같다, blocked·superseded여도). 신청일보다 이르면·날짜가 아니면·
+ *   모르는 effectiveRule이면·effectiveRule만 있고 날짜가 없으면 Error. 미실시 규칙의 날보다 이르거나 오늘보다 이르면 경고.
  * - **저장:** blocked·superseded가 아니면 kind가 'none'이어도 신청 행(date, 값)을 쓴다 — 신청서 기록이고, 나중에 늦게 입력되는
  *   이전 신청서가 이 신청을 덮지 못하게 한다(값이 같아 상태는 바뀌지 않는다). blocked·superseded면 date·rule은 ''이고 쓰지 않는다.
  * - superseded: 이 신청보다 신청 일시가 늦은 신청 행(퇴실 정리 F6 행 제외)이 이미 있고 그 적용일이 이 신청의 적용일 이하이면,
@@ -150,14 +153,26 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
   } else {
     cand = mealEffectiveDate_(to === '일반 석식' ? 'to_general' : 'start', requestedAt, opts);
   }
+  var autoDate = cand.date;
+  var manual = ruleStr_(opts.effectiveDate), rule = ruleStr_(opts.effectiveRule);
+  if (rule && !manual) throw new Error('effectiveRule을 주면 effectiveDate도 필요합니다: ' + rule);
+  if (manual) {   // 교사가 고친 적용일(R10, 결정 52)
+    rule = rule || 'manual';
+    if (!ymdIsValid_(manual)) throw new Error('effectiveDate 형식이 아닙니다(yyyy-MM-dd): ' + opts.effectiveDate);
+    if (manual < at.date) throw new Error('적용일은 신청일(' + at.date + ') 이후여야 합니다: ' + manual);
+    if (rule !== 'manual' && rule !== 'entry_date') throw new Error('effectiveRule은 manual 또는 entry_date: ' + opts.effectiveRule);
+    cand = { date: manual, rule: rule };
+  }
   var from = statusOn_(rows, sid, it, cand.date);
-  var out = { kind: mealChangeKind_(it, from, to), date: cand.date, rule: cand.rule, from: from, blocked: '', superseded: false,
+  var out = { kind: mealChangeKind_(it, from, to), date: cand.date, rule: cand.rule, autoDate: autoDate, from: from, blocked: '', superseded: false,
     toCancel: [], followUps: [], warnings: [] };
+  if (manual && to === '미실시' && manual < autoDate) out.warnings.push('고친 적용일(' + manual + ')이 미실시 규칙의 날(' + autoDate + ')보다 이릅니다');
+  if (manual && manual < today) out.warnings.push('고친 적용일(' + manual + ')이 오늘보다 이릅니다: 지난 식수가 바뀝니다');
 
-  // 퇴실 상태인 날의 학사생 값: 퇴실 기록보다 뒤에 신청했으면 막는다(신청 일시 순서 — 입력 순서와 무관). 조식은 늘 막는다(즉시 중단).
-  // 먼저 신청한 석식은 중단일 전에 적용되므로(신청 다음 날까지 < 퇴실 입력 + 1주) 그대로 두고 아래 followUps가 중단일에 끝낸다.
+  // 퇴실 상태인 날의 학사생 값: 조식은 늘, 석식은 퇴실 기록보다 뒤에 신청했거나(신청 일시 순서 — 입력 순서와 무관) 중단일 이후면 막는다.
+  // 먼저 신청한 석식이 중단일 전에 적용되면 그대로 두고 아래 followUps가 중단일에 끝낸다(F6 정리가 중단일 이후 행만 취소하는 것과 같다).
   var leave = mealIsHallOnly_(it, to) ? mealLeaveFor_(rows, sid, it, cand.date, req) : null;
-  if (leave && leave.date <= cand.date && (it === '조식' || leave.at <= req)) {
+  if (leave && leave.date <= cand.date && (it === '조식' || leave.at <= req || cand.date >= leave.stop)) {
     out.kind = 'none'; out.date = ''; out.rule = '';
     out.blocked = cand.date + '에는 학사 퇴실 상태라 ' + it + ' ' + to + '을(를) 새로 신청할 수 없습니다';
     return out;
@@ -178,7 +193,7 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
   // 퇴실 정리(F6) 행은 학사생 값을 끝내는 표시다. 이 신청을 저장한 뒤 그 행이 없어도 그날 값이 학사생 값이 아니고 그 행 값과도
   // 다르면(예: 퇴실 뒤·퇴실 전 늦은 입력의 일반 석식) 뜻이 없어졌으므로 함께 취소한다.
   var newRow = { student_id: sid, item: it, value: to, effective_date: cand.date, requested_at: req, status: '유효', created_at: '9999' };
-  mine.filter(function (c) { return ruleStr_(c.source) === 'F6' && ruleStr_(c.effective_date) > cand.date; })
+  mine.filter(function (c) { return ruleStr_(c.source) === 'F6' && ruleStr_(c.effective_date) >= cand.date; })   // 같은 날 F6도(동점이면 신청 일시가 늦은 F6가 이기므로)
     .sort(function (a, b) { return String(a.effective_date) < String(b.effective_date) ? -1 : 1; })
     .forEach(function (f) {
       var others = rows.filter(function (c) { return c !== f && !cancelled[ruleStr_(c.id)]; }).concat([newRow]);
