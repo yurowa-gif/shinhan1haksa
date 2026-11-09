@@ -118,7 +118,7 @@ test('끝난 기간·명단 밖 학생은 오류, 석식을 안 고르면 오류
   const un = env.rows('students').find((s) => s.name === '가짜미등록').id;
   const ended = prev(env, ADMIN, input(non, '학사 퇴실', '2027-03-02T10:00:00', '2027-02-20'));
   assert.ok(ended.errors.some((e) => e.message.includes('끝난 기간')));
-  assert.ok(prev(env, ADMIN, input(un, '학사 입실', '2027-03-03T10:00:00', '2027-03-05')).errors.some((e) => e.message.includes('명단에 없는')));
+  assert.ok(prev(env, ADMIN, input(un, '학사 입실', '2027-03-03T10:00:00', '2027-03-05')).errors.some((e) => e.message.includes('명단에 없는') && e.message.includes('관리자에게')));
   const noDinner = prev(env, ADMIN, input(non, '학사 퇴실', '2027-03-03T10:00:00', '2027-03-05', { dinner: '' }));
   assert.ok(noDinner.errors.some((e) => e.field === 'dinner'));
 });

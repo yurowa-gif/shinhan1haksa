@@ -88,7 +88,7 @@ function inoutCheck_(input, d) {
   if (!term) errors.push({ field: 'effectiveDate', message: '적용일이 속한 운영 기간이 없습니다.' });
   else if (term.end_date < today) errors.push({ field: 'effectiveDate', message: '"' + term.name + '"은(는) 끝난 기간입니다. 끝난 기간의 입퇴실은 받지 않습니다.' });
   else if (!d.enrollments.some(function (e) { return e.term_id === term.id && e.student_id === rec.studentId; })) {
-    errors.push({ field: 'studentId', message: '"' + term.name + '" 명단에 없는 학생입니다. 명단 올리기에서 먼저 등록해 주세요.' });
+    errors.push({ field: 'studentId', message: '"' + term.name + '" 명단에 없는 학생입니다. 관리자에게 명단 등록을 요청해 주세요.' });
   }
   var permYmd = term ? (rec.effectiveDate > term.start_date ? rec.effectiveDate : term.start_date) : '';
   if (errors.length) return { errors: errors, rec: rec, term: term, permYmd: permYmd };
