@@ -20,9 +20,10 @@ test('출결 담당: 이번 기간 학사생 전체, 미등록 학생은 제외'
   assert.ok(!can(['attendance'], {}));
   assert.ok(!can(['attendance'], { isEnrolled: true }, ['admin', 'hall_teacher']));
 });
-test('학사 교사: 담당 학생 또는 근무일만', () => {
+test('학사 교사: 담당 학생, 또는 근무일이면서 이번 기간 등록 학생만(근무일만으로는 미등록 학생까지 통과하지 않는다)', () => {
   assert.ok(can(['hall_teacher'], { isAssigned: true }));
-  assert.ok(can(['hall_teacher'], { isOnDuty: true }));
+  assert.ok(can(['hall_teacher'], { isOnDuty: true, isEnrolled: true }));
+  assert.ok(!can(['hall_teacher'], { isOnDuty: true }), '근무일이어도 미등록 학생은 거부');
   assert.ok(!can(['hall_teacher'], {}));
 });
 test('wideView(보기 키): 학사 교사도 이번 기간 학사생 전체, 미등록은 제외 · 기본(쓰기)은 그대로', () => {

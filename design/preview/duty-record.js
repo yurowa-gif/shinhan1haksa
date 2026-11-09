@@ -17,13 +17,22 @@ function cases() {
     const names = Array.from({ length: teachers }, (_, i) => (longName ? '가나다라마바사아자' + (i + 1) + '선생' : '교사' + (i + 1)));
     m.teachers = names.map((name, i) => ({ name, cells: {}, standby: [] }));
     let k = 0;
+    const slotsList = [];
     for (let d = 1; d <= 31; d++) {
       const wd = (d - 1) % 7;
       if (d === 2) continue;
-      const slots = wd <= 3 ? ['21:30조', '23:00조'] : ['단독'];
-      slots.forEach((c) => { const t = m.teachers[k++ % teachers]; (t.cells['2027-03-' + (d < 10 ? '0' : '') + d] = t.cells['2027-03-' + (d < 10 ? '0' : '') + d] || []).push(c); });
+      const ds = '2027-03-' + (d < 10 ? '0' : '') + d;
+      (wd <= 3 ? ['21:30조', '23:00조'] : ['단독']).forEach((c) => {
+        const t = m.teachers[k++ % teachers];
+        (t.cells[ds] = t.cells[ds] || []).push(c);
+        slotsList.push({ date: ds, slot: c, to: t.name });
+      });
     }
-    m.swaps = Array.from({ length: swaps }, (_, i) => ({ date: '2027-03-' + ((i % 28) + 1 < 10 ? '0' : '') + ((i % 28) + 1), slot: i % 3 ? '23:00조' : '단독', from: names[i % teachers], to: names[(i + 1) % teachers], kind: i % 4 ? '교대' : '대신 근무' }));
+    // 교대는 실제로 그 칸을 맡은 사람(to)에게 붙는다(칸이 없는 교대는 경고가 길어져 쪽 수를 흔든다)
+    m.swaps = Array.from({ length: swaps }, (_, i) => {
+      const sl = slotsList[(i * 3) % slotsList.length];
+      return { date: sl.date, slot: sl.slot, from: names[(names.indexOf(sl.to) + 1) % teachers], to: sl.to, kind: i % 4 ? '교대' : '대신 근무' };
+    });
     return m;
   };
   return [
