@@ -105,25 +105,27 @@ test('거부: 담당이 아닌 학생(denied:out.save)·담임·학생·학부�
   x.env.expectAllowed(ADMIN, 'saveOut', x.input({ studentId: x.notMine.id }));
 });
 
-test('근무교사(C8s): 오늘 근무자는 오늘, 어제 근무자는 어제 사건(다음 날까지)만 — 이틀 전 occurredAt·남의 날·예비·교대로 넘긴 원래 근무자·Z/오프셋 형식은 거부이고 0행', () => {
+test('근무교사(C8s): 오늘 근무자는 오늘, 어제 근무자는 어제 사건(다음 날까지)만 — 이틀 전 occurredAt·근무 아닌 날·예비·교대로 넘긴 원래 근무자·시간대 표시는 거부이고 0행', () => {
   const x = makeEnv();
-  x.duty(TODAY, '21:30조', T2); x.duty(YESTERDAY, '23:00조', T3); x.duty(TWO_AGO, '21:30조', T2);
-  x.duty(TODAY, '23:00조', T1, T3);   // T1이 T3에게 넘김
-  x.duty(TODAY, '예비', T3);
+  const T4 = 'fake.t4@example.com', T5 = 'fake.t5@example.com', T6 = 'fake.t6@example.com';
+  x.env.asOwner((c) => { c.addUser(T4, '가짜교사4', 'hall_teacher'); c.addUser(T5, '가짜교사5', 'hall_teacher'); c.addUser(T6, '가짜교사6', 'hall_teacher'); });
+  x.duty(TODAY, '21:30조', T2);          // 오늘 근무자
+  x.duty(YESTERDAY, '23:00조', T5);      // 어제 근무자
+  x.duty(TWO_AGO, '21:30조', T6);        // 이틀 전 근무자
+  x.duty(TODAY, '23:00조', T1, T3);      // T1이 T3에게 넘김(실제 근무자 T3)
+  x.duty(TODAY, '예비', T4);             // 예비 지정만
   const stu = x.notMine.id, w = x.tab().length;
   assert.strictEqual(save(x, T2, x.input({ studentId: stu, occurredAt: AT(TODAY) })).r.ok, true, '오늘 근무자 오늘 사건');
-  assert.strictEqual(save(x, T3, x.input({ studentId: stu, occurredAt: AT(YESTERDAY), ruleId: x.dorm.id })).r.ok, true, '어제 근무자 어제 사건');
-  const n = x.tab().length; assert.strictEqual(n, w + 2);
+  assert.strictEqual(save(x, T3, x.input({ studentId: stu, occurredAt: AT(TODAY), ruleId: x.dorm.id })).r.ok, true, '넘겨받은 실제 근무자도 오늘 사건');
+  assert.strictEqual(save(x, T5, x.input({ studentId: stu, occurredAt: AT(YESTERDAY) })).r.ok, true, '어제 근무자 어제 사건(다음 날까지)');
+  const n = x.tab().length; assert.strictEqual(n, w + 3);
   const denied = (who, o) => x.env.expectDenied(who, 'out.save', 'saveOut', x.input(Object.assign({ studentId: stu }, o)));
-  denied(T2, { occurredAt: AT(TWO_AGO) });                        // 오늘 근무자가 이틀 전 occurredAt
-  denied(T2, { occurredAt: AT(YESTERDAY), ruleId: x.dorm.id });  // 오늘 근무자가 근무가 아니었던 어제
-  denied(T3, { occurredAt: AT(TODAY), ruleId: x.dorm.id });      // 어제 근무자가 오늘(근무 아님) 사건
-  denied(T1, { occurredAt: AT(TODAY) });                          // 교대로 넘긴 원래 근무자는 담당 학생이 아니면 거부
-  // 예비 지정만(T3가 오늘 예비이면서 23:00조를 받았으므로 다른 교사로 확인): 새 교사
-  x.env.asOwner((c) => c.addUser('fake.t4@example.com', '가짜교사4', 'hall_teacher'));
-  x.duty(TODAY, '예비', 'fake.t4@example.com');
-  denied('fake.t4@example.com', { occurredAt: AT(TODAY) });
-  denied(T2, { occurredAt: AT(TODAY) + 'Z' });                    // 시간대 표시가 붙은 값은 날짜를 믿을 수 없다 → 날짜 없음으로 보고 검사에서 거부(아래 오류)
+  denied(T2, { occurredAt: AT(TWO_AGO) });      // 오늘 근무자가 이틀 전 occurredAt
+  denied(T2, { occurredAt: AT(YESTERDAY) });    // 오늘 근무자가 근무가 아니었던 어제
+  denied(T5, { occurredAt: AT(TODAY) });        // 어제 근무자가 오늘(근무 아님) 사건
+  denied(T6, { occurredAt: AT(TWO_AGO) });      // 근무일은 맞지만 이틀 지남(창 밖)
+  denied(T1, { occurredAt: AT(TODAY) });        // 교대로 넘긴 원래 근무자(담당 학생이 아니면 거부)
+  denied(T4, { occurredAt: AT(TODAY) });        // 예비 지정만
   assert.strictEqual(x.tab().length, n, '거부된 호출은 0행');
 });
 
@@ -149,7 +151,7 @@ test('입력 검사: 꺼진·자동 항목·없는 항목, 미래 일시, 입실
   bad({ occurredAt: AT('2027-03-04', '09:00') }, 'occurredAt');
   bad({ studentId: x.late }, 'studentId');                          // 3/15 입실 예정
   bad({ studentId: x.acc.unenrolledStudentId }, 'studentId');
-  bad({ studentId: '' }, 'studentId');
+  x.env.expectDenied(ADMIN, 'out.save', 'saveOut', x.input({ studentId: '' }));   // 학생이 없으면 범위 검사가 먼저 거부
   bad({ memo: 'ㄱ'.repeat(201) }, 'memo');
   bad({ detectedBy: 'nope' }, 'detectedBy');
   bad({ detectedBy: x.id(STUDENT) }, 'detectedBy');                  // 학생 계정은 교사가 아니다
@@ -198,13 +200,11 @@ test('previewOut: 쓰지 않고 "저장하면 N OUT" 안내(1건 → 1OUT, 이�
   const p2 = call(x, T1, 'previewOut', x.input({ ruleId: x.dorm.id }));
   assert.deepStrictEqual([p2.before.label, p2.after.label, p2.after.level], ['1OUT', '퇴실 대상', 2]);
   assert.strictEqual(save(x, T1, x.input({ ruleId: x.dorm.id })).r.after.label, '퇴실 대상');
-  const prev = x.env.rows('terms').find((t) => t.name.startsWith('2026'));
-  const prevEn = x.env.rows('enrollments').find((e) => e.term_id === prev.id && e.student_id === x.mine.id);
-  if (prevEn) {   // 이전 기간에도 등록되어 있으면 그 기간의 OUT 수는 따로 센다
-    x.env.setNow(prev.start_date + 'T10:00:00');
-    const r = save(x, ADMIN, x.input({ occurredAt: AT(prev.start_date, '09:00') })).r;
-    assert.deepStrictEqual([r.ok, r.after.count], [true, 1], '기간마다 초기화');
-  }
+  // 기간마다 따로 센다(학기마다 초기화): 다른 기간의 OUT은 이번 기간 수에 들어가지 않는다
+  const levelOf = (rows, term) => plain(pure.outLevel_(rows, x.mine.id, term));
+  const row = (term) => ({ term_id: term, student_id: x.mine.id, status: '유효' });
+  assert.deepStrictEqual(levelOf([row('prev'), row('prev')], x.term.id).count, 0, '지난 기간 2건은 이번 기간 0건');
+  assert.strictEqual(levelOf([row('prev'), row(x.term.id)], x.term.id).count, 1);
 });
 
 /* ───── 메일 ───── */
