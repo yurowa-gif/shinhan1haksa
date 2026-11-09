@@ -312,7 +312,7 @@ function foodRemark_(rows) {
  *  head: 대표 행 데이터(id는 만들어진다). linked: 연결 행 데이터 배열(linked_change_id = 대표 id, doc_submitted '' 이 기본).
  *  cancels: [{id, cancel_reason}] — status '취소', cancel_reason = '[자동] <대표 id> <사유>'(되살릴 때 꼬리표로 찾는다).
  *  restores: [{id}] — 꼬리표로 취소됐던 행을 되살린다(status 유효, cancel_reason 비움, 퇴실 정리·F6 쪽 되살림).
- *  행마다 appendRecord_(audit create), 취소·되살림은 bulkUpdateRecords_(audit bulk_update). 지우지 않는다.
+ *  대표+연결 행은 bulkAppend_ 한 번(audit bulk_create 한 줄), 취소·되살림은 bulkUpdateRecords_ 한 번(audit bulk_update 한 줄). 지우지 않는다.
  * → {head, linked}
  */
 function foodWrite_(head, linked, cancels, actorEmail, restores) {
