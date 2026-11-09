@@ -474,3 +474,20 @@ test('결정 52: 고친 미실시 날짜가 미실시 규칙의 날보다 이르
   assert.ok(past.warnings.some((w) => /오늘보다 이릅니다/.test(w)));
   assert.ok(!plan(rows, '조식', '미실시', '2027-03-03T09:00:00', { today: '2027-03-03', effectiveDate: '2027-03-20' }).warnings.some((w) => /이릅니다/.test(w)));
 });
+
+test('R10 경계: 먼저 신청한 학사 석식도 고친 날 = 결정 35 중단일(3/15)이면 막힘, 하루 전(3/14)은 안 막힘', () => {
+  const left = saveLeave([CH('학사', '입실', '2027-03-01'), CH('석식', '미실시', '2027-03-01')], '2027-03-10', '2027-03-03T10:00:00');
+  assert.ok(plan(left, '석식', '학사 석식', '2027-03-02T09:00:00', { today: '2027-03-09', effectiveDate: '2027-03-15' }).blocked);
+  assert.ok(!plan(left, '석식', '학사 석식', '2027-03-02T09:00:00', { today: '2027-03-09', effectiveDate: '2027-03-14' }).blocked);
+});
+
+test('결정 52 경계: 고친 날 = 자동 날, 고친 날 = 오늘, 일반 석식인데 고친 날 < 자동 날이면 "이릅니다" 경고 없음', () => {
+  const none = (p) => !p.warnings.some((w) => /이릅니다/.test(w));
+  const rows = [CH('조식', '실시', '2027-03-01'), CH('석식', '미실시', '2027-03-01')];
+  const sameAuto = plan(rows, '조식', '미실시', '2027-03-03T09:00:00', { today: '2027-03-03', effectiveDate: '2027-03-15' });
+  assert.deepStrictEqual([sameAuto.autoDate, none(sameAuto)], ['2027-03-15', true]);
+  const today = plan([CH('조식', '미실시', '2027-03-01')], '조식', '실시', '2027-03-01T09:00:00', { today: '2027-03-05', effectiveDate: '2027-03-05' });   // 늦은 입력, 자동 3/1
+  assert.deepStrictEqual([today.autoDate, none(today)], ['2027-03-01', true]);
+  const gen = plan(rows, '석식', '일반 석식', '2027-03-03T12:00:00', { today: '2027-03-03', effectiveDate: '2027-03-03' });
+  assert.deepStrictEqual([gen.autoDate, none(gen)], ['2027-03-04', true]);
+});

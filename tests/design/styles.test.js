@@ -169,3 +169,9 @@ test('CSS 읽기 도구: 대비 계산이 알려진 값과 맞다(나쁜 입력 
   assert.strictEqual(css.px('var(--tap)', { '--tap': '48px' }), 48);
   assert.strictEqual(css.px('3rem'), null);
 });
+
+test('Styles.html 은 자습 일정 화면이 자기 <style>에서 쓰는 이름(.cal-day·.cal-nav·.cal-tag·.cal-warn)을 전역으로 정의하지 않는다(근무표 달력은 .duty-day)', () => {
+  const styles = css.readFile('src/ui/Styles.html');
+  assert.ok(!/\.cal-(day|nav|tag|warn)\b/.test(styles));
+  assert.ok(/\.duty-day\b/.test(styles));
+});
