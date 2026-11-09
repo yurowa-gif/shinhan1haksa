@@ -129,6 +129,7 @@ test('users에 없는 근무자·이름이 빈 사용자는 "(등록 안 된 교
   assert.ok(html.includes('(등록 안 된 교사)') && !html.includes('ghost'));
 });
 
+const rows0 = (html) => html.split('<tr').filter((t) => t.includes('scope="row"')).map((t) => text(t).split('|').filter((q) => q && !/^ style=/.test(q)));
 const text = (html) => html.replace(/<style[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
 
 test('PDF HTML: 교사별 [근무, 21:30, 23:00, 단독, 예비 지정]이 독립 계산과 같고, 교대 3건(대신 근무 포함)·마지막 변경 시각이 들어 있다', () => {
@@ -146,8 +147,15 @@ test('PDF HTML: 교사별 [근무, 21:30, 23:00, 단독, 예비 지정]이 독�
   const t = text(html);
   assert.ok(/교대 3건/.test(t) && (t.match(/대신 근무/g) || []).length >= 1, '교대 3건과 대신 근무');
   assert.ok(/2027년 1월 23일\(토\)\|단독\|[^|]+ → \|[^|]+\|대신 근무/.test(t), '1/23 대신 근무 행');
-  const last = x.slots.map((s) => String(s.updated_at)).sort().pop().replace('T', ' ').slice(0, 16);
-  assert.ok(html.includes(last), '근무표 마지막 변경 시각');
+  const total = rows0(html).find((r) => r[0] === '합계');
+  const sum = emails.reduce((a, e) => { const by = o.bySlot[e] || {}; return [a[0] + (o.work[e] || 0), a[1] + (by['21:30조'] || 0), a[2] + (by['23:00조'] || 0), a[3] + (by['단독'] || 0), a[4] + (o.standby[e] || 0)]; }, [0, 0, 0, 0, 0]);
+  assert.deepStrictEqual(total && total.slice(-6, -1).map(Number), sum, '합계 줄 = 교사별 합');
+  // 마지막 변경 시각은 만든 시각과 다른 값으로 확인한다
+  x.env.setNow('2027-01-31T21:40:00');
+  x.env.asOwner((c) => c.updateRecord_('duty_slots', x.slots.find((q) => q.status === '유효').id, { memo: '수정' }, ADMIN));
+  x.env.setNow('2027-01-31T23:10:00');
+  const h2 = text(file(x, DUTY, MON, 'pdf').html);
+  assert.ok(h2.includes('2027-01-31 21:40') && h2.includes('2027-01-31 23:10'), '마지막 변경(21:40)과 만든 시각(23:10)이 둘 다, 서로 다르게: ' + h2.slice(-400));
 });
 
 test('운영 안 한 1/1에 근무 행을 되살리면 경고가 PDF에 한 번만, 예비만 있는 운영 안 한 날도 경고가 남는다(조용히 세지 않는다)', () => {
@@ -189,4 +197,11 @@ test('getDutyRecordFile 형식 인자: 대소문자·공백은 받고, 배열·�
   const x = makeEnv();
   for (const f of ['PDF', ' pdf ', undefined, '']) assert.strictEqual(file(x, DUTY, MON, f).r.ok, true, String(f));
   for (const f of [['pdf'], 5, 'xlsx']) assert.strictEqual(file(x, DUTY, MON, f).r.ok, false, JSON.stringify(f));
+});
+
+test('본인 행만 보는 학사 교사에게는 근무표 경고를 주지 않는다(손쓸 수 없다), 담당자·관리자에게는 준다', () => {
+  const x = makeEnv();
+  x.env.asOwner((c) => c.appendRecord_('duty_slots', { date: '2027-01-30', slot: '단독', end_time: '', original_email: 'fake.ghost@example.com', actual_email: 'fake.ghost@example.com', swapped_at: '', swapped_by: '', status: '유효', memo: '' }, ADMIN));
+  assert.deepStrictEqual(rec(x, T1).warnings, []);
+  assert.ok(rec(x, DUTY).warnings.length >= 1);
 });

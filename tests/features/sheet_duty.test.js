@@ -106,7 +106,7 @@ test('그날 틀 밖 칸은 머리말에서 빼고 경고한다: 진짜 단독 �
   x.slot(SAT, '21:30조', B); x.slot(SAT, '23:00조', C); x.slot(SAT, '단독', A);   // 토요일 틀은 단독·예비
   const r = x.sheet(SAT);
   assert.deepStrictEqual([r.dutySource, r.dutyNames], ['근무표', ['가나다선생']], '틀 밖 21:30·23:00 칸이 단독 근무자를 밀어내지 않는다');
-  assert.ok(r.warnings.some((w) => w.includes('틀에 없는 칸')), JSON.stringify(r.warnings));
+  assert.ok(r.warnings.some((w) => w.includes('틀에 없는 칸') && /\d+월 \d+일\([가-힣]\)/.test(w) && !/\d{4}-\d\d-\d\d/.test(w)), JSON.stringify(r.warnings));
   const y = makeEnv();
   y.slot(SAT, '21:30조', B);
   const z = y.sheet(SAT, { dutyNames: ['손1'] });
