@@ -199,3 +199,19 @@ test('getMoveContext: 오늘 값과 고를 수 있는 유형(기숙사생은 학
   [ADMIN, 'test.attendance@example.com'].forEach((who) => env.expectAllowed(who, 'getMoveContext', other));
   ['test.duty@example.com', 'test.student@example.com', 'test.parent@example.com'].forEach((who) => env.expectDenied(who, 'status.view', 'getMoveContext', non));
 });
+
+test('기간 경계(결정 60 보충): 2/28에 3/8 적용 퇴실 → 새 기간 담당교사는 저장, 옛 기간 담당교사는 거부 기록과 안내', () => {
+  const OLD = 'fake.teacher1@example.com';
+  const env = makeEnv('2027-02-28T12:00:00');
+  const { non } = pick(env);
+  const old = env.rows('enrollments').find((e) => e.student_id === non && e.term_id !== term2(env).id);
+  env.asOwner((c) => c.updateRecord_('enrollments', old.id, { teacher_email: OLD }, env.owner));
+  const i = input(non, '학사 퇴실', '2027-02-28T10:00:00', '2027-03-08');
+  Object.keys(env.cache).filter((k) => k.indexOf('script:deny:') === 0).forEach((k) => delete env.cache[k]);
+  const before = env.rows('audit_log').length;
+  assert.throws(() => prev(env, OLD, i), /부터는 .* 일입니다\. 그 기간 담당교사나 관리자가 신청합니다/);
+  assert.ok(env.rows('audit_log').slice(before).some((r) => r.action === 'denied:status.edit' && r.created_by === OLD));
+  const r = saveOk(env, HALL, i);
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(rowsOf(env, non).find((x) => x.id === r.id).effective_date, '2027-03-08');
+});

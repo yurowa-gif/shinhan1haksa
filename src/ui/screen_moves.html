@@ -225,6 +225,7 @@
     call('getMealContext').then(function (c) { ctx = c; draw(); }).catch(function (err) { clear(body); showError(body, err); });
 
     function draw() {
+      resetState();   // 다시 그릴 때마다 이전 선택·서류 체크를 비운다
       clear(body); removeBar();
       if (!ctx.canEdit) { body.appendChild(el('div', { class: 'notice info', text: '입퇴실은 담당교사와 관리자만 신청합니다. 이 화면에서는 볼 수만 있습니다.' })); return; }
       if (!ctx.students.length) { body.appendChild(UI.emptyState('신청할 수 있는 학생이 없습니다. 이번 운영 기간 명단과 담당교사를 확인해 주세요.')); return; }
@@ -310,9 +311,9 @@
       }
       function drawBar() { removeBar(); bar = UI.actionBar([{ text: '비우기', kind: 'secondary', onclick: reset }, { text: '입퇴실 신청', disabled: !ready(), onclick: confirmSave }], { mount: true }); }
       function refresh(retried) {
+        var mine = ++seq; clearTimeout(timer);   // 학생을 비우는 경우에도 진행 중인 미리보기를 무효로 한다
         last = null; drawResult(); drawBar();
         if (!picked || !type || (hallLeave() && !dinner)) return;
-        var mine = ++seq; clearTimeout(timer);
         timer = setTimeout(function () {
           call('previewMove', payload()).then(function (p) {
             if (mine !== seq) return;
@@ -332,7 +333,7 @@
               if (!r.ok) { UI.toast((r.errors && r.errors[0] && r.errors[0].message) || '저장하지 못했습니다.', { kind: 'warn', ms: 5000 }); refresh(); return; }
               UI.toast(r.duplicate ? '이미 저장된 신청서입니다.' : r.lead + ' · 저장했습니다.');
               resetState();
-              call('getMealContext').then(function (c) { ctx = c; draw(); });
+              call('getMealContext').then(function (c) { ctx = c; draw(); }).catch(function (err) { draw(); fail(err); });
             }).catch(function (err) { busy = false; drawBar(); fail(err); });
           } });
       }

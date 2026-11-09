@@ -83,25 +83,23 @@ function inoutCheck_(input, d) {
   var v = inoutValidate_(input, { now: nowIso_() });
   if (v.errors.length) return { errors: v.errors, permYmd: '' };
   var rec = v.rec;
-  var term = foodTermOf_(rec.effectiveDate, d.terms);
+  var term = foodTermFor_(rec.studentId, rec.effectiveDate, d.terms, d.enrollments);   // 급식 신청과 같은 기간 판정(결정 60 보충)
   var errors = [];
   if (!term) errors.push({ field: 'effectiveDate', message: '적용일이 속한 운영 기간이 없습니다.' });
   else if (term.end_date < today) errors.push({ field: 'effectiveDate', message: '"' + term.name + '"은(는) 끝난 기간입니다. 끝난 기간의 입퇴실은 받지 않습니다.' });
   else if (!d.enrollments.some(function (e) { return e.term_id === term.id && e.student_id === rec.studentId; })) {
     errors.push({ field: 'studentId', message: '"' + term.name + '" 명단에 없는 학생입니다. 관리자에게 명단 등록을 요청해 주세요.' });
   }
-  var permYmd = term ? (rec.effectiveDate > term.start_date ? rec.effectiveDate : term.start_date) : '';
-  if (errors.length) return { errors: errors, rec: rec, term: term, permYmd: permYmd };
+  var permYmd = foodPermYmd_(term, rec.effectiveDate);
+  if (errors.length) return { errors: errors, rec: rec, term: term, eff: rec.effectiveDate, permYmd: permYmd };
   var plan = movePlan_(d.changes, rec.studentId, { type: rec.type, effectiveDate: rec.effectiveDate, requestedAt: rec.requestedAt, dinner: rec.dinner,
     breakfastWithDorm: rec.breakfastWithDorm, breakfastStopWithDorm: rec.breakfastStopWithDorm }, { today: today, cutoff: d.cutoff });
   plan.errors = plan.errors.map(inoutKo_);
   plan.warnings = plan.warnings.map(inoutKo_);
-  return { errors: plan.errors.map(function (m) { return { field: 'type', message: m }; }), rec: rec, term: term, plan: plan, permYmd: permYmd };
+  return { errors: plan.errors.map(function (m) { return { field: 'type', message: m }; }), rec: rec, term: term, eff: rec.effectiveDate, plan: plan, permYmd: permYmd };
 }
 
-function inoutAuthorize_(input, c) {
-  return requirePermission_('status.edit', { studentId: String((input && input.studentId) || ''), ymd: c.permYmd });
-}
+function inoutAuthorize_(input, c) { return foodAuthorize_(input, c); }   // 다른 기간 담당교사 안내 포함
 
 /** 유형 → 대표 행의 항목·값·적용일 */
 function inoutHeadOf_(type, eff) {
