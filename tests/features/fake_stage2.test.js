@@ -188,10 +188,15 @@ test('seedFakeStage2: 가짜 DB에 쓰고, 두 번 실행해도 중복 없음, �
   assert.deepStrictEqual(rec.standby, pure.standby);
 });
 
-test('seedFakeStage2: 1단계 가짜 데이터가 없으면 쓰지 않는다', () => {
+test('seedFakeStage2: 1단계 가짜 데이터가 없으면 근무표만 쓰고 생활 기록은 건너뛴다(나중에 1단계 뒤 다시 실행하면 채움)', () => {
   const env = seededEnv();
-  assert.match(env.errorOf(env.owner, (c) => c.seedFakeStage2()).message, /seedFakeStage1/);
-  assert.deepStrictEqual(counts(env), [0, 0]);
+  assert.strictEqual(env.asOwner((c) => c.seedFakeStage2()),
+    '가짜 2단계 데이터: duty_slots +62, day_schedules +1, 생활 기록 건너뜀(seedFakeStage1을 먼저 실행하면 함께 씁니다)');
+  assert.strictEqual(env.rows('status_changes').length, 0);
+  env.asOwner((c) => c.seedFakeStage1());
+  const vtab = ctx.termSheetName_('violations', life.term.id);
+  assert.strictEqual(env.asOwner((c) => c.seedFakeStage2()),
+    '가짜 2단계 데이터: duty_slots +0, day_schedules +0, ' + vtab + ' +3, status_changes +3');
 });
 
 test('seedFakeStage2: 가짜가 아닌 학생이 하나라도 있거나 학생이 없으면 쓰지 않는다', () => {

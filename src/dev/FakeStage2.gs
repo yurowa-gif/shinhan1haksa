@@ -7,7 +7,7 @@
  *                              1건인 학생 1명(violations), 서류 미제출 F7 급식 신청 2건 + 적용 전 대기 신청 1건(status_changes).
  *                              면담 기록은 넣지 않는다(시험이 직접 넣는다).
  *                              ruleRows = violation_rules 행(setup이 만든 id를 rule_id로 쓴다).
- * seedFakeStage2()           : 편집기에서 실행. seedFakeStage1() 뒤에. 두 번 실행해도 중복 없음(id가 이미 있으면 건너뜀).
+ * seedFakeStage2()           : 편집기에서 실행. seedFakeStage1() 뒤에 실행하면 생활 기록까지, 없으면 근무표만. 두 번 실행해도 중복 없음(id가 이미 있으면 건너뜀).
  *
  * 근무자 = 가짜 교사 1~3 + 시험 학사 교사(Script Property TEST_TEACHER_EMAIL). 넷이 돌아가며 맡는다.
  * 교대 3건(PRD F3 완료 기준): 일반 교대 1, 교대의 교대 A→B→C 1(칸에는 A→C만, 중간 B는 swapped_by),
@@ -97,7 +97,7 @@ function buildFakeStage2Life_(fake, ruleRows) {
     out2Id: st[FAKE2_OUT2].id, out1Id: st[FAKE2_OUT1].id, noDocIds: FAKE2_NODOC.map(function (i) { return st[i].id; }), pendingId: st[FAKE2_PENDING].id };
 }
 
-/** 편집기에서 실행. seedFakeData()·seedFakeStage1() 뒤에, 가짜 학생만 있는 DB에서만 동작한다. 두 번 실행해도 중복 없음. */
+/** 편집기에서 실행. seedFakeData() 뒤에(생활 기록은 seedFakeStage1()도 뒤에), 가짜 학생만 있는 DB에서만 동작한다. 두 번 실행해도 중복 없음. */
 function seedFakeStage2() {
   var owner = assertOwnerRun_();
   return withLock_(function () {   // 검사와 쓰기 사이에 다른 저장이 끼지 않게(bulkAppend_의 락은 다시 들어가도 된다)
@@ -126,19 +126,22 @@ function seedFakeStage2() {
     var foreign = readAll_('duty_slots').filter(function (r) { return String(r.date).slice(0, 7) === FAKE2_MONTH && !mine[r.id]; })
       .concat(readAll_('day_schedules').filter(function (r) { return String(r.date) === FAKE2_CLOSED && !mine[r.id]; }));
     if (foreign.length) throw new Error(FAKE2_MONTH + ' 근무표나 ' + FAKE2_CLOSED + ' 일정에 다른 행이 ' + foreign.length + '개 있어 쓰지 않습니다.');
+    // 생활 기록(T1b)은 1단계 가짜 데이터 위에서만 뜻이 있다. 없으면 근무표만 쓰고 건너뛴다(근무 기록 시험은 1단계 없이 돈다)
     var stage1First = buildFakeStage1_(fake).statusChanges[0].id;
-    if (!readAll_('status_changes').some(function (r) { return r.id === stage1First; })) {
-      throw new Error('1단계 가짜 데이터가 없습니다. seedFakeStage1()을 먼저 실행하세요.');
+    var hasStage1 = readAll_('status_changes').some(function (r) { return r.id === stage1First; });
+    var plan = [['duty_slots', data.dutySlots], ['day_schedules', data.daySchedules]];
+    if (hasStage1) {
+      var life = buildFakeStage2Life_(fake, readAll_('violation_rules'));
+      ensureTermSheets_([]);
+      plan.push([termSheetName_('violations', life.term.id), life.violations], ['status_changes', life.statusChanges]);
     }
-    var life = buildFakeStage2Life_(fake, readAll_('violation_rules'));
-    ensureTermSheets_([]);
     var lines = [];
-    [['duty_slots', data.dutySlots], ['day_schedules', data.daySchedules],
-      [termSheetName_('violations', life.term.id), life.violations], ['status_changes', life.statusChanges]].forEach(function (pair) {
+    plan.forEach(function (pair) {
       var fresh = fake1OnlyNew_(pair[1], readAll_(pair[0]));
       bulkAppend_(pair[0], fresh, owner);
       lines.push(pair[0] + ' +' + fresh.length);
     });
+    if (!hasStage1) lines.push('생활 기록 건너뜀(seedFakeStage1을 먼저 실행하면 함께 씁니다)');
     var msg = '가짜 2단계 데이터: ' + lines.join(', ');
     console.log(msg);
     return msg;
