@@ -42,7 +42,7 @@ async function main() {
       await page.waitForTimeout(60);
       const info = await page.evaluate(() => {
         const vis = (e) => e.offsetParent !== null || getComputedStyle(e).position === 'fixed';
-        const small = Array.from(document.querySelectorAll('.btn,.chip,.seg,.tab,.picker-item,.cal-day,.back,select,input:not([type=checkbox]),.check,textarea'))
+        const small = Array.from(document.querySelectorAll('.btn,.chip,.seg,.tab,.picker-item,.duty-day,.back,select,input:not([type=checkbox]),.check,textarea'))
           .filter((e) => vis(e) && e.offsetHeight < 48).map((e) => (e.className || e.tagName) + ':' + e.offsetHeight);
         return { scrollW: document.documentElement.scrollWidth, scrollH: document.documentElement.scrollHeight, small };
       });
