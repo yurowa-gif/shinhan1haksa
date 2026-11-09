@@ -27,14 +27,33 @@ var FOOD_RULE_TEXT = {
  * 입력한 사람이 아니라 담당교사 기준(관리자 홈은 전체). 담임은 숫자 없이 열람 링크만 쓴다.
  */
 function foodHomeInfo_(user, role) {
-  if (role !== 'admin' && role !== 'hall_teacher') return {};
-  var term = getCurrentTerm_();
-  if (!term) return { docMissing: 0 };
-  var mineIds = {};
-  readAll_('enrollments').forEach(function (e) {
-    if (e.term_id === term.id && (role === 'admin' || normalizeEmail_(e.teacher_email) === user.email)) mineIds[e.student_id] = true;
-  });
-  return { docMissing: readAll_('status_changes').filter(function (c) { return foodIsMissingDoc_(c) && mineIds[c.student_id]; }).length };
+  var terms = readAll_('terms'), students = readAll_('students'), changes = readAll_('status_changes');
+  var label = function (id) { var st = students.filter(function (x) { return x.id === id; })[0]; return st ? st.number + '. ' + st.name : '(알 수 없음)'; };
+  if (role === 'admin' || role === 'hall_teacher') {
+    var miss = foodMissingDocs_(changes, readAll_('enrollments'), terms);
+    if (role === 'hall_teacher') miss = miss.filter(function (m) { return m.teacher === user.email; });
+    var seen = {}, list = [];
+    miss.forEach(function (m) {   // 학생·종류마다 한 줄(이메일·memo 없음)
+      var kind = m.row.source === 'F6' ? '입퇴실' : '급식 변경', k = m.studentId + '|' + kind;
+      if (!seen[k]) { seen[k] = true; list.push({ studentId: m.studentId, label: label(m.studentId), kind: kind }); }
+    });
+    return { docMissing: miss.length, docList: role === 'hall_teacher' ? list.slice(0, 10) : [] };
+  }
+  if (role === 'homeroom') {   // 담임: 우리 반 이번 주 변경(보기만)
+    var today = today_(), from = ymdMondayOf_(today), to = ymdAddDays_(from, 6);
+    var term = foodTermOf_(today, terms) || getCurrentTerm_();
+    var mine = {};
+    if (term) readAll_('enrollments').forEach(function (e) { if (e.term_id === term.id) mine[e.student_id] = true; });
+    var week = changes.filter(function (c) {
+      var st = students.filter(function (x) { return x.id === c.student_id; })[0];
+      return mine[c.student_id] && st && sameClass_(user.homeroomClass, st.grade, st.class_no) && String(c.status || '유효') === '유효' && c.source !== '명단업로드' &&
+        !String(c.linked_change_id || '') && ymdIsValid_(String(c.effective_date)) && c.effective_date >= from && c.effective_date <= to;
+    }).sort(function (a, b) { return a.effective_date < b.effective_date ? -1 : 1; }).slice(0, 20).map(function (c) {
+      return { studentId: c.student_id, label: label(c.student_id), what: c.item + ' ' + c.value, dateKo: foodDateKo_(c.effective_date), missing: foodIsMissingDoc_(c) };
+    });
+    return { week: week };
+  }
+  return {};
 }
 
 /* ───────────── 순수·읽기 도우미 ───────────── */
@@ -197,7 +216,7 @@ function foodAuthorize_(input, c) {
   return requirePermission_('status.edit', { studentId: String((input && input.studentId) || ''), ymd: c.permYmd });
 }
 
-/** 서류 미제출 대표 행 중복 저장 방지용: 같은 신청서(학생·항목·값·신청 일시, F7)가 이미 있나(유효 또는 덮여서 취소된 기록) */
+/** 같은 신청서(학생·항목·값·신청 일시, F7)가 이미 있나(유효 또는 덮여서 취소된 기록) — 다시 눌러도 한 번만 쓴다 */
 function foodFindDuplicate_(rec, changes) {
   return changes.filter(function (c) {
     return c.item === rec.item && c.value === rec.value && c.requested_at === rec.requestedAt && c.source === 'F7' && !String(c.linked_change_id || '') &&
@@ -210,15 +229,37 @@ function foodIsMissingDoc_(c) {
   return String(c.status || '유효') === '유효' && c.source !== '명단업로드' && !String(c.linked_change_id || '') && String(c.doc_submitted).toUpperCase() === 'FALSE';
 }
 
-/** 현황표 비고 문장(real-layout-2025.md): "3.3 석식 미실시(3.15~)" 쉼표로 이음. 신청 행만(명단·연결 행·취소 제외), 신청 일시 순 */
+/**
+ * 서류 미제출 집계 하나(홈·학생 기록·식수 집계가 같이 쓴다, 결정 60): 행마다 "적용일이 속한(사이면 다음) 기간의 담당교사"가 책임진다.
+ * 기간이 바뀌어도 서류를 표시할 때까지 남는다(결정 3). 기간을 못 찾으면 teacher '' (관리자만). → [{row, studentId, termId, teacher}]
+ */
+function foodMissingDocs_(changes, enrollments, terms) {
+  var teacherOf = {};
+  enrollments.forEach(function (e) { teacherOf[e.term_id + '|' + e.student_id] = normalizeEmail_(e.teacher_email); });
+  return changes.filter(foodIsMissingDoc_).map(function (c) {
+    var term = ymdIsValid_(String(c.effective_date)) ? foodTermOf_(c.effective_date, terms) : null;
+    return { row: c, studentId: c.student_id, termId: term ? term.id : '', teacher: term ? (teacherOf[term.id + '|' + c.student_id] || '') : '' };
+  });
+}
+
+/**
+ * 현황표 비고 문장(real-layout-2025.md): 신청 하나는 "신청일 변경내용(적용일~), 변경내용(적용일~)"로 연결 행을 묶고, 신청끼리는 " / "로 잇는다.
+ * 명단 행·취소·덮인 신청서는 뺀다. 석식은 '학사 석식'·'일반 석식으로 변경'·'석식 미실시'로 쓴다(값을 반복하지 않는다).
+ */
 function foodRemark_(rows) {
   var md = function (ymd) { var p = String(ymd).split('-'); return (+p[1]) + '.' + (+p[2]); };
-  return (rows || []).filter(function (c) {
-    return String(c.status || '유효') === '유효' && c.source !== '명단업로드' && !String(c.linked_change_id || '') && (c.source === 'F6' || c.source === 'F7') && ymdIsValid_(String(c.effective_date)) &&
-      ymdIsValid_(String(c.requested_at).slice(0, 10));
-  }).sort(function (a, b) { return a.requested_at < b.requested_at ? -1 : a.requested_at > b.requested_at ? 1 : 0; }).map(function (c) {
-    return md(String(c.requested_at).slice(0, 10)) + ' ' + c.item + ' ' + c.value + '(' + md(c.effective_date) + '~)';
-  }).join(', ');
+  var order = { '학사': 0, '기숙사': 1, '조식': 2, '석식': 3 };
+  var label = function (c) {
+    if (c.item === '석식') return c.value === '일반 석식' ? '일반 석식으로 변경' : c.value === '미실시' ? '석식 미실시' : '학사 석식';
+    return c.item + ' ' + c.value;
+  };
+  var live = (rows || []).filter(function (c) { return String(c.status || '유효') === '유효' && c.source !== '명단업로드' && ymdIsValid_(String(c.effective_date)); });
+  return live.filter(function (c) { return !String(c.linked_change_id || '') && (c.source === 'F6' || c.source === 'F7') && ymdIsValid_(String(c.requested_at).slice(0, 10)); })
+    .sort(function (a, b) { return a.requested_at < b.requested_at ? -1 : a.requested_at > b.requested_at ? 1 : 0; }).map(function (h) {
+      var parts = [h].concat(live.filter(function (c) { return c.linked_change_id === h.id; })
+        .sort(function (a, b) { return a.effective_date < b.effective_date ? -1 : a.effective_date > b.effective_date ? 1 : order[a.item] - order[b.item]; }));
+      return md(String(h.requested_at).slice(0, 10)) + ' ' + parts.map(function (p) { return label(p) + '(' + md(p.effective_date) + '~)'; }).join(', ');
+    }).join(' / ');
 }
 
 /* ───────────── 쓰기 ───────────── */
@@ -348,47 +389,67 @@ function saveMealChange(input, expect) {
   });
 }
 
+/** 기록 줄에 보일 말: 시스템 글자(F7·[자동] <id>) 대신 교사용 말 */
+function foodSourceLabel_(src) { return src === 'F7' ? '급식 변경' : src === 'F6' ? '입퇴실' : src === '명단업로드' ? '명단' : ''; }
+function foodCancelText_(reason) {
+  var t = String(reason || '').replace(/^\[자동\]\s+\S+\s*/, '').trim();
+  return t ? (/대체|더 새 신청/.test(t) ? '새 신청으로 대체됨' : t) : (String(reason || '').indexOf('[자동]') === 0 ? '새 신청으로 대체됨' : '');
+}
+function foodAtKo_(iso) {
+  var s = String(iso || '');
+  return ymdIsValid_(s.slice(0, 10)) ? foodDateKo_(s.slice(0, 10)) + (s.length >= 16 ? ' ' + s.slice(11, 16) : '') : '';
+}
+
 /**
  * 학생 한 명의 급식·입퇴실 기록(보기). 관리자·출결 담당·학사 교사 = 이번 기간 학사생 전체, 담임 = 우리 반(status.view).
- * memo는 내보내지 않는다(2OUT 연결 id가 들어 있을 수 있다). 서류 표시 버튼은 canMarkDoc(쓰기 권한)일 때만 켠다.
+ * memo는 내보내지 않는다(2OUT 연결 id가 들어 있을 수 있다). 서류 표시 버튼(canMarkDoc)은 그 행의 담당교사(적용일 기간, 결정 60)·관리자에게만.
  */
 function listStudentStatus(studentId) {
   var user = requirePermission_('status.view', { studentId: studentId });
   var today = today_();
   var rows = readAll_('status_changes').filter(function (c) { return c.student_id === studentId; });
   var student = findById_('students', studentId);
-  var term = getCurrentTerm_();
-  var enr = term ? readAll_('enrollments').filter(function (e) { return e.term_id === term.id && e.student_id === studentId; })[0] : null;
-  var canEdit = user.roles.indexOf('admin') >= 0 || (user.roles.indexOf('hall_teacher') >= 0 && !!enr && normalizeEmail_(enr.teacher_email) === user.email);
+  var miss = {};
+  foodMissingDocs_(rows, readAll_('enrollments'), readAll_('terms')).forEach(function (m) { miss[m.row.id] = m; });
   var live = rows.filter(function (c) { return String(c.status || '유효') === '유효' && ymdIsValid_(String(c.effective_date)); });
   var now = {};
   ['학사', '기숙사', '조식', '석식'].forEach(function (it) { now[it] = statusOn_(rows, studentId, it, today); });
-  var view = function (c) {
+  var pendingRows = live.filter(function (c) { return c.effective_date > today; }).sort(function (a, b) { return a.effective_date < b.effective_date ? -1 : 1; });
+  var pendingId = {};
+  pendingRows.forEach(function (c) { pendingId[c.id] = true; });
+  var view = function (c, noButton) {
     var head = !String(c.linked_change_id || '');
-    return { id: c.id, item: c.item, value: c.value, requestedAt: c.requested_at, date: c.effective_date,
-      edited: !!c.effective_date_auto && c.effective_date_auto !== c.effective_date, autoDate: c.effective_date_auto, reason: c.reason,
-      doc: head ? String(c.doc_submitted).toUpperCase() : '', source: c.source, status: String(c.status || '유효'), cancelReason: c.cancel_reason,
-      head: head, canMarkDoc: canEdit && foodIsMissingDoc_(c) };
+    var m = miss[c.id];
+    var mineDoc = !!m && (user.roles.indexOf('admin') >= 0 || (user.roles.indexOf('hall_teacher') >= 0 && m.teacher === user.email));
+    return { id: c.id, item: c.item, value: c.value, requestedKo: foodAtKo_(c.requested_at), date: c.effective_date,
+      dateKo: ymdIsValid_(String(c.effective_date)) ? foodDateKo_(c.effective_date) : '', edited: !!c.effective_date_auto && c.effective_date_auto !== c.effective_date,
+      reason: c.reason, sourceLabel: foodSourceLabel_(c.source), status: String(c.status || '유효'), cancelText: foodCancelText_(c.cancel_reason),
+      docState: m ? 'missing' : (head && c.source !== '명단업로드' && String(c.doc_submitted).toUpperCase() === 'TRUE' ? 'done' : ''),
+      head: head, canMarkDoc: mineDoc && !noButton };
   };
   return {
     student: { id: student.id, name: student.name, grade: +student.grade, classNo: student.class_no, number: student.number, studentNo: student.student_no },
-    today: today, now: now, remark: foodRemark_(rows), canEdit: canEdit,
-    pending: live.filter(function (c) { return c.effective_date > today; }).sort(function (a, b) { return a.effective_date < b.effective_date ? -1 : 1; }).map(view),
-    history: rows.slice().sort(function (a, b) { return String(b.requested_at || b.created_at) < String(a.requested_at || a.created_at) ? -1 : 1; }).map(view)
+    today: today, now: now, remark: foodRemark_(rows),
+    pending: pendingRows.map(function (c) { return view(c, false); }),
+    history: rows.slice().sort(function (a, b) { return String(b.requested_at || b.created_at) < String(a.requested_at || a.created_at) ? -1 : 1; })
+      .map(function (c) { return view(c, !!pendingId[c.id]); })   // 대기 행의 버튼은 위 "대기 중인 변경"에만
   };
 }
 
 /**
  * 서류 제출 표시(대표 행만 FALSE → TRUE). 행 id만 받으므로 첫 줄은 역할만 보고(status.list),
- * 락 안에서 행을 다시 읽은 뒤 그 학생에 대한 status.edit(담당교사·관리자)를 다시 확인한다.
+ * 락 안에서 행을 다시 읽은 뒤 그 행의 담당교사(적용일이 속한 기간, 결정 60)·관리자인지 status.edit로 다시 확인한다.
  */
 function setDocSubmitted(changeId) {
   var user = requirePermission_('status.list');
+  if (typeof changeId !== 'string' || !changeId) return { ok: false, error: '기록을 찾을 수 없습니다.' };
   return withLock_(function () {
     invalidate_('db', 'status_changes');
-    var row = findById_('status_changes', String(changeId || ''));
+    invalidate_('db', 'enrollments');
+    var row = findById_('status_changes', changeId);
     if (!row) return { ok: false, error: '기록을 찾을 수 없습니다.' };
-    requirePermission_('status.edit', { studentId: row.student_id, ymd: ymdIsValid_(String(row.effective_date)) ? row.effective_date : '' });
+    var term = ymdIsValid_(String(row.effective_date)) ? foodTermOf_(row.effective_date, readAll_('terms')) : null;
+    requirePermission_('status.edit', { studentId: row.student_id, ymd: term ? (row.effective_date > term.start_date ? row.effective_date : term.start_date) : '' });
     if (String(row.doc_submitted).toUpperCase() === 'TRUE' && !String(row.linked_change_id || '') && row.source !== '명단업로드') return { ok: true, already: true };
     if (!foodIsMissingDoc_(row)) return { ok: false, error: '서류 제출을 표시할 수 있는 신청 행이 아닙니다.' };
     updateRecord_('status_changes', row.id, { doc_submitted: 'TRUE' }, user.email);

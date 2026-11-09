@@ -11,6 +11,7 @@
    */
   function renderMealTab(root) {
     var U = UI.util;
+    var alive = true;   // 탭을 떠난 뒤 늦게 온 응답이 화면·아래 바를 다시 그리지 않게
     var ctx = null, picked = null, chip = '', doc = false, fixing = false, seq = 0, timer = null, last = null, busy = false;
     var body = el('div');
     root.appendChild(body);
@@ -18,11 +19,12 @@
     function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
     function removeBar() { if (bar) { bar.remove(); bar = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); } }
 
-    call('getMealContext').then(function (c) { ctx = c; draw(); }).catch(function (err) { clear(body); showError(body, err); });
-    return removeBar;   // 탭을 바꿀 때 아래 바를 치운다
+    call('getMealContext').then(function (c) { if (!alive) return; ctx = c; draw(); }).catch(function (err) { if (!alive) return; clear(body); showError(body, err); });
+    return function () { alive = false; clearTimeout(timer); removeBar(); };   // 탭을 바꿀 때 아래 바를 치우고 늦은 응답을 버린다
 
     function draw() {
       clear(body); removeBar();
+      body.appendChild(el('h2', { text: (ctx.term ? ctx.term.name + ' · ' : '') + '급식 변경' }));
       if (!ctx.canEdit) {
         body.appendChild(el('div', { class: 'notice info', text: '급식 변경은 담당교사와 관리자만 신청합니다. 이 화면에서는 볼 수만 있습니다.' }));
         return;
@@ -113,7 +115,7 @@
         clearTimeout(timer);
         timer = setTimeout(function () {
           call('previewMealChange', payload()).then(function (p) {
-            if (mine !== seq) return;
+            if (!alive || mine !== seq) return;
             // 신청 일시를 건드리지 않았으면 서버의 지금으로 맞춘다(화면을 오래 열어 둔 뒤 저장해도 옛 시각이 되지 않게)
             if (!atTouched && p.now && p.now.slice(0, 16) !== at.value && retried !== true) { at.value = p.now.slice(0, 16); at.max = at.value; refresh(true); return; }
             last = p; drawResult(); drawBar();
@@ -132,12 +134,13 @@
           onconfirm: function () {
             busy = true; drawBar();
             call('saveMealChange', payload(), p.expect).then(function (r) {
+              if (!alive) return;
               busy = false;
               if (r.stale) { UI.toast(r.error, { kind: 'warn', ms: 5000 }); refresh(); return; }
               if (!r.ok) { UI.toast((r.errors && r.errors[0] && r.errors[0].message) || r.blocked || '저장하지 못했습니다.', { kind: 'warn', ms: 5000 }); refresh(); return; }
               UI.toast(r.duplicate ? '이미 저장된 신청서입니다.' : r.superseded ? '기록으로 저장했습니다.' : r.dateKo + '부터 ' + r.label + '(으)로 저장했습니다.');
               resetState();   // 다음 학생에게 이전 학생의 선택·서류 체크가 남지 않게 모두 비운다
-              call('getMealContext').then(function (c) { ctx = c; draw(); });
+              call('getMealContext').then(function (c) { if (alive) { ctx = c; draw(); } });
             }).catch(function (err) { busy = false; drawBar(); fail(err); });
           }
         });
@@ -148,49 +151,59 @@
     }
   }
 
-  /** [학생 기록] 탭: 학생을 고르면 오늘 값·대기·기록·비고. 서류 미제출 행은 담당교사·관리자가 [제출 표시] */
+  /** [학생 기록] 탭: 학생을 고르면 오늘 값·비고·대기·기록. 서류 미제출 행은 그 행의 담당교사·관리자가 [제출 표시] */
   function renderRecordTab(root, wantStudent) {
-    var U = UI.util;
     var pick = el('div'), out = el('div');
     root.appendChild(pick); root.appendChild(out);
+    var alive = true, seq = 0, current = '', saving = false;
     function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
-    var current = '';
     call('getMealContext').then(function (ctx) {
+      if (!alive) return;
       if (!ctx.viewStudents.length) { pick.appendChild(UI.emptyState('볼 수 있는 학생이 없습니다.')); return; }
-      var picker = UI.studentPicker({ students: ctx.viewStudents, label: '학생', onpick: function (s) { if (s) load(s.id); else { current = ''; clear(out); } } });
+      var picker = UI.studentPicker({ students: ctx.viewStudents, label: wantStudent ? '다른 학생 보기' : '학생', onpick: function (s) { if (s) load(s.id); else { seq++; current = ''; clear(out); } } });
       pick.appendChild(el('div', { class: 'card' }, [picker]));
-      if (wantStudent) load(wantStudent);
-    }).catch(function (err) { showError(pick, err); });
-    function line(h) {
+      if (wantStudent) load(wantStudent);   // 홈 카드에서 학생을 눌러 들어오면 그 학생의 기록을 바로 연다
+    }).catch(function (err) { if (alive) showError(pick, err); });
+
+    function line(h, name) {
       var what = h.item + ' ' + h.value;
       var left = el('div', { class: 'mv-text' }, [
-        el('div', { text: (h.status === '취소' ? '(취소) ' : '') + what + ' · ' + U.formatDateKo(h.date, false) + '부터' }),
-        el('div', { class: 'muted', text: '신청 ' + (h.requestedAt ? h.requestedAt.slice(0, 16).replace('T', ' ') : '(명단)') + ' · ' + h.source + (h.edited ? ' · 적용일 고침(' + (h.reason || '') + ')' : (h.reason ? ' · ' + h.reason : '')) }),
-        h.status === '취소' && h.cancelReason ? el('div', { class: 'muted', text: '취소 사유: ' + h.cancelReason }) : null
+        el('div', { text: (h.status === '취소' ? '(취소) ' : '') + what + ' · ' + h.dateKo + '부터' }),
+        el('div', { class: 'muted', text: [h.requestedKo ? '신청 ' + h.requestedKo : '', h.sourceLabel, h.edited ? '적용일 고침' + (h.reason ? '(' + h.reason + ')' : '') : h.reason].filter(function (x) { return x; }).join(' · ') }),
+        h.status === '취소' && h.cancelText ? el('div', { class: 'muted', text: h.cancelText }) : null
       ]);
       var right = null;
-      if (h.canMarkDoc) right = el('button', { type: 'button', class: 'btn secondary', text: '제출 표시', onclick: function () {
-        UI.confirmSheet({ title: '서류를 받았습니까?', lead: what, lines: ['서류 제출로 표시합니다(되돌리지 않습니다)'], confirmText: '제출 표시', onconfirm: function () {
-          call('setDocSubmitted', h.id).then(function (r) { if (!r.ok) fail(new Error(r.error)); else UI.toast('제출로 표시했습니다.'); load(current); }).catch(fail);
+      if (h.canMarkDoc) {
+        right = el('button', { type: 'button', class: 'btn secondary', text: '제출 표시', onclick: function (e) {
+          var btn = e.currentTarget;
+          UI.confirmSheet({ title: '서류를 받았습니까?', lead: name + ' · ' + what, lines: [h.dateKo + '부터 적용되는 신청의 서류를 제출로 표시합니다(되돌리지 않습니다)'], confirmText: '제출 표시', onconfirm: function () {
+            if (saving) return;
+            saving = true; btn.disabled = true;
+            call('setDocSubmitted', h.id).then(function (r) { saving = false; if (!alive) return; if (!r.ok) fail(new Error(r.error)); else UI.toast('제출로 표시했습니다.'); load(current); })
+              .catch(function (err) { saving = false; btn.disabled = false; fail(err); });
+          } });
         } });
-      } });
-      else if (h.head && h.doc === 'FALSE' && h.status === '유효') right = UI.statusPill('todo', '서류 미제출');
-      else if (h.head && h.doc === 'TRUE') right = UI.statusPill('mute', '서류 제출');
+      } else if (h.docState === 'missing') right = UI.statusPill('todo', '서류 미제출');
+      else if (h.docState === 'done') right = UI.statusPill('mute', '서류 제출');
       return el('div', { class: 'mv-row', style: 'padding:8px 0;border-bottom:1px solid var(--line)' }, [left, right]);
     }
     function load(id) {
       current = id;
+      var mine = ++seq;
       call('listStudentStatus', id).then(function (d) {
+        if (!alive || mine !== seq) return;   // 학생을 빨리 바꾸면 늦은 응답은 버린다(다른 학생 기록·버튼이 그려지지 않게)
+        var name = UI.util.studentLabel(d.student);
         clear(out);
         out.appendChild(el('div', { class: 'card' }, [
-          el('h2', { text: U.studentLabel(d.student) }),
+          el('h2', { text: name }),
           el('div', { text: '오늘: ' + ['학사', '기숙사', '조식', '석식'].map(function (k) { return k + ' ' + (d.now[k] || '없음'); }).join(' · ') }),
           d.remark ? el('div', { class: 'muted', style: 'margin-top:8px', text: '비고: ' + d.remark }) : null
         ]));
-        out.appendChild(el('div', { class: 'card' }, [el('h2', { text: '대기 중인 변경' })].concat(d.pending.length ? d.pending.map(line) : [el('div', { class: 'muted', text: '없습니다.' })])));
-        out.appendChild(el('div', { class: 'card' }, [el('h2', { text: '기록' })].concat(d.history.length ? d.history.map(line) : [el('div', { class: 'muted', text: '기록이 없습니다.' })])));
-      }).catch(function (err) { clear(out); showError(out, err); });
+        out.appendChild(el('div', { class: 'card' }, [el('h2', { text: '대기 중인 변경' })].concat(d.pending.length ? d.pending.map(function (h) { return line(h, name); }) : [el('div', { class: 'muted', text: '없습니다.' })])));
+        out.appendChild(el('div', { class: 'card' }, [el('h2', { text: '기록' })].concat(d.history.length ? d.history.map(function (h) { return line(h, name); }) : [el('div', { class: 'muted', text: '기록이 없습니다.' })])));
+      }).catch(function (err) { if (!alive || mine !== seq) return; clear(out); showError(out, err); });
     }
+    return function () { alive = false; seq++; };
   }
 
   function renderScreen(root) {
@@ -200,7 +213,7 @@
       if (dispose) { dispose(); dispose = null; }
       clear(holder);
       if (tab === 'meal') dispose = renderMealTab(holder);
-      else renderRecordTab(holder, window.SCREEN_STUDENT || '');
+      else dispose = renderRecordTab(holder, window.SCREEN_STUDENT || '');
     }
     root.appendChild(el('div', { class: 'card' }, [UI.segmented({ label: '화면', value: tab, options: [{ value: 'meal', label: '급식 변경' }, { value: 'history', label: '학생 기록' }],
       onchange: function (v) { tab = v; window.SCREEN_STUDENT = ''; draw(); } })]));
