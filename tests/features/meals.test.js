@@ -5,7 +5,6 @@ const { createGasEnv } = require('../helpers/gas-fakes');
 
 const ADMIN = 'owner@example.com';          // admin + hall_teacher
 const HALL = 'test.teacher@example.com';    // 담당 학생이 있는 학사 교사
-const DENIED = ['test.homeroom@example.com', 'test.attendance@example.com', 'test.duty@example.com', 'test.student@example.com', 'test.parent@example.com'];
 
 function makeEnv(now) {
   const env = createGasEnv({ now: now || '2027-03-03T10:00:00' });
@@ -35,18 +34,30 @@ function seedEarly(env, sid) {
   }, env.owner)));
 }
 
-test('급식 변경 저장 표(PRD F7 1·3·4줄): 실시·학사 석식·일반 석식은 11:29:59 → 당일, 11:30:00 → 다음 날, 2026-12-31 11:30 → 2027-01-01', () => {
-  const env = makeEnv();
-  const { a } = pick(env);
-  seedEarly(env, a);
-  const cases = [['d_hall', '2027-03-03T11:29:59', '2027-03-03'], ['d_hall', '2027-03-03T11:30:00', '2027-03-04'],
-    ['d_gen', '2027-03-03T11:29:59', '2027-03-03'], ['d_gen', '2027-03-03T11:30:00', '2027-03-04'],
-    ['b_on', '2027-03-03T11:29:59', '2027-03-03'], ['b_on', '2027-03-03T11:30:00', '2027-03-04'], ['d_hall', '2026-12-31T11:30:00', '2027-01-01']];
-  cases.forEach(([chip, at, want]) => {
-    env.setNow(at.slice(0, 10) === '2026-12-31' ? '2027-01-05T10:00:00' : '2027-03-03T12:00:00');
-    const p = prev(env, ADMIN, input(a, chip, at));
-    assert.strictEqual(p.ok, true, chip + ' ' + at + ' ' + JSON.stringify(p.errors));
-    assert.strictEqual(p.date, want, chip + ' ' + at);
+/** 값이 바뀌는 학생으로 만든다: 이 학생의 조식·석식을 앞선 값(미실시)으로 맞춘다(명단 행 값 + 앞선 학기 행) */
+function primeOff(env, sid) {
+  seedEarly(env, sid);
+  env.asOwner((c) => c.bulkUpdateRecords_('status_changes', env.rows('status_changes').filter((r) => r.student_id === sid && r.source === '명단업로드' && (r.item === '석식' || r.item === '조식'))
+    .map((r) => ({ id: r.id, patch: { value: '미실시' } })), env.owner));
+  env.asOwner((c) => c.bulkUpdateRecords_('status_changes', env.rows('status_changes').filter((r) => r.source === '명단업로드').map((r) => ({ id: r.id, patch: { requested_at: '' } })), env.owner));
+}
+
+test('급식 변경 저장 표(PRD F7 1·3·4줄): 11:29:59 → 당일, 11:30:00 → 다음 날, 2026-12-31 11:30 → 2027-01-01. 저장 행과 전날(옛 값)·당일(새 값)까지', () => {
+  const cases = [['d_hall', '2027-03-03T11:29:59', '2027-03-03', '학사 석식'], ['d_hall', '2027-03-03T11:30:00', '2027-03-04', '학사 석식'],
+    ['d_gen', '2027-03-03T11:29:59', '2027-03-03', '일반 석식'], ['d_gen', '2027-03-03T11:30:00', '2027-03-04', '일반 석식'],
+    ['b_on', '2027-03-03T11:29:59', '2027-03-03', '실시'], ['b_on', '2027-03-03T11:30:00', '2027-03-04', '실시'], ['d_hall', '2026-12-31T11:30:00', '2027-01-01', '학사 석식']];
+  cases.forEach(([chip, at, want, val]) => {
+    const env = makeEnv(at.slice(0, 10) === '2026-12-31' ? '2027-01-05T10:00:00' : '2027-03-03T12:00:00');
+    const { a } = pick(env);
+    primeOff(env, a);
+    const item = chip === 'b_on' ? '조식' : '석식';
+    const r = saveOk(env, ADMIN, input(a, chip, at));
+    assert.strictEqual(r.ok, true, chip + ' ' + at + ' ' + JSON.stringify(r));
+    const row = rowsOf(env, a).find((x) => x.id === r.id);
+    assert.deepStrictEqual([row.effective_date, row.effective_date_auto, row.source, row.requested_at, row.value], [want, want, 'F7', at, val], chip + ' ' + at);
+    const before = new Date(want + 'T00:00:00Z'); before.setUTCDate(before.getUTCDate() - 1);
+    assert.strictEqual(valueOn(env, a, item, before.toISOString().slice(0, 10)), '미실시', '적용일 전날은 옛 값');
+    assert.strictEqual(valueOn(env, a, item, want), val, '적용일 당일은 새 값');
   });
 });
 
@@ -97,7 +108,8 @@ test('적용일 고치기: 자동값과 다르면 사유 2자 필요(없으면 �
   assert.strictEqual(env.rows('status_changes').length, before, '거부된 저장은 쓰지 않는다');
   const p = prev(env, HALL, input(a, 'd_off', '2027-03-03T10:00:00', { effectiveDate: '2027-03-08', reason: '급식실 요청' }));
   assert.strictEqual(p.manual, true);
-  assert.ok(p.warnings.some((w) => w.includes('미실시 규칙')), '준비 기간보다 이르면 경고');
+  assert.ok(p.warnings.some((w) => w.includes('급식실 준비 기간')), '준비 기간보다 이르면 경고');
+  assert.ok(![].concat(p.warnings, [p.reasonText]).some((t) => /\d{4}-\d{2}-\d{2}/.test(t)), '교사에게 숫자 날짜 원문을 보이지 않는다');
   const r = save(env, HALL, input(a, 'd_off', '2027-03-03T10:00:00', { effectiveDate: '2027-03-08', reason: '급식실 요청' }), p.expect);
   const row = rowsOf(env, a).find((x) => x.id === r.id);
   assert.deepStrictEqual([row.effective_date, row.effective_date_auto, row.reason], ['2027-03-08', '2027-03-15', '급식실 요청']);
@@ -224,9 +236,13 @@ test('권한: 관리자·담당교사 허용, 담당 아닌 학사 교사·담�
   env.expectAllowed(ADMIN, 'previewMealChange', i);
   const p = env.expectAllowed(HALL, 'previewMealChange', i);
   const n = env.rows('status_changes').length;
-  DENIED.forEach((who) => {
+  ['test.homeroom@example.com', 'test.attendance@example.com'].forEach((who) => {   // 역할 1차(status.list)는 통과, 학생 범위(status.edit)에서 거부
     env.expectDenied(who, 'status.edit', 'previewMealChange', i);
     env.expectDenied(who, 'status.edit', 'saveMealChange', i, p.expect);
+  });
+  ['test.duty@example.com', 'test.student@example.com', 'test.parent@example.com'].forEach((who) => {   // 역할 자체가 없음
+    env.expectDenied(who, 'status.list', 'previewMealChange', i);
+    env.expectDenied(who, 'status.list', 'saveMealChange', i, p.expect);
   });
   const o = input(other, 'd_off', '2027-03-03T10:00:00');
   env.expectDenied(HALL, 'status.edit', 'previewMealChange', o);
@@ -250,4 +266,80 @@ test('getMealContext: 관리자·학사 교사·담임·출결 허용(근무표�
   });
   ['test.duty@example.com', 'test.student@example.com', 'test.parent@example.com'].forEach((who) => env.expectDenied(who, 'status.list', 'getMealContext'));
   assert.ok(!JSON.stringify([adm, hall]).includes('@'), '응답에 이메일 없음');
+});
+
+/* ───────── C17a 검토 반영(결정 60 기간 하나, 중복 저장, 경고 문구) ───────── */
+
+function clearListTimes(env) {
+  env.asOwner((c) => c.bulkUpdateRecords_('status_changes', env.rows('status_changes').filter((r) => r.source === '명단업로드').map((r) => ({ id: r.id, patch: { requested_at: '' } })), env.owner));
+}
+
+test('같은 신청서를 다시 저장해도 한 행뿐이다(재시도·두 번 누르기): kind none·덮인 신청서·값이 바뀌는 stop', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { a, b } = pick(env);
+  const twice = (sid, i, label) => {
+    const p = prev(env, HALL, i);
+    const n = rowsOf(env, sid).length;
+    const r1 = save(env, HALL, i, p.expect);
+    const n1 = rowsOf(env, sid).length;
+    const r2 = save(env, HALL, i, p.expect);
+    assert.strictEqual(r1.ok, true, label); assert.strictEqual(r2.ok, true, label); assert.strictEqual(r2.duplicate, true, label);
+    assert.strictEqual(r2.id, r1.id, label);
+    assert.strictEqual(rowsOf(env, sid).length, n1, label + ': 두 번째는 쓰지 않는다');
+    assert.ok(n1 > n, label);
+  };
+  twice(a, input(a, 'd_hall', '2027-03-03T10:00:00'), 'none');
+  twice(a, input(a, 'd_gen', '2027-03-03T09:00:00'), 'superseded');   // 위 신청이 더 새 신청 → 덮임
+  twice(b, input(b, 'd_off', '2027-03-03T10:00:00'), 'stop');
+});
+
+test('결정 60: 기간은 적용일이 속한 기간 — 3/1(기간 사이)에는 새 담당교사만 저장되고 옛 담당교사는 거부, 2/25 종이를 3/3에 입력해도 3/8 적용으로 저장된다', () => {
+  const env = makeEnv('2027-03-01T23:00:00');
+  const { a } = pick(env);
+  const old = env.rows('enrollments').find((e) => e.student_id === a && e.term_id !== term2(env).id);
+  env.asOwner((c) => c.updateRecord_('enrollments', old.id, { teacher_email: 'fake.teacher1@example.com' }, env.owner));
+  clearListTimes(env);
+  const i = input(a, 'd_off', '2027-03-01T10:00:00');   // 월요일 신청 → 3/8, 새 기간
+  env.expectDenied('fake.teacher1@example.com', 'status.edit', 'previewMealChange', i);
+  env.expectDenied('fake.teacher1@example.com', 'status.edit', 'saveMealChange', i, '');
+  assert.strictEqual(saveOk(env, HALL, i).date, '2027-03-08');
+  const env2 = makeEnv('2027-03-03T12:00:00');
+  clearListTimes(env2);
+  const s2 = pick(env2).a;
+  const r = saveOk(env2, ADMIN, input(s2, 'd_off', '2027-02-25T10:00:00'));   // 목요일 → 다다음 주 월요일
+  assert.strictEqual(r.ok, true, JSON.stringify(r)); assert.strictEqual(r.date, '2027-03-08');
+  // 적용일이 끝난 기간이면 그대로 거부
+  const env3 = makeEnv('2027-03-03T12:00:00');
+  const late = prev(env3, ADMIN, input(pick(env3).a, 'd_off', '2027-02-10T10:00:00'));   // 2/10(수) → 2/22 월요일: 끝난 기간
+  assert.strictEqual(late.ok, false); assert.ok(late.errors.some((e) => e.message.includes('끝난 기간')));
+});
+
+test('경고·막힘 문구는 규칙 원문이 아니라 교사용 말이고 숫자 날짜(yyyy-MM-dd)가 없다. 덮인 신청서 안내는 한 번만', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { a, b } = pick(env);
+  const noRaw = (p) => ![].concat(p.warnings, [p.blocked, p.reasonText]).some((t) => /\d{4}-\d{2}-\d{2}|규칙의 날|\(F6\)/.test(t));
+  saveOk(env, HALL, input(a, 'd_hall', '2027-03-03T10:30:00'));
+  const late = prev(env, HALL, input(a, 'd_gen', '2027-03-03T09:00:00'));
+  assert.strictEqual(late.superseded, true);
+  assert.strictEqual(late.warnings.filter((w) => w.includes('더 새 신청')).length, 1);
+  assert.ok(noRaw(late));
+  const past = prev(env, HALL, input(b, 'd_off', '2027-03-03T10:00:00', { effectiveDate: '2027-03-03', reason: '이미 급식 중단' }));
+  assert.ok(past.warnings.some((w) => w.includes('지난 날짜의 식수 집계')) === false, '오늘 날짜는 지난 날짜가 아니다');
+  const old = prev(env, HALL, input(b, 'd_hall', '2027-03-03T10:00:00', { effectiveDate: '2027-03-03' }));
+  assert.ok(noRaw(past) && noRaw(old));
+  env.asOwner((c) => c.appendRecord_('status_changes', { student_id: b, item: '학사', value: '퇴실', requested_at: '2027-03-03T08:00:00', effective_date: '2027-03-03',
+    effective_date_auto: '2027-03-03', reason: '', doc_submitted: 'FALSE', linked_change_id: '', source: 'F6', status: '유효', memo: '', cancel_reason: '' }, env.owner));
+  const blocked = prev(env, HALL, input(b, 'd_hall', '2027-03-03T11:30:00'));
+  assert.ok(blocked.blocked.includes('학사 퇴실 상태') && noRaw(blocked));
+  env.setNow('2027-03-05T12:00:00');
+  const ago = prev(env, HALL, input(a, 'b_off', '2027-03-03T10:00:00'));   // 오늘(3/5)보다 이른 자동 날짜 3/3
+  assert.ok(ago.warnings.some((w) => w.includes('지난 날짜의 식수 집계가 바뀝니다')));
+});
+
+test('사유는 200자까지', () => {
+  const env = makeEnv();
+  const { a } = pick(env);
+  const p = prev(env, HALL, input(a, 'd_off', '2027-03-03T10:00:00', { effectiveDate: '2027-03-08', reason: '가'.repeat(201) }));
+  assert.strictEqual(p.ok, false);
+  assert.ok(p.errors.some((e) => e.field === 'reason'));
 });
