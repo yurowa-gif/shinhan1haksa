@@ -44,7 +44,7 @@
 `UI.blockChips({blocks:[{seq,start,end,label}], value?:{all,seqs}, onchange(value)})` → 칩 줄(전체 + 블록별). 블록을 다 고르면 "전체"로 바뀐다. `getValue()` → `{all, seqs, spec, valid}`: `spec`은 `'ALL'` 또는 `'18:00-20:00;22:00-24:00'`, 아무것도 안 골랐으면 `valid:false`. "15:00부터 귀가"는 화면이 시각 입력으로 따로 받는다(`UI.util.blockSpec`는 블록 칩만 다룬다).
 
 ### UI.segmented
-`UI.segmented({options:[{value,label}], value?, label?, onchange(value)})` → 2~4개 중 하나 고르기(`role="radiogroup"`). 노드: `getValue()`, `setValue(v)`. 예: 하루 / 기간.
+`UI.segmented({options:[{value,label}], value?, label?, onchange(value)})`(`value`를 안 주면 첫 칸, `value:''`면 아무것도 고르지 않은 상태 — 꼭 골라야 하는 칸) → 2~4개 중 하나 고르기(`role="radiogroup"`). 노드: `getValue()`, `setValue(v)`. 예: 하루 / 기간.
 
 ### UI.studentPicker
 `UI.studentPicker({students:[{id,name,grade,classNo,number,studentNo}], onpick(student|null), label?, placeholder?, maxResults?:8})` → 검색 + 결과 목록. 이름 일부·초성(ㄱㄱㅇ)·학번 앞자리로 찾고, 고르면 "1. 김가온 · 1-3 5번 [변경]"으로 바뀐다. 결과가 없으면 다음 할 일을 알려 준다. 노드: `getValue()`, `clear()`. 이메일·성별 같은 값은 화면에 쓰지 않는다.
@@ -55,7 +55,7 @@
 `UI.bottomSheet({title, content:Node, actions:[{text,onclick,kind,disabled}], onclose, initialFocus?:0})` → `{open(), close(), el, buttons}`. 바깥 누르기·Esc로 닫히고, 닫으면 포커스가 원래 자리로 돌아간다.
 
 ### UI.confirmSheet
-`UI.confirmSheet({title, message, confirmText?:'확인', cancelText?:'취소', danger?, onconfirm, oncancel})` → 열린 시트. 포커스는 **취소** 쪽. 무엇이 바뀌는지 `message`에 한 줄로 쓴다(rules.md 6절).
+`UI.confirmSheet({title, lead?, lines?, message?, confirmText?:'확인', cancelText?:'취소', danger?, onconfirm, oncancel})` → 열린 시트. 포커스는 **취소** 쪽. 무엇이 바뀌는지 `message`에 한 줄로 쓴다(rules.md 6절). 적용일처럼 꼭 봐야 할 한 줄은 `lead`(크고 굵게, 예 "3월 5일(금)부터 학사 퇴실"), 그 아래 바뀌는 것 목록은 `lines`(문자열 배열). `lead`·`lines`만 주면 `message`는 없어도 된다.
 
 ### UI.confirmWithReason
 `UI.confirmWithReason({title, message, reasonLabel?:'사유', confirmText?:'확인', minLength?:2, danger?:true, onconfirm(reason), oncancel})` → 열린 시트. 사유를 `minLength`자 이상 적어야 확인 버튼이 켜진다. `onconfirm`에는 앞뒤 공백을 자른 사유가 온다. 사유 저장·`audit_log`는 서버 몫이다.
