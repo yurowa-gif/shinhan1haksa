@@ -270,6 +270,77 @@ test('getMealContext: 관리자·학사 교사·담임·출결 허용(근무표�
   assert.ok(!JSON.stringify([adm, hall]).includes('@'), '응답에 이메일 없음');
 });
 
+/* ───────── C17b 학생 기록·서류 ───────── */
+
+const hr = (env) => env.rows('users').find((u) => u.email === 'test.homeroom@example.com').homeroom_class;
+const studentsOf = (env) => env.rows('students');
+function inClass(env, klass, yes) {
+  const [g, c] = klass.split('-');
+  const ids = new Set(env.rows('enrollments').filter((e) => e.term_id === term2(env).id).map((e) => e.student_id));
+  return studentsOf(env).filter((s) => ids.has(s.id) && ((String(s.grade) === g && String(s.class_no) === String(+c)) === yes))[0].id;
+}
+
+test('listStudentStatus: 오늘 값·대기·기록·비고 문장이 나오고 memo·이메일은 없다', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { a } = pick(env);
+  const r = saveOk(env, HALL, input(a, 'd_off', '2027-03-03T10:00:00'));
+  const row = rowsOf(env, a).find((x) => x.id === r.id);
+  env.asOwner((c) => c.updateRecord_('status_changes', row.id, { memo: '[2OUT] out:ZZ-메모-표식' }, env.owner));
+  const d = env.expectAllowed(HALL, 'listStudentStatus', a);
+  assert.strictEqual(d.now['석식'], '학사 석식');
+  assert.deepStrictEqual(d.pending.map((p) => [p.item, p.value, p.date]), [['석식', '미실시', '2027-03-15']]);
+  assert.strictEqual(d.remark, '3.3 석식 미실시(3.15~)');
+  const pend = d.pending.find((h) => h.id === r.id);
+  assert.ok(pend && pend.docState === 'missing' && pend.canMarkDoc, '대기 줄에 [제출 표시]');
+  assert.ok(d.history.some((h) => h.id === r.id && h.docState === 'missing' && !h.canMarkDoc), '같은 행이 기록에도 있지만 버튼은 한 곳에만');
+  const wire = JSON.stringify(d);
+  assert.ok(!wire.includes('ZZ-메모-표식') && !wire.includes('@'), 'memo·이메일 없음');
+});
+
+test('listStudentStatus 권한: 관리자·출결·학사 교사(담당 아닌 학생도)·담임(우리 반) 허용, 다른 반 담임·근무표·학생·학부모는 거부(denied:status.view)', () => {
+  const env = makeEnv();
+  const { a, other } = pick(env);
+  [ADMIN, HALL, 'test.attendance@example.com'].forEach((who) => { env.expectAllowed(who, 'listStudentStatus', a); env.expectAllowed(who, 'listStudentStatus', other); });
+  const klass = hr(env);
+  const mineId = inClass(env, klass, true), otherId = inClass(env, klass, false);
+  const home = env.expectAllowed('test.homeroom@example.com', 'listStudentStatus', mineId);
+  assert.ok(!home.pending.concat(home.history).some((h) => h.canMarkDoc), '담임은 서류 표시 버튼이 없다');
+  env.expectDenied('test.homeroom@example.com', 'status.view', 'listStudentStatus', otherId);
+  ['test.duty@example.com', 'test.student@example.com', 'test.parent@example.com'].forEach((who) => env.expectDenied(who, 'status.view', 'listStudentStatus', a));
+  const ctx = env.call('test.homeroom@example.com', 'getMealContext');
+  assert.ok(ctx.viewStudents.length > 0 && ctx.viewStudents.every((s) => s.classNo === String(+klass.split('-')[1]) || s.classNo === klass.split('-')[1]));
+});
+
+test('서류 미제출: 관리자가 입력해도 담당교사 홈에 1건, setDocSubmitted 뒤 원래대로. 명단 행은 세지 않는다', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { a } = pick(env);
+  const home = (who, role) => env.call(who, 'getHomeData', role).food.docMissing;
+  // 가짜 데이터에는 이미 서류 미제출 퇴실이 있을 수 있다(명단 행의 FALSE는 세지 않는다). 늘어나는 수로 본다.
+  const base = { hall: home(HALL, 'hall_teacher'), other: home('fake.teacher1@example.com', 'hall_teacher'), admin: home(ADMIN, 'admin') };
+  const r = saveOk(env, ADMIN, input(a, 'd_off', '2027-03-03T10:00:00'));
+  assert.strictEqual(home(HALL, 'hall_teacher'), base.hall + 1);
+  assert.strictEqual(home('fake.teacher1@example.com', 'hall_teacher'), base.other, '담당이 아닌 교사 홈은 그대로');
+  assert.strictEqual(home(ADMIN, 'admin'), base.admin + 1);
+  assert.strictEqual(env.expectAllowed(HALL, 'setDocSubmitted', r.id).ok, true);
+  assert.strictEqual(rowsOf(env, a).find((x) => x.id === r.id).doc_submitted, 'TRUE');
+  assert.ok(env.auditActions('update').length > 0);
+  assert.strictEqual(home(HALL, 'hall_teacher'), base.hall);
+  assert.strictEqual(env.call(HALL, 'setDocSubmitted', r.id).already, true, '두 번 눌러도 안전');
+});
+
+test('setDocSubmitted 권한: 남의 학생 행 id → denied:status.edit(락 안 재검사), 담임·출결 denied:status.edit, 근무표·학생·학부모 denied:status.list, 연결 행·없는 id는 ok:false', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { a } = pick(env);
+  const r = saveOk(env, ADMIN, input(a, 'd_off', '2027-03-03T10:00:00', { docSubmitted: false }));
+  ['fake.teacher1@example.com', 'test.homeroom@example.com', 'test.attendance@example.com'].forEach((who) => env.expectDenied(who, 'status.edit', 'setDocSubmitted', r.id));
+  ['test.duty@example.com', 'test.student@example.com', 'test.parent@example.com'].forEach((who) => env.expectDenied(who, 'status.list', 'setDocSubmitted', r.id));
+  assert.strictEqual(rowsOf(env, a).find((x) => x.id === r.id).doc_submitted, 'FALSE');
+  const list = rowsOf(env, a).find((x) => x.item === '석식' && x.source === '명단업로드');
+  assert.strictEqual(env.call(ADMIN, 'setDocSubmitted', list.id).ok, false, '명단 행은 대상 아님');
+  assert.strictEqual(env.call(ADMIN, 'setDocSubmitted', 'no-such-id').ok, false);
+  assert.strictEqual(env.call(ADMIN, 'setDocSubmitted', r.id).ok, true);
+});
+
 /* ───────── C17a 검토 반영(결정 60 기간 하나, 중복 저장, 경고 문구) ───────── */
 
 /** 다른 기간의 담당교사: 거부 기록(denied:status.edit)은 남고, 오류 문구는 "그 기간 담당교사나 관리자가 신청합니다" 안내 */
@@ -376,6 +447,135 @@ test('근무교사(C8s)도 급식 변경은 못 한다: 오늘 근무자는 out.
   env.expectDenied(duty, 'status.edit', 'previewMealChange', i);
   env.expectDenied(duty, 'status.edit', 'saveMealChange', i, '');
   assert.strictEqual(rowsOf(env, a).filter((x) => x.source === 'F7').length, 0);
+});
+
+/* ───────── C17b 검토 반영(결정 60 기준 하나, 비고·기록 말, 홈 목록) ───────── */
+
+test('서류 미제출의 담당은 "적용일이 속한 기간의 담당교사" 하나: 홈 숫자·canMarkDoc·setDocSubmitted가 일치한다(2/24에 3/8 적용 행)', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { a } = pick(env);
+  const old = env.rows('enrollments').find((e) => e.student_id === a && e.term_id !== term2(env).id);
+  env.asOwner((c) => c.updateRecord_('enrollments', old.id, { teacher_email: 'fake.teacher1@example.com' }, env.owner));
+  env.asOwner((c) => c.bulkUpdateRecords_('status_changes', env.rows('status_changes').filter((r) => r.source === '명단업로드').map((r) => ({ id: r.id, patch: { requested_at: '' } })), env.owner));
+  const home = (who) => env.call(who, 'getHomeData', 'hall_teacher').food.docMissing;
+  const base = { hall: home(HALL), old: home('fake.teacher1@example.com') };
+  const r = saveOk(env, ADMIN, input(a, 'd_off', '2027-02-24T10:00:00'));   // 2/24 수 → 3/8: 새 기간(1학기)
+  assert.strictEqual(r.date, '2027-03-08');
+  assert.strictEqual(home(HALL), base.hall + 1, '1학기 담당 홈에 1건');
+  assert.strictEqual(home('fake.teacher1@example.com'), base.old, '2학기 담당 홈에는 없다');
+  const can = (who) => env.call(who, 'listStudentStatus', a).pending.find((h) => h.id === r.id).canMarkDoc;
+  assert.strictEqual(can(HALL), true); assert.strictEqual(can('fake.teacher1@example.com'), false); assert.strictEqual(can(ADMIN), true);
+  env.expectDenied('fake.teacher1@example.com', 'status.edit', 'setDocSubmitted', r.id);
+  assert.strictEqual(env.expectAllowed(HALL, 'setDocSubmitted', r.id).ok, true);
+  assert.strictEqual(home(HALL), base.hall);
+});
+
+test('기간이 바뀌어도 서류 미제출은 표시할 때까지 남는다(지난 기간 행도 관리자 홈에), 홈 목록은 학생·종류만(이메일·memo 없음)', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { a } = pick(env);
+  const adminHome = () => env.call(ADMIN, 'getHomeData', 'admin').food.docMissing;
+  const n0 = adminHome();
+  env.asOwner((c) => c.appendRecord_('status_changes', { student_id: a, item: '학사', value: '퇴실', requested_at: '2027-02-20T10:00:00', effective_date: '2027-02-22',
+    effective_date_auto: '2027-02-22', reason: '학기 말 퇴실', doc_submitted: 'FALSE', linked_change_id: '', source: 'F6', status: '유효', memo: 'ZZ-메모-표식', cancel_reason: '' }, env.owner));
+  assert.strictEqual(adminHome(), n0 + 1, '끝난 기간의 행도 센다');
+  const f = env.call(HALL, 'getHomeData', 'hall_teacher').food;
+  const item = f.docList.find((x) => x.studentId === a);
+  assert.ok(item && item.kind === '입퇴실' && /\d+\. /.test(item.label));
+  assert.ok(!JSON.stringify(f).includes('@') && !JSON.stringify(f).includes('ZZ-메모-표식'));
+});
+
+test('비고 문장: 한 신청의 연결 행을 묶고(신청일은 한 번), 취소·덮인 신청서·명단 행은 빼고, 석식은 고유 이름으로 쓴다', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { a } = pick(env);
+  const add = (r) => env.asOwner((c) => c.appendRecord_('status_changes', Object.assign({ student_id: a, effective_date_auto: r.effective_date, reason: '', doc_submitted: '', linked_change_id: '',
+    status: '유효', memo: '', cancel_reason: '' }, r), env.owner));
+  const head = add({ item: '학사', value: '퇴실', requested_at: '2027-03-03T15:00:00', effective_date: '2027-03-05', source: 'F6', doc_submitted: 'TRUE' });
+  [['기숙사', '퇴실', '2027-03-05'], ['조식', '미실시', '2027-03-05'], ['석식', '미실시', '2027-03-15']]
+    .forEach(([item, value, d]) => add({ item, value, requested_at: '2027-03-03T15:00:00', effective_date: d, source: 'F6', linked_change_id: head.id }));
+  add({ item: '석식', value: '일반 석식', requested_at: '2027-03-04T10:00:00', effective_date: '2027-03-05', source: 'F7', status: '취소', cancel_reason: '[자동] x 더 새 신청' });
+  const gen = add({ item: '석식', value: '일반 석식', requested_at: '2027-03-04T11:00:00', effective_date: '2027-03-12', source: 'F7' });
+  const d = env.call(ADMIN, 'listStudentStatus', a);
+  assert.ok(d.remark.startsWith('3.3 학사 퇴실(3.5~), 기숙사 퇴실(3.5~), 조식 미실시(3.5~), 석식 미실시(3.15~)'), d.remark);
+  assert.ok(d.remark.includes('3.4 일반 석식으로 변경(3.12~)'), d.remark);
+  assert.strictEqual((d.remark.match(/일반 석식으로 변경/g) || []).length, 1, '취소·덮인 신청서는 비고에 없다');
+  assert.ok(!d.remark.includes('석식 학사 석식') && !d.remark.includes('석식 일반 석식'));
+  assert.ok(gen.id);
+});
+
+test('기록 줄은 교사용 말: 날짜는 "3월 4일(목) 10:00", 출처는 급식 변경·입퇴실·명단, 취소 사유에 [자동]·UUID가 없다', () => {
+  const env = makeEnv('2027-03-04T12:00:00');
+  const { a } = pick(env);
+  saveOk(env, HALL, input(a, 'd_off', '2027-03-04T09:00:00'));
+  saveOk(env, HALL, input(a, 'd_gen', '2027-03-04T10:00:00'));   // 앞 대기 신청을 대체(취소)
+  const d = env.call(HALL, 'listStudentStatus', a);
+  const wire = JSON.stringify(d);
+  assert.ok(!/\d{4}-\d{2}-\d{2}T/.test(wire) && !wire.includes('[자동]') && !/[0-9a-f]{8}-[0-9a-f]{4}/.test(wire.replace(/"id":"[^"]*"/g, '').replace(/"student":\{[^}]*\}/, '')), '시스템 글자·UUID 없음');
+  const h = d.history.find((x) => x.status === '취소');
+  assert.strictEqual(h.cancelText, '새 신청으로 대체됨');
+  assert.strictEqual(h.requestedKo, '3월 4일(목) 09:00'); assert.strictEqual(h.sourceLabel, '급식 변경');
+  assert.ok(d.history.some((x) => x.sourceLabel === '명단'));
+});
+
+test('setDocSubmitted: 문자열이 아닌 id는 거부, 담임 홈은 우리 반의 이번 주 신청(신청일 기준)만 보고 일요일에도 이번 주가 맞다', () => {
+  const env = makeEnv('2027-03-07T21:00:00');   // 일요일 밤: 이번 주 = 3/1(월)~3/7(일)
+  assert.strictEqual(env.call(ADMIN, 'setDocSubmitted', 12345).ok, false);
+  assert.strictEqual(env.call(ADMIN, 'setDocSubmitted', null).ok, false);
+  const klass = env.rows('users').find((u) => u.email === 'test.homeroom@example.com').homeroom_class;
+  const [g, c] = klass.split('-');
+  const ids = env.rows('enrollments').filter((e) => e.term_id === term2(env).id).map((e) => e.student_id);
+  const inClass = env.rows('students').filter((s) => ids.includes(s.id) && String(s.grade) === g && String(s.class_no) === String(+c));
+  const outClass = env.rows('students').filter((s) => ids.includes(s.id) && !(String(s.grade) === g && String(s.class_no) === String(+c)));
+  const mine = inClass[0], other = outClass[0];
+  env.asOwner((c2) => c2.bulkUpdateRecords_('status_changes', env.rows('status_changes').filter((r) => r.source === '명단업로드').map((r) => ({ id: r.id, patch: { requested_at: '' } })), env.owner));
+  saveOk(env, ADMIN, input(mine.id, 'd_off', '2027-03-03T10:00:00'));   // 신청은 이번 주, 적용일 3/15는 다음 주
+  saveOk(env, ADMIN, input(other.id, 'd_off', '2027-03-03T10:00:00'));  // 다른 반
+  saveOk(env, ADMIN, input(mine.id, 'd_gen', '2027-03-02T10:30:00', { docSubmitted: true }));
+  saveOk(env, ADMIN, input(mine.id, 'b_off', '2027-02-26T10:30:00'));   // 지난주 신청: 이번 주 카드에 없다
+  const week = env.call('test.homeroom@example.com', 'getHomeData', 'homeroom').food.week;
+  assert.strictEqual(week.length, 2, JSON.stringify(week));
+  assert.ok(week.every((x) => x.label === mine.grade + '. ' + mine.name), '앱 표준 이름(학년. 이름)');
+  assert.deepStrictEqual(week.map((x) => [x.what, x.missing, x.done]).sort(), [['석식 미실시', true, false], ['일반 석식으로 변경', false, true]].sort());
+  assert.ok(!JSON.stringify(week).includes(other.name));
+});
+
+test('지난 기간(졸업) 학생의 서류 미제출도 홈 링크 → 기록 → [제출 표시]로 지울 수 있다. ymd 없이는 보기 거부, 책임 교사가 없는 행은 관리자 홈 맨 위', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const t1 = env.rows('terms').find((t) => t.name !== '2027 1학기');
+  const grad = env.asOwner((c) => c.appendRecord_('students', { student_no: '39997', name: '가짜졸업', gender: '여', grade: '3', class_no: '1', number: '97', track: '', email: '', memo: '가짜' }, env.owner));
+  env.asOwner((c) => c.appendRecord_('enrollments', { term_id: t1.id, student_id: grad.id, teacher_email: HALL, veritas: 'FALSE', commute_type: '일반', end_type: '23:00', memo: '' }, env.owner));
+  const row = env.asOwner((c) => c.appendRecord_('status_changes', { student_id: grad.id, item: '학사', value: '퇴실', requested_at: '2027-02-10T10:00:00', effective_date: '2027-02-10',
+    effective_date_auto: '2027-02-10', reason: '졸업', doc_submitted: 'FALSE', linked_change_id: '', source: 'F6', status: '유효', memo: '', cancel_reason: '' }, env.owner));
+  const nobody = env.rows('students').find((s) => s.name === '가짜미등록');
+  env.asOwner((c) => c.appendRecord_('status_changes', { student_id: nobody.id, item: '석식', value: '미실시', requested_at: '2027-03-01T10:00:00', effective_date: '2027-03-08',
+    effective_date_auto: '2027-03-08', reason: '', doc_submitted: 'FALSE', linked_change_id: '', source: 'F7', status: '유효', memo: '', cancel_reason: '' }, env.owner));
+  const hall = () => env.call(HALL, 'getHomeData', 'hall_teacher').food;
+  const item = hall().docList.find((x) => x.studentId === grad.id);
+  assert.ok(item && item.ymd >= t1.start_date && item.ymd <= t1.end_date, '링크 날짜는 그 행의 기간 안: ' + JSON.stringify(item));
+  assert.ok(!hall().docList.some((x) => x.studentId === nobody.id), '등록 없는 학생의 행은 담당 교사 홈에 없다');
+  const adm = env.call(ADMIN, 'getHomeData', 'admin').food;
+  assert.strictEqual(adm.docList[0].studentId, nobody.id, '책임 교사가 없는 행이 관리자 홈 맨 위');
+  assert.ok(adm.docList.some((x) => x.studentId === grad.id));
+  env.expectDenied(HALL, 'status.view', 'listStudentStatus', grad.id);   // 이번 기간 기준으로는 보이지 않는다
+  const d = env.expectAllowed(HALL, 'listStudentStatus', grad.id, item.ymd);
+  const mineRow = d.history.find((h) => h.id === row.id);
+  assert.ok(mineRow.canMarkDoc && mineRow.dateKo.startsWith('2월 10일'), JSON.stringify(mineRow));
+  const n0 = hall().docMissing;
+  assert.strictEqual(env.expectAllowed(HALL, 'setDocSubmitted', row.id).ok, true);
+  assert.strictEqual(hall().docMissing, n0 - 1);
+  assert.strictEqual(env.call(ADMIN, 'listStudentStatus', nobody.id, adm.docList[0].ymd).pending.find((h) => h.docState === 'missing').canMarkDoc, true, '관리자는 책임 교사가 없는 행도 표시할 수 있다');
+});
+
+test('비고: 신청은 신청 일시 순(오래된 것 먼저), 구분자 " / ", 다른 해 날짜에는 연도가 붙는다', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { a } = pick(env);
+  const add = (r) => env.asOwner((c) => c.appendRecord_('status_changes', Object.assign({ student_id: a, effective_date_auto: r.effective_date, reason: '', doc_submitted: '', linked_change_id: '',
+    status: '유효', memo: '', cancel_reason: '' }, r), env.owner));
+  add({ item: '조식', value: '미실시', requested_at: '2027-03-02T10:00:00', effective_date: '2027-03-09', source: 'F7', doc_submitted: 'TRUE' });
+  add({ item: '석식', value: '미실시', requested_at: '2026-12-30T10:00:00', effective_date: '2027-01-11', source: 'F7', doc_submitted: 'TRUE' });
+  const d = env.call(ADMIN, 'listStudentStatus', a);
+  assert.ok(d.remark.startsWith('12.30 석식 미실시(1.11~) / 3.2 조식 미실시(3.9~)'), d.remark);
+  const old = d.history.find((h) => h.what === '석식 미실시' && h.requestedKo.indexOf('2026년') === 0);
+  assert.ok(old && old.dateKo.indexOf('2027') < 0, '올해 날짜에는 연도가 없고 지난해 신청 일시에는 연도가 붙는다');
 });
 
 test('기간 경계(결정 60 보충): 2/28(일)·3/1(사이 날)에 옛 담당은 안내와 함께 거부, 새 담당은 저장. 목록은 이번 기간 ∪ 다음 기간', () => {
@@ -530,6 +730,66 @@ test('기간 대체 순서(T5·T6): 첫 등록 기간 전 적용일의 신입생
   assert.strictEqual(early.ok, false); assert.ok(early.errors.some((e) => /명단에 없는/.test(e.message)), JSON.stringify(early.errors));
 });
 
+/* ───────── C17b 3차: ymd 범위·전입생·picker ymd ───────── */
+
+test('listStudentStatus의 ymd로 범위가 넓어지지 않는다: 한 번도 등록 안 된 학생·졸업생(이번 기간 ymd)·다른 반 담임은 어떤 ymd로도 거부, 잘못된·기간 밖 ymd는 ymd 없음과 같다', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const t1 = env.rows('terms').find((t) => t.name !== '2027 1학기');
+  const nobody = env.rows('students').find((s) => s.name === '가짜미등록').id;
+  const grad = env.asOwner((c) => c.appendRecord_('students', { student_no: '39995', name: '가짜졸업생', gender: '여', grade: '3', class_no: '1', number: '95', track: '', email: '', memo: '가짜' }, env.owner));
+  env.asOwner((c) => c.appendRecord_('enrollments', { term_id: t1.id, student_id: grad.id, teacher_email: HALL, veritas: 'FALSE', commute_type: '일반', end_type: '23:00', memo: '' }, env.owner));
+  const { a } = pick(env);
+  // 한 번도 등록 안 된 학생: 어떤 기간 안 ymd도 거부(역할만 검사하거나 아무 기간으로 보면 통과해 버린다)
+  ['2027-03-03', '2027-02-10', '2027-05-01'].forEach((y) => env.expectDenied(HALL, 'status.view', 'listStudentStatus', nobody, y));
+  // 졸업생(옛 기간만 등록): 이번 기간 ymd는 거부, 그 기간 ymd는 허용
+  env.expectDenied(HALL, 'status.view', 'listStudentStatus', grad.id, '2027-03-03');
+  env.expectAllowed(HALL, 'listStudentStatus', grad.id, '2027-02-10');
+  // 다른 반 담임은 어떤 ymd로도 거부
+  const klass = env.rows('users').find((u) => u.email === 'test.homeroom@example.com').homeroom_class;
+  const [g, c] = klass.split('-');
+  const ids = env.rows('enrollments').filter((e) => e.term_id === term2(env).id).map((e) => e.student_id);
+  const other = env.rows('students').find((s) => ids.includes(s.id) && !(String(s.grade) === g && String(s.class_no) === String(+c))).id;
+  ['', '2027-03-03', '2027-02-10'].forEach((y) => env.expectDenied('test.homeroom@example.com', 'status.view', 'listStudentStatus', other, y));
+  // 잘못된·기간 밖 ymd = ymd 없음과 같은 결과(허용되는 학생은 허용, 거부되는 학생은 거부)
+  ['2027-13-45', 'abc', 12345, '2030-01-01'].forEach((y) => {
+    assert.strictEqual(env.call(HALL, 'listStudentStatus', a, y).student.id, a);
+    env.expectDenied(HALL, 'status.view', 'listStudentStatus', grad.id, y);
+  });
+});
+
+test('전입생(다음 기간 명단 없음)의 서류 담당은 대체 기간 담당: 홈 1건·항목 ymd는 그 기간 끝 날짜·그 ymd로 canMarkDoc·setDocSubmitted 뒤 0건', () => {
+  const env = makeEnv('2027-02-25T12:00:00');
+  const t1 = env.rows('terms').find((t) => t.name !== '2027 1학기');
+  const st = env.asOwner((c) => c.appendRecord_('students', { student_no: '39994', name: '가짜전입생', gender: '남', grade: '2', class_no: '1', number: '94', track: '', email: '', memo: '가짜' }, env.owner));
+  env.asOwner((c) => c.appendRecord_('enrollments', { term_id: t1.id, student_id: st.id, teacher_email: HALL, veritas: 'FALSE', commute_type: '일반', end_type: '23:00', memo: '' }, env.owner));
+  ['학사', '석식'].forEach((item) => env.asOwner((c) => c.appendRecord_('status_changes', { student_id: st.id, item, value: item === '학사' ? '입실' : '학사 석식', requested_at: '', effective_date: '2026-08-17',
+    effective_date_auto: '2026-08-17', reason: '', doc_submitted: '', linked_change_id: '', source: '명단업로드', status: '유효', memo: '', cancel_reason: '' }, env.owner)));
+  const home = () => env.call(HALL, 'getHomeData', 'hall_teacher').food;
+  const n0 = home().docMissing;
+  const r = saveOk(env, HALL, input(st.id, 'd_off', '2027-02-25T10:00:00'));   // 적용일 3/8 = 1학기, 이 학생은 1학기 미등록
+  assert.strictEqual(r.date, '2027-03-08');
+  assert.strictEqual(home().docMissing, n0 + 1);
+  const item = home().docList.find((x) => x.studentId === st.id);
+  assert.strictEqual(item.ymd, t1.end_date, '대체 기간 안 날짜(그 기간 끝)');
+  const d = env.call(HALL, 'listStudentStatus', st.id, item.ymd);
+  assert.strictEqual(d.pending.find((h) => h.id === r.id).canMarkDoc, true);
+  assert.strictEqual(env.call(HALL, 'setDocSubmitted', r.id).ok, true);
+  assert.strictEqual(home().docMissing, n0);
+});
+
+test('getMealContext의 보기 목록 항목에 ymd: 이번 기간 등록이면 빈 값, 다음 기간에만 등록된 학생은 그 기간 안 날짜(고르면 열린다)', () => {
+  const env = makeEnv('2027-02-24T12:00:00');
+  const t2 = term2(env);
+  const st = env.asOwner((c) => c.appendRecord_('students', { student_no: '39993', name: '가짜신입', gender: '여', grade: '1', class_no: '1', number: '93', track: '', email: '', memo: '가짜' }, env.owner));
+  env.asOwner((c) => c.appendRecord_('enrollments', { term_id: t2.id, student_id: st.id, teacher_email: HALL, veritas: 'FALSE', commute_type: '일반', end_type: '23:00', memo: '' }, env.owner));
+  const ctx = env.call(HALL, 'getMealContext');
+  const item = ctx.viewStudents.find((x) => x.id === st.id);
+  assert.ok(item && item.ymd >= t2.start_date && item.ymd <= t2.end_date, JSON.stringify(item));
+  assert.strictEqual(env.call(HALL, 'listStudentStatus', st.id, item.ymd).student.id, st.id);
+  const cur = ctx.viewStudents.find((x) => x.id === pick(env).a);
+  assert.ok(cur.ymd === '' || cur.ymd >= t2.start_date, '이번 기간 또는 다음 기간 중 하나');
+});
+
 test('끝난 저장을 나중에 다시 보내도 거짓 "덜 끝났습니다"가 없다(FP-A): 나중에 연결 행이 취소돼도, 덮여서 취소된 신청서여도 duplicate', () => {
   const env = makeEnv('2027-03-03T12:00:00');
   const { a } = pick(env);
@@ -577,4 +837,18 @@ test('대체 기간이 끝난 학생의 오류 문구는 적용일 기간 이름
   env.asOwner((c) => c.appendRecord_('enrollments', { term_id: t1.id, student_id: st.id, teacher_email: HALL, veritas: 'FALSE', commute_type: '일반', end_type: '23:00', memo: '' }, env.owner));
   const p = env.call(ADMIN, 'previewMealChange', input(st.id, 'd_off', '2027-03-03T10:00:00'));   // 적용일 3/15 = 1학기, 이 학생은 2학기(끝남)만 등록
   assert.deepStrictEqual(p.errors.map((e) => e.message), ['"2027 1학기" 명단에 없는 학생입니다. 관리자에게 명단 등록을 요청해 주세요.']);
+});
+
+test('사이 날(3/1)에도 다음 기간에만 등록된 신입생을 학생 기록 picker에서 고르면 열린다(ymd = 그 기간 안 날짜)', () => {
+  const env = makeEnv('2027-03-01T20:00:00');
+  const t2 = term2(env);
+  const st = env.asOwner((c) => c.appendRecord_('students', { student_no: '39990', name: '가짜신입3', gender: '여', grade: '1', class_no: '1', number: '90', track: '', email: '', memo: '가짜' }, env.owner));
+  env.asOwner((c) => c.appendRecord_('enrollments', { term_id: t2.id, student_id: st.id, teacher_email: HALL, veritas: 'FALSE', commute_type: '일반', end_type: '23:00', memo: '' }, env.owner));
+  const ctx = env.call(HALL, 'getMealContext');
+  const item = ctx.viewStudents.find((x) => x.id === st.id);
+  assert.ok(item && item.ymd >= t2.start_date, JSON.stringify(item));
+  assert.strictEqual(env.expectAllowed(HALL, 'listStudentStatus', st.id, item.ymd).student.id, st.id);
+  const old = ctx.viewStudents.find((x) => x.id === pick(env).a);
+  assert.strictEqual(old.ymd, '', '막 끝난 기간에 등록된 학생은 ymd 없이 열린다');
+  assert.strictEqual(env.expectAllowed(HALL, 'listStudentStatus', old.id, old.ymd).student.id, old.id);
 });
