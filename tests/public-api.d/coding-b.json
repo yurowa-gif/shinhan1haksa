@@ -16,6 +16,14 @@
       "use": "화면",
       "guard": "requirePermission_"
     },
+    "listStudentStatus": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "setDocSubmitted": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
     "getMealCounts": {
       "use": "화면",
       "guard": "requirePermission_"
