@@ -143,7 +143,8 @@ function saveMove(rows, move, today) {
   const head = 'H' + (++seq);
   const out = rows.map((r) => {
     const c = p.toCancel.find((x) => x.id === r.id);
-    return c ? Object.assign({}, r, { status: '취소', cancel_reason: '[자동] ' + head + ' ' + c.cancel_reason }) : r;
+    return c ? Object.assign({}, r, { status: '취소', cancel_reason: '[자동] ' + head + ' ' + c.cancel_reason })
+      : p.toRestore.some((x) => x.id === r.id) ? Object.assign({}, r, { status: '유효', cancel_reason: '' }) : r;
   });
   p.rows.forEach((r, i) => out.push(CH(r.item, r.value, r.effective_date, { id: i ? head + '_' + i : head, linked_change_id: i ? head : '',
     requested_at: r.requested_at, source: r.source, created_at: String(++seq) })));
@@ -178,8 +179,9 @@ test('학기 중 신규 학생의 학사 입실(직전 퇴실 없음): meals가 
 });
 
 const undo = (rows, head, today) => plain(ctx.moveUndoPlan_(rows, head, { today: today || '2027-03-09' }));
-function applyUndo(rows, u) {
-  return rows.map((r) => (u.toCancel.some((c) => c.id === r.id) ? Object.assign({}, r, { status: '취소' })
+function applyUndo(rows, u) {   // 저장 흉내: 규칙이 준 cancel_reason은 그대로, 없으면 '[자동] <대표> 퇴실 취소'
+  const why = (id) => (u.toCancel.find((c) => c.id === id) || {}).cancel_reason;
+  return rows.map((r) => (u.toCancel.some((c) => c.id === r.id) ? Object.assign({}, r, { status: '취소', cancel_reason: why(r.id) || '[자동] undo 퇴실 취소' })
     : u.toRestore.some((c) => c.id === r.id) ? Object.assign({}, r, { status: '유효', cancel_reason: '' }) : r));
 }
 
@@ -194,14 +196,15 @@ test('퇴실 취소: 대표·연결 행 취소 + 퇴실로 [자동] 취소된 �
   for (const d of ['2027-03-10', '2027-03-15', '2027-03-25']) assert.deepStrictEqual([at(s, '학사', d), at(s, '조식', d), at(s, '석식', d)], ['입실', '실시', '학사 석식'], d);
 });
 
-test('퇴실 취소: 더 새 신청에 덮이는 행은 되살리지 않고 경고, memo 꼬리표도 찾는다(5절 5번 승인 전)', () => {
+test('퇴실 취소: 더 새 신청에 덮이는 행은 되살리지 않고 경고(꼬리표는 cancel_reason만, memo는 찾지 않는다 — 결정 41)', () => {
   const base = HALL().concat([CH('조식', '실시', '2027-03-20', { source: 'F7', requested_at: '2027-03-02T09:00:00' })]);
   base[2].value = '미실시';
   const left = saveMove(base, LEAVE, '2027-03-08');
   const cancelledId = left.p.toCancel[0].id;
-  // 꼬리표를 memo로 옮기고, 더 새 신청(3/9 신청, 3/12 미실시)을 넣는다
-  const rows = left.rows.map((r) => (r.id === cancelledId ? Object.assign({}, r, { cancel_reason: '', memo: '메모 [자동] ' + left.head }) : r))
-    .concat([CH('조식', '미실시', '2027-03-12', { source: 'F7', requested_at: '2027-03-09T09:00:00' })]);
+  const memoOnly = left.rows.map((r) => (r.id === cancelledId ? Object.assign({}, r, { cancel_reason: '', memo: '메모 [자동] ' + left.head }) : r));
+  assert.deepStrictEqual(undo(memoOnly, left.head).toRestore, []);
+  // 더 새 신청(3/9 신청, 3/12 미실시)을 넣는다
+  const rows = left.rows.concat([CH('조식', '미실시', '2027-03-12', { source: 'F7', requested_at: '2027-03-09T09:00:00' })]);
   let u = undo(rows, left.head);
   assert.deepStrictEqual([u.toRestore, u.warnings.length > 0], [[], true]);
   u = undo(rows.slice(0, -1), left.head);
@@ -265,11 +268,12 @@ test('퇴실 취소: 남은 다른 학사 퇴실이 같은 날을 석식 중단�
 
 /* ───── 총괄 검토(#55) ───── */
 
-// F7 신청 저장 흉내: 취소 사유 '[자동] <새 행 id> 새 신청으로 대체'(C17a)
+// F7 신청 저장 흉내: 취소 사유 '[자동] <새 행 id> 새 신청으로 대체'(C17a). superseded 신청서는 '취소' 행으로(결정 58)
 function saveReq(rows, item, to, at, today, effectiveDate) {
   const p = plain(ctx.mealPlanChange_(rows, 's1', item, to, at, { today, effectiveDate }));
-  if (p.blocked || p.superseded) return rows;
+  if (p.blocked) return rows;
   const id = 'q' + (++seq);
+  if (p.superseded) return rows.concat([CH(item, to, effectiveDate || p.autoDate, { id, source: 'F7', requested_at: at, created_at: String(++seq), status: '취소', cancel_reason: '[자동] ' + p.supersededBy[0] + ' 더 새 신청' })]);
   const out = rows.map((r) => (p.toCancel.some((c) => c.id === r.id) ? Object.assign({}, r, { status: '취소', cancel_reason: '[자동] ' + id + ' 새 신청으로 대체' }) : r));
   out.push(CH(item, to, p.date, { id, source: 'F7', requested_at: at, created_at: String(++seq) }));
   p.followUps.forEach((f) => out.push(CH(f.item, f.value, f.effective_date, { source: f.source, requested_at: at, created_at: String(++seq) })));
@@ -318,16 +322,6 @@ test('적용일 뒤에 입퇴실 기록이 있으면 오류(재현 G: 3/20 학�
   const p = plan(rows, { type: '기숙사 입실', effectiveDate: '2027-03-10', requestedAt: '2027-03-03T15:00:00' });
   assert.ok(p.errors.some((e) => /이후 날짜에 입퇴실 기록/.test(e)));
   assert.deepStrictEqual(p.rows, []);
-});
-
-test('총괄 결정 (a): 퇴실 정리가 취소한 학사 석식 행이 [자동]으로 취소했던 신청을 되살린다 — 같은 신청 일시면 입력 순서와 무관', () => {
-  const base = () => [CH('학사', '입실', '2027-03-01'), CH('기숙사', '퇴실', '2027-03-01'), CH('석식', '미실시', '2027-03-01')];
-  const A = (r) => saveReq(r, '석식', '일반 석식', '2027-03-03T09:00:00', '2027-03-04', '2027-03-22');
-  const B = (r) => saveReq(r, '석식', '학사 석식', '2027-03-04T09:00:00', '2027-03-04', '2027-03-16');
-  const L = (r) => saveLeaveP(r, { type: '학사 퇴실', effectiveDate: '2027-03-05', requestedAt: '2027-03-04T10:00:00' }, '2027-03-04');
-  const one = L(B(A(base()))), two = B(L(A(base())));
-  assert.strictEqual(at(one, '석식', '2027-03-22'), '일반 석식');
-  assert.deepStrictEqual(['2027-03-10', '2027-03-16', '2027-03-22', '2027-04-30'].map((d) => at(one, '석식', d)), ['2027-03-10', '2027-03-16', '2027-03-22', '2027-04-30'].map((d) => at(two, '석식', d)));
 });
 
 test('C16 후속: 명단 초기 행(명단업로드)은 "대기 중인 신청 — 직접 취소" 경고에 넣지 않는다', () => {
@@ -382,4 +376,146 @@ test('재입실은 퇴실과 함께 고른 일반 석식(연결 F7, 재입실일
   const general = left.rows.find((r) => r.linked_change_id === left.head && r.value === '일반 석식');
   assert.ok(p.toCancel.some((c) => c.id === general.id));
   assert.ok(p.toRestore.some((c) => base.some((b) => b.id === c.id && b.effective_date === '2027-03-29')));
+});
+
+/* ───── 총괄 2차 검토(#55) ───── */
+
+const perms = (a) => (a.length <= 1 ? [a] : [].concat(...a.map((x, i) => perms(a.slice(0, i).concat(a.slice(i + 1))).map((p) => [x].concat(p)))));
+// 사건 묶음의 모든 입력 순서가 같은 날별 석식 값이 되는지(결정 55·58)
+function allOrders(base, events, days, want) {
+  for (const order of perms(Object.keys(events))) {
+    const s = order.reduce((r, k) => events[k](r), base());
+    assert.deepStrictEqual(days.map((d) => at(s, '석식', d)), want, '순서 ' + order.join(''));
+  }
+}
+const NOHALL = () => [CH('학사', '입실', '2027-03-01'), CH('기숙사', '퇴실', '2027-03-01'), CH('조식', '미실시', '2027-03-01'), CH('석식', '미실시', '2027-03-01')];
+const LEAVE_34 = (r) => saveLeaveP(r, { type: '학사 퇴실', effectiveDate: '2027-03-05', requestedAt: '2027-03-04T10:00:00' }, '2027-03-04');
+
+test('결정 58: superseded 신청서도 취소 행으로 저장 → A(일반 석식 3/22)·B(학사 석식 3/16)·Z(미실시 3/25, 더 이전)·L 24순서 모두 같은 값(되살린 행끼리도 덮임)', () => {
+  allOrders(NOHALL, {
+    A: (r) => saveReq(r, '석식', '일반 석식', '2027-03-03T09:00:00', '2027-03-04', '2027-03-22'),
+    B: (r) => saveReq(r, '석식', '학사 석식', '2027-03-04T09:00:00', '2027-03-04', '2027-03-16'),
+    Z: (r) => saveReq(r, '석식', '미실시', '2027-03-02T09:00:00', '2027-03-04', '2027-03-25'),
+    L: LEAVE_34
+  }, ['2027-03-10', '2027-03-16', '2027-03-22', '2027-03-25', '2027-04-30'], ['미실시', '미실시', '일반 석식', '일반 석식', '일반 석식']);
+});
+
+test('결정 58: 더 새 살아 있는 신청(C 미실시 3/20, 신청 3/4 09:30)이 있으면 되살리지 않는다 — A·B·C·L 24순서, 3/22 미실시', () => {
+  allOrders(NOHALL, {
+    A: (r) => saveReq(r, '석식', '일반 석식', '2027-03-03T09:00:00', '2027-03-04', '2027-03-22'),
+    B: (r) => saveReq(r, '석식', '학사 석식', '2027-03-04T09:00:00', '2027-03-04', '2027-03-16'),
+    C: (r) => saveReq(r, '석식', '미실시', '2027-03-04T09:30:00', '2027-03-04', '2027-03-20'),
+    L: LEAVE_34
+  }, ['2027-03-10', '2027-03-16', '2027-03-22', '2027-04-30'], ['미실시', '미실시', '미실시', '미실시']);
+});
+
+test('결정 58: 되살릴 superseded 신청서가 학사 석식이고 중단일 이후면 되살리지 않는다 — A(학사 석식 3/22)·B·L 6순서, 4/30 미실시', () => {
+  allOrders(NOHALL, {
+    A: (r) => saveReq(r, '석식', '학사 석식', '2027-03-03T09:00:00', '2027-03-04', '2027-03-22'),
+    B: (r) => saveReq(r, '석식', '학사 석식', '2027-03-04T09:00:00', '2027-03-04', '2027-03-16'),
+    L: LEAVE_34
+  }, ['2027-03-10', '2027-03-16', '2027-03-22', '2027-04-30'], ['미실시', '미실시', '미실시', '미실시']);
+});
+
+test('늦게 입력한 퇴실(3/5, 기록 3/3 15:00)보다 뒤에 신청한 학사 석식(3/8 09:00)은 입력 순서와 상관없이 퇴실일~중단일에도 없음', () => {
+  allOrders(NOHALL, {
+    X: (r) => saveReq(r, '석식', '학사 석식', '2027-03-08T09:00:00', '2027-03-08'),
+    L: (r) => saveLeaveP(r, { type: '학사 퇴실', effectiveDate: '2027-03-05', requestedAt: '2027-03-03T15:00:00' }, '2027-03-08')
+  }, ['2027-03-08', '2027-03-14', '2027-03-15', '2027-04-30'], ['미실시', '미실시', '미실시', '미실시']);
+});
+
+test("'일반 석식으로'는 일반 석식 날(3/5)부터 학사 석식을 정리한다(결정 35 날 3/15부터가 아니라) — 3/12 학사 석식(퇴실 기록보다 먼저 신청) 취소, 4/30 일반 석식", () => {
+  // x20: 퇴실 기록보다 뒤에 신청 → 일반 석식 신청은 취소하지 않고 "덮습니다" 경고를 내지만 정리가 취소한다
+  const rows = HALL().concat([CH('석식', '학사 석식', '2027-03-12', { id: 'x12', source: 'F7', requested_at: '2027-03-03T09:00:00' }),
+    CH('석식', '학사 석식', '2027-03-20', { id: 'x20', source: 'F7', requested_at: '2027-03-04T09:00:00' })]);
+  const move = { type: '학사 퇴실', effectiveDate: '2027-03-05', requestedAt: '2027-03-03T15:00:00', dinner: '일반 석식' };
+  const p = plan(rows, move, '2027-03-04');
+  assert.deepStrictEqual(['x12', 'x20'].map((id) => p.toCancel.some((c) => c.id === id)), [true, true], JSON.stringify(p.toCancel));
+  assert.ok(!p.warnings.some((w) => /덮습니다/.test(w)), JSON.stringify(p.warnings));   // 이 계획이 취소하는 행을 가리키는 경고는 없다
+  assert.strictEqual(at(saveLeaveP(rows, move, '2027-03-04'), '석식', '2027-04-30'), '일반 석식');
+});
+
+test('첫 급식 기록일(3/5)에 퇴실하면 조식은 빈 값이 아니라 미실시(정리 전 학사생 값), summary도', () => {
+  const rows = [CH('학사', '입실', '2027-03-01'), CH('기숙사', '퇴실', '2027-03-01'), CH('조식', '실시', '2027-03-05'), CH('석식', '미실시', '2027-03-05')];
+  const move = { type: '학사 퇴실', effectiveDate: '2027-03-05', requestedAt: '2027-03-03T15:00:00' };
+  assert.deepStrictEqual(plan(rows, move).summary.breakfast, { value: '미실시', from: '2027-03-05' });
+  assert.strictEqual(at(saveLeaveP(rows, move, '2027-03-03'), '조식', '2027-03-05'), '미실시');
+});
+
+test("기숙사 입실 조식(entry_date)은 고친 날이 아니라 '고친 적용일' 경고가 없다(쓸 때·안 쓸 때 모두)", () => {
+  const move = { type: '기숙사 입실', effectiveDate: '2027-03-02', requestedAt: '2027-03-03T15:00:00' };
+  const off = HALL(); off[2].value = '미실시';
+  for (const rows of [HALL(), off]) assert.ok(!plan(rows, move).warnings.some((w) => /고친 적용일/.test(w)), JSON.stringify(plan(rows, move).warnings));
+});
+
+test("되살림 꼬리표는 id 전체로 맞춘다('[자동] q12 …'는 q1의 꼬리표가 아니다)", () => {
+  const rows = NOHALL().concat([CH('석식', '학사 석식', '2027-03-16', { id: 'q1', source: 'F7', requested_at: '2027-03-04T09:00:00' }),
+    CH('석식', '일반 석식', '2027-03-22', { id: 'y', source: 'F7', requested_at: '2027-03-03T09:00:00', status: '취소', cancel_reason: '[자동] q12 더 새 신청' })]);
+  const p = plan(rows, { type: '학사 퇴실', effectiveDate: '2027-03-05', requestedAt: '2027-03-04T10:00:00' }, '2027-03-04');
+  assert.deepStrictEqual([p.toCancel.map((c) => c.id), p.toRestore], [['q1'], []]);
+});
+
+/* ───── 총괄 2차 검토(#57) ───── */
+
+test('재입실 뒤 두 번째 퇴실도 본다: 퇴실 3/20 → 재입실 3/25 → 퇴실 4/5, 3/10 학사 석식 신청 → 3/20 미실시·3/25 학사 석식·4/5 미실시(결정 35)', () => {
+  const l1 = saveMove(NOHALL(), { type: '학사 퇴실', effectiveDate: '2027-03-20', requestedAt: '2027-03-08T10:00:00' }, '2027-03-08');
+  const re = saveMove(l1.rows, { type: '학사 입실', effectiveDate: '2027-03-25', requestedAt: '2027-03-09T09:00:00' }, '2027-03-09');
+  const l2 = saveMove(re.rows, { type: '학사 퇴실', effectiveDate: '2027-04-05', requestedAt: '2027-03-09T12:00:00' }, '2027-03-09');
+  const p = plain(ctx.mealPlanChange_(l2.rows, 's1', '석식', '학사 석식', '2027-03-10T09:00:00', { today: '2027-03-10' }));
+  assert.deepStrictEqual(p.followUps.map((f) => [f.value, f.effective_date, f.source]),
+    [['미실시', '2027-03-20', 'F6'], ['학사 석식', '2027-03-25', 'F7'], ['미실시', '2027-04-05', 'F6']]);
+  const s = saveReq(l2.rows, '석식', '학사 석식', '2027-03-10T09:00:00', '2027-03-10');
+  assert.deepStrictEqual(['2027-03-15', '2027-03-20', '2027-03-25', '2027-04-05', '2027-04-12', '2027-04-30'].map((d) => at(s, '석식', d)),
+    ['학사 석식', '미실시', '학사 석식', '미실시', '미실시', '미실시']);
+});
+
+test('같은 날 재입실의 신청 일시가 퇴실보다 이르면 오류(학사 상태가 바뀌지 않는데 정리만 취소되지 않게)', () => {
+  const left = saveMove(HALL(), { type: '학사 퇴실', effectiveDate: '2027-03-10', requestedAt: '2027-03-09T12:00:00' }, '2027-03-09');
+  const p = plan(left.rows, { type: '학사 입실', effectiveDate: '2027-03-10', requestedAt: '2027-03-09T10:00:00' }, '2027-03-09');
+  assert.ok(p.errors.some((e) => /같은 날\(2027-03-10\) 기록보다 신청 일시가 이릅니다/.test(e)), JSON.stringify(p.errors));
+  assert.deepStrictEqual([p.rows, p.toCancel, p.toRestore], [[], [], []]);
+});
+
+test('결정 59: 재입실이 있는 퇴실을 취소하면 재입실과 그 연결 행도 함께 취소(경고) → 고친 퇴실(3/11)을 다시 넣을 수 있다', () => {
+  const left = saveMove(HALL(), { type: '학사 퇴실', effectiveDate: '2027-03-10', requestedAt: '2027-03-08T10:00:00' }, '2027-03-08');
+  const back = saveMove(left.rows, { type: '학사 입실', effectiveDate: '2027-03-15', requestedAt: '2027-03-09T10:00:00' }, '2027-03-09');
+  const blocked = plan(back.rows, { type: '학사 퇴실', effectiveDate: '2027-03-11', requestedAt: '2027-03-09T11:00:00' }, '2027-03-09');
+  assert.ok(blocked.errors.some((e) => /2027-03-15 학사 입실.*\[퇴실 취소\].*재입실도 함께/.test(e)), JSON.stringify(blocked.errors));
+  const u = undo(back.rows, left.head);
+  assert.ok(u.toCancel.some((c) => c.id === back.head) && back.rows.filter((r) => r.linked_change_id === back.head).every((r) => u.toCancel.some((c) => c.id === r.id)));
+  assert.ok(u.warnings.some((w) => w === '재입실 기록(2027-03-15)도 함께 취소됩니다'), JSON.stringify(u.warnings));
+  const s = applyUndo(back.rows, u);
+  for (const d of ['2027-03-10', '2027-03-15', '2027-03-30']) assert.deepStrictEqual([at(s, '학사', d), at(s, '조식', d), at(s, '석식', d)], ['입실', '실시', '학사 석식'], d);
+  assert.deepStrictEqual(plan(s, { type: '학사 퇴실', effectiveDate: '2027-03-11', requestedAt: '2027-03-09T11:00:00' }, '2027-03-09').errors, []);
+});
+
+test("'일반 석식으로' 퇴실을 취소하면 그 일반 석식에 가려졌던 늦은 신청서(결정 58 취소 행)가 돌아온다", () => {
+  const left = saveMove(HALL(), { type: '학사 퇴실', effectiveDate: '2027-03-10', requestedAt: '2027-03-08T10:00:00', dinner: '일반 석식' }, '2027-03-08');
+  const late = saveReq(left.rows, '석식', '미실시', '2027-03-07T09:00:00', '2027-03-09', '2027-03-12');   // 일반 석식(3/10, 신청 3/8)에 가려짐
+  const row = late.find((r) => r.requested_at === '2027-03-07T09:00:00');
+  assert.strictEqual(row.status, '취소');
+  const s = applyUndo(late, undo(late, left.head));
+  assert.deepStrictEqual(['2027-03-11', '2027-03-12', '2027-03-30'].map((d) => at(s, '석식', d)), ['학사 석식', '미실시', '미실시']);
+});
+
+test('퇴실 취소: 같은 값의 더 새 신청만 있으면 덮인 것이 아니라 되살린다', () => {
+  const base = HALL().concat([CH('석식', '미실시', '2027-03-20', { id: 'z', source: 'F7', requested_at: '2027-03-02T09:00:00' })]);
+  const left = saveMove(base, { type: '학사 퇴실', effectiveDate: '2027-03-10', requestedAt: '2027-03-08T10:00:00', dinner: '일반 석식' }, '2027-03-08');
+  assert.strictEqual(left.rows.find((r) => r.id === 'z').status, '취소');   // 일반 석식 신청이 취소
+  const rows = left.rows.concat([CH('석식', '미실시', '2027-03-15', { source: 'F7', requested_at: '2027-03-09T09:00:00' })]);
+  assert.ok(undo(rows, left.head).toRestore.some((c) => c.id === 'z'));
+});
+
+test('퇴실 취소가 되살린 신청이 다시 취소한 행은 그 신청 id 꼬리표 → 같은 퇴실을 다시 넣으면 한 번 넣은 것과 같다', () => {
+  const B = (r) => saveReq(r, '석식', '학사 석식', '2027-03-04T09:00:00', '2027-03-04', '2027-03-16');
+  const A = (r) => saveReq(r, '석식', '일반 석식', '2027-03-03T09:00:00', '2027-03-04', '2027-03-22');
+  const L = (r) => saveMove(r, { type: '학사 퇴실', effectiveDate: '2027-03-05', requestedAt: '2027-03-04T10:00:00' }, '2027-03-04');
+  const l1 = L(B(NOHALL()));
+  const a = A(l1.rows);                                 // B가 끊긴 동안 들어온 A는 살아 있다
+  const u = undo(a, l1.head);                           // B가 돌아오며 A를 다시 취소(꼬리표 B)
+  const again = L(applyUndo(a, u)).rows;
+  const once = L(A(B(NOHALL()))).rows;
+  const days = ['2027-03-10', '2027-03-16', '2027-03-22', '2027-04-30'];
+  assert.deepStrictEqual(days.map((d) => at(again, '석식', d)), days.map((d) => at(once, '석식', d)));
+  assert.strictEqual(at(again, '석식', '2027-03-22'), '일반 석식');
 });

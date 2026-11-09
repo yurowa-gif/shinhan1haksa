@@ -103,7 +103,7 @@ function mealIsHallOnly_(item, value) {
  * F7 급식 변경 신청 하나를 계획한다(아무것도 쓰지 않음). tests/rules/meal_oracle.test.js가 단순한 오라클과 비교한다.
  * changes = 그 학생의 status_changes 행(학사·조식·석식, 취소 포함 그대로), requestedAt = 신청 일시(KST, 교사가 넣는 신청서 일시),
  * opts = {cutoff, leaveDate, today:'yyyy-MM-dd'(필수, 입력하는 날), effectiveDate, effectiveRule:'manual'(기본)|'entry_date'}
- * → {kind, date, rule, autoDate, from, blocked:''|사유, superseded:boolean, toCancel:[{id, effective_date, value}],
+ * → {kind, date, rule, autoDate, from, blocked:''|사유, superseded:boolean, supersededBy:[id], toCancel:[{id, effective_date, value}],
  *    followUps:[{item, value, effective_date, source}], warnings:[]}   source: 미실시 중단 행 'F6', 재입실일 값 행 'F7'(R11b) — 저장 쪽은 그대로 쓴다
  *
  * 기준(오라클과 같은 뜻): 어떤 날의 값 = 그날까지 적용일이 지난 신청 중 **신청 일시가 가장 늦은** 신청의 값.
@@ -113,12 +113,15 @@ function mealIsHallOnly_(item, value) {
  *   바뀌지 않는다 — 예: 미실시 대기 중에 다시 학사 석식을 신청하면 그날 값은 아직 학사 석식이라 'none'이고, 더 늦게 적용될 이전
  *   미실시 대기 행을 toCancel로 취소한다). 미실시인데 그날 먹는 급식이 없으면 'initial'(신청일).
  * - 고친 적용일(R10, 결정 52): effectiveDate를 주면 그 날로 계산한다(kind·blocked·superseded·toCancel·followUps·경고 모두).
- *   autoDate = 규칙 계산값(늘 들어 있다 — 고치지 않으면 date와 같다, blocked·superseded여도). 신청일보다 이르면·날짜가 아니면·
- *   모르는 effectiveRule이면·effectiveRule만 있고 날짜가 없으면 Error. 미실시 규칙의 날보다 이르거나 오늘보다 이르면 경고.
+ *   autoDate = 규칙 계산값(늘 들어 있다 — 고치지 않으면 date와 같다, blocked·superseded여도). 신청일보다 이르면(entry_date는 예외 —
+ *   입퇴실 늦은 입력)·날짜가 아니면·모르는 effectiveRule이면·effectiveRule만 있고 날짜가 없으면 Error. 교사가 고친 날(manual)이
+ *   미실시 규칙의 날보다 이르거나 오늘보다 이르면 경고.
  * - **저장:** blocked·superseded가 아니면 kind가 'none'이어도 신청 행(date, 값)을 쓴다 — 신청서 기록이고, 나중에 늦게 입력되는
  *   이전 신청서가 이 신청을 덮지 못하게 한다(값이 같아 상태는 바뀌지 않는다). blocked·superseded면 date·rule은 ''이고 쓰지 않는다.
- * - superseded: 이 신청보다 신청 일시가 늦은 신청 행(퇴실 정리 F6 행 제외)이 이미 있고 그 적용일이 이 신청의 적용일 이하이면,
- *   이 신청은 영영 적용되지 않는다(늦게 입력한 이전 신청서). kind 'none' + 경고, 아무것도 쓰지 않는다.
+ * - superseded: 이 신청보다 신청 일시가 늦은 다른 값 신청 행(퇴실 정리 F6 행 제외)이 이미 있고 그 적용일이 이 신청의 적용일 이하이면,
+ *   이 신청은 영영 적용되지 않는다(늦게 입력한 이전 신청서). kind 'none' + 경고. supersededBy = 덮은 행 id(적용일이 늦은 순, 같으면
+ *   신청 일시가 늦은 순). **저장(결정 58):** 신청서를 status '취소', cancel_reason '[자동] <supersededBy[0]> 더 새 신청'으로 쓴다 —
+ *   덮은 행이 나중에 퇴실 정리로 취소되면 movePlan_이 이 행을 되살린다(입력 순서와 무관).
  * - blocked: 후보 적용일에 학사 상태가 '퇴실'이면 조식 '실시'는 늘, 석식 '학사 석식'은 그 퇴실 기록(requested_at)보다 뒤에 신청했으면
  *   켜지 못한다(일반 석식은 된다). **입력 순서가 아니라 신청 일시 순서:** 퇴실 기록보다 먼저 신청한 학사 석식은 늦게 입력해도
  *   이미 있던 것으로 보고 결정 35 중단일까지 유지한다(아래 followUps가 중단일에 끝낸다). 고친 날(effectiveDate)이 결정 35 중단일
@@ -167,9 +170,10 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
   }
   var from = statusOn_(rows, sid, it, cand.date);
   var out = { kind: mealChangeKind_(it, from, to), date: cand.date, rule: cand.rule, autoDate: autoDate, from: from, blocked: '', superseded: false,
-    toCancel: [], followUps: [], warnings: [] };
-  if (manual && to === '미실시' && manual < autoDate) out.warnings.push('고친 적용일(' + manual + ')이 미실시 규칙의 날(' + autoDate + ')보다 이릅니다');
-  if (manual && manual < today) out.warnings.push('고친 적용일(' + manual + ')이 오늘보다 이릅니다: 지난 식수가 바뀝니다');
+    supersededBy: [], toCancel: [], followUps: [], warnings: [] };
+  if (rule === 'manual' && to === '미실시' && manual < autoDate) out.warnings.push('고친 적용일(' + manual + ')이 미실시 규칙의 날(' + autoDate + ')보다 이릅니다');
+  // 입실일(entry_date)은 고친 날이 아니다 — 늦은 입력 경고는 movePlan_이 한다
+  if (rule === 'manual' && manual < today) out.warnings.push('고친 적용일(' + manual + ')이 오늘보다 이릅니다: 지난 식수가 바뀝니다');
 
   // 퇴실 상태인 날의 학사생 값: 조식은 늘, 석식은 퇴실 기록보다 뒤에 신청했거나(신청 일시 순서 — 입력 순서와 무관) 중단일 이후면 막는다.
   // 먼저 신청한 석식이 중단일 전에 적용되면 그대로 두고 아래 followUps가 중단일에 끝낸다(F6 정리가 중단일 이후 행만 취소하는 것과 같다).
@@ -180,11 +184,16 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
     return out;
   }
   // 늦게 입력한 이전 신청서: 더 새 신청이 이미 그 전에 적용되면 이 신청은 영영 적용되지 않는다
+  // 같은 값의 더 새 신청은 이 신청을 뜻 없게 만들지 않는다(재입실이 그 신청을 덮어도 이 대기 신청은 남아야 한다 — 결정 56)
   var newer = mine.filter(function (c) {   // 퇴실 정리(F6) 행은 신청이 아니다
-    return ruleStr_(c.source) !== 'F6' && ruleIso_(c.requested_at) > req && ruleStr_(c.effective_date) <= cand.date;
+    return ruleStr_(c.source) !== 'F6' && ruleStr_(c.value) !== to && ruleIso_(c.requested_at) > req && ruleStr_(c.effective_date) <= cand.date;
   });
   if (newer.length) {
     out.kind = 'none'; out.date = ''; out.rule = ''; out.superseded = true;
+    out.supersededBy = newer.slice().sort(function (a, b) {
+      var ea = ruleStr_(a.effective_date), eb = ruleStr_(b.effective_date);
+      return ea !== eb ? (ea > eb ? -1 : 1) : ruleIso_(a.requested_at) > ruleIso_(b.requested_at) ? -1 : 1;
+    }).map(function (c) { return ruleStr_(c.id); });
     out.warnings.push('더 새 신청(' + newer.map(function (c) { return ruleStr_(c.effective_date) + ' ' + ruleStr_(c.value); }).join(', ') +
       ')이 먼저 적용되어 이 신청은 적용되지 않습니다');
     return out;
@@ -216,27 +225,30 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
   });
 
   // 학사생 값이 퇴실 뒤 중단일까지 이어지면 퇴실 정리 행을 함께 쓴다(none이어도 — 이전 미실시 대기 행을 취소한 경우).
-  // 중단일에 다시 입실해 있으면 쓰지 않는다.
-  if (leave && statusOn_(rows, sid, '학사', leave.stop) === '퇴실') {
-    var after = rows.filter(function (c) { return !cancelled[ruleStr_(c.id)]; }).concat([newRow]);
-    if (mealIsHallOnly_(it, statusOn_(after, sid, it, leave.stop))) {
-      out.followUps.push({ item: it, value: '미실시', effective_date: leave.stop, source: 'F6' });
-      after.push({ student_id: sid, item: it, value: '미실시', effective_date: leave.stop, requested_at: req, source: 'F6', status: '유효', created_at: '9999' });
-    }
-    // 중단일 뒤에 다시 입실했으면 재입실일부터 이 신청 값을 다시(R11b — 이 신청의 일부라 source F7). 재입실일에 이미 더 새 신청이
-    // 적용되면 되살리지 않는다.
+  // 중단일에 다시 입실해 있으면 쓰지 않는다. 중단일 뒤에 다시 입실했으면 재입실일부터 이 신청 값을 다시 쓰고(R11b — 이 신청의
+  // 일부라 source F7), 그 뒤의 다음 퇴실에도 같은 일을 되풀이한다(결정 35 — 재입실 뒤 다시 퇴실하면 거기서도 끝낸다).
+  var after = rows.filter(function (c) { return !cancelled[ruleStr_(c.id)]; }).concat([newRow]);
+  var put = function (value, date, source) {
+    out.followUps.push({ item: it, value: value, effective_date: date, source: source });
+    after.push({ student_id: sid, item: it, value: value, effective_date: date, requested_at: req, source: source, status: '유효', created_at: '9999' });
+  };
+  for (var lv = leave; lv && statusOn_(rows, sid, '학사', lv.stop) === '퇴실'; lv = mealLeaveFor_(rows, sid, it, back, req)) {
+    if (mealIsHallOnly_(it, statusOn_(after, sid, it, lv.stop))) put('미실시', lv.stop, 'F6');
+    var stop = lv.stop;
     var back = rows.filter(function (c) {
       var e = ruleStr_(c.effective_date);
-      return ruleStr_(c.item) === '학사' && ruleStr_(c.value) === '입실' && e > leave.stop && statusOn_(rows, sid, '학사', e) === '입실';
+      return ruleStr_(c.item) === '학사' && ruleStr_(c.value) === '입실' && e > stop && statusOn_(rows, sid, '학사', e) === '입실';
     }).map(function (c) { return ruleStr_(c.effective_date); }).sort()[0];
-    var newerAtBack = back && mine.some(function (c) {
+    if (!back) break;
+    // 재입실일에 이미 더 새 신청이 적용되면 되살리지 않는다(그 뒤는 그 신청의 일이다)
+    if (mine.some(function (c) {
       return !cancelled[ruleStr_(c.id)] && ruleStr_(c.source) !== 'F6' && ruleIso_(c.requested_at) > req && ruleStr_(c.effective_date) <= back;
-    });
-    var ownAtBack = back && after.some(function (c) {   // 이 신청의 행이 이미 재입실일에 있으면(다시 계획할 때) 또 쓰지 않는다
+    })) break;
+    // 이 신청의 행이 이미 재입실일에 있으면(다시 계획할 때) 또 쓰지 않는다. 다른 신청의 행이 같은 값을 주고 있어도 쓴다: 그 행은
+    // 그 신청과 함께 취소될 수 있다(늦게 입력된 옛 신청서가 취소하는 경우)
+    if (!after.some(function (c) {
       return ruleStr_(c.effective_date) === back && ruleStr_(c.value) === to && ruleIso_(c.requested_at) === req && ruleStr_(c.source) !== 'F6';
-    });
-    // 다른 신청의 행이 같은 값을 주고 있어도 쓴다: 그 행은 그 신청과 함께 취소될 수 있다(늦게 입력된 옛 신청서가 취소하는 경우)
-    if (back && !newerAtBack && !ownAtBack) out.followUps.push({ item: it, value: to, effective_date: back, source: 'F7' });
+    })) put(to, back, 'F7');
   }
   return out;
 }
