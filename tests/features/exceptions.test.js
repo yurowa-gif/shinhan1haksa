@@ -381,12 +381,12 @@ test('이번 주가 기간 경계에 걸치면 두 기간의 탭을 모두 읽�
 
 test('저장은 담당·담임·출결·관리자만: 근무일(isOnDuty)이어도 담당 아닌 학생에게는 거부(F3 이후 대비, ASSUMPTION)', () => {
   const x = makeEnv();
-  const as = (fn) => x.env.errorOf(TEACHER, (c) => { c.isOnDutyToday_ = () => true; return fn(c); });
+  const as = (fn) => x.env.errorOf(TEACHER, (c) => { c.isOnDutyFor_ = () => true; return fn(c); });
   const input = { studentId: x.other.id, from: '2027-03-04', blocks: 'ALL', type: '병결' };
   const e1 = as((c) => c.saveException(input)), e2 = as((c) => c.previewException(input));
   assert.ok(e1 && /권한이 없습니다/.test(e1.message) && e2 && /권한이 없습니다/.test(e2.message), '근무일이어도 담당이 아니면 거부');
   assert.strictEqual(x.tab().filter((q) => q.student_id === x.other.id && q.date === '2027-03-04').length, 0);
-  assert.strictEqual(x.env.errorOf(TEACHER, (c) => { c.isOnDutyToday_ = () => true; return c.saveException({ studentId: x.mine[0].id, from: '2027-03-04', blocks: 'ALL', type: '병결' }); }), null, '담당 학생은 그대로 가능');
+  assert.strictEqual(x.env.errorOf(TEACHER, (c) => { c.isOnDutyFor_ = () => true; return c.saveException({ studentId: x.mine[0].id, from: '2027-03-04', blocks: 'ALL', type: '병결' }); }), null, '담당 학생은 그대로 가능');
 });
 
 test('겹침: 저장은 확인 플래그(confirmOverlap) 없이는 거부(쓰기 없음), 확인하면 저장 / 요청도 같다', () => {
