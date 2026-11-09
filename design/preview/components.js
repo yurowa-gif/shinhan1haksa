@@ -110,12 +110,22 @@ async function main() {
   await page.click('#open-confirm');
   assert.strictEqual(await page.evaluate(() => document.activeElement.textContent), '취소');
   await page.screenshot({ path: path.join(OUT, 'components-confirm-360.png') });
+  await page.waitForTimeout(400);   // 열린 직후 350ms는 시트 버튼을 무시한다(두 번 탭 방지)
   await page.locator('.sheet .btn', { hasText: '맞바꾸기' }).click();
   assert.ok((await log()).includes('confirmed'));
   assert.ok(await page.locator('.toast').count() === 1);
   await page.click('#open-confirm');
   await page.keyboard.press('Escape');
   assert.strictEqual(await page.locator('.sheet').count(), 0, 'Esc 로 닫힘');
+
+  // 두 번 탭 방지: 시트가 열린 직후(350ms 안) 확인 버튼 클릭은 무시하고, 350ms 뒤에는 실행된다
+  const before = (await log()).filter((x) => x === 'confirmed').length;
+  await page.evaluate(() => { document.getElementById('open-confirm').click(); document.querySelector('.sheet .btn:last-child').click(); });
+  assert.strictEqual((await log()).filter((x) => x === 'confirmed').length, before, '열자마자 누른 확인은 무시');
+  assert.strictEqual(await page.locator('.sheet').count(), 1, '시트는 그대로 열려 있다');
+  await page.waitForTimeout(400);
+  await page.locator('.sheet .btn', { hasText: '맞바꾸기' }).click();
+  assert.strictEqual((await log()).filter((x) => x === 'confirmed').length, before + 1, '350ms 뒤 확인은 실행');
 
   // 사유 시트: 사유가 짧으면 꺼져 있다
   await page.click('#open-reason');
@@ -124,6 +134,7 @@ async function main() {
   await page.fill('.sheet textarea', '잘못 입력');
   assert.ok(await confirmBtn.isEnabled());
   await page.screenshot({ path: path.join(OUT, 'components-reason-360.png') });
+  await page.waitForTimeout(400);
   await confirmBtn.click();
   assert.ok((await log()).includes('reason:잘못 입력'));
 
