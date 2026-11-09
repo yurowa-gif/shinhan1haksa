@@ -293,3 +293,17 @@ test('stale만 다른 경우(확인 뒤 취소·되살림 대상이 달라짐)�
   const again = save(env, ADMIN, i, p2.expect);
   assert.strictEqual(again.ok, false); assert.ok(again.errors[0].message.includes('덜 끝났습니다'), JSON.stringify(again));
 });
+
+test('끝난 저장을 나중에 다시 보내도 거짓 "덜 끝났습니다"가 없다(FP-A): 나중에 정리 행이 취소돼도 duplicate', () => {
+  const env = makeEnv();
+  const { dorm } = pick(env);
+  const i = input(dorm, '학사 및 기숙사 퇴실', '2027-03-03T15:00:00', '2027-03-05');
+  const p = prev(env, ADMIN, i);
+  const r = save(env, ADMIN, i, p.expect);
+  assert.strictEqual(r.ok, true);
+  const linked = rowsOf(env, dorm).filter((x) => x.linked_change_id === r.id);
+  assert.ok(linked.length >= 3);
+  env.asOwner((c) => c.updateRecord_('status_changes', linked[1].id, { status: '취소', cancel_reason: '[자동] 나중 재입실 취소' }, env.owner));   // 나중 저장이 정리 행을 바꿨다
+  const again = save(env, ADMIN, i, p.expect);
+  assert.strictEqual(again.ok, true, JSON.stringify(again)); assert.strictEqual(again.duplicate, true);
+});

@@ -247,7 +247,9 @@
         call('getMoveContext', id, dateField.getValue()).then(function (m) {
           if (!alive || mine !== typeSeq || !picked || picked.id !== id) return;
           mctx = m;
-          status.textContent = '지금 상태: ' + ['학사', '기숙사', '조식', '석식'].map(function (k) { return k + ' ' + (m.now[k] || '없음'); }).join(' · ');
+          var line = function (v) { return ['학사', '기숙사', '조식', '석식'].map(function (k) { return k + ' ' + (v[k] || '없음'); }).join(' · '); };
+          status.textContent = '지금 상태: ' + line(m.now) + (m.date !== m.today ? '\n' + U.formatDateKo(m.date, false) + ' 기준: ' + line(m.onDate) : '');
+          status.style.whiteSpace = 'pre-line';
           if (type && !m.types.some(function (t) { return t.type === type && t.enabled; })) { type = ''; dinner = ''; drawExtras(); }
           drawTypes(); refresh();
         }).catch(function (err) { if (alive) fail(err); });
@@ -272,7 +274,7 @@
 
       var at = el('input', { type: 'datetime-local', value: ctx.now.slice(0, 16), max: ctx.now.slice(0, 16) });
       at.addEventListener('change', function () { atTouched = true; refresh(); });
-      var dateField = UI.dateField({ label: '적용일', value: ctx.today, shortcuts: [{ label: '오늘', value: ctx.today }, { label: '내일', value: plusDay(ctx.today) }], onchange: function () { if (picked) loadTypes(picked.id); else refresh(); } });
+      var dateField = UI.dateField({ label: '적용일', value: ctx.today, shortcuts: [{ label: '오늘', value: ctx.today }, { label: '내일', value: plusDay(ctx.today) }], onchange: function () { last = null; drawResult(); drawBar(); if (picked) loadTypes(picked.id); else refresh(); } });   // 날짜가 바뀌는 동안 이전 미리보기와 켜진 버튼을 남기지 않는다
       body.appendChild(el('div', { class: 'card' }, [UI.field('신청 일시', at, { hint: '서류를 받은 날짜·시각입니다. 기본값은 지금입니다.' }), dateField]));
 
       var extra = el('div');
