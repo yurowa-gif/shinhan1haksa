@@ -210,3 +210,50 @@ test('cancelOut: 기간이 끝난 다음 날까지는 취소 가능, 그다음 �
   assert.strictEqual(call(x, ADMIN, 'cancelOut', x.term.id, b.id, '이틀 뒤 취소').ok, false);
   assert.strictEqual(x.tab().find((q) => q.id === b.id).status, '유효');
 });
+
+test('listOuts 서버 필드: stats(취소 건·퇴실 처리된 학생 제외), isMine, latest(가장 새 유효 행), left(학사 퇴실 뒤)·맨 뒤 정렬, hasMine, 오늘 탭 date', () => {
+  const x = makeEnv();
+  const enr = x.env.rows('enrollments').filter((e) => e.term_id === x.term.id);
+  const ownS = x.env.rows('students').find((s) => enr.some((e) => e.student_id === s.id && e.teacher_email === T1) && s.id !== x.other.id);
+  x.add(ownS, { occurred_at: '2027-03-02T20:00:00' }); x.add(ownS, { occurred_at: '2027-03-03T19:00:00', rule_name: '가장 새 기록' });
+  x.add(ownS, { occurred_at: '2027-03-03T21:00:00', status: '취소', cancel_reason: '잘못', rule_name: '취소된 더 새 기록' });
+  x.add(x.other);
+  const t = call(x, T1, 'listOuts', { scope: 'term' });
+  assert.deepStrictEqual(t.stats, { records: 3, out1Students: 1, out2Students: 1 }, '취소 1건은 기록 수에서 빠진다');
+  const sm = (r, id) => r.summary.find((q) => q.studentId === id);
+  assert.deepStrictEqual([sm(t, ownS.id).isMine, sm(t, x.other.id).isMine, t.hasMine], [true, false, true]);
+  assert.deepStrictEqual([sm(t, ownS.id).latest.ruleName, sm(t, ownS.id).latest.occurredAt], ['가장 새 기록', '2027-03-03T19:00:00'], '취소된 행은 latest가 아니다');
+  assert.strictEqual(call(x, HOMEROOM, 'listOuts', { scope: 'term' }).hasMine, false, '담당 학생이 없는 사람');
+  // 학사 퇴실 뒤: left true, 통계에서 빠지고 맨 뒤
+  x.env.asOwner((c) => c.appendRecord_('status_changes', { student_id: ownS.id, item: '학사', value: '퇴실', effective_date: '2027-03-03', reason: '2OUT 퇴실', memo: '', status: '유효' }, ADMIN));
+  const t2 = call(x, ADMIN, 'listOuts', { scope: 'term' });
+  assert.deepStrictEqual([sm(t2, ownS.id).left, t2.summary[t2.summary.length - 1].studentId, t2.stats.out2Students, t2.stats.out1Students], [true, ownS.id, 0, 1]);
+  assert.strictEqual(call(x, ADMIN, 'listOuts', { scope: 'today' }).date, '2027-03-03');
+});
+
+test('listOuts 오늘 탭: date를 다른 기간 날짜로 주면 그 기간(2학기)의 그날 기록. 홈: 학사 교사 겸 출결(가짜교사3)은 자기 학생만·많은 순·6명 이내', () => {
+  const x = makeEnv();
+  x.env.asOwner((c) => c.appendRecord_('terms', { name: '2027 2학기 가짜', type: '학기', start_date: '2027-08-20', end_date: '2027-12-20', memo: '' }, ADMIN));
+  const t2 = x.env.rows('terms').find((t) => t.name === '2027 2학기 가짜');
+  const enr1 = x.env.rows('enrollments').find((e) => e.term_id === x.term.id && e.student_id === x.mine.id);
+  x.env.asOwner((c) => { c.appendRecord_('enrollments', { term_id: t2.id, student_id: x.mine.id, teacher_email: enr1.teacher_email, veritas: enr1.veritas, commute_type: enr1.commute_type, end_type: '', memo: '' }, ADMIN); c.ensureTermSheet_('violations', t2.id); });
+  x.env.asOwner((c) => c.appendRecord_('violations_' + t2.id.slice(0, 8), { term_id: t2.id, student_id: x.mine.id, occurred_at: '2027-08-25T20:00:00', rule_id: x.rule.id, rule_name: x.rule.name, memo: '', detected_by: T1, entered_by: T1, status: '유효', source: '직접', source_exception_id: '', cancel_reason: '' }, ADMIN));
+  const r = call(x, ADMIN, 'listOuts', { scope: 'today', date: '2027-08-25' });
+  assert.deepStrictEqual([r.term.id, r.items.length, r.date], [t2.id, 1, '2027-08-25']);
+  // 홈: 가짜교사3은 hall_teacher + attendance — 학사 교사로 볼 때 자기 담당 학생만
+  const T3 = 'fake.t3@example.com';
+  x.env.asOwner((c) => c.addUser(T3, '가짜교사3', 'hall_teacher,attendance'));
+  const mineEnr = x.env.rows('enrollments').filter((e) => e.term_id === x.term.id);
+  const students = x.env.rows('students').filter((s) => mineEnr.some((e) => e.student_id === s.id)).slice(0, 8);
+  students.forEach((s, i) => {
+    x.env.asOwner((c) => c.updateRecord_('enrollments', mineEnr.find((e) => e.student_id === s.id).id, { teacher_email: i < 7 ? T3 : T1 }, ADMIN));
+    for (let k = 0; k <= i % 3; k++) x.add(s, { occurred_at: '2027-03-0' + (2 + (k % 2)) + 'T1' + k + ':00:00' });
+  });
+  const info = plain(x.env.as(T3, (c) => c.vioHomeInfo_(c.requirePermission_('out.view'), 'hall_teacher')));
+  assert.ok(info.list.length <= 6 && info.list.length > 0, String(info.list.length));
+  assert.ok(info.list.every((q) => students.slice(0, 7).some((s) => s.id === q.studentId)), '자기 학생만');
+  assert.ok(info.list.every((q, i, a) => i === 0 || a[i - 1].count >= q.count), '많은 순');
+  const as = plain(x.env.as(T3, (c) => c.vioHomeInfo_(c.requirePermission_('out.view'), 'attendance')));
+  assert.strictEqual(as.canRecord, false);
+  assert.ok(as.out1 + as.out2 >= info.out1 + info.out2, '출결 담당으로 보면 전체');
+});
