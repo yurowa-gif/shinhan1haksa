@@ -26,6 +26,11 @@
       el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=duty', text: '근무 편성하기' })
     ]);
     root.appendChild(c);
+    if (d.duty) root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '월말 근무 기록표' }),
+      el('div', { class: 'muted', text: '실제 근무자 기준 교사별 합계를 확인하고 PDF(임시 양식)로 받습니다.' }),
+      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=duty&tab=record', text: '근무 기록표 열기' })
+    ]));
   }
 
   /** 관리자 홈: 전체 현황 (PRD 8절) */
@@ -79,6 +84,16 @@
 
   /** 2단계 B 카드(CODING-B: 입퇴실·급식·서류). 이 함수의 몸통만 고친다(docs/plan/stage2.md 1절) */
   function renderStage2B(d, root) {
-    return;
+    var f = d.food;
+    if (!f || f.error) return;
+    var n = f.docMissing || 0;
+    var kids = [el('h2', { text: '급식·입퇴실 서류' }),
+      el('div', { class: n ? '' : 'muted', text: n ? '서류 미제출 ' + n + '건이 남아 있습니다.' : '서류 미제출 기록이 없습니다.' })];
+    (f.docList || []).forEach(function (x) {
+      kids.push(el('a', { style: 'display:block;padding:10px 0;border-bottom:1px solid var(--line);color:var(--accent)', href: d.appUrl + '?page=moves&tab=history&student=' + encodeURIComponent(x.studentId) + (x.ymd ? '&date=' + x.ymd : ''), text: x.label + ' ' + x.kind }));
+    });
+    if (f.docMore) kids.push(el('div', { class: 'muted', style: 'margin-top:8px', text: '그 밖에 ' + f.docMore + '건이 더 있습니다.' }));
+    kids.push(el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=moves&tab=meal', text: '급식 변경 신청' }));
+    root.appendChild(el('div', { class: 'card' }, kids));
   }
 </script>

@@ -52,6 +52,15 @@
 
   /** 2단계 B 카드(CODING-B: 입퇴실·급식·서류). 이 함수의 몸통만 고친다(docs/plan/stage2.md 1절) */
   function renderStage2B(d, root) {
-    return;
+    if (!d.food || d.food.error) return;
+    var kids = [el('h2', { text: '우리 반 입퇴실·급식 변경' }), el('div', { class: 'muted', text: '이번 주 신청만 보입니다. 변경은 담당교사가 합니다.' })];
+    var week = d.food.week || [];
+    if (!week.length) kids.push(el('div', { style: 'margin-top:8px', text: '이번 주 신청이 없습니다.' }));
+    week.forEach(function (x) {
+      kids.push(el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)' }, [
+        el('a', { style: 'flex:1 1 auto;min-width:0', href: d.appUrl + '?page=moves&tab=history&student=' + encodeURIComponent(x.studentId) + (x.ymd ? '&date=' + x.ymd : ''), text: x.label + ' ' + x.what + '(' + x.dateKo + '부터)' }),
+        el('span', { style: 'flex:0 0 auto;white-space:nowrap' }, [x.missing ? UI.statusPill('todo', '서류 미제출') : (x.done ? UI.statusPill('mute', '서류 제출') : null)])]));
+    });
+    root.appendChild(el('div', { class: 'card' }, kids));
   }
 </script>
