@@ -347,7 +347,7 @@ test('setDocSubmitted 권한: 남의 학생 행 id → denied:status.edit(락 �
 function guided(env, who, fn, ...args) {
   Object.keys(env.cache).filter((k) => k.indexOf('script:deny:') === 0).forEach((k) => delete env.cache[k]);
   const before = env.rows('audit_log').length;
-  assert.throws(() => env.call(who, fn, ...args), /부터는 .* 일입니다\. 그 기간 담당교사나 관리자가 신청합니다/);
+  assert.throws(() => env.call(who, fn, ...args), /이 신청\(적용일 .*\)은 .* 담당교사나 관리자가 합니다/);
   assert.ok(env.rows('audit_log').slice(before).some((r) => r.action === 'denied:status.edit' && r.created_by === who), '거부 기록은 남는다');
 }
 
@@ -443,7 +443,7 @@ test('근무교사(C8s)도 급식 변경은 못 한다: 오늘 근무자는 out.
   env.asOwner((c) => c.appendRecord_('duty_slots', { date: '2027-03-03', slot: '21:30조', end_time: '21:30', original_email: duty, actual_email: duty,
     swapped_at: '', swapped_by: '', status: '유효', memo: '' }, env.owner));
   env.as(duty, (c) => c.requirePermission_('out.save', { studentId: a, ymd: '2027-03-03' }));   // 근무 창 안: 통과
-  const i = input(a, 'd_off', '2027-03-03T10:00:00');
+  const i = input(a, 'd_gen', '2027-03-03T10:00:00');   // 11:30 전 신청 → 적용일 = 오늘 = 근무일(noDuty를 빼면 통과해 버리는 경우)
   env.expectDenied(duty, 'status.edit', 'previewMealChange', i);
   env.expectDenied(duty, 'status.edit', 'saveMealChange', i, '');
   assert.strictEqual(rowsOf(env, a).filter((x) => x.source === 'F7').length, 0);
@@ -610,7 +610,7 @@ test('다음 기간 명단에 학생이 없으면 신청일의 기간(적용일 
   assert.strictEqual(env.call(ADMIN, 'saveMealChange', input(st.id, 'd_off', '2027-02-25T10:30:00'), env.call(ADMIN, 'previewMealChange', input(st.id, 'd_off', '2027-02-25T10:30:00')).expect).ok, true);
   env.setNow('2027-03-03T12:00:00');   // 이제 옛 기간은 끝났다 → 등록 없는 새 기간의 학생은 관리자가 명단에 올리기 전에는 저장 불가
   const late = env.call(ADMIN, 'previewMealChange', input(st.id, 'd_off', '2027-03-03T10:00:00'));
-  assert.strictEqual(late.ok, false); assert.ok(late.errors.some((e) => /끝난 기간|명단에 없는/.test(e.message)));
+  assert.strictEqual(late.ok, false); assert.ok(late.errors.some((e) => /명단에 없는/.test(e.message)), JSON.stringify(late.errors));   // 대체 기간이 끝났으면 할 일은 적용일 기간 명단 등록
 });
 
 test('중복 검사: 신청 일시가 다르면 새 행(M6), 사람이 취소한 같은 신청서는 중복이 아니다(M7)', () => {
@@ -694,4 +694,98 @@ test('끊긴 저장 뒤 재시도: 대표 행은 있는데 취소가 빠졌으�
   const again = save(env, HALL, i, p.expect);
   assert.strictEqual(again.ok, false); assert.ok(again.errors[0].message.includes('덜 끝났습니다'), JSON.stringify(again));
   assert.strictEqual(env.rows('status_changes').length, n);
+});
+
+test('안내 문구 조건: 그 기간이 끝났거나·학생이 그 기간 명단에 없거나·본인이 그 기간 담당이면 안내 없이 맨 오류(관리자도 아닌 사람은 맨 "권한이 없습니다.")', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { a } = pick(env);
+  const OLD = 'fake.teacher1@example.com';
+  const old = env.rows('enrollments').find((e) => e.student_id === a && e.term_id !== term2(env).id);
+  env.asOwner((c) => c.updateRecord_('enrollments', old.id, { teacher_email: OLD }, env.owner));
+  // OLD는 2학기 담당 → 3/8 적용(1학기) 신청은 안내와 함께 거부된다
+  guided(env, OLD, 'previewMealChange', input(a, 'd_off', '2027-03-03T10:00:00'));
+  // 적용일이 끝난 기간(2/22)이면 안내 대신 맨 거부가 아니라 "끝난 기간" 오류(관리자)·권한 거부(OLD는 대상 기간 담당이라 그 기간으로는 허용되나 끝난 기간 오류)
+  const ended = env.call(ADMIN, 'previewMealChange', input(a, 'd_off', '2027-02-10T10:00:00'));
+  assert.ok(ended.errors.some((e) => e.message.includes('끝난 기간')), JSON.stringify(ended.errors));
+});
+
+test('기간 대체 순서(T5·T6): 첫 등록 기간 전 적용일의 신입생은 거부, 3기간(A·B 등록, C 아님)에서 오늘이 B이고 적용일이 C면 B 담당이 저장(가장 이른 A가 아님)', () => {
+  const env = makeEnv('2027-07-10T12:00:00');
+  const [t1, t2] = [env.rows('terms').find((t) => t.name !== '2027 1학기'), term2(env)];
+  env.asOwner((c) => c.appendRecord_('terms', { name: '2027 2학기', type: '학기', start_date: '2027-08-01', end_date: '2027-12-20', memo: '시험' }, env.owner));
+  const { a } = pick(env);
+  const enrA = env.rows('enrollments').find((e) => e.student_id === a && e.term_id === t1.id);
+  env.asOwner((c) => c.updateRecord_('enrollments', enrA.id, { teacher_email: 'fake.teacher1@example.com' }, env.owner));   // A(2학기 지난)=teacher1, B(1학기)=HALL
+  clearListTimes(env);
+  const i = input(a, 'd_off', '2027-07-10T10:00:00');   // 토요일 → 7/26(사이 날) → C 시작 8/1 기간 = C, 이 학생은 C 미등록
+  const p = prev(env, HALL, i);
+  assert.strictEqual(p.ok, true, JSON.stringify(p.errors));
+  guided(env, 'fake.teacher1@example.com', 'previewMealChange', i);   // A 담당(가장 이른 기간)이 아니라 B 담당이 저장한다
+  assert.strictEqual(save(env, HALL, i, p.expect).ok, true);
+  // 첫 등록 기간(B) 전 적용일의 신입생(B에만 등록): 적용일이 A 기간이면 등록이 없다
+  const st = env.asOwner((c) => c.appendRecord_('students', { student_no: '39996', name: '가짜신입', gender: '남', grade: '1', class_no: '1', number: '96', track: '', email: '', memo: '가짜' }, env.owner));
+  env.asOwner((c) => c.appendRecord_('enrollments', { term_id: t2.id, student_id: st.id, teacher_email: HALL, veritas: 'FALSE', commute_type: '일반', end_type: '23:00', memo: '' }, env.owner));
+  env.setNow('2027-02-20T12:00:00');
+  const early = env.call(ADMIN, 'previewMealChange', input(st.id, 'd_off', '2027-02-20T10:00:00', { effectiveDate: '2027-02-22', reason: '급식실 요청' }));
+  assert.strictEqual(early.ok, false); assert.ok(early.errors.some((e) => /명단에 없는/.test(e.message)), JSON.stringify(early.errors));
+});
+
+/* ───────── C17b 3차: ymd 범위·전입생·picker ymd ───────── */
+
+test('listStudentStatus의 ymd로 범위가 넓어지지 않는다: 한 번도 등록 안 된 학생·졸업생(이번 기간 ymd)·다른 반 담임은 어떤 ymd로도 거부, 잘못된·기간 밖 ymd는 ymd 없음과 같다', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const t1 = env.rows('terms').find((t) => t.name !== '2027 1학기');
+  const nobody = env.rows('students').find((s) => s.name === '가짜미등록').id;
+  const grad = env.asOwner((c) => c.appendRecord_('students', { student_no: '39995', name: '가짜졸업생', gender: '여', grade: '3', class_no: '1', number: '95', track: '', email: '', memo: '가짜' }, env.owner));
+  env.asOwner((c) => c.appendRecord_('enrollments', { term_id: t1.id, student_id: grad.id, teacher_email: HALL, veritas: 'FALSE', commute_type: '일반', end_type: '23:00', memo: '' }, env.owner));
+  const { a } = pick(env);
+  // 한 번도 등록 안 된 학생: 어떤 기간 안 ymd도 거부(역할만 검사하거나 아무 기간으로 보면 통과해 버린다)
+  ['2027-03-03', '2027-02-10', '2027-05-01'].forEach((y) => env.expectDenied(HALL, 'status.view', 'listStudentStatus', nobody, y));
+  // 졸업생(옛 기간만 등록): 이번 기간 ymd는 거부, 그 기간 ymd는 허용
+  env.expectDenied(HALL, 'status.view', 'listStudentStatus', grad.id, '2027-03-03');
+  env.expectAllowed(HALL, 'listStudentStatus', grad.id, '2027-02-10');
+  // 다른 반 담임은 어떤 ymd로도 거부
+  const klass = env.rows('users').find((u) => u.email === 'test.homeroom@example.com').homeroom_class;
+  const [g, c] = klass.split('-');
+  const ids = env.rows('enrollments').filter((e) => e.term_id === term2(env).id).map((e) => e.student_id);
+  const other = env.rows('students').find((s) => ids.includes(s.id) && !(String(s.grade) === g && String(s.class_no) === String(+c))).id;
+  ['', '2027-03-03', '2027-02-10'].forEach((y) => env.expectDenied('test.homeroom@example.com', 'status.view', 'listStudentStatus', other, y));
+  // 잘못된·기간 밖 ymd = ymd 없음과 같은 결과(허용되는 학생은 허용, 거부되는 학생은 거부)
+  ['2027-13-45', 'abc', 12345, '2030-01-01'].forEach((y) => {
+    assert.strictEqual(env.call(HALL, 'listStudentStatus', a, y).student.id, a);
+    env.expectDenied(HALL, 'status.view', 'listStudentStatus', grad.id, y);
+  });
+});
+
+test('전입생(다음 기간 명단 없음)의 서류 담당은 대체 기간 담당: 홈 1건·항목 ymd는 그 기간 끝 날짜·그 ymd로 canMarkDoc·setDocSubmitted 뒤 0건', () => {
+  const env = makeEnv('2027-02-25T12:00:00');
+  const t1 = env.rows('terms').find((t) => t.name !== '2027 1학기');
+  const st = env.asOwner((c) => c.appendRecord_('students', { student_no: '39994', name: '가짜전입생', gender: '남', grade: '2', class_no: '1', number: '94', track: '', email: '', memo: '가짜' }, env.owner));
+  env.asOwner((c) => c.appendRecord_('enrollments', { term_id: t1.id, student_id: st.id, teacher_email: HALL, veritas: 'FALSE', commute_type: '일반', end_type: '23:00', memo: '' }, env.owner));
+  ['학사', '석식'].forEach((item) => env.asOwner((c) => c.appendRecord_('status_changes', { student_id: st.id, item, value: item === '학사' ? '입실' : '학사 석식', requested_at: '', effective_date: '2026-08-17',
+    effective_date_auto: '2026-08-17', reason: '', doc_submitted: '', linked_change_id: '', source: '명단업로드', status: '유효', memo: '', cancel_reason: '' }, env.owner)));
+  const home = () => env.call(HALL, 'getHomeData', 'hall_teacher').food;
+  const n0 = home().docMissing;
+  const r = saveOk(env, HALL, input(st.id, 'd_off', '2027-02-25T10:00:00'));   // 적용일 3/8 = 1학기, 이 학생은 1학기 미등록
+  assert.strictEqual(r.date, '2027-03-08');
+  assert.strictEqual(home().docMissing, n0 + 1);
+  const item = home().docList.find((x) => x.studentId === st.id);
+  assert.strictEqual(item.ymd, t1.end_date, '대체 기간 안 날짜(그 기간 끝)');
+  const d = env.call(HALL, 'listStudentStatus', st.id, item.ymd);
+  assert.strictEqual(d.pending.find((h) => h.id === r.id).canMarkDoc, true);
+  assert.strictEqual(env.call(HALL, 'setDocSubmitted', r.id).ok, true);
+  assert.strictEqual(home().docMissing, n0);
+});
+
+test('getMealContext의 보기 목록 항목에 ymd: 이번 기간 등록이면 빈 값, 다음 기간에만 등록된 학생은 그 기간 안 날짜(고르면 열린다)', () => {
+  const env = makeEnv('2027-02-24T12:00:00');
+  const t2 = term2(env);
+  const st = env.asOwner((c) => c.appendRecord_('students', { student_no: '39993', name: '가짜신입', gender: '여', grade: '1', class_no: '1', number: '93', track: '', email: '', memo: '가짜' }, env.owner));
+  env.asOwner((c) => c.appendRecord_('enrollments', { term_id: t2.id, student_id: st.id, teacher_email: HALL, veritas: 'FALSE', commute_type: '일반', end_type: '23:00', memo: '' }, env.owner));
+  const ctx = env.call(HALL, 'getMealContext');
+  const item = ctx.viewStudents.find((x) => x.id === st.id);
+  assert.ok(item && item.ymd >= t2.start_date && item.ymd <= t2.end_date, JSON.stringify(item));
+  assert.strictEqual(env.call(HALL, 'listStudentStatus', st.id, item.ymd).student.id, st.id);
+  const cur = ctx.viewStudents.find((x) => x.id === pick(env).a);
+  assert.ok(cur.ymd === '' || cur.ymd >= t2.start_date, '이번 기간 또는 다음 기간 중 하나');
 });
