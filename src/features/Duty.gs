@@ -90,6 +90,7 @@ function dtyMonthView_(m, user) {
   var byEmail = Object.create(null);
   readAll_('users').forEach(function (u) { byEmail[normalizeEmail_(u.email)] = { id: u.id, name: u.name }; });
   var who = function (email) { return email ? (byEmail[email] || { id: '', name: '(등록 안 된 교사)' }) : { id: '', name: '' }; };
+  var canEditSwap = user.roles.some(function (r) { return permissions_()['duty.edit'].roles.indexOf(r) >= 0; });
   var emptyDays = 0, swapCount = 0, warnings = [];
   var days = plans.map(function (p) {
     var frame = dutySlotsFor_(p), picked = dutyPick_(rows, p.date), on = dutyOn_(rows, p.date);
@@ -100,7 +101,9 @@ function dtyMonthView_(m, user) {
       var from = email && orig && orig !== email ? orig : '';
       if (from) swapCount++;
       var w = who(email);
-      return { slot: f.slot, label: DTY_SLOT_LABEL[f.slot], end: f.end, userId: w.id, name: w.name,
+      // canSwap: 이 사람에게 [교대]/[대신 근무] 버튼을 보일지(예비 감독 줄은 보이지 않는다). 판정은 swapDuty가 다시 한다
+      var canSwap = !!r && f.slot !== '예비' && dtySwapCheck_({ email: user.email, canEdit: canEditSwap, today: today_() }, r, 'x').ok;
+      return { slot: f.slot, label: DTY_SLOT_LABEL[f.slot], end: f.end, userId: w.id, name: w.name, slotId: r ? r.id : '', canSwap: canSwap,
         swappedFrom: from ? who(from).name : '', swapped: !!from, mine: !!email && email === user.email };
     });
     var open = slots.some(function (x) { return !x.name; });   // 빈 예비 감독 칸도 빈 날(시안·screens.md)
@@ -226,6 +229,101 @@ function setDutyOperating(input) {
     var canceled = dtyCancelSlots_(chk.rows, user.email);
     return { ok: true, changed: !same || canceled > 0, canceledSlots: canceled };
   });
+}
+
+/**
+ * 교대·대신 근무 판정(순수). ctx = {email(누른 사람), canEdit(duty.edit 보유), today}, row = duty_slots 행, toEmail = 새 근무자.
+ * → {ok:true} | {ok:false, denied:true, why}(권한 없음, 거부 기록 대상) | {ok:false, error}(입력 오류).
+ * - 담당자·관리자(duty.edit): 어느 칸이든, 지난 날짜도(사실 기록, 결정 57·4-2).
+ * - 학사 교사: 오늘 이후, 지금 실제 근무자가 본인인 근무 칸을 넘겨주기만. 예비 감독 칸은 열지 않는다(4-2). 남의 칸·이미 넘긴 칸·지난 날짜는 거부.
+ */
+function dtySwapCheck_(ctx, row, toEmail) {
+  if (!row || !ruleRowLive_(row)) return { ok: false, denied: true, why: '없거나 취소된 칸' };
+  var cur = dutyEmail_(row.actual_email) || dutyEmail_(row.original_email);
+  if (!ctx.canEdit) {
+    if (String(row.slot).trim() === '예비') return { ok: false, denied: true, why: '예비 감독 칸은 담당자가 기록' };
+    if (!ctx.email || cur !== dutyEmail_(ctx.email)) return { ok: false, denied: true, why: '본인 칸 아님' };
+    if (String(row.date).trim() < ctx.today) return { ok: false, denied: true, why: '지난 날짜' };
+  }
+  if (dutyEmail_(toEmail) === cur) return { ok: false, error: '지금 근무하는 선생님과 같습니다. 다른 선생님을 골라 주세요.' };
+  return { ok: true };
+}
+
+/**
+ * 근무 교대(학사 교사 본인 칸) / 대신 근무 기록(근무표 담당자·관리자). 승인 절차 없음(PRD F3).
+ * swapDuty(slotId, toUserId, {acknowledge, reason}) → {ok, changed, notified} | {ok:false, needsConfirm, warnings} | {ok:false, errors}
+ * 락 안에서 칸을 다시 읽고 다시 검사한 뒤 actual_email·swapped_at·swapped_by만 바꾼다(원래 근무자는 그대로, 중간 단계는 audit_log).
+ * 메일은 저장을 끝내고 락을 푼 뒤에 보낸다: 이전·새 근무자와 활성 근무표 담당자(없으면 관리자)에게, 누른 사람은 빼고.
+ * 메일이 안 가도(notified:false) 교대는 저장되어 있다 — 화면이 "상대 선생님께 직접 알려 주세요"를 보인다.
+ */
+function swapDuty(slotId, toUserId, opts) {
+  var user = requirePermission_('duty.swap');
+  opts = opts || {};
+  var canEdit = permissions_()['duty.edit'].roles.some(function (r) { return user.roles.indexOf(r) >= 0; });
+  var res = withLock_(function () {
+    ['duty_slots', 'day_schedules', 'blocks', 'users'].forEach(function (t) { invalidate_('db', t); });
+    var sid = String(slotId || '').trim(), all = readAll_('duty_slots');
+    // 같은 id의 줄이 둘 이상(시트에서 복사·붙여넣은 줄)이면 어느 줄인지 알 수 없다 — 고치지 않고 담당자에게 알린다. 빈 id도 칸이 아니다
+    var same = sid ? all.filter(function (r) { return String(r.id).trim() === sid; }) : [];
+    if (same.length > 1) throw new Error('근무표 시트에 같은 칸이 여러 줄입니다. 근무표 담당자에게 알려 주세요.');
+    var row = same[0] || null;
+    // 없는 칸·취소된 칸·낡은 화면(그 사이 칸이 바뀜)·같은 (날짜, 칸)에 살아 있는 행이 둘일 때의 옛 행은 공격이 아니라 "화면이 낡음"이다.
+    // R8(dutyOn_)이 쓰는 최신 행만(같은 물리 줄까지 비교) 교대할 수 있다 — 옛 행 id로 남의 근무를 빼앗는 길을 막는다
+    var current = row && ruleRowLive_(row) ? dutyPick_(all, String(row.date).trim()).bySlot[String(row.slot).trim()] : null;
+    if (!current || current._row !== row._row || current.id !== row.id) throw new Error('근무표가 바뀌었습니다. 새로 고친 뒤 다시 해 주세요.');
+    var denyIf = function (c) {
+      if (!c.denied) return;
+      logDenied_(user.email, 'duty.swap', c.why + ' ' + JSON.stringify({ slotId: String(slotId || ''), toUserId: String(toUserId || '') }));
+      throw new Error('권한이 없습니다.');
+    };
+    denyIf(dtySwapCheck_({ email: user.email, canEdit: canEdit, today: today_() }, row, ''));
+    var teachers = dtyTeachers_(), to = teachers.filter(function (t) { return t.id === String(toUserId || ''); })[0];
+    if (!to) return { ok: false, errors: [{ field: 'to', message: '근무를 설 수 있는 학사 교사를 목록에서 골라 주세요.' }] };
+    var chk = dtySwapCheck_({ email: user.email, canEdit: canEdit, today: today_() }, row, to.email);
+    denyIf(chk);
+    if (!chk.ok) return { ok: false, errors: [{ field: 'to', message: chk.error }] };
+    var date = String(row.date).trim();
+    if (!dtyPlan_(date, calLoadCtx_()).operating) return { ok: false, errors: [{ field: 'slot', message: '운영하지 않는 날의 근무는 바꿀 수 없습니다.' }] };
+    // 새 근무자가 그날 다른 칸에도 있으면 경고 후 확인. 예비 감독이 대신 근무하는 것은 정상이라 경고하지 않는다
+    var others = readAll_('duty_slots').filter(function (r) {
+      return r.id !== row.id && ruleRowLive_(r) && String(r.date).trim() === date && (dutyEmail_(r.actual_email) || dutyEmail_(r.original_email)) === to.email &&
+        !(String(r.slot).trim() === '예비' && String(row.slot).trim() !== '예비');
+    });
+    if (others.length && opts.acknowledge !== true) {
+      return { ok: false, needsConfirm: true, warnings: [to.name + ' 선생님이 이 날 이미 ' + DTY_SLOT_LABEL[others[0].slot] + '에 편성되어 있습니다.'] };
+    }
+    var from = dutyEmail_(row.actual_email) || dutyEmail_(row.original_email);
+    var patch = { actual_email: to.email, swapped_at: nowIso_(), swapped_by: user.email };
+    // 이유(memo)는 교대마다 새로 정한다: 담당자·관리자만 넣을 수 있고, 학사 교사의 교대는 옛 이유를 지운다
+    patch.memo = canEdit ? String(opts.reason || '').trim().slice(0, 100) : '';
+    // 원래 근무자에게 되돌리면 교대 표시를 정리한다
+    if (to.email === dutyEmail_(row.original_email)) { patch.swapped_at = ''; patch.swapped_by = ''; patch.memo = ''; }
+    updateRecord_('duty_slots', row.id, patch, user.email);
+    var names = Object.create(null);
+    readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = u.name; });
+    var managers = readAll_('users').filter(function (u) { return isTruthy_(u.active) && parseRoles_(u.roles).indexOf('duty_manager') >= 0; });
+    if (!managers.length) managers = readAll_('users').filter(function (u) { return isTruthy_(u.active) && parseRoles_(u.roles).indexOf('admin') >= 0; });
+    var mail = {
+      to: [from, to.email].concat(managers.map(function (u) { return normalizeEmail_(u.email); })).filter(function (e) { return e && e !== user.email; }),
+      body: [ymdKoShort_(date) + ' ' + DTY_SLOT_LABEL[row.slot] + ' 근무가 바뀌었습니다.', (names[from] || '(등록 안 된 교사)') + ' → ' + to.name,
+        '바꾼 사람: ' + (names[user.email] || user.name || '')].join('\n')
+    };
+    return { ok: true, changed: true, mail: mail };
+  });
+  if (!res.mail) return res;
+  // 락 밖: 메일이 실패해도 저장은 되돌리지 않는다
+  // 앱 주소·메일에서 오류가 나도 저장은 끝났다 — 다시 시도하면 "내 칸이 아님"으로 거부되므로 여기서는 던지지 않는다
+  var notified = false;
+  try {
+    var link = '';
+    try { link = ScriptApp.getService().getUrl(); } catch (e) { link = ''; }
+    notified = notifyMail_(res.mail.to, '[신한1학사] 근무 교대 알림', res.mail.body + (link ? '\n\n' + link : ''), user.email).notified;
+  } catch (e) { console.warn('교대 알림 실패: ' + e.message); }
+  return { ok: true, changed: true, notified: notified };
+}
+
+function ymdKoShort_(ymd) {
+  return (+ymd.slice(5, 7)) + '월 ' + (+ymd.slice(8, 10)) + '일(' + ymdWeekdayKo_(ymd) + ')';
 }
 
 /**
