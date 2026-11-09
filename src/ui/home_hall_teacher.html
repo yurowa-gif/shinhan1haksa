@@ -1,6 +1,13 @@
 <script>
   /** 2단계 A 카드(CODING-A: 근무·OUT·면담). 이 함수의 몸통만 고친다(docs/plan/stage2.md 1절). 오늘 카드의 #home-duty 줄(내 근무, screens.md 학사 교사)도 여기서 채운다 */
   function renderStage2A(d, root) {
+    if (d.out && d.out.canRecord) {
+      root.appendChild(el('div', { class: 'card' }, [
+        el('h2', { text: 'OUT 기록' }),
+        el('div', { class: 'muted', text: '오늘 적발한 학생의 OUT을 30초 안에 기록합니다.' }),
+        el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=outs&tab=record', text: 'OUT 기록하기' })
+      ]));
+    }
     var x = d.duty, line = document.getElementById('home-duty');
     if (!x) return;
     if (line) {
