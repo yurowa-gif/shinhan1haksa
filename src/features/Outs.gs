@@ -76,6 +76,10 @@ function vioViolations_(term) {
   try { return readAll_(termSheetName_('violations', term.id)); } catch (e) { if (String(e.message).indexOf('탭이 없습니다') < 0) throw e; return []; }
 }
 
+function vioTabMissing_(term) {
+  try { readAll_(termSheetName_('violations', term.id)); return false; } catch (e) { if (String(e.message).indexOf('탭이 없습니다') < 0) throw e; return true; }
+}
+
 /**
  * 같은 날 같은 항목이 이미 있거나 그날 자동 OUT이 있으면 확인 문구(순수). rows = 그 기간 violations 행
  * → string[]
@@ -149,13 +153,18 @@ function getOutContext(date) {
   var out = { today: today_(), date: ymd, term: term ? { id: term.id, name: term.name, start_date: term.start_date, end_date: term.end_date } : null,
     rules: vioPickableRules_(readAll_('violation_rules')).map(function (r) { return { id: r.id, name: r.name }; }),
     teachers: vioActiveTeachers_(users).map(function (u) { return { id: u.id, name: u.name, me: normalizeEmail_(u.email) === user.email }; }),
-    students: [], levels: {}, canRecord: false, now: nowIso_().slice(11, 16), periodWord: vioPeriodWord_(term), dutyYesterday: false };
+    students: [], levels: {}, canRecord: false, dateOk: false, dateReason: '', now: nowIso_().slice(11, 16), periodWord: vioPeriodWord_(term), dutyYesterday: false };
   if (!term) return out;
   var isAdmin = hasRole_(user, 'admin'), isTeacher = hasRole_(user, 'hall_teacher');
-  // 미래 날짜·기간 밖 날짜·끝난 지 하루가 넘은 기간은 기록할 수 없다(저장 검사와 같은 기준)
-  out.canRecord = (isAdmin || isTeacher) && !!termOn && ymd <= today_() && today_() <= ymdAddDays_(termOn.end_date, 1);
+  out.canRecord = isAdmin || isTeacher;   // 역할이 기록할 수 있는가. 날짜가 되는지는 dateOk
   if (!out.canRecord) return out;
+  // 어제 근무자(오늘 아침 열면 어제 밤 일을 입력할 수 있다): 오늘이 기록 불가인 사이 날에도 알려 준다
   out.dutyYesterday = isTeacher && ymd === today_() && isOnDutyFor_(user.email, ymdAddDays_(ymd, -1), 1);
+  // 날짜가 되는가(저장 검사와 같은 기준): 운영 기간 안, 오늘까지, 기간이 끝난 다음 날까지
+  var why = !termOn ? '운영 기간 밖의 날짜입니다.' : ymd > today_() ? '앞으로의 날짜입니다.' : today_() > ymdAddDays_(termOn.end_date, 1) ? '끝난 운영 기간입니다.' : '';
+  out.dateOk = !why;
+  out.dateReason = why;
+  if (!out.dateOk) return out;
   var onDuty = isTeacher && isOnDutyFor_(user.email, ymd, 1);
   var enr = readAll_('enrollments').filter(function (e) { return e.term_id === term.id; });
   var changes = readAll_('status_changes');
@@ -194,7 +203,7 @@ function saveOut(input) {
     var c = vioValidate_(input, user);
     if (!c.ok) return { ok: false, errors: c.errors };
     if (c.warnings.length && !(input && input.acknowledge === true)) return { ok: false, needsConfirm: true, warnings: c.warnings, before: c.before, after: c.after };
-    ensureTermSheet_('violations', c.term.id);   // 기간 탭이 아직 없으면 만든다(미리보기는 되는데 저장이 던지지 않게)
+    if (vioTabMissing_(c.term)) ensureTermSheet_('violations', c.term.id);   // 기간 탭이 아직 없을 때만 만든다(미리보기는 되는데 저장이 던지지 않게)
     appendRecord_(termSheetName_('violations', c.term.id), {
       term_id: c.term.id, student_id: c.student.id, occurred_at: c.vio.at, rule_id: c.rule.id, rule_name: c.rule.name, memo: c.memo,
       detected_by: c.detectedEmail, entered_by: user.email, status: '유효', source: '직접', source_exception_id: '', cancel_reason: ''

@@ -223,10 +223,14 @@ test('알림 메일(결정 49): 담당교사·담임(2OUT이면 관리자도)에
   assert.deepStrictEqual([a.r.ok, a.r.notified], [true, true]);
   assert.deepStrictEqual(a.sent.map((m) => m.to).sort(), [R1, RH].sort(), '1OUT: 담당교사·담임(관리자 ADMIN은 입력한 사람이라 빠지고 실가짜관리는 2OUT 때만)');
   assert.deepStrictEqual(a.locks, a.sent.map(() => false), '메일은 락 밖에서');
-  for (const m of a.sent) assert.ok(!m.body.includes(x.mine.name) && !m.body.includes(secretMemo) && m.body.includes('3월 3일(수)') && m.body.includes(x.phone.name) && m.body.includes('1OUT'), m.body);
+  for (const m of a.sent) assert.ok(!m.body.includes(x.mine.name) && !m.body.includes(secretMemo) && m.body.includes('3월 3일(수)') && m.body.includes(x.phone.name) && m.body.includes('이번 학기 1OUT입니다.') && !m.body.includes('퇴실 대상'), m.body);
   const b = save(x, ADMIN, x.input({ ruleId: x.dorm.id }));
   assert.deepStrictEqual(b.sent.map((m) => m.to).sort(), [R1, RA, RH].sort(), '2OUT: 관리자도');
-  assert.ok(b.sent[0].body.includes('퇴실 대상'));
+  assert.ok(b.sent.every((m) => m.body.includes('이번 학기 2OUT(퇴실 대상)입니다.')), b.sent[0].body);
+  const third = x.env.rows('violation_rules').find((r) => ![x.phone.id, x.dorm.id, x.auto.id].includes(r.id) && r.active !== 'FALSE');
+  const t3 = save(x, ADMIN, x.input({ occurredAt: AT(TODAY, '19:50'), ruleId: third.id }));
+  assert.deepStrictEqual(t3.sent.map((m) => m.to).sort(), [R1, RH].sort(), '3OUT부터는 관리자에게 다시 보내지 않는다');
+  assert.ok(t3.sent.every((m) => m.body.includes('이번 학기 3OUT(퇴실 대상)입니다.')), t3.sent[0].body);
   const before = x.tab().length;
   const c = save(x, ADMIN, x.input({ occurredAt: AT(YESTERDAY), ruleId: x.phone.id }), { fail: true });
   assert.deepStrictEqual([c.r.ok, c.r.notified, c.r.notifyWarn, c.r.notifyReason], [true, false, true, 'failed']);
@@ -280,19 +284,49 @@ test('OUT은 사건이 일어난 날의 기간에 저장된다(오늘 기간이 
   assert.strictEqual(r.ok, true, JSON.stringify(r));
   const last = x.tab()[x.tab().length - 1];
   assert.deepStrictEqual([last.term_id, last.occurred_at.slice(0, 10)], [x.term.id, end], '옛 기간 탭·옛 term_id');
+  // 새 기간에 같은 학생을 등록하고 0건에서 시작하는지 본다(미등록이면 어떤 단언도 의미 없다)
+  const nt = x.env.rows('terms').find((t) => t.name === '다음 방학 가짜');
+  const oldEnr = x.env.rows('enrollments').find((e) => e.term_id === x.term.id && e.student_id === x.mine.id);
+  x.env.asOwner((c) => c.appendRecord_('enrollments', { term_id: nt.id, student_id: x.mine.id, teacher_email: oldEnr.teacher_email, veritas: oldEnr.veritas, commute_type: oldEnr.commute_type, end_type: '', memo: '' }, ADMIN));
   const p = call(x, ADMIN, 'previewOut', x.input({ occurredAt: AT(ns, '10:00') }));
-  assert.ok(!p.ok || p.before.count === 0, '새 기간은 0건에서 시작');
+  assert.strictEqual(p.ok, true, JSON.stringify(p));
+  assert.strictEqual(p.before.count, 0, '새 기간은 0건에서 시작');
+  assert.strictEqual(call(x, ADMIN, 'getOutContext', ns).levels[x.mine.id], 0, 'levels도 0');
 });
 
-test('getOutContext: now(HH:mm)·periodWord·dutyYesterday, 미래·기간 밖 날짜는 canRecord false', () => {
+test('getOutContext: now(HH:mm)·periodWord·dutyYesterday, 미래·기간 밖 날짜는 역할은 canRecord true지만 dateOk false(날짜 칸은 남는다)', () => {
   const x = makeEnv();
   x.duty(YESTERDAY, '21:30조', T2);
   const c = call(x, T1, 'getOutContext', '');
   assert.deepStrictEqual([c.now, c.periodWord, c.dutyYesterday], ['20:00', '이번 학기', false]);
   assert.strictEqual(call(x, T2, 'getOutContext', '').dutyYesterday, true, '어제 근무자가 오늘 아침 열면 안내용');
   assert.strictEqual(call(x, T2, 'getOutContext', YESTERDAY).dutyYesterday, false, '날짜를 어제로 바꾸면 안내는 필요 없다');
-  assert.strictEqual(call(x, T1, 'getOutContext', '2027-03-04').canRecord, false, '미래 날짜');
-  assert.strictEqual(call(x, T1, 'getOutContext', '2020-01-01').canRecord, false, '기간 밖 날짜');
+  const f = call(x, T1, 'getOutContext', '2027-03-04'), o = call(x, T1, 'getOutContext', '2020-01-01');
+  assert.deepStrictEqual([f.canRecord, f.dateOk, !!f.dateReason, f.students.length], [true, false, true, 0], '미래 날짜');
+  assert.deepStrictEqual([o.canRecord, o.dateOk, !!o.dateReason], [true, false, true], '기간 밖 날짜');
+  assert.strictEqual(call(x, HOMEROOM, 'getOutContext', '').canRecord, false, '담임은 역할이 기록 못 함');
+});
+
+test('기간이 끝난 다음 날(사이 날) 아침: 오늘 날짜는 dateOk false지만 끝 날 근무자는 dutyYesterday, 끝 날(어제)은 dateOk true·학생이 나온다. 이틀 뒤에는 둘 다 닫힌다', () => {
+  const x = makeEnv();
+  const next = (d, n) => { const t = new Date(d + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+  const end = x.term.end_date;
+  x.duty(end, '21:30조', T2);
+  x.env.setNow(next(end, 1) + 'T08:00:00');
+  const today = call(x, T2, 'getOutContext', '');
+  assert.deepStrictEqual([today.canRecord, today.dateOk, today.dutyYesterday, today.students.length], [true, false, true, 0], '오늘은 기간 밖이지만 안내는 나온다');
+  const y = call(x, T2, 'getOutContext', end);
+  assert.deepStrictEqual([y.dateOk, y.students.length > 0], [true, true], '끝 날로 바꾸면 기록할 수 있다(저장도 허용)');
+  assert.strictEqual(save(x, T2, x.input({ occurredAt: AT(end, '22:30') })).r.ok, true, '서버도 끝 날 22:30 저장을 허용');
+  assert.strictEqual(call(x, T3, 'getOutContext', '').dutyYesterday, false, '근무가 아니던 교사에게는 안내 없음');
+  x.env.setNow(next(end, 2) + 'T08:00:00');
+  assert.deepStrictEqual([call(x, T2, 'getOutContext', '').dutyYesterday, call(x, T2, 'getOutContext', end).dateOk], [false, false], '이틀 뒤는 안내도 날짜도 닫힘');
+});
+
+test('방학 기간이면 periodWord가 "이번 기간", 학기면 "이번 학기"', () => {
+  const x = makeEnv();
+  x.env.asOwner((c) => c.updateRecord_('terms', x.term.id, { type: '방학' }, ADMIN));
+  assert.strictEqual(call(x, T1, 'getOutContext', '').periodWord, '이번 기간');
 });
 
 test('꺼진 항목은 "지금 쓰지 않는 항목", 오류 문구에 ISO 날짜 형식이 없다', () => {
@@ -312,4 +346,22 @@ test('그 기간의 OUT 탭이 없어도 저장은 탭을 만들고 저장한다
   const { r } = save(x, T1, x.input());
   assert.strictEqual(r.ok, true, JSON.stringify(r));
   assert.strictEqual(x.tab().length, 1);
+});
+
+test('빈틈 메우기: previewOut 응답에 이메일 없음, 담당교사 이메일 대소문자가 달라도 담당으로 보고, 앱 주소를 못 읽어도 저장되고, 탭이 있으면 ensureTermSheet_를 부르지 않는다', () => {
+  const x = makeEnv();
+  assert.ok(!JSON.stringify(call(x, T1, 'previewOut', x.input({ detectedBy: x.id(T2) }))).includes('@'));
+  const en = x.env.rows('enrollments').find((e) => e.term_id === x.term.id && e.student_id === x.mine.id);
+  x.env.asOwner((c) => c.updateRecord_('enrollments', en.id, { teacher_email: ' ' + T1.toUpperCase() + ' ' }, ADMIN));
+  assert.ok(call(x, T1, 'getOutContext', '').students.some((s) => s.id === x.mine.id), '대소문자·공백이 달라도 담당 학생');
+  const r = plain(x.env.as(T1, (c) => {
+    c.MailApp = { sendEmail() {}, getRemainingDailyQuota: () => 100 };
+    c.ScriptApp = { getService: () => { throw new Error('주소 오류(가짜)'); } };
+    return c.saveOut(x.input());
+  }));
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.strictEqual(x.tab().length, 1, '저장은 끝났다');
+  let ensured = 0;
+  x.env.as(T1, (c) => { const orig = c.ensureTermSheet_; c.ensureTermSheet_ = function () { ensured++; return orig.apply(null, arguments); }; c.MailApp = { sendEmail() {}, getRemainingDailyQuota: () => 100 }; return c.saveOut(x.input({ ruleId: x.dorm.id })); });
+  assert.strictEqual(ensured, 0, '탭이 있으면 다시 만들지 않는다');
 });
