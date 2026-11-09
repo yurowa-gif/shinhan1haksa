@@ -116,3 +116,17 @@ test('관리자 홈: 오늘 인원과 공석(자습실·SA)이 나오고 학사 
   const t = env.call(HALL, 'getHomeData', 'hall_teacher').food;
   assert.strictEqual(t.counts, undefined); assert.strictEqual(t.vacancy, undefined);
 });
+
+test('서류 미제출 수는 홈과 같은 집계: 변경 신청과 지난 기간의 미제출 행이 모두 학생 수로 늘고, 서류를 표시하면 줄어든다', () => {
+  const env = makeEnv();
+  const [x, y] = mineOf(env);
+  const n = () => counts(env, '2027-03-03').docUnsubmitted;
+  const home = () => env.call(ADMIN, 'getHomeData', 'admin').food.docMissing;
+  const n0 = n(), h0 = home();
+  const i = { studentId: x, chip: 'd_off', requestedAt: '2027-03-03T10:00:00', docSubmitted: false };
+  const r = env.call(HALL, 'saveMealChange', i, env.call(HALL, 'previewMealChange', i).expect);
+  append(env, { student_id: y, item: '학사', value: '퇴실', requested_at: '2027-02-20T10:00:00', effective_date: '2027-02-22', source: 'F6', doc_submitted: 'FALSE' });
+  assert.strictEqual(n(), n0 + 2); assert.strictEqual(home(), h0 + 2);
+  env.call(HALL, 'setDocSubmitted', r.id);
+  assert.strictEqual(n(), n0 + 1); assert.strictEqual(home(), h0 + 1);
+});
