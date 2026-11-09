@@ -15,6 +15,18 @@
     "setDutyOperating": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getDutyRecord": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getDutyRecordFile": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "swapDuty": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }

@@ -1,6 +1,227 @@
+<style>
+  .mv-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .mv-row .mv-text { flex: 1 1 auto; min-width: 0; }
+  .mv-row .btn { flex: 0 0 auto; white-space: nowrap; }
+  .mv-date { font-size: var(--font-xl); font-weight: 700; }
+</style>
 <script>
-  /** 입퇴실·급식 변경·학생 기록 화면(2단계, CODING-B). S2-0a 골격: 아직 내용이 없다. */
+  /**
+   * 입퇴실·급식 화면(2단계, CODING-B). [급식 변경](F7-1) · [학생 기록](C17b). [입퇴실]은 C18a가 탭으로 더한다.
+   * 날짜·이유·취소할 행은 서버(previewMealChange)가 계산한 것만 보여 준다. docs/design/screens.md F7-1.
+   */
+  function renderMealTab(root) {
+    var U = UI.util;
+    var alive = true;   // 탭을 떠난 뒤 늦게 온 응답이 화면·아래 바를 다시 그리지 않게
+    var ctx = null, picked = null, chip = '', doc = false, fixing = false, seq = 0, timer = null, last = null, busy = false;
+    var body = el('div');
+    root.appendChild(body);
+    var bar = null;
+    function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
+    function removeBar() { if (bar) { bar.remove(); bar = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); } }
+
+    call('getMealContext').then(function (c) { if (!alive) return; ctx = c; draw(); }).catch(function (err) { if (!alive) return; clear(body); showError(body, err); });
+    return function () { alive = false; clearTimeout(timer); removeBar(); };   // 탭을 바꿀 때 아래 바를 치우고 늦은 응답을 버린다
+
+    function draw() {
+      resetState();   // 다시 그릴 때마다 이전 선택·서류 체크를 비운다(저장 왕복 중에 누른 것이 새 화면에 몰래 남지 않게)
+      clear(body); removeBar();
+      body.appendChild(el('h2', { text: (ctx.term ? ctx.term.name + ' · ' : '') + '급식 변경' }));
+      if (!ctx.canEdit) {
+        body.appendChild(el('div', { class: 'notice info', text: '급식 변경은 담당교사와 관리자만 신청합니다. 이 화면에서는 볼 수만 있습니다.' }));
+        return;
+      }
+      if (!ctx.students.length) { body.appendChild(UI.emptyState('신청할 수 있는 학생이 없습니다. 이번 운영 기간 명단과 담당교사를 확인해 주세요.')); return; }
+
+      var status = el('div', { class: 'muted' });
+      var picker = UI.studentPicker({ students: ctx.students, label: '학생', onpick: function (s) {
+        picked = s; status.textContent = s ? '지금: ' + ['학사', '기숙사', '조식', '석식'].map(function (k) { return k + ' ' + (s.status[k] || '없음'); }).join(' · ') : '';
+        refresh();
+      } });
+      body.appendChild(el('div', { class: 'card' }, [picker, status]));
+
+      var chips = el('div', { class: 'chips' });
+      function drawChips() {
+        clear(chips);
+        ctx.chips.forEach(function (c) {
+          chips.appendChild(el('button', { type: 'button', class: c.id === chip ? 'chip on' : 'chip', text: c.label, onclick: function () { chip = c.id; drawChips(); refresh(); } }));
+        });
+      }
+      drawChips();
+      body.appendChild(el('div', { class: 'card' }, [UI.field('무엇을', chips)]));
+
+      var at = el('input', { type: 'datetime-local', value: ctx.now.slice(0, 16), max: ctx.now.slice(0, 16) });
+      var atTouched = false;
+      at.addEventListener('change', function () { atTouched = true; refresh(); });
+      body.appendChild(el('div', { class: 'card' }, [UI.field('신청 일시', at, { hint: '기본값은 지금입니다. ' + ctx.cutoff + ' 규칙에 쓰이므로 서류의 시각과 다르면 고쳐 주세요.' })]));
+
+      var result = el('div');
+      var fixBox = el('div');
+      var reasonInput = el('input', { type: 'text', maxlength: '100' });
+      var reasonField = UI.field('사유(꼭 적어 주세요)', reasonInput);
+      var dateField = UI.dateField({ label: '적용일(고침)', value: '', onchange: function () { refresh(); } });
+      reasonInput.addEventListener('input', refresh);
+      var fixBtn = el('button', { type: 'button', class: 'btn secondary', text: '고치기', onclick: function () {
+        fixing = !fixing; fixBtn.textContent = fixing ? '자동으로' : '고치기';
+        if (fixing && last && last.date) dateField.setValue(last.date);
+        drawFix(); refresh();
+      } });
+      function drawFix() {
+        clear(fixBox);
+        if (fixing) { fixBox.appendChild(dateField); fixBox.appendChild(reasonField); }
+      }
+      var dateText = el('div', { class: 'mv-text' });
+      body.appendChild(el('div', { class: 'card' }, [
+        el('h2', { text: '적용일' }),
+        el('div', { class: 'mv-row' }, [dateText, fixBtn]),
+        result, fixBox
+      ]));
+
+      var docBox = el('input', { type: 'checkbox' });
+      docBox.addEventListener('change', function () { doc = docBox.checked; drawDoc(); });
+      var docWarn = el('div');
+      function drawDoc() { clear(docWarn); if (!doc) docWarn.appendChild(el('div', { class: 'notice warn', text: '서류 미제출로 기록됩니다. 담당교사 홈에 남습니다.' })); }
+      drawDoc();
+      body.appendChild(el('div', { class: 'card' }, [el('label', { class: 'check' }, [docBox, el('span', { text: '학교 서류 제출함' })]), docWarn]));
+
+      function payload() {
+        return { studentId: picked ? picked.id : '', chip: chip, requestedAt: at.value ? at.value + ':00' : '', effectiveDate: fixing ? dateField.getValue() : '',
+          reason: fixing ? reasonInput.value.trim() : '', docSubmitted: doc };
+      }
+      function drawResult() {
+        clear(result); clear(dateText);
+        var p = last;
+        if (!p) { dateText.appendChild(el('span', { class: 'muted', text: picked && chip ? '적용일을 계산하는 중…' : '학생과 무엇을 바꿀지 고르면 적용일이 나옵니다.' })); return; }
+        if (p.errors && p.errors.length) p.errors.forEach(function (e) { result.appendChild(el('div', { class: 'notice warn', text: e.message })); });
+        if (p.blocked) { dateText.appendChild(el('span', { class: 'muted', text: '신청할 수 없습니다' })); result.appendChild(el('div', { class: 'notice warn', text: p.blocked })); return; }
+        if (!p.date && !p.superseded) { dateText.appendChild(el('span', { class: 'muted', text: '신청할 수 없습니다' })); return; }   // 사유는 아래 안내에 있다
+        dateText.appendChild(el('span', { class: 'mv-date', text: p.superseded ? '적용되지 않음' : p.dateKo }));
+        if (!p.superseded) result.appendChild(el('div', { class: 'notice info', text: p.reasonText }));
+        (p.warnings || []).forEach(function (w) { result.appendChild(el('div', { class: 'notice warn', text: w })); });
+        if (p.cancel && p.cancel.length) result.appendChild(el('div', { class: 'muted', text: '대체되어 취소되는 대기 신청: ' + p.cancel.map(function (c) { return U.formatDateKo(c.date, false) + ' ' + c.value; }).join(', ') }));
+        if (p.followUps && p.followUps.length) result.appendChild(el('div', { class: 'muted', text: '함께 기록: ' + p.followUps.map(function (f) { return U.formatDateKo(f.date, false) + ' ' + f.item + ' ' + f.value; }).join(', ') }));
+      }
+      function drawBar() {
+        removeBar();
+        var p = last;
+        var ready = !!(picked && chip && p && !(p.errors && p.errors.length) && !p.blocked && (p.date || p.superseded) && !busy);
+        bar = UI.actionBar([
+          { text: '비우기', kind: 'secondary', onclick: reset },
+          { text: p && p.superseded ? '기록으로 저장' : '변경 신청', disabled: !ready, onclick: confirmSave }
+        ], { mount: true });
+      }
+      function refresh(retried) {
+        var mine = ++seq;   // 학생을 비우는 경우에도 진행 중인 미리보기·예약을 무효로 한다
+        clearTimeout(timer);
+        last = null; drawResult(); drawBar();
+        if (!picked || !chip) return;
+        timer = setTimeout(function () {
+          call('previewMealChange', payload()).then(function (p) {
+            if (!alive || mine !== seq) return;
+            // 신청 일시를 건드리지 않았으면 서버의 지금으로 맞춘다(화면을 오래 열어 둔 뒤 저장해도 옛 시각이 되지 않게)
+            if (!atTouched && p.now && p.now.slice(0, 16) !== at.value && retried !== true) { at.value = p.now.slice(0, 16); at.max = at.value; refresh(true); return; }
+            last = p; drawResult(); drawBar();
+          }).catch(function (err) { if (alive && mine === seq) fail(err); });
+        }, 250);
+      }
+      function confirmSave() {
+        var p = last, label = p.label;
+        UI.confirmSheet({
+          title: p.superseded ? '신청서를 기록으로 저장합니다' : '급식 변경을 저장합니다',
+          lead: p.superseded ? '적용되지 않는 신청서(기록만 남김)' : p.dateKo + '부터 ' + label,
+          lines: [U.studentLabel(picked) + ' · ' + label, p.superseded ? '더 새 신청이 먼저 적용되어 값은 바뀌지 않습니다' : p.reasonText]
+            .concat((p.cancel || []).length ? ['대체되어 취소되는 대기 신청: ' + p.cancel.map(function (c) { return U.formatDateKo(c.date, false) + ' ' + c.value; }).join(', ')] : [])
+            .concat(doc ? [] : ['서류 미제출로 기록됩니다']),
+          confirmText: p.superseded ? '기록으로 저장' : '변경 신청',
+          onconfirm: function () {
+            busy = true; drawBar();
+            call('saveMealChange', payload(), p.expect).then(function (r) {
+              if (r.ok) UI.toast(r.duplicate ? '이미 저장된 신청서입니다.' : r.superseded ? '기록으로 저장했습니다.' : r.dateKo + '부터 ' + r.label + '(으)로 저장했습니다.');   // 다른 탭으로 옮긴 뒤 와도 결과는 알린다
+              if (!alive) return;
+              if (r.stale) { busy = false; UI.toast(r.error, { kind: 'warn', ms: 5000 }); refresh(); return; }
+              if (!r.ok) { busy = false; UI.toast((r.errors && r.errors[0] && r.errors[0].message) || r.blocked || '저장하지 못했습니다.', { kind: 'warn', ms: 5000 }); refresh(); return; }
+              resetState();   // 다음 학생에게 이전 학생의 선택·서류 체크가 남지 않게 모두 비운다
+              window.scrollTo(0, 0);
+              // 다시 불러오는 동안은 busy를 유지한다(그 사이 눌린 버튼이 빈 학생으로 저장되지 않게)
+              call('getMealContext').then(function (c) { if (alive) { busy = false; ctx = c; draw(); } })
+                .catch(function (err) { if (alive) { busy = false; draw(); UI.toast('저장했습니다. 화면을 다시 불러오지 못했습니다. 새로고침해 주세요.', { kind: 'warn', ms: 6000 }); } });
+            }).catch(function (err) { if (!alive) return; busy = false; drawBar(); fail(err); });
+          }
+        });
+      }
+      function resetState() { picked = null; chip = ''; doc = false; fixing = false; last = null; seq++; clearTimeout(timer); }
+      function reset() { resetState(); draw(); }
+      drawResult(); drawBar();
+    }
+  }
+
+  /** [학생 기록] 탭: 학생을 고르면 오늘 값·비고·대기·기록. 서류 미제출 행은 그 행의 담당교사·관리자가 [제출 표시] */
+  function renderRecordTab(root, wantStudent) {
+    var pick = el('div'), out = el('div');
+    root.appendChild(pick); root.appendChild(out);
+    var alive = true, seq = 0, current = '', currentYmd = '', saving = false;
+    function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
+    call('getMealContext').then(function (ctx) {
+      if (!alive) return;
+      if (!ctx.viewStudents.length) { pick.appendChild(UI.emptyState('볼 수 있는 학생이 없습니다.')); return; }
+      var picker = UI.studentPicker({ students: ctx.viewStudents, label: wantStudent ? '다른 학생 보기' : '학생', onpick: function (s) { if (s) load(s.id, s.ymd || ''); else { seq++; current = ''; currentYmd = ''; clear(out); } } });   // ymd = 다음·막 끝난 기간에만 등록된 학생의 기간 안 날짜
+      pick.appendChild(el('div', { class: 'card' }, [picker]));
+      if (wantStudent) load(wantStudent, window.SCREEN_DATE || '');   // 홈 카드에서 학생을 눌러 들어오면 그 학생의 기록을 그 기록의 기간 기준으로 바로 연다
+    }).catch(function (err) { if (alive) showError(pick, err); });
+
+    function line(h, name) {
+      var what = h.what;
+      var left = el('div', { class: 'mv-text' }, [
+        el('div', { text: (h.status === '취소' ? '(취소) ' : '') + what + ' · ' + h.dateKo + '부터' }),
+        el('div', { class: 'muted', text: [h.requestedKo ? '신청 ' + h.requestedKo : '', h.sourceLabel, h.edited ? '적용일 고침' + (h.reason ? '(' + h.reason + ')' : '') : h.reason].filter(function (x) { return x; }).join(' · ') }),
+        h.status === '취소' && h.cancelText ? el('div', { class: 'muted', text: h.cancelText }) : null
+      ]);
+      var right = null;
+      if (h.canMarkDoc) {
+        right = el('button', { type: 'button', class: 'btn secondary', text: '제출 표시', onclick: function (e) {
+          var btn = e.currentTarget;
+          UI.confirmSheet({ title: '서류를 받았습니까?', lead: name + ' · ' + what, lines: [h.dateKo + '부터 적용되는 신청의 서류를 제출로 표시합니다(되돌리지 않습니다)'], confirmText: '제출 표시', onconfirm: function () {
+            if (saving) { UI.toast('저장 중입니다. 잠시 기다려 주세요.', { kind: 'info' }); return; }
+            saving = true; btn.disabled = true;
+            call('setDocSubmitted', h.id).then(function (r) { saving = false; if (!alive) return; if (!r.ok) fail(new Error(r.error)); else UI.toast('제출로 표시했습니다.'); if (current) load(current, currentYmd); })
+              .catch(function (err) { saving = false; btn.disabled = false; fail(err); });
+          } });
+        } });
+      } else if (h.docState === 'missing') right = UI.statusPill('todo', '서류 미제출');
+      else if (h.docState === 'done') right = UI.statusPill('mute', '서류 제출');
+      return el('div', { class: 'mv-row', style: 'padding:8px 0;border-bottom:1px solid var(--line)' }, [left, right]);
+    }
+    function load(id, ymd) {
+      current = id; currentYmd = ymd || '';
+      var mine = ++seq;
+      clear(out); out.appendChild(el('div', { class: 'muted', text: '기록을 불러오는 중입니다…' }));
+      call('listStudentStatus', id, currentYmd).then(function (d) {
+        if (!alive || mine !== seq) return;   // 학생을 빨리 바꾸면 늦은 응답은 버린다(다른 학생 기록·버튼이 그려지지 않게)
+        var name = UI.util.studentLabel(d.student);
+        clear(out);
+        out.appendChild(el('div', { class: 'card' }, [
+          el('h2', { text: name }),
+          el('div', { text: '오늘: ' + ['학사', '기숙사', '조식', '석식'].map(function (k) { return k + ' ' + (d.now[k] || '없음'); }).join(' · ') }),
+          d.remark ? el('div', { class: 'muted', style: 'margin-top:8px', text: '비고: ' + d.remark }) : null
+        ]));
+        out.appendChild(el('div', { class: 'card' }, [el('h2', { text: '대기 중인 변경' })].concat(d.pending.length ? d.pending.map(function (h) { return line(h, name); }) : [el('div', { class: 'muted', text: '없습니다.' })])));
+        out.appendChild(el('div', { class: 'card' }, [el('h2', { text: '기록' })].concat(d.history.length ? d.history.map(function (h) { return line(h, name); }) : [el('div', { class: 'muted', text: '기록이 없습니다.' })])));
+      }).catch(function (err) { if (!alive || mine !== seq) return; clear(out); showError(out, err); });
+    }
+    return function () { alive = false; seq++; };
+  }
+
   function renderScreen(root) {
-    root.appendChild(el('div', { class: 'card' }, [el('div', { class: 'muted', text: '준비 중입니다.' })]));
+    var tab = window.SCREEN_TAB === 'history' || window.SCREEN_STUDENT ? 'history' : 'meal';
+    var holder = el('div'), dispose = null;
+    function draw() {
+      if (dispose) { dispose(); dispose = null; }
+      clear(holder);
+      if (tab === 'meal') dispose = renderMealTab(holder);
+      else dispose = renderRecordTab(holder, window.SCREEN_STUDENT || '');
+    }
+    root.appendChild(el('div', { class: 'card' }, [UI.segmented({ label: '화면', value: tab, options: [{ value: 'meal', label: '급식 변경' }, { value: 'history', label: '학생 기록' }],
+      onchange: function (v) { tab = v; window.SCREEN_STUDENT = ''; draw(); } })]));
+    root.appendChild(holder);
+    draw();
   }
 </script>
