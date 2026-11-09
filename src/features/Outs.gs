@@ -14,6 +14,27 @@ function vioHomeInfo_(user, role) {
 
 var VIO_MEMO_MAX = 200;
 
+/** '이번 학기' | '이번 기간'(방학) */
+function vioPeriodWord_(term) { return term && String(term.type).trim() === '방학' ? '이번 기간' : '이번 학기'; }
+
+/**
+ * 알림 받을 사람(순수): 담당교사·그 반 담임(활성만), 처음 2OUT이 되는 저장이면 관리자도(결정 49). 입력한 본인은 뺀다. C12(자동 OUT)도 쓴다.
+ * → 이메일 배열(정규화·중복 없음)
+ */
+function vioNotifyTo_(users, enrollment, student, beforeCount, afterCount, actorEmail) {
+  var seen = {}, to = [];
+  var add = function (e) { var m = normalizeEmail_(e); if (m && m !== actorEmail && !seen[m]) { seen[m] = true; to.push(m); } };
+  var teacher = normalizeEmail_(enrollment && enrollment.teacher_email);
+  (users || []).forEach(function (u) {
+    if (!isTruthy_(u.active)) return;
+    var roles = parseRoles_(u.roles), email = normalizeEmail_(u.email);
+    if (email === teacher) add(email);
+    if (roles.indexOf('homeroom') >= 0 && sameClass_(u.homeroom_class, student.grade, student.class_no)) add(email);
+    if (beforeCount < 2 && afterCount >= 2 && roles.indexOf('admin') >= 0) add(email);   // 처음 2OUT이 될 때만 관리자도
+  });
+  return to;
+}
+
 /** '3월 3일(수)' */
 function vioDayKo_(ymd) { return (+ymd.slice(5, 7)) + '월 ' + (+ymd.slice(8, 10)) + '일(' + ymdWeekdayKo_(ymd) + ')'; }
 
@@ -67,11 +88,11 @@ function vioDupWarnings_(rows, studentId, ymd, ruleId) {
  * input = {studentId, occurredAt, ruleId, detectedBy(교사 users.id, 빈칸=모름), memo}
  * → {ok, errors:[{field,message}], term, student, enrollment, rule, detectedName, vio:{ymd,at}, rows, before:{count,level,label}, after, warnings}
  */
-function vioCheck_(input, user) {
+function vioValidate_(input, user) {
   var errors = [], add = function (field, message) { errors.push({ field: field, message: message }); };
   input = input || {};
   var when = vioYmd_(input);
-  if (!when) add('occurredAt', '날짜와 시각을 2027-03-03T21:40 같은 형식으로 골라 주세요.');
+  if (!when) add('occurredAt', '날짜와 시각을 다시 골라 주세요.');
   var out = { ok: false, errors: errors, warnings: [], vio: when };
   var student = input.studentId ? findById_('students', String(input.studentId)) : null;
   if (!student) add('studentId', '학생을 골라 주세요.');
@@ -86,19 +107,22 @@ function vioCheck_(input, user) {
     if (!enrollment || !isActiveOn_(readAll_('status_changes'), enrollment, when.ymd)) add('studentId', '그날 학사생이 아닙니다(그 기간 명단에 없거나 입실 전·퇴실 뒤).');
   }
   var rule = readAll_('violation_rules').filter(function (r) { return String(r.id) === String(input.ruleId || ''); })[0] || null;
-  if (!rule || vioPickableRules_([rule]).length === 0) add('ruleId', rule ? '이 항목은 직접 입력할 수 없습니다(무단 지각·결석·이탈은 출결 담당의 미인정 특이사항으로 자동 기록).' : '항목을 골라 주세요.');
+  if (!rule || vioPickableRules_([rule]).length === 0) {
+    var isAuto = rule && String(rule.name).trim() === DEFAULT_VIOLATION_RULES[0][0];
+    add('ruleId', !rule ? '항목을 골라 주세요.' : isAuto ? '이 항목은 직접 입력할 수 없습니다(무단 지각·결석·이탈은 출결 담당의 미인정 특이사항으로 자동 기록).' : '지금 쓰지 않는 항목입니다. 다른 항목을 골라 주세요.');
+  }
   var memo = String(input.memo === undefined || input.memo === null ? '' : input.memo).trim();
   if (memo.length > VIO_MEMO_MAX) add('memo', '메모는 ' + VIO_MEMO_MAX + '자 안으로 적어 주세요.');
-  var detectedName = '';
+  var detectedName = '', detectedEmail = '';
   if (input.detectedBy) {
     var t = vioActiveTeachers_(readAll_('users')).filter(function (u) { return u.id === String(input.detectedBy); })[0];
-    if (!t) add('detectedBy', '적발 교사를 목록에서 골라 주세요.'); else detectedName = String(t.name || '');
+    if (!t) add('detectedBy', '적발 교사를 목록에서 골라 주세요.'); else { detectedName = String(t.name || ''); detectedEmail = normalizeEmail_(t.email); }
   }
   if (errors.length) return out;
   var rows = vioViolations_(term);
   var before = outLevel_(rows, student.id, term.id);
   var n = before.count + 1, level = n >= 2 ? 2 : n;
-  Object.assign(out, { ok: true, term: term, student: student, enrollment: enrollment, rule: rule, detectedName: detectedName, memo: memo, rows: rows,
+  Object.assign(out, { ok: true, term: term, student: student, enrollment: enrollment, rule: rule, detectedName: detectedName, detectedEmail: detectedEmail, memo: memo, rows: rows,
     before: before, after: { count: n, level: level, label: ['', '1OUT', '퇴실 대상'][level] },
     warnings: vioDupWarnings_(rows, student.id, when.ymd, rule.id) });
   return out;
@@ -110,16 +134,19 @@ function getOutContext(date) {
   var ymd = String(date || '').trim() || today_();
   if (!ymdIsValid_(ymd)) throw new Error('날짜를 골라 주세요.');
   var terms = readAll_('terms');
-  var term = termOnDate_(ymd, terms) || getCurrentTerm_();
+  var termOn = termOnDate_(ymd, terms);
+  var term = termOn || getCurrentTerm_();
   var users = readAll_('users');
   var out = { today: today_(), date: ymd, term: term ? { id: term.id, name: term.name, start_date: term.start_date, end_date: term.end_date } : null,
     rules: vioPickableRules_(readAll_('violation_rules')).map(function (r) { return { id: r.id, name: r.name }; }),
     teachers: vioActiveTeachers_(users).map(function (u) { return { id: u.id, name: u.name, me: normalizeEmail_(u.email) === user.email }; }),
-    students: [], levels: {}, canRecord: false };
+    students: [], levels: {}, canRecord: false, now: nowIso_().slice(11, 16), periodWord: vioPeriodWord_(term), dutyYesterday: false };
   if (!term) return out;
   var isAdmin = hasRole_(user, 'admin'), isTeacher = hasRole_(user, 'hall_teacher');
-  out.canRecord = isAdmin || isTeacher;
+  // 미래 날짜·기간 밖 날짜·끝난 지 하루가 넘은 기간은 기록할 수 없다(저장 검사와 같은 기준)
+  out.canRecord = (isAdmin || isTeacher) && !!termOn && ymd <= today_() && today_() <= ymdAddDays_(termOn.end_date, 1);
   if (!out.canRecord) return out;
+  out.dutyYesterday = isTeacher && ymd === today_() && isOnDutyFor_(user.email, ymdAddDays_(ymd, -1), 1);
   var onDuty = isTeacher && isOnDutyFor_(user.email, ymd, 1);
   var enr = readAll_('enrollments').filter(function (e) { return e.term_id === term.id; });
   var changes = readAll_('status_changes');
@@ -139,7 +166,7 @@ function getOutContext(date) {
 /** 저장 전 확인(아무것도 쓰지 않는다): 검사 결과·같은 날 중복 경고·"저장하면 N OUT" 안내 */
 function previewOut(input) {
   var user = requirePermission_('out.save', { studentId: input && input.studentId, ymd: (vioYmd_(input) || {}).ymd || '' });
-  var c = vioCheck_(input, user);
+  var c = vioValidate_(input, user);
   if (!c.ok) return { ok: false, errors: c.errors };
   return { ok: true, warnings: c.warnings, before: c.before, after: c.after };
 }
@@ -155,26 +182,35 @@ function saveOut(input) {
     ['terms', 'enrollments', 'status_changes', 'violation_rules', 'users', 'students'].forEach(function (t) { invalidate_('db', t); });
     var term0 = vioYmd_(input) ? termOnDate_(vioYmd_(input).ymd) : null;
     if (term0) invalidate_('db', termSheetName_('violations', term0.id));
-    var c = vioCheck_(input, user);
+    var c = vioValidate_(input, user);
     if (!c.ok) return { ok: false, errors: c.errors };
     if (c.warnings.length && !(input && input.acknowledge === true)) return { ok: false, needsConfirm: true, warnings: c.warnings, before: c.before, after: c.after };
+    ensureTermSheet_('violations', c.term.id);   // 기간 탭이 아직 없으면 만든다(미리보기는 되는데 저장이 던지지 않게)
     appendRecord_(termSheetName_('violations', c.term.id), {
       term_id: c.term.id, student_id: c.student.id, occurred_at: c.vio.at, rule_id: c.rule.id, rule_name: c.rule.name, memo: c.memo,
-      detected_by: c.detectedName, entered_by: user.email, status: '유효', source: '직접', source_exception_id: '', cancel_reason: ''
+      detected_by: c.detectedEmail, entered_by: user.email, status: '유효', source: '직접', source_exception_id: '', cancel_reason: ''
     }, user.email);
-    var users = readAll_('users');
-    var to = [normalizeEmail_(c.enrollment.teacher_email)];
-    users.forEach(function (u) {
-      if (!isTruthy_(u.active)) return;
-      var roles = parseRoles_(u.roles);
-      if (roles.indexOf('homeroom') >= 0 && sameClass_(u.homeroom_class, c.student.grade, c.student.class_no)) to.push(normalizeEmail_(u.email));
-      if (c.after.level >= 2 && roles.indexOf('admin') >= 0) to.push(normalizeEmail_(u.email));   // 2OUT이 되면 관리자도
-    });
-    return { ok: true, after: c.after, mail: { to: to.filter(function (e) { return e && e !== user.email; }),
-      body: [vioDayKo_(c.vio.ymd) + ' ' + c.rule.name + ' OUT이 기록되었습니다.', '이번 학기 ' + c.after.label + '입니다.', '자세한 내용은 앱에서 확인해 주세요.'].join('\n') } };
+    var to = vioNotifyTo_(readAll_('users'), c.enrollment, c.student, c.before.count, c.after.count, user.email);
+    return { ok: true, after: c.after, mail: { to: to,
+      body: [vioDayKo_(c.vio.ymd) + ' ' + c.rule.name + ' OUT이 기록되었습니다.', vioPeriodWord_(c.term) + ' ' + c.after.count + 'OUT' + (c.after.level >= 2 ? '(퇴실 대상)' : '') + '입니다.', '자세한 내용은 앱에서 확인해 주세요.'].join('\n') } };
   });
   if (!res.mail) return res;
-  // 락 밖: 학생 이름·상황 메모는 메일에 넣지 않는다(결정 49)
-  var sent = notifyMail_(res.mail.to, '[신한1학사] OUT 알림', res.mail.body + '\n\n' + ScriptApp.getService().getUrl(), user.email);
-  return { ok: true, after: res.after, notified: sent.notified };
+  // 락 밖: 학생 이름·상황 메모는 메일에 넣지 않는다(결정 49). 앱 주소를 못 읽어도 저장은 그대로, 메일은 주소만 빼고 간다
+  var link = '';
+  try { link = ScriptApp.getService().getUrl(); } catch (e) { link = ''; }
+  var enabled = PropertiesService.getScriptProperties().getProperty('MAIL_ENABLED') === 'true';
+  var sent = notifyMail_(res.mail.to, '[신한1학사] OUT 알림', res.mail.body + (link ? '\n\n' + link : ''), user.email);
+  // 경고는 보내려 했는데 못 간 경우(할당량·발송 실패)에만. 메일이 꺼져 있거나 받을 사람이 없는 것은 문제가 아니다
+  var reason = '';
+  if (!sent.notified) {
+    if (!enabled) reason = 'off';
+    else if (!res.mail.to.length) reason = 'noRecipients';
+    else if (sent.failed > 0) reason = 'failed';
+    else {   // 한 통도 시도하지 않았다: 한도 부족이면 문제, 보낼 수 있는 주소가 하나도 없으면(가짜 주소 등) 문제 아님
+      var quota = -1;
+      try { quota = MailApp.getRemainingDailyQuota(); } catch (e) { quota = -1; }
+      reason = quota >= 0 && quota < res.mail.to.length || quota < 0 ? 'quota' : 'noRecipients';
+    }
+  }
+  return { ok: true, after: res.after, notified: sent.notified, notifyWarn: reason === 'failed' || reason === 'quota', notifyReason: reason };
 }

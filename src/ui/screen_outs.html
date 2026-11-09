@@ -9,17 +9,17 @@
     var state = { ctx: null, student: null, ruleId: '', date: '', time: '', detectedBy: '', memo: '', busy: false, seq: 0 };
     var body = el('div');
     root.appendChild(body);
-    var bar = null, saveBtn = null, noticeBox = null;
+    var bar = null, saveBtn = null, noticeBox = null, statusBox = null, errHolders = {};
 
     function pad(n) { return (n < 10 ? '0' : '') + n; }
-    function nowHm() { var d = new Date(); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
-
+    
     function load(date, note) {
       var my = ++state.seq;
       call('getOutContext', date || '').then(function (ctx) {
         if (my !== state.seq) return;   // 더 나중에 누른 날짜의 응답만 쓴다
         state.ctx = ctx;
-        if (!state.date) { state.date = ctx.today; state.time = nowHm(); }
+        if (!state.date) state.date = ctx.today;
+        if (!state.time) state.time = ctx.now;   // 기본 시각은 서버 시계(휴대폰 시계가 아님). 저장·비우기 뒤에는 비워서 다시 채운다
         if (state.student && !ctx.students.some(function (s) { return s.id === state.student.id; })) state.student = null;   // 이 날짜에 기록할 수 없는 학생이면 비운다
         draw(note);
       }).catch(function (err) { if (my !== state.seq) return; clear(body); showError(body, err); });
@@ -31,8 +31,8 @@
     function levelNotice() {
       if (!state.student) return null;
       var n = state.ctx.levels[state.student.id] || 0;
-      if (n === 1) return el('div', { class: 'notice warn', text: UI.util.studentLabel(state.student) + eunNeun(state.student.name) + ' 이번 학기 이미 1OUT입니다. 저장하면 2OUT — 퇴실 대상이 됩니다.' });
-      if (n >= 2) return el('div', { class: 'notice warn', text: UI.util.studentLabel(state.student) + eunNeun(state.student.name) + ' 이번 학기 이미 퇴실 대상(' + n + 'OUT)입니다.' });
+      if (n === 1) return el('div', { class: 'notice warn', text: UI.util.studentLabel(state.student) + eunNeun(state.student.name) + ' ' + state.ctx.periodWord + ' 이미 1OUT입니다. 저장하면 2OUT — 퇴실 대상이 됩니다.' });
+      if (n >= 2) return el('div', { class: 'notice warn', text: UI.util.studentLabel(state.student) + eunNeun(state.student.name) + ' ' + state.ctx.periodWord + ' 이미 퇴실 대상(' + n + 'OUT)입니다.' });
       return null;
     }
 
@@ -43,14 +43,18 @@
       var c = state.ctx;
       clear(body);
       if (bar && bar.parentNode) bar.parentNode.removeChild(bar);
-      bar = null; saveBtn = null; noticeBox = null;
-      if (note) body.appendChild(el('div', { class: 'notice info', text: note }));
+      bar = null; saveBtn = null; noticeBox = null; errHolders = {};
+      statusBox = el('div');   // 오류·결과는 이 상자 하나에만(쌓이지 않게)
+      body.appendChild(statusBox);
+      if (note) statusBox.appendChild(el('div', { class: 'notice info', text: note }));
       if (!c.term) { body.appendChild(UI.emptyState('운영 기간이 없습니다. 관리자에게 운영 기간을 만들어 달라고 요청해 주세요.')); return; }
       if (!c.canRecord) {
         body.appendChild(el('div', { class: 'card' }, [el('h2', { text: 'OUT 기록' }), el('div', { class: 'muted', text: 'OUT은 담당교사·근무교사·관리자가 기록합니다. 이 계정은 보기만 할 수 있습니다.' })]));
         return;
       }
+      if (c.dutyYesterday && c.date === c.today) body.appendChild(el('div', { class: 'notice info', text: '어제 근무하셨습니다. 어제 밤 적발한 OUT은 날짜를 [어제]로 바꾸면 학사생 전체에서 고를 수 있습니다.' }));
       var studentCard = el('div', { class: 'card' }, [el('h2', { text: '학생' })]);
+      errHolders.studentId = studentCard;
       studentCard.appendChild(UI.studentPicker({ students: c.students, label: '학생', placeholder: '이름·초성(ㅂㄷㅅ)·학번',
         onpick: function (s) { state.student = s; updateNotice(); refresh(); } }));   // 입력 중인 폼은 다시 그리지 않는다(고른 학생·글자가 사라지지 않게)
       if (!c.students.length) studentCard.appendChild(el('div', { class: 'muted', text: '이 날짜에 OUT을 기록할 수 있는 학생이 없습니다. 담당 학생이 없거나, 근무한 날(어제 밤까지)이 아닙니다.' }));
@@ -69,8 +73,10 @@
             refresh();
           } }));
       });
-      body.appendChild(el('div', { class: 'card' }, [el('h2', { text: '무엇을' }), chips,
-        el('div', { class: 'hint muted', style: 'margin-top:8px', text: '무단 지각·결석·이탈은 출결 담당이 미인정 특이사항으로 입력하면 자동으로 기록됩니다.' })]));
+      var ruleCard = el('div', { class: 'card' }, [el('h2', { text: '무엇을' }), chips,
+        el('div', { class: 'hint muted', style: 'margin-top:8px', text: '무단 지각·결석·이탈은 출결 담당이 미인정 특이사항으로 입력하면 자동으로 기록됩니다.' })]);
+      errHolders.ruleId = ruleCard;
+      body.appendChild(ruleCard);
 
       var dateField = UI.dateField({ label: '날짜', value: state.date, name: 'date', max: c.today,
         shortcuts: [{ label: '오늘', value: c.today }, { label: '어제', value: addDaysYmd(c.today, -1) }],
@@ -86,12 +92,14 @@
       var memo = el('textarea', { maxlength: '200' });
       memo.value = state.memo;
       memo.addEventListener('input', function () { state.memo = memo.value; });
-      body.appendChild(el('div', { class: 'card' }, [el('h2', { text: '언제·누가' }), dateField, UI.field('시각', time), UI.field('적발 교사', who),
-        UI.field('상황 메모(선택)', memo, { hint: '200자까지. 길게 쓰지 않습니다.' })]));
+      var whenCard = el('div', { class: 'card' }, [el('h2', { text: '언제·누가' }), dateField, UI.field('시각', time), UI.field('적발 교사', who),
+        UI.field('상황 메모(선택)', memo, { hint: '200자까지. 길게 쓰지 않습니다.' })]);
+      errHolders.occurredAt = errHolders.detectedBy = errHolders.memo = whenCard;
+      body.appendChild(whenCard);
 
       bar = UI.actionBar([
-        { text: 'OUT 저장', kind: 'primary', disabled: true, onclick: onSave },
-        { text: '비우기', kind: 'secondary', onclick: function () { reset(); draw(); } }
+        { text: '저장', kind: 'primary', disabled: true, onclick: onSave },
+        { text: '비우기', kind: 'secondary', onclick: function () { reset(); load(state.date); } }
       ], { mount: true });
       saveBtn = bar.querySelectorAll('button')[0];
       refresh();
@@ -101,37 +109,53 @@
       var d = new Date(Date.UTC(+ymd.slice(0, 4), +ymd.slice(5, 7) - 1, +ymd.slice(8, 10) + n));
       return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
     }
-    function reset() { state.student = null; state.ruleId = ''; state.memo = ''; }
+    function reset() { state.student = null; state.ruleId = ''; state.memo = ''; state.time = ''; }
 
     function inputValue() {
       return { studentId: state.student.id, occurredAt: state.date + 'T' + state.time, ruleId: state.ruleId, detectedBy: state.detectedBy, memo: state.memo.trim() };
     }
 
+    /** 오류는 해당 칸 아래에(없으면 맨 위 상자에), 이전 오류는 지우고 첫 오류로 스크롤 */
+    function showErrors(errors) {
+      Array.prototype.forEach.call(body.querySelectorAll('.out-err'), function (n) { n.parentNode.removeChild(n); });
+      if (statusBox) clear(statusBox);
+      var first = null;
+      errors.forEach(function (e) {
+        var h = errHolders[e.field] || statusBox;
+        var n = el('div', { class: 'fix out-err', role: 'alert', text: e.message });
+        h.appendChild(n); if (!first) first = n;
+      });
+      if (first) first.scrollIntoView({ block: 'center' });
+    }
+    function showFailure(message) { showErrors([{ field: '', message: message }]); window.scrollTo(0, 0); }
+
     function onSave() { if (canSave()) doSave(false); }
     function doSave(ack) {
       state.busy = true; refresh();
+      showErrors([]);
       var v = inputValue(); if (ack) v.acknowledge = true;
       call('saveOut', v).then(function (r) {
         state.busy = false;
         if (r.needsConfirm) {
           refresh();
           return UI.confirmSheet({ title: '이미 비슷한 OUT이 있습니다', lead: r.warnings.join(' '),
-            lines: ['그래도 저장하면 OUT이 한 건 더 늘어납니다' + (r.after && r.after.level >= 2 ? '(저장하면 퇴실 대상)' : '')], confirmText: '그래도 저장', cancelText: '돌아가기', danger: true,
+            lines: ['그래도 저장하면 OUT이 한 건 더 늘어납니다' + (r.before && r.before.count >= 2 ? '(이미 퇴실 대상입니다)' : r.after && r.after.level >= 2 ? '(저장하면 퇴실 대상)' : '')], confirmText: '그래도 저장', cancelText: '돌아가기', danger: true,
             onconfirm: function () { doSave(true); } });
         }
         if (!r.ok) {
           refresh();
-          body.insertBefore(el('div', { class: 'error', text: r.errors.map(function (e) { return e.message; }).join(' ') }), body.firstChild);
-          window.scrollTo(0, 0);
+          showErrors(r.errors);
           return;
         }
-        var msg = '저장했습니다. 이번 학기 ' + r.after.label + '입니다.' + (r.notified === false ? ' 알림 메일은 가지 않았습니다. 필요하면 담당 선생님께 직접 알려 주세요.' : '');
-        UI.toast('저장했습니다.');
+        var msg = '저장했습니다. ' + state.ctx.periodWord + ' ' + r.after.label + '입니다.';
+        var warn = r.notifyWarn ? ' 알림 메일이 가지 않았습니다. 필요하면 담당 선생님께 직접 알려 주세요.' : '';
+        UI.toast(msg + warn, r.notifyWarn ? { kind: 'warn', ms: 8000 } : undefined);
         reset();
-        load(state.date, msg);
+        load(state.date, msg + warn);
+        window.scrollTo(0, 0);
       }).catch(function (err) {
         state.busy = false; refresh();
-        body.insertBefore(el('div', { class: 'error', text: (err && err.message) || String(err) }), body.firstChild);
+        showFailure((err && err.message) || String(err));
       });
     }
 
