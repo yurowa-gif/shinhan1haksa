@@ -589,3 +589,15 @@ test('재입실 급식 행은 퇴실 기록 전에 낸, 재입실일보다 늦�
   assert.strictEqual(at(saveReq(back.rows, '조식', '미실시', '2027-03-07T09:00:00', '2027-03-11', '2027-03-20'), '조식', '2027-03-20'), '미실시');
   assert.strictEqual(plain(ctx.mealPlanChange_(back.rows, 's1', '조식', '미실시', '2027-03-07T09:00:00', { today: '2027-03-11', effectiveDate: '2027-03-12' })).superseded, true);
 });
+
+// 알려진 지름길(총괄: 이번 라운드 안 함, docs/plan/followups.md R11b '재입실이 덮는 신청의 부수 효과'):
+// 퇴실 기록 뒤·재입실 전에 낸, 재입실 값과 다른 신청 Q가 퇴실 전 대기 신청 P를 가린 효과는 입력 순서에 따라 남거나 사라진다.
+// 고치면 아래 단언을 '두 순서가 같다'로 바꾼다.
+test('(알려진 지름길) 재입실이 덮는 신청 Q(일반 석식 3/19)가 퇴실 전 대기 신청 P(미실시 3/19)를 가린 효과 — 지금은 입력 순서에 따라 다르다', () => {
+  const P = (r) => saveReq(r, '석식', '미실시', '2027-03-05T09:00:00', '2027-03-12', '2027-03-19');
+  const L = (r) => saveMove(r, { type: '학사 퇴실', effectiveDate: '2027-03-11', requestedAt: '2027-03-10T10:00:00' }, '2027-03-10').rows;
+  const Q = (r) => saveReq(r, '석식', '일반 석식', '2027-03-12T09:00:00', '2027-03-12', '2027-03-19');
+  const R = (r) => saveMove(r, { type: '학사 입실', effectiveDate: '2027-03-15', requestedAt: '2027-03-16T09:00:00' }, '2027-03-16').rows;
+  const pFirst = R(Q(L(P(HALL())))), pLate = R(P(Q(L(HALL()))));   // P를 먼저 입력 / Q 뒤에 늦게 입력(그때 P는 Q에 가려 취소 행)
+  assert.deepStrictEqual([at(pFirst, '석식', '2027-03-20'), at(pLate, '석식', '2027-03-20')], ['미실시', '학사 석식']);
+});
