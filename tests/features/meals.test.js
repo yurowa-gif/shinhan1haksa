@@ -661,3 +661,37 @@ test('M15: 고친 적용일이 어느 기간에도 속하지 않는 사이 날�
   const q = prev(env, ADMIN, input(a, 'd_hall', '2027-02-26T10:00:00', { effectiveDate: '2027-03-03', reason: '급식실 요청' }));
   assert.ok(!q.warnings.some((t) => t.includes('등록된 운영 기간 밖')), '기간 안 날짜에는 경고가 없다');
 });
+
+test('foodWrite_: 대표+연결 행은 한 번(bulk_create 한 줄)에 쓰고, 규칙이 준 [자동] 꼬리표 사유는 그대로 둔다', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { a } = pick(env);
+  const pending = saveOk(env, HALL, input(a, 'd_off', '2027-03-03T09:00:00'));
+  const n0 = env.auditActions('bulk_create').length, c0 = env.auditActions('create').length;
+  const w = env.as(ADMIN, (c) => c.withLock_(() => c.foodWrite_({ student_id: a, item: '석식', value: '학사 석식', requested_at: '2027-03-03T10:00:00', effective_date: '2027-03-03',
+    effective_date_auto: '2027-03-03', reason: '', doc_submitted: 'FALSE', source: 'F7' },
+  [{ item: '조식', value: '미실시', effective_date: '2027-03-03', effective_date_auto: '2027-03-03', source: 'F6', reason: '시험' }],
+  [{ id: pending.id, cancel_reason: '[자동] 원인행 더 새 신청' }], ADMIN)));
+  assert.strictEqual(env.auditActions('bulk_create').length - n0, 1, '대표+연결 행이 한 덩어리');
+  assert.strictEqual(env.auditActions('create').length, c0, '행마다 따로 쓰지 않는다');
+  const rows = rowsOf(env, a);
+  const head = rows.find((x) => x.id === w.head.id);
+  assert.strictEqual(rows.filter((x) => x.linked_change_id === head.id).length, 1);
+  assert.strictEqual(rows.find((x) => x.id === pending.id).cancel_reason, '[자동] 원인행 더 새 신청', '이미 꼬리표가 있는 사유에 대표 id를 덧붙이지 않는다');
+});
+
+test('끊긴 저장 뒤 재시도: 대표 행은 있는데 취소가 빠졌으면 "이미 저장"이 아니라 덜 끝났다는 오류, 끝까지 간 저장의 재시도는 그대로 성공', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { a } = pick(env);
+  const pending = saveOk(env, HALL, input(a, 'd_off', '2027-03-03T09:00:00'));   // 3/15 미실시 대기
+  const i = input(a, 'd_hall', '2027-03-03T10:00:00');
+  const p = prev(env, HALL, i);
+  const r = save(env, HALL, i, p.expect);
+  assert.strictEqual(r.cancelCount, 1);
+  assert.strictEqual(save(env, HALL, i, p.expect).duplicate, true, '끝까지 간 저장의 재시도');
+  // 취소 쓰기가 끊긴 상황을 만든다: 대기 행을 다시 살려 둔다
+  env.asOwner((c) => c.updateRecord_('status_changes', pending.id, { status: '유효', cancel_reason: '' }, env.owner));
+  const n = env.rows('status_changes').length;
+  const again = save(env, HALL, i, p.expect);
+  assert.strictEqual(again.ok, false); assert.ok(again.errors[0].message.includes('덜 끝났습니다'), JSON.stringify(again));
+  assert.strictEqual(env.rows('status_changes').length, n);
+});
