@@ -88,10 +88,10 @@
       function drawResult() {
         clear(result); clear(dateText);
         var p = last;
-        if (!p) { dateText.appendChild(el('span', { class: 'muted', text: '학생과 무엇을 바꿀지 고르면 적용일이 나옵니다.' })); return; }
+        if (!p) { dateText.appendChild(el('span', { class: 'muted', text: picked && chip ? '적용일을 계산하는 중…' : '학생과 무엇을 바꿀지 고르면 적용일이 나옵니다.' })); return; }
         if (p.errors && p.errors.length) p.errors.forEach(function (e) { result.appendChild(el('div', { class: 'notice warn', text: e.message })); });
         if (p.blocked) { dateText.appendChild(el('span', { class: 'muted', text: '신청할 수 없습니다' })); result.appendChild(el('div', { class: 'notice warn', text: p.blocked })); return; }
-        if (!p.date && !p.superseded) { dateText.appendChild(el('span', { class: 'muted', text: '—' })); return; }
+        if (!p.date && !p.superseded) { dateText.appendChild(el('span', { class: 'muted', text: '신청할 수 없습니다' })); return; }   // 사유는 아래 안내에 있다
         dateText.appendChild(el('span', { class: 'mv-date', text: p.superseded ? '적용되지 않음' : p.dateKo }));
         if (!p.superseded) result.appendChild(el('div', { class: 'notice info', text: p.reasonText }));
         (p.warnings || []).forEach(function (w) { result.appendChild(el('div', { class: 'notice warn', text: w })); });
@@ -133,12 +133,15 @@
           onconfirm: function () {
             busy = true; drawBar();
             call('saveMealChange', payload(), p.expect).then(function (r) {
-              busy = false;
-              if (r.stale) { UI.toast(r.error, { kind: 'warn', ms: 5000 }); refresh(); return; }
-              if (!r.ok) { UI.toast((r.errors && r.errors[0] && r.errors[0].message) || r.blocked || '저장하지 못했습니다.', { kind: 'warn', ms: 5000 }); refresh(); return; }
-              UI.toast(r.duplicate ? '이미 저장된 신청서입니다.' : r.superseded ? '기록으로 저장했습니다.' : r.dateKo + '부터 ' + r.label + '(으)로 저장했습니다.');
+              if (r.stale) { busy = false; UI.toast(r.error, { kind: 'warn', ms: 5000 }); refresh(); return; }
+              if (!r.ok) { busy = false; UI.toast((r.errors && r.errors[0] && r.errors[0].message) || r.blocked || '저장하지 못했습니다.', { kind: 'warn', ms: 5000 }); refresh(); return; }
+              var saved = r.duplicate ? '이미 저장된 신청서입니다.' : r.superseded ? '기록으로 저장했습니다.' : r.dateKo + '부터 ' + r.label + '(으)로 저장했습니다.';
+              UI.toast(saved);
               resetState();   // 다음 학생에게 이전 학생의 선택·서류 체크가 남지 않게 모두 비운다
-              call('getMealContext').then(function (c) { ctx = c; draw(); }).catch(function (err) { draw(); fail(err); });
+              window.scrollTo(0, 0);
+              // 다시 불러오는 동안은 busy를 유지한다(그 사이 눌린 버튼이 빈 학생으로 저장되지 않게)
+              call('getMealContext').then(function (c) { busy = false; ctx = c; draw(); })
+                .catch(function (err) { busy = false; draw(); UI.toast('저장했습니다. 화면을 다시 불러오지 못했습니다. 새로고침해 주세요.', { kind: 'warn', ms: 6000 }); });
             }).catch(function (err) { busy = false; drawBar(); fail(err); });
           }
         });
