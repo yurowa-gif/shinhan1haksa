@@ -70,8 +70,15 @@ function movePlan_(changes, studentId, move, opts) {
       live = live.filter(function (x) { return ruleStr_(x.id) !== c.id; });
     });
   };
+  // 퇴실 기록 이후에 신청한 퇴실일 이상 학사 석식(mealPlanChange_ blocked의 거울) — 이 퇴실 정리가 취소한다
+  var postLeaveHall = function (c) {
+    return ruleStr_(c.item) === '석식' && ruleStr_(c.value) === '학사 석식' && ruleStr_(c.source) !== 'F6' &&
+      ruleStr_(c.effective_date) >= E && ruleIso_(c.requested_at) >= ruleIso_(at);
+  };
   var meal = function (item, to, mopts, reason, always) {   // 급식 신청(F7)을 같은 계획에 넣는다 → 쓴 날 또는 ''(always면 값이 같아도 쓴다)
-    var p = mealPlanChange_(live, sid, item, to, at, Object.assign({ today: today, cutoff: opts.cutoff }, mopts));
+    // 퇴실과 함께 고른 급식은 이 퇴실 정리가 곧 취소할 행(퇴실 뒤 학사 석식)에 밀리지 않는다(입력 순서와 무관)
+    var src = mopts.leaveDate ? live.filter(function (c) { return !postLeaveHall(c); }) : live;
+    var p = mealPlanChange_(src, sid, item, to, at, Object.assign({ today: today, cutoff: opts.cutoff }, mopts));
     if (p.blocked || p.superseded) { out.warnings.push(item + ' ' + to + ' 신청은 쓰지 않습니다: ' + (p.blocked || '더 새 신청이 있습니다')); return ''; }
     if (!always && p.kind === 'none' && !p.toCancel.length && !p.followUps.length) return '';   // 이미 그 값이면 행을 늘리지 않는다(경고도 없음)
     out.warnings = out.warnings.concat(p.warnings);
@@ -85,21 +92,26 @@ function movePlan_(changes, studentId, move, opts) {
   // → 그 행들이 '[자동] <그 행 id>'로 취소했던 행 중 더 새 신청에 덮이지 않는 것을 되살린다(입력 순서와 무관하게, 결정 55·58)
   // → 그래도 중단일 값이 학사생 값이면(정리 전 학사생 값이었는데 이제 값이 없어도) 미실시
   var stopHall = function (item, stop, reason) {
-    var before = statusOn_(live, sid, item, stop), req = ruleIso_(at);
+    var before = statusOn_(live, sid, item, stop);
     var gone = mealPendingToCancel_(live, sid, item, stop, { source: 'F6' });
-    if (item === '석식') {
-      live.forEach(function (c) {
-        if (ruleStr_(c.item) === '석식' && ruleStr_(c.value) === '학사 석식' && ruleStr_(c.source) !== 'F6' &&
-          ruleStr_(c.effective_date) >= E && ruleStr_(c.effective_date) < stop && ruleIso_(c.requested_at) >= req) gone.push({ id: ruleStr_(c.id) });
-      });
-    }
+    live.forEach(function (c) { if (postLeaveHall(c) && ruleStr_(c.effective_date) < stop) gone.push({ id: ruleStr_(c.id) }); });
     cancel(gone, reason);
+    var back = [];
     gone.forEach(function (x) {
-      moveRestorable_(changes, live, x.id).forEach(function (r) {
-        if (mealIsHallOnly_(item, ruleStr_(r.value)) && ruleStr_(r.effective_date) >= stop) return;   // 되살려도 이 정리가 다시 취소할 행
+      moveRestorable_(changes, live, x.id, function (r) {   // 되살려도 이 정리가 다시 취소할 행은 처음부터 뺀다(더 이른 행을 막지 않게)
+        return (mealIsHallOnly_(item, ruleStr_(r.value)) && ruleStr_(r.effective_date) >= stop) || postLeaveHall(r);
+      }).forEach(function (r) {
         out.toRestore.push({ id: ruleStr_(r.id) });
         live.push(Object.assign({}, r, { status: '유효' }));
+        back.push(r);
       });
+    });
+    // 되살린 신청은 처음 저장될 때처럼 그보다 먼저 신청했는데 더 늦게 적용되는 다른 값의 행을 취소한다(superseded로 저장돼 자기 취소를
+    // 못 했거나, 취소돼 있던 동안 늦게 입력된 옛 신청서). 새 신청부터. 꼬리표는 되살린 행 id(그 행이 다시 끊기면 돌아오게)
+    back.sort(function (a, b) { return ruleIso_(a.requested_at) > ruleIso_(b.requested_at) ? -1 : 1; }).forEach(function (r) {
+      if (!live.some(function (c) { return ruleStr_(c.id) === ruleStr_(r.id); })) return;
+      cancel(mealPendingToCancel_(live, sid, item, ruleStr_(r.effective_date), { source: 'F7', requestedAt: r.requested_at, newValue: ruleStr_(r.value) }),
+        '[자동] ' + ruleStr_(r.id) + ' 되살린 신청으로 대체');
     });
     var now = statusOn_(live, sid, item, stop);
     if (mealIsHallOnly_(item, now) || (!now && mealIsHallOnly_(item, before))) {
@@ -132,9 +144,10 @@ function movePlan_(changes, studentId, move, opts) {
  * 행 tagId가 '[자동] <tagId> …'로 취소했던 행(cancel_reason, 결정 41) 중 되살려도 더 새 신청에 덮이지 않는 것.
  * 덮임 = 같은 학생·항목의 신청 행(F6 제외)이 신청 일시가 더 늦고 적용일이 그 행 이하 — live(지금 살아 있는 행, 계획 반영)와
  * 함께 되살아나는 행 모두에서 본다(신청 일시가 늦은 것부터 정해 서로 덮는 것도 거른다).
- * 꼬리표 = superseded 신청서(결정 58)·F7 신청이 대체한 행(C17a)·퇴실 정리가 취소한 행(F6).
+ * 꼬리표 = superseded 신청서(결정 58)·F7 신청이 대체한 행(C17a)·퇴실 정리가 취소한 행(F6). skip(행)이 참인 행은 처음부터 뺀다
+ * (되살려도 곧 다시 취소할 행 — 덮임 검사에도 넣지 않는다).
  */
-function moveRestorable_(changes, live, tagId) {
+function moveRestorable_(changes, live, tagId, skip) {
   var tag = '[자동] ' + ruleStr_(tagId) + ' ';
   var covers = function (x, c) {
     return ruleStr_(x.student_id) === ruleStr_(c.student_id) && ruleStr_(x.item) === ruleStr_(c.item) && ruleStr_(x.source) !== 'F6' &&
@@ -144,6 +157,7 @@ function moveRestorable_(changes, live, tagId) {
   (changes || []).filter(function (c) {
     return c && !ruleRowLive_(c) && (ruleStr_(c.cancel_reason) + ' ').indexOf(tag) === 0;
   }).sort(function (a, b) { return ruleIso_(a.requested_at) > ruleIso_(b.requested_at) ? -1 : 1; }).forEach(function (c) {
+    if (skip && skip(c)) return;
     if (!live.some(function (x) { return ruleRowLive_(x) && covers(x, c); }) && !back.some(function (x) { return covers(x, c); })) back.push(c);
   });
   return back;

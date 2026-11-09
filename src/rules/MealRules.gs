@@ -117,10 +117,12 @@ function mealIsHallOnly_(item, value) {
  *   입퇴실 늦은 입력)·날짜가 아니면·모르는 effectiveRule이면·effectiveRule만 있고 날짜가 없으면 Error. 교사가 고친 날(manual)이
  *   미실시 규칙의 날보다 이르거나 오늘보다 이르면 경고.
  * - **저장:** blocked·superseded가 아니면 kind가 'none'이어도 신청 행(date, 값)을 쓴다 — 신청서 기록이고, 나중에 늦게 입력되는
- *   이전 신청서가 이 신청을 덮지 못하게 한다(값이 같아 상태는 바뀌지 않는다). blocked·superseded면 date·rule은 ''이고 쓰지 않는다.
+ *   이전 신청서가 이 신청을 덮지 못하게 한다(값이 같아 상태는 바뀌지 않는다). blocked면 date·rule은 ''이고 쓰지 않는다.
+ *   superseded면 date·rule은 ''이고 아래 결정 58대로 '취소' 행으로 쓴다.
  * - superseded: 이 신청보다 신청 일시가 늦은 신청 행(퇴실 정리 F6 행 제외)이 이미 있고 그 적용일이 이 신청의 적용일 이하이면,
  *   이 신청은 영영 적용되지 않는다(늦게 입력한 이전 신청서). kind 'none' + 경고. supersededBy = 덮은 행 id(적용일이 늦은 순, 같으면
- *   신청 일시가 늦은 순). **저장(결정 58):** 신청서를 status '취소', cancel_reason '[자동] <supersededBy[0]> 더 새 신청'으로 쓴다 —
+ *   신청 일시가 늦은 순). **저장(결정 58):** 신청서를 status '취소', cancel_reason '[자동] <supersededBy[0]> 더 새 신청',
+ *   effective_date = opts.effectiveDate(고친 날)가 있으면 그것, 없으면 autoDate, effective_date_auto = autoDate로 쓴다 —
  *   덮은 행이 나중에 퇴실 정리로 취소되면 movePlan_이 이 행을 되살린다(입력 순서와 무관).
  * - blocked: 후보 적용일에 학사 상태가 '퇴실'이면 조식 '실시'는 늘, 석식 '학사 석식'은 그 퇴실 기록(requested_at)보다 뒤에 신청했으면
  *   켜지 못한다(일반 석식은 된다). **입력 순서가 아니라 신청 일시 순서:** 퇴실 기록보다 먼저 신청한 학사 석식은 늦게 입력해도
