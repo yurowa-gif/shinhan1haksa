@@ -18,7 +18,8 @@
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '근무표' }),
       el('div', { class: 'muted', text: '내 근무와 이번 달 근무표를 봅니다.' }),
-      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=duty', text: '근무표 보기' })
+      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=duty', text: '근무표 보기' }),
+      el('a', { class: 'btn secondary', style: 'margin:12px 0 0 8px', href: d.appUrl + '?page=duty&tab=record', text: '내 근무 기록' })
     ]));
   }
 

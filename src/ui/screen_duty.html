@@ -10,14 +10,16 @@
   .duty-card.readonly { cursor: default; }
   .duty-slot .slot-label { flex: 0 0 5.5em; color: var(--muted-ink); white-space: nowrap; }
   .duty-sheet-slots .field { margin-bottom: 8px; }
+  table.data.duty-rec th, table.data.duty-rec td { padding: 10px 4px; white-space: nowrap; }   /* 360px에서 예비 열까지 한 화면에 */
   .row-btn { flex: 0 0 auto; white-space: nowrap; }   /* 줄 끝 버튼(C9 교대)이 줄어들어 글자가 깨지지 않게 */
 </style>
 <script>
   /** 근무표 화면(C8a): 주 목록(휴대폰 기본)·월 달력(PC 기본), 편성·운영 안 함은 날짜를 눌러 연 시트에서(근무표 담당자·관리자). 교대는 C9. */
   function renderScreen(root) {
     var state = { data: null, month: '', mode: window.innerWidth < 640 ? 'week' : 'month', week: 0, seq: 0 };
-    var head = el('div'), body = el('div');
-    root.appendChild(head); root.appendChild(body);
+    var head = el('div'), body = el('div'), tabsBox = el('div'), recBox = el('div');
+    root.appendChild(tabsBox); root.appendChild(head); root.appendChild(body); root.appendChild(recBox);
+    state.view = typeof SCREEN_TAB === 'string' && SCREEN_TAB === 'record' ? 'record' : 'duty';   // [근무표 | 기록표]
 
     function monthShift(m, n) {
       var p = m.split('-'), t = (+p[0]) * 12 + (+p[1] - 1) + n;
@@ -274,6 +276,84 @@
       refresh();
     }
 
+    /* ───────── 기록표 탭(C14): 월말 근무 기록, 근무표 담당자·관리자는 PDF(임시 양식), 학사 교사는 본인 행만 ───────── */
+    function drawViewTabs() {
+      clear(tabsBox);
+      tabsBox.appendChild(UI.segmented({ label: '화면', options: [{ value: 'duty', label: '근무표' }, { value: 'record', label: '기록표' }], value: state.view,
+        onchange: function (v) { state.view = v; showView(); } }));
+      tabsBox.style.marginBottom = '12px';
+    }
+    function showView() {
+      var rec = state.view === 'record';
+      head.style.display = rec ? 'none' : ''; body.style.display = rec ? 'none' : ''; recBox.style.display = rec ? '' : 'none';
+      if (rec) loadRecord(state.month || '');
+    }
+    var recSeq = 0;
+    function loadRecord(month) {
+      var my = ++recSeq;
+      clear(recBox); recBox.appendChild(el('div', { class: 'loading', text: '불러오는 중…' }));
+      call('getDutyRecord', month).then(function (r) {
+        if (my !== recSeq) return;
+        state.month = r.month; drawRecord(r);
+      }).catch(function (err) { if (my !== recSeq) return; clear(recBox); showError(recBox, err); });
+    }
+    function drawRecord(r) {
+      clear(recBox);
+      var nav = el('div', { class: 'card' }, [el('div', { class: 'duty-nav' }, [
+        el('button', { type: 'button', class: 'btn secondary', 'aria-label': '이전 달', text: '‹', onclick: function () { loadRecord(monthShift(r.month, -1)); } }),
+        el('span', { class: 'title', text: r.month.slice(0, 4) + '년 ' + (+r.month.slice(5, 7)) + '월' }),
+        el('button', { type: 'button', class: 'btn secondary', 'aria-label': '다음 달', text: '›', onclick: function () { loadRecord(monthShift(r.month, 1)); } })
+      ])]);
+      recBox.appendChild(nav);
+      if (!r.canFile) nav.appendChild(el('div', { class: 'notice info', text: '본인 근무 기록만 보입니다.' }));
+      if (r.warnings && r.warnings.length) nav.appendChild(el('div', { class: 'notice warn', text: r.warnings.slice(0, 3).join(' / ') }));
+      if (!r.teachers.length) { recBox.appendChild(UI.emptyState('이 달 근무 기록이 없습니다.')); return; }
+      var small = 'color:var(--muted-ink);font-size:var(--font-sm)';
+      var table = el('table', { class: 'data compact duty-rec' });
+      table.appendChild(el('thead', {}, [el('tr', {}, ['교사', '근무', '21:30', '23:00', '단독', '예비'].map(function (h) { return el('th', { scope: 'col', text: h }); }))]));
+      var tb = el('tbody');
+      function row(name, total, by, standby, cls) {
+        tb.appendChild(el('tr', { class: cls || '' }, [el('th', { scope: 'row', text: name }),
+          el('td', { text: total + '회', style: 'font-size:var(--font-lg);font-weight:700' }),
+          el('td', { text: String(by['21:30조'] || 0), style: small }), el('td', { text: String(by['23:00조'] || 0), style: small }), el('td', { text: String(by['단독'] || 0), style: small }),
+          el('td', { text: String(standby), style: small })]));
+      }
+      r.teachers.forEach(function (t) { row(t.name, t.total, t.bySlot, t.standby); });
+      if (r.totals) row('합계', r.totals.total, r.totals.bySlot, r.totals.standby, 'total');
+      table.appendChild(tb);
+      recBox.appendChild(el('div', { class: 'card' }, [
+        el('div', { class: 'tablewrap' }, [table]),
+        el('div', { class: 'muted', style: 'margin-top:8px', text: 'ⓘ "근무" 합계가 주 숫자입니다(21:30조·23:00조 수당은 같아 조별 횟수는 참고). "예비 지정"은 따로 세며, 대신 근무한 날은 근무로만 세고 예비 지정에서는 뺍니다.' })
+      ]));
+      var sw = el('div', { class: 'card' }, [el('h2', { text: '교대 ' + r.swaps.length + '건' })]);
+      if (!r.swaps.length) sw.appendChild(el('div', { class: 'muted', text: '이 달 교대는 없습니다.' }));
+      else sw.appendChild(el('ul', { class: 'list' }, r.swaps.map(function (x) {
+        return el('li', {}, [el('span', { text: (+x.date.slice(5, 7)) + '월 ' + (+x.date.slice(8, 10)) + '일(' + x.weekdayKo + ') ' + x.label + ' ' + x.from + ' → ' + x.to + (x.kind === '대신 근무' ? ' (예비 감독이 대신 근무, 근무로 셈)' : '') })]);
+      })));
+      recBox.appendChild(sw);
+      recBox.appendChild(el('div', { class: 'muted', text: '만든 시각 ' + r.generatedAt + ' · 근무표 마지막 변경 ' + (r.lastChangedAt || '(없음)') + ' — 출력한 뒤 근무표가 바뀌었는지 이 시각으로 확인합니다.' }));
+      if (r.canFile) {
+        var btn = el('button', { type: 'button', class: 'btn', style: 'margin-top:12px', text: 'PDF 받기(임시 양식)' });
+        btn.addEventListener('click', function () {
+          btn.disabled = true; btn.textContent = 'PDF 만드는 중…';
+          call('getDutyRecordFile', r.month, 'pdf').then(function (f) {
+            btn.disabled = false; btn.textContent = 'PDF 받기(임시 양식)';
+            if (!f.ok) { UI.toast(f.error || 'PDF를 만들지 못했습니다.', { kind: 'warn', ms: 5000 }); return; }
+            var bin = atob(f.base64), arr = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            var url = URL.createObjectURL(new Blob([arr], { type: 'application/pdf' }));
+            var a = el('a', { class: 'btn secondary', style: 'margin-left:8px', href: url, download: f.name, text: f.name + ' 열기' });
+            var old = recBox.querySelector('a.btn.secondary[download]'); if (old) old.remove();
+            btn.parentNode.insertBefore(a, btn.nextSibling); a.click();
+            UI.toast('PDF를 만들었습니다. 받아지지 않으면 옆 링크를 누르세요.', { kind: 'ok', ms: 5000 });
+          }).catch(function (err) { btn.disabled = false; btn.textContent = 'PDF 받기(임시 양식)'; UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); });
+        });
+        recBox.appendChild(btn);
+      }
+    }
+
+    drawViewTabs();
     load('');
+    showView();   // 기록표로 열리면(?tab=record) 근무표 자료는 뒤에서 불러 두고 기록표를 보인다
   }
 </script>
