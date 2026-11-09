@@ -29,8 +29,15 @@ test('참조 무결성: 근무자·교대자는 users의 학사 교사, 칸은 �
     assert.ok(['유효', '취소'].includes(r.status));
     assert.ok(r.swapped_at === '' || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(r.swapped_at));
     assert.strictEqual(!!r.swapped_at, r.actual_email !== r.original_email, '교대한 칸만 교대 일시');
+    assert.strictEqual(!!r.swapped_by, r.actual_email !== r.original_email, '교대한 칸만 교대자');
   }
   assert.strictEqual(d.dutySlots.length, 62, '31일 × 2칸');
+  const cols = (tab) => ['id'].concat(ctx.SCHEMA.db[tab]);
+  for (const r of d.dutySlots) assert.deepStrictEqual(Object.keys(r).sort(), cols('duty_slots').sort(), 'duty_slots 열 그대로');
+  assert.deepStrictEqual(Object.keys(d.daySchedules[0]).sort(), cols('day_schedules').sort());
+  const setting = Object.fromEntries(plain(ctx.DEFAULT_SETTINGS).map((x) => [x[0], x[1]]));
+  assert.deepStrictEqual(plain(ctx.FAKE2_DAY_END), { mon_thu: setting['study.weekday.end'], fri: setting['study.fri.end'],
+    sat: setting['study.sat.end'], sun: setting['study.sun.end'] }, '그날 종료 = 설정 기본값');
   const stage1 = plain(ctx.buildFakeStage1_(fake));
   const ids = d.dutySlots.concat(d.daySchedules, stage1.daySchedules).map((r) => r.id);
   assert.strictEqual(new Set(ids).size, ids.length, 'id 고유(1단계 일정 id와도 겹치지 않음)');
@@ -150,9 +157,19 @@ test('F7 대기 행 1건: 수요일 미실시 신청 → 다다음 주 월요일
   assert.strictEqual(ctx.statusOn_(all, life.pendingId, '석식', '2027-03-22'), '미실시');
 });
 
-test('seedFakeStage2: 가짜 DB에 쓰고, 두 번 실행해도 중복 없음', () => {
+/** setup → seedFakeData (→ seedFakeStage1) 순서로 시드한다. 미등록 학생 등 다른 학생을 넣지 않는다(가짜 DB 판정은 정확히 일치). */
+function seededEnv(props, opts) {
   const env = createGasEnv({ owner: 'owner@example.com', now: '2026-12-20T10:00:00' });
-  env.seedFake({ stage1: true });
+  Object.assign(env.scriptProps, { TEST_TEACHER_EMAIL: TESTER }, props || {});
+  env.asOwner((c) => c.setup());
+  if (!(opts && opts.noStudents)) env.asOwner((c) => c.seedFakeData());
+  if (opts && opts.stage1) env.asOwner((c) => c.seedFakeStage1());
+  return env;
+}
+const counts = (env) => [env.rows('duty_slots').length, env.rows('day_schedules').length];
+
+test('seedFakeStage2: 가짜 DB에 쓰고, 두 번 실행해도 중복 없음, 시트에서 읽은 기록 = 순수 함수 기록', () => {
+  const env = seededEnv({}, { stage1: true });
   const before = env.rows('day_schedules').length;
   const vtab = ctx.termSheetName_('violations', life.term.id);
   assert.strictEqual(env.asOwner((c) => c.seedFakeStage2()),
@@ -163,24 +180,50 @@ test('seedFakeStage2: 가짜 DB에 쓰고, 두 번 실행해도 중복 없음', 
   const ruleIds = env.rows('violation_rules').map((r) => r.id);
   assert.ok(vs.length === 3 && vs.every((v) => ruleIds.includes(v.rule_id)), 'rule_id는 setup이 만든 항목');
   assert.strictEqual(env.as(T1, (c) => c.outLevel_(c.readAll_(vtab), life.out2Id, life.term.id).label), '퇴실 대상');
-  const rows = env.rows('duty_slots');
-  assert.strictEqual(rows.length, 62);
-  assert.strictEqual(env.rows('day_schedules').length, before + 1);
-  assert.deepStrictEqual(rows.map((r) => r.actual_email).filter((e, i, a) => a.indexOf(e) === i).sort(), [T1, T2, T3, TESTER]);
+  assert.deepStrictEqual(counts(env), [62, before + 1]);
   const rec = env.as(T2, (c) => plain(c.dutyRecord_(c.readAll_('duty_slots'), '2027-01')));
-  assert.strictEqual(rec.teachers.reduce((n, t) => n + t.total, 0), 46, '시트에서 읽어도 같은 합계');
+  const pure = plain(ctx.dutyRecord_(d.dutySlots, '2027-01'));
+  assert.deepStrictEqual(rec.teachers, pure.teachers);
+  assert.deepStrictEqual(rec.swaps, pure.swaps);
+  assert.deepStrictEqual(rec.standby, pure.standby);
 });
 
 test('seedFakeStage2: 1단계 가짜 데이터가 없으면 쓰지 않는다', () => {
-  const env = createGasEnv({ owner: 'owner@example.com', now: '2026-12-20T10:00:00' });
-  env.seedFake();
+  const env = seededEnv();
   assert.match(env.errorOf(env.owner, (c) => c.seedFakeStage2()).message, /seedFakeStage1/);
-  assert.strictEqual(env.rows('duty_slots').length, 0);
+  assert.deepStrictEqual(counts(env), [0, 0]);
 });
 
-test('seedFakeStage2: TEST_TEACHER_EMAIL이 없으면 쓰지 않는다', () => {
-  const env = createGasEnv({ owner: 'owner@example.com', now: '2026-12-20T10:00:00' });
-  env.seedFake({ accounts: { TEST_TEACHER_EMAIL: '' } });
+test('seedFakeStage2: 가짜가 아닌 학생이 하나라도 있거나 학생이 없으면 쓰지 않는다', () => {
+  const env = seededEnv();
+  env.asOwner((c) => c.appendRecord_('students', { student_no: '39998', name: '진짜', gender: '여', grade: '3', class_no: '9',
+    number: '98', track: '', email: 'someone@school.invalid', memo: '' }, env.owner));
+  assert.match(env.errorOf(env.owner, (c) => c.seedFakeStage2()).message, /가짜 학생/);
+  assert.deepStrictEqual(counts(env), [0, 0]);
+  const empty = seededEnv({}, { noStudents: true });
+  assert.match(empty.errorOf(empty.owner, (c) => c.seedFakeStage2()).message, /가짜 학생/);
+  assert.deepStrictEqual(counts(empty), [0, 0]);
+});
+
+test('seedFakeStage2: 이미 있는 1월 근무 칸·1/1 일정(다른 행)이 있으면 덮지 않는다', () => {
+  const env = seededEnv();
+  env.asOwner((c) => c.appendRecord_('duty_slots', { date: '2027-01-05', slot: '21:30조', end_time: '21:30',
+    original_email: 'real.teacher@school.invalid', actual_email: 'real.teacher@school.invalid', swapped_at: '', swapped_by: '',
+    status: '유효', memo: '' }, env.owner));
+  assert.match(env.errorOf(env.owner, (c) => c.seedFakeStage2()).message, /다른 행이 1개/);
+  assert.deepStrictEqual(counts(env), [1, 0]);
+  const env2 = seededEnv();
+  env2.asOwner((c) => c.appendRecord_('day_schedules', { date: '2027-01-01', operating: 'TRUE', start: '', end: '', day_type: '',
+    memo: '', status: '유효' }, env2.owner));
+  assert.match(env2.errorOf(env2.owner, (c) => c.seedFakeStage2()).message, /다른 행/);
+  assert.deepStrictEqual(counts(env2), [0, 1]);
+});
+
+test('seedFakeStage2: TEST_TEACHER_EMAIL이 없거나 users에 학사 교사로 없으면 쓰지 않는다', () => {
+  const env = seededEnv();
+  delete env.scriptProps.TEST_TEACHER_EMAIL;
   assert.match(env.errorOf(env.owner, (c) => c.seedFakeStage2()).message, /TEST_TEACHER_EMAIL/);
-  assert.strictEqual(env.rows('duty_slots').length, 0);
+  env.scriptProps.TEST_TEACHER_EMAIL = 'late.teacher@example.com';   // 시드 뒤에 속성만 넣은 경우
+  assert.match(env.errorOf(env.owner, (c) => c.seedFakeStage2()).message, /addUser/);
+  assert.deepStrictEqual(counts(env), [0, 0]);
 });
