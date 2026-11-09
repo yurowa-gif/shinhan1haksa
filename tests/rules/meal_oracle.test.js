@@ -8,9 +8,10 @@
  *   - 학사생 값(조식 '실시'·석식 '학사 석식')은 학사 퇴실 뒤에는 새로 신청할 수 없다(적용일이 퇴실일 이후면 무효). 단 석식은
  *     퇴실 기록보다 **먼저 신청한** 것(늦게 입력한 신청서)이면 이미 있던 것으로 보고 중단일 전까지 유효(입력 순서와 무관).
  *   - 조식: 퇴실일부터 학사생 값은 세지 않는다(PRD F6 즉시 중단). 남는 의도가 없으면 '미실시'.
- *   - 석식: 가장 늦은 의도가 학사 석식이면 결정 35 중단일(퇴실 입력일이 월·화면 다음 주 월요일, 수~일이면 다다음 주 월요일,
- *     퇴실일보다 이르면 퇴실일 — 이 파일에서 따로 계산)부터 '미실시', 그 전은 '학사 석식'. 아니면 정확히 그 의도의 값.
- * 사건(무작위): F7 신청(늦게 입력한 이전 신청서 포함), 학사 퇴실(미리·당일·늦게 입력). 신청마다 같은 계획을 바로 다시 세우면
+ *   - 석식: 결정 35 중단일(퇴실 입력일이 월·화면 다음 주 월요일, 수~일이면 다다음 주 월요일, 퇴실일보다 이르면 퇴실일 — 이 파일에서
+ *     따로 계산)부터는 중단일 이후에 시작하는 학사 석식 의도를 세지 않고(고친 적용일로 생길 수 있다), 남은 가장 늦은 의도가
+ *     학사 석식이면 '미실시', 아니면 그 값. 중단일 전에는 정확히 가장 늦은 의도의 값.
+ * 사건(무작위): F7 신청(늦게 입력한 이전 신청서, 교사가 고친 적용일 포함 — R10), 학사 퇴실(미리·당일·늦게 입력). 신청마다 같은 계획을 바로 다시 세우면
  * 할 일이 없어야 한다(수렴). 사건마다 3/1~4/30 모든 날을 비교한다.
  * 사건마다 날짜 7개 중 하나씩 돌아가며(9일 정도) 비교하고, 마지막 사건 뒤에는 모든 날을 비교한다(npm test 시간).
  * 기본 400가지, ORACLE_FULL=1이면 사건 수를 그대로 두고 매 사건 모든 날을 비교한다.
@@ -53,10 +54,10 @@ function simulate(seed, steps) {
   const addRow = (o) => rows.push(Object.assign({ id: 'r' + (++rid), student_id: 's1', status: '유효', created_at: created() }, o));
   const cancel = (list) => list.forEach((c) => { rows.find((r) => r.id === c.id).status = '취소'; });
 
-  function oracleTop(item, d, dropHall) {
+  function oracleTop(item, d, skip) {
     let top = null;
     for (const i of intents) {
-      if (i.item !== item || i.eff > d || (dropHall && isHall(item, i.value))) continue;
+      if (i.item !== item || i.eff > d || (skip && skip(i))) continue;
       if (!top || i.req > top.req || (i.req === top.req && i.seq > top.seq)) top = i;
     }
     return top;
@@ -66,10 +67,12 @@ function simulate(seed, steps) {
     const where = 'seed ' + seed + ' step ' + stepNo + '\n' + log.slice(-10).join('\n');
     for (const d of DAYS.filter((x, i) => all || FULL || i % 7 === stepNo % 7)) {
       const b = ctx.statusOn_(rows, 's1', '조식', d);
-      const tb = oracleTop('조식', d, leave && d >= leave.L);
+      const tb = oracleTop('조식', d, leave && d >= leave.L ? (i) => isHall('조식', i.value) : null);
       assert.strictEqual(b, tb ? tb.value : '미실시', where + '\n조식 ' + d);
-      const top = oracleTop('석식', d, false).value;
-      const want = leave && isHall('석식', top) && d >= stop35(leave.t, leave.L) ? '미실시' : top;
+      // 중단일부터: 중단일 이후에 시작하는 학사 석식 의도는 세지 않고(F6 정리가 취소), 남은 가장 늦은 의도가 학사 석식이면 미실시
+      const stop = leave ? stop35(leave.t, leave.L) : null;
+      const top = oracleTop('석식', d, stop && d >= stop ? (i) => isHall('석식', i.value) && i.eff >= stop : null).value;
+      const want = stop && d >= stop && isHall('석식', top) ? '미실시' : top;
       assert.strictEqual(ctx.statusOn_(rows, 's1', '석식', d), want, where + '\n석식 ' + d);
     }
   }
@@ -95,11 +98,14 @@ function simulate(seed, steps) {
       const late = R() < 0.25;
       const reqMin = late ? Math.max(0, now - Math.floor(R() * 4 * 24 * 60)) : now;
       const req = iso(reqMin);
-      const p = plain(ctx.mealPlanChange_(rows, 's1', item, to, req, { today }));
+      // R10: 넷에 하나는 교사가 적용일을 고친다(신청일 ~ +20일). 의도 적용일 = 고친 날짜
+      const manual = R() < 0.25 ? ctx.ymdAddDays_(req.slice(0, 10), Math.floor(R() * 21)) : undefined;
+      const popts = { today, effectiveDate: manual };
+      const p = plain(ctx.mealPlanChange_(rows, 's1', item, to, req, popts));
       const kind = to === '미실시' ? 'stop' : to === '일반 석식' ? 'to_general' : 'start';
-      const eff = ctx.mealEffectiveDate_(kind, req).date;
+      const eff = manual || ctx.mealEffectiveDate_(kind, req).date;
       const voidHall = isHall(item, to) && leave && eff >= leave.L && (item === '조식' || req >= leave.t || eff >= stop35(leave.t, leave.L));
-      log.push(today + ' 신청 ' + item + '→' + to + ' (신청 ' + req + (late ? ' 늦은 입력' : '') + ') → ' + JSON.stringify({ k: p.kind, d: p.date, b: !!p.blocked, s: p.superseded, c: p.toCancel.length, f: p.followUps.length }));
+      log.push(today + ' 신청 ' + item + '→' + to + ' (신청 ' + req + (late ? ' 늦은 입력' : '') + (manual ? ' 수동 ' + manual : '') + ') → ' + JSON.stringify({ k: p.kind, d: p.date, b: !!p.blocked, s: p.superseded, c: p.toCancel.length, f: p.followUps.length }));
       assert.strictEqual(!!p.blocked, !!voidHall, 'seed ' + seed + ' blocked 판정\n' + log.slice(-6).join('\n'));
       if (!voidHall) intents.push({ item, value: to, eff, req, seq: ++seq });
       if (p.blocked) { check(step); continue; }
@@ -110,7 +116,7 @@ function simulate(seed, steps) {
       }
       for (const f of p.followUps) addRow({ item: f.item, value: f.value, effective_date: f.effective_date, source: 'F6', requested_at: req });
       // 수렴: 같은 신청으로 바로 다시 계획하면 할 일이 없다
-      const again = plain(ctx.mealPlanChange_(rows, 's1', item, to, req, { today }));
+      const again = plain(ctx.mealPlanChange_(rows, 's1', item, to, req, popts));
       assert.ok((again.kind === 'none' || again.superseded) && !again.toCancel.length && !again.followUps.length,
         'seed ' + seed + ' 수렴 안 함 ' + JSON.stringify(again) + '\n' + log.slice(-4).join('\n'));
     }
