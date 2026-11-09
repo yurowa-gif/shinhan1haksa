@@ -1,7 +1,12 @@
 <script>
   /** 2단계 A 카드(CODING-A: 근무·OUT·면담). 이 함수의 몸통만 고친다(docs/plan/stage2.md 1절) */
   function renderStage2A(d, root) {
-    return;
+    if (!d.out || d.out.error) return;
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '우리 반 OUT' }),
+      el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin:8px 0' }, [UI.statusPill('out1', '1OUT ' + (d.out.out1 || 0) + '명'), UI.statusPill('out2', '퇴실 대상 ' + (d.out.out2 || 0) + '명')]),
+      el('a', { class: 'btn secondary', style: 'margin-top:4px', href: d.appUrl + '?page=outs&tab=term', text: (d.out.periodWord === '이번 기간' ? '이번 기간 보기' : '이번 학기 보기') })
+    ]));
   }
 
   /** 담임 홈: 우리 반 학사생 목록(요청 상태 pill)과 특이사항 요청 (PRD 8절, docs/design/screens.md 1절) */

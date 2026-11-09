@@ -164,3 +164,16 @@ test('관리자 홈 숫자: 2OUT 대상·면담 필요·확정 가능, 내용 �
   assert.deepStrictEqual(info().targets, { n: 2, need: 1, ready: 1 });
   assert.ok(!JSON.stringify(info()).includes(MARK));
 });
+
+test('listOuts targets: 2OUT 학생의 살아 있는 OUT 목록이 함께 오고, 연결 OUT이 취소돼 면담이 인정 안 되면 staleMeeting', () => {
+  const x = makeEnv();
+  x.two(x.mine); meet(x, T1);
+  const t = call(x, T1, 'listOuts', { scope: 'targets' });
+  assert.deepStrictEqual([t.summary.length, t.items.length, t.items.every((i) => i.status === '유효' && i.studentId === x.mine.id)], [1, 2, true]);
+  assert.strictEqual(t.summary[0].staleMeeting, false);
+  const second = x.env.rows(x.tabName).filter((v) => v.student_id === x.mine.id).sort((a, b) => a.occurred_at < b.occurred_at ? -1 : 1)[1];
+  x.env.call(ADMIN, 'cancelOut', x.term.id, second.id, '잘못 입력했습니다');
+  x.addOut(x.mine, '2027-03-03T19:30:00');   // 다시 2건이 되어도 이전 면담은 인정되지 않는다
+  const t2 = call(x, T1, 'listOuts', { scope: 'targets' });
+  assert.deepStrictEqual([t2.summary[0].state, t2.summary[0].staleMeeting, t2.summary[0].meeting], ['need', true, null]);
+});
