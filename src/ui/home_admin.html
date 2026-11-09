@@ -19,6 +19,11 @@
       el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=duty', text: '근무 편성하기' })
     ]);
     root.appendChild(c);
+    if (d.duty) root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '월말 근무 기록표' }),
+      el('div', { class: 'muted', text: '실제 근무자 기준 교사별 합계를 확인하고 PDF(임시 양식)로 받습니다.' }),
+      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=duty&tab=record', text: '근무 기록표 열기' })
+    ]));
   }
 
   /** 관리자 홈: 전체 현황 (PRD 8절) */
