@@ -44,14 +44,16 @@ function inoutValidate_(input, ctx) {
   if (hallLeave && dinner !== '중단' && dinner !== '일반 석식') err('dinner', '석식을 골라 주세요(중단 또는 일반 석식으로).');
   var reason = String(input.reason || '').trim();
   if (reason.length > EXC_REASON_MAX) err('reason', '사유는 ' + EXC_REASON_MAX + '자 안으로 적어 주세요.');
+  // '2OUT 퇴실'·'[2OUT]…'은 2OUT 퇴실 확정(C20)이 서버에서만 쓰는 사유다(관리자도 손으로 쓰지 못한다 — 면담 관문을 건너뛰는 길이 되지 않게)
+  if (/^2OUT\s*퇴실$/.test(reason.replace(/\s+/g, ' ')) || reason.indexOf('[2OUT]') === 0) err('reason', "'2OUT 퇴실' 사유는 OUT 화면의 퇴실 확정에서만 씁니다. 다른 사유를 적어 주세요.");
   return { errors: errors, rec: errors.length ? null : {
     studentId: studentId, type: type, requestedAt: at, effectiveDate: eff, dinner: dinner, reason: reason, doc: input.docSubmitted === true,
     breakfastWithDorm: input.breakfastWithDorm !== false, breakfastStopWithDorm: input.breakfastStopWithDorm !== false
   } };
 }
 
-/** 확인창용 한 줄들(순수): 날짜를 크게 보이는 lead와 바뀌는 것 목록 */
-function inoutSummary_(rec, plan) {
+/** 확인창용 한 줄들(순수): 날짜를 크게 보이는 lead와 바뀌는 것 목록. 취소·되살림은 개수가 아니라 어느 신청인지 쓴다 */
+function inoutSummary_(rec, plan, changes) {
   var lead = foodDateKo_(rec.effectiveDate) + '부터 ' + rec.type;
   var lines = [];
   if (rec.type === '학사 퇴실' || rec.type === '학사 및 기숙사 퇴실') lines.push('자리 공석');
@@ -61,8 +63,12 @@ function inoutSummary_(rec, plan) {
     else if (r.item === '조식') lines.push(r.value === '미실시' ? '조식 ' + d + ' 중단' : '조식 ' + d + '부터 ' + r.value);
     else if (r.item === '석식') lines.push(r.value === '미실시' ? '석식 ' + d + ' 중단' : '석식 ' + d + '부터 ' + r.value);
   });
-  if (plan.toCancel.length) lines.push('대체되어 취소되는 대기 신청 ' + plan.toCancel.length + '개');
-  if (plan.toRestore.length) lines.push('다시 살아나는 신청 ' + plan.toRestore.length + '개');
+  var of = function (id) { return (changes || []).filter(function (c) { return c.id === id; })[0]; };
+  var named = function (list, tail) {
+    list.forEach(function (x) { var c = of(x.id); if (c) lines.push(foodDateKo_(c.effective_date) + ' ' + foodChangeLabel_(c) + ' 신청 ' + tail); });
+  };
+  named(plan.toCancel, '취소');
+  named(plan.toRestore, '다시 살림');
   return { lead: lead, lines: lines };
 }
 
@@ -78,6 +84,14 @@ function inoutSignature_(plan) {
  * 검사 + 계획(미리보기·저장 공용). 기간은 적용일이 속한 기간(없으면 곧 시작하는 기간, 결정 60과 같은 방식)이고
  * 끝난 기간·명단 밖 학생은 오류. permYmd = 권한 검사 날짜(기간 안의 날짜).
  */
+function inoutPlan_(rec, changes, d) {
+  var plan = movePlan_(changes, rec.studentId, { type: rec.type, effectiveDate: rec.effectiveDate, requestedAt: rec.requestedAt, dinner: rec.dinner,
+    breakfastWithDorm: rec.breakfastWithDorm, breakfastStopWithDorm: rec.breakfastStopWithDorm }, { today: today_(), cutoff: d.cutoff });
+  plan.errors = plan.errors.map(inoutKo_);
+  plan.warnings = plan.warnings.map(inoutKo_);
+  return plan;
+}
+
 function inoutCheck_(input, d) {
   var today = today_();
   var v = inoutValidate_(input, { now: nowIso_() });
@@ -90,13 +104,15 @@ function inoutCheck_(input, d) {
   else if (!d.enrollments.some(function (e) { return e.term_id === term.id && e.student_id === rec.studentId; })) {
     errors.push({ field: 'studentId', message: '"' + term.name + '" 명단에 없는 학생입니다. 관리자에게 명단 등록을 요청해 주세요.' });
   }
-  var permYmd = foodPermYmd_(term, rec.effectiveDate);
-  if (errors.length) return { errors: errors, rec: rec, term: term, eff: rec.effectiveDate, permYmd: permYmd };
-  var plan = movePlan_(d.changes, rec.studentId, { type: rec.type, effectiveDate: rec.effectiveDate, requestedAt: rec.requestedAt, dinner: rec.dinner,
-    breakfastWithDorm: rec.breakfastWithDorm, breakfastStopWithDorm: rec.breakfastStopWithDorm }, { today: today, cutoff: d.cutoff });
-  plan.errors = plan.errors.map(inoutKo_);
-  plan.warnings = plan.warnings.map(inoutKo_);
-  return { errors: plan.errors.map(function (m) { return { field: 'type', message: m }; }), rec: rec, term: term, eff: rec.effectiveDate, plan: plan, permYmd: permYmd };
+  return { errors: errors, rec: rec, term: term, eff: rec.effectiveDate, permYmd: foodPermYmd_(term, rec.effectiveDate) };
+}
+
+/** 권한을 확인한 뒤에 계획을 세운다(권한 없는 사람에게 계획·오류 문구가 새지 않게). 오류가 있으면 plan 없음 */
+function inoutFinish_(c, d) {
+  if (!c.rec || c.errors.length) return c;
+  c.plan = inoutPlan_(c.rec, d.changes, d);
+  c.errors = c.plan.errors.map(function (m) { return { field: 'type', message: m }; });
+  return c;
 }
 
 function inoutAuthorize_(input, c) { return foodAuthorize_(input, c); }   // 다른 기간 담당교사 안내 포함
@@ -117,14 +133,20 @@ function inoutFindDuplicate_(rec, head, changes) {
 
 /* ───────────── 화면에서 부르는 서버 함수 ───────────── */
 
-/** 학생 한 명의 오늘 값과 지금 고를 수 있는 입퇴실 유형(보기 범위: status.view) */
-function getMoveContext(studentId) {
-  requirePermission_('status.view', { studentId: studentId });
+/**
+ * 학생 한 명의 오늘 값과 그 날짜(ymd, 기본 오늘)에 고를 수 있는 입퇴실 유형. 첫 줄은 역할만, 학생 범위(status.view)는 신청과 같은 기간으로 판정한다.
+ * 유형은 적용일 기준이다(3/10 기숙사 입실 대기 학생의 3/12 퇴실은 "학사 및 기숙사 퇴실").
+ */
+function getMoveContext(studentId, ymd) {
+  requirePermission_('status.list');
+  var sid = String(studentId || '');
   var today = today_();
-  var rows = readAll_('status_changes').filter(function (c) { return c.student_id === studentId; });
-  var now = {};
-  ['학사', '기숙사', '조식', '석식'].forEach(function (it) { now[it] = statusOn_(rows, studentId, it, today); });
-  return { today: today, now: now, types: inoutTypeChips_(now['학사'], now['기숙사']) };
+  var eff = typeof ymd === 'string' && ymdIsValid_(ymd) ? ymd : today;
+  requirePermission_('status.view', { studentId: sid, ymd: foodPermYmd_(foodTermFor_(sid, eff, readAll_('terms'), readAll_('enrollments')), eff) });
+  var rows = readAll_('status_changes').filter(function (c) { return c.student_id === sid; });
+  var now = {}, onDate = {};
+  ['학사', '기숙사', '조식', '석식'].forEach(function (it) { now[it] = statusOn_(rows, sid, it, today); onDate[it] = statusOn_(rows, sid, it, eff); });
+  return { today: today, date: eff, now: now, onDate: onDate, types: inoutTypeChips_(onDate['학사'], onDate['기숙사']) };
 }
 
 /** 저장 전 확인: 적용일·바뀌는 것·경고. 아무것도 쓰지 않는다. */
@@ -133,8 +155,9 @@ function previewMove(input) {
   var d = foodLoad_(String((input && input.studentId) || ''));
   var c = inoutCheck_(input, d);
   inoutAuthorize_(input, c);
+  c = inoutFinish_(c, d);
   if (!c.plan) return { ok: false, errors: c.errors, now: nowIso_() };
-  var s = inoutSummary_(c.rec, c.plan);
+  var s = inoutSummary_(c.rec, c.plan, d.changes);
   return { ok: !c.errors.length, errors: c.errors, warnings: c.plan.warnings, lead: s.lead, lines: s.lines, now: nowIso_(),
     cancel: c.plan.toCancel.length, restore: c.plan.toRestore.length, expect: inoutSignature_(c.plan) };
 }
@@ -152,12 +175,17 @@ function saveMove(input, expect) {
     var d = foodLoad_(String((input && input.studentId) || ''));
     var c = inoutCheck_(input, d);
     var user = inoutAuthorize_(input, c);
-    // 같은 신청서를 다시 보내면(다시 누르기·재시도) 이미 퇴실 상태라 상태 오류가 나므로, 오류보다 먼저 중복을 본다
-    var dup = c.rec ? inoutFindDuplicate_(c.rec, inoutHeadOf_(c.rec.type, c.rec.effectiveDate), d.changes) : null;
-    if (dup) return { ok: true, duplicate: true, id: dup.id, lead: foodDateKo_(c.rec.effectiveDate) + '부터 ' + c.rec.type, doc: c.rec.doc };
+    // 같은 신청서를 다시 보내면(다시 누르기·재시도) 이미 퇴실 상태라 상태 오류가 나므로, 오류보다 먼저 중복을 본다.
+    // 저장된 대표 행이 있어도 그 계획의 연결 행·취소·되살림이 빠져 있으면(중간에 끊긴 저장) 성공이라 하지 않는다
+    var dup = c.rec && !c.errors.length ? inoutFindDuplicate_(c.rec, inoutHeadOf_(c.rec.type, c.rec.effectiveDate), d.changes) : null;
+    if (dup) {
+      if (foodUnfinished_(inoutPlan_(c.rec, foodBefore_(d.changes, dup.id), d), d.changes, dup.id)) return { ok: false, errors: [{ field: '', message: FOOD_UNFINISHED }] };
+      return { ok: true, duplicate: true, id: dup.id, lead: foodDateKo_(c.rec.effectiveDate) + '부터 ' + c.rec.type, doc: String(dup.doc_submitted).toUpperCase() === 'TRUE' };
+    }
+    c = inoutFinish_(c, d);
     if (!c.plan || c.errors.length) return { ok: false, errors: c.errors };
     var rec = c.rec, plan = c.plan, head = plan.rows[0];
-    var s = inoutSummary_(rec, plan);
+    var s = inoutSummary_(rec, plan, d.changes);
     if (String(expect || '') !== inoutSignature_(plan)) return { ok: false, stale: true, error: '확인한 뒤 다른 변경이 있었습니다. 다시 확인해 주세요.' };
     var w = foodWrite_({
       student_id: rec.studentId, item: head.item, value: head.value, requested_at: head.requested_at, effective_date: head.effective_date,

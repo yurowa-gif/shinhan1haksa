@@ -214,6 +214,7 @@
    */
   function renderMoveTab(root) {
     var U = UI.util;
+    var alive = true, typeSeq = 0;   // 탭을 떠난 뒤 늦게 온 응답·예약이 화면·아래 바를 다시 만들지 않게
     var ctx = null, picked = null, mctx = null, type = '', dinner = '', doc = false, breakfastOn = true, last = null, seq = 0, timer = null, busy = false, atTouched = false;
     var body = el('div');
     root.appendChild(body);
@@ -223,7 +224,7 @@
     function plusDay(ymd) { var d = new Date(ymd + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); }
     function hallLeave() { return type === '학사 퇴실' || type === '학사 및 기숙사 퇴실'; }
 
-    call('getMealContext').then(function (c) { ctx = c; draw(); }).catch(function (err) { clear(body); showError(body, err); });
+    call('getMealContext').then(function (c) { if (!alive) return; ctx = c; draw(); }).catch(function (err) { if (!alive) return; clear(body); showError(body, err); });
 
     function draw() {
       resetState();   // 다시 그릴 때마다 이전 선택·서류 체크를 비운다
@@ -233,15 +234,22 @@
 
       var status = el('div', { class: 'muted' });
       var picker = UI.studentPicker({ students: ctx.students, label: '학생', onpick: function (s) {
-        picked = s; type = ''; dinner = ''; mctx = null; status.textContent = ''; drawTypes();
+        picked = s; type = ''; dinner = ''; mctx = null; status.textContent = '';
+        doc = false; docBox.checked = false; drawDoc(); breakfastOn = true; reason.value = '';   // 이전 학생의 서류 체크·조식 선택·사유가 남지 않게
+        drawTypes(); drawExtras();
         if (!s) { refresh(); return; }
-        call('getMoveContext', s.id).then(function (m) {
-          if (!picked || picked.id !== s.id) return;
+        loadTypes(s.id);
+      } });
+      function loadTypes(id) {   // 유형 칩은 적용일 기준이다(날짜를 바꾸면 다시 불러온다)
+        var mine = ++typeSeq;
+        call('getMoveContext', id, dateField.getValue()).then(function (m) {
+          if (!alive || mine !== typeSeq || !picked || picked.id !== id) return;
           mctx = m;
           status.textContent = '지금 상태: ' + ['학사', '기숙사', '조식', '석식'].map(function (k) { return k + ' ' + (m.now[k] || '없음'); }).join(' · ');
+          if (type && !m.types.some(function (t) { return t.type === type && t.enabled; })) { type = ''; dinner = ''; drawExtras(); }
           drawTypes(); refresh();
-        }).catch(fail);
-      } });
+        }).catch(function (err) { if (alive) fail(err); });
+      }
       body.appendChild(el('div', { class: 'card' }, [picker, status]));
 
       var chips = el('div', { class: 'chips' }), hints = el('div');
@@ -250,7 +258,7 @@
         clear(chips); clear(hints);
         if (!mctx) { chips.appendChild(el('span', { class: 'muted', text: '학생을 고르면 가능한 유형이 나옵니다.' })); }
         else mctx.types.forEach(function (t) {
-          var b = el('button', { type: 'button', class: t.type === type ? 'chip on' : 'chip', text: t.type, onclick: function () { type = t.type; dinner = ''; drawTypes(); drawExtras(); refresh(); } });
+          var b = el('button', { type: 'button', class: t.type === type ? 'chip on' : 'chip', text: t.type, onclick: function () { type = t.type; dinner = ''; breakfastOn = true; drawTypes(); drawExtras(); refresh(); } });
           if (!t.enabled) { b.disabled = true; if (t.hint.indexOf('기숙사생은') === 0) hints.appendChild(el('div', { class: 'hint', text: t.hint })); }
           chips.appendChild(b);
         });
@@ -262,7 +270,7 @@
 
       var at = el('input', { type: 'datetime-local', value: ctx.now.slice(0, 16), max: ctx.now.slice(0, 16) });
       at.addEventListener('change', function () { atTouched = true; refresh(); });
-      var dateField = UI.dateField({ label: '적용일', value: ctx.today, shortcuts: [{ label: '오늘', value: ctx.today }, { label: '내일', value: plusDay(ctx.today) }], onchange: function () { refresh(); } });
+      var dateField = UI.dateField({ label: '적용일', value: ctx.today, shortcuts: [{ label: '오늘', value: ctx.today }, { label: '내일', value: plusDay(ctx.today) }], onchange: function () { if (picked) loadTypes(picked.id); else refresh(); } });
       body.appendChild(el('div', { class: 'card' }, [UI.field('신청 일시', at, { hint: '서류를 받은 날짜·시각입니다. 기본값은 지금입니다.' }), dateField]));
 
       var extra = el('div');
@@ -317,32 +325,33 @@
         if (!picked || !type || (hallLeave() && !dinner)) return;
         timer = setTimeout(function () {
           call('previewMove', payload()).then(function (p) {
-            if (mine !== seq) return;
+            if (!alive || mine !== seq) return;
             if (!atTouched && p.now && p.now.slice(0, 16) !== at.value && retried !== true) { at.value = p.now.slice(0, 16); at.max = at.value; refresh(true); return; }
             last = p; drawResult(); drawBar();
-          }).catch(function (err) { if (mine === seq) fail(err); });
+          }).catch(function (err) { if (alive && mine === seq) fail(err); });
         }, 250);
       }
       function confirmSave() {
         var p = last;
-        UI.confirmSheet({ title: '입퇴실을 저장합니다', lead: p.lead, lines: p.lines.concat(doc ? [] : ['서류 미제출로 기록됩니다']).concat(p.warnings || []),
+        UI.confirmSheet({ title: '입퇴실을 저장합니다', lead: p.lead, lines: [U.studentLabel(picked) + ' (' + picked.grade + '-' + picked.classNo + ' ' + picked.number + '번)'].concat(p.lines).concat(doc ? [] : ['서류 미제출로 기록됩니다']).concat(p.warnings || []),
           confirmText: '입퇴실 저장', danger: /퇴실/.test(type), onconfirm: function () {
             busy = true; drawBar();
             call('saveMove', payload(), p.expect).then(function (r) {
+              if (!alive) return;
               busy = false;
               if (r.stale) { UI.toast(r.error, { kind: 'warn', ms: 5000 }); refresh(); return; }
               if (!r.ok) { UI.toast((r.errors && r.errors[0] && r.errors[0].message) || '저장하지 못했습니다.', { kind: 'warn', ms: 5000 }); refresh(); return; }
               UI.toast(r.duplicate ? '이미 저장된 신청서입니다.' : r.lead + ' · 저장했습니다.');
               resetState();
-              call('getMealContext').then(function (c) { ctx = c; draw(); }).catch(function (err) { draw(); fail(err); });
-            }).catch(function (err) { busy = false; drawBar(); fail(err); });
+              call('getMealContext').then(function (c) { if (alive) { ctx = c; draw(); } }).catch(function (err) { if (alive) { draw(); fail(err); } });
+            }).catch(function (err) { if (!alive) return; busy = false; drawBar(); fail(err); });
           } });
       }
       function resetState() { picked = null; mctx = null; type = ''; dinner = ''; doc = false; breakfastOn = true; last = null; atTouched = false; seq++; clearTimeout(timer); }
       function reset() { resetState(); draw(); }
       drawResult(); drawBar();
     }
-    return removeBar;
+    return function () { alive = false; seq++; typeSeq++; clearTimeout(timer); removeBar(); };
   }
 
   function renderScreen(root) {
