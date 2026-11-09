@@ -529,3 +529,52 @@ test('기간 대체 순서(T5·T6): 첫 등록 기간 전 적용일의 신입생
   const early = env.call(ADMIN, 'previewMealChange', input(st.id, 'd_off', '2027-02-20T10:00:00', { effectiveDate: '2027-02-22', reason: '급식실 요청' }));
   assert.strictEqual(early.ok, false); assert.ok(early.errors.some((e) => /명단에 없는/.test(e.message)), JSON.stringify(early.errors));
 });
+
+test('끝난 저장을 나중에 다시 보내도 거짓 "덜 끝났습니다"가 없다(FP-A): 나중에 연결 행이 취소돼도, 덮여서 취소된 신청서여도 duplicate', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { a } = pick(env);
+  env.asOwner((c) => c.appendRecord_('status_changes', { student_id: a, item: '학사', value: '퇴실', requested_at: '2027-03-03T08:00:00', effective_date: '2027-03-10',
+    effective_date_auto: '2027-03-10', reason: '', doc_submitted: 'FALSE', linked_change_id: '', source: 'F6', status: '유효', memo: '', cancel_reason: '' }, env.owner));
+  const i = input(a, 'd_hall', '2027-03-03T10:00:00');
+  const p = prev(env, HALL, i);
+  const r = save(env, HALL, i, p.expect);
+  assert.strictEqual(r.followUpCount, 1);
+  const linked = rowsOf(env, a).find((x) => x.linked_change_id === r.id);
+  env.asOwner((c) => c.updateRecord_('status_changes', linked.id, { status: '취소', cancel_reason: '[자동] 나중의-퇴실취소 되돌림' }, env.owner));   // 나중 저장이 연결 행을 바꿨다
+  const again = save(env, HALL, i, p.expect);
+  assert.strictEqual(again.ok, true, JSON.stringify(again)); assert.strictEqual(again.duplicate, true);
+  // 덮여서 취소된 신청서(superseded 기록)를 다시 보내도 같다
+  const late = input(a, 'd_gen', '2027-03-03T09:00:00');
+  const lp = prev(env, HALL, late);
+  const lr = save(env, HALL, late, lp.expect);
+  assert.strictEqual(lr.superseded, true);
+  assert.strictEqual(save(env, HALL, late, lp.expect).duplicate, true);
+});
+
+test('안내 문구가 틀린 곳에서는 맨 "권한이 없습니다."(G6~G8): 끝난 기간·명단 밖 신입생·출결 전용 계정은 안내 없이 거부', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const { a } = pick(env);
+  const t1 = env.rows('terms').find((t) => t.name !== '2027 1학기');
+  // (a2) HALL은 1학기 담당, 2학기 담당은 OLD. 적용일이 끝난 2학기(2/22)면 안내 없이 거부
+  const old = env.rows('enrollments').find((e) => e.student_id === a && e.term_id === t1.id);
+  env.asOwner((c) => c.updateRecord_('enrollments', old.id, { teacher_email: 'fake.teacher1@example.com' }, env.owner));
+  env.expectDenied(HALL, 'status.edit', 'previewMealChange', input(a, 'd_off', '2027-02-10T10:00:00', { effectiveDate: '2027-02-22', reason: '급식실 요청' }));
+  // (c) 1학기 teacher_email인 출결 전용 계정: 역할이 안 되므로 안내 없이 거부
+  const en2 = env.rows('enrollments').find((e) => e.student_id === a && e.term_id === term2(env).id);
+  env.asOwner((c) => c.updateRecord_('enrollments', en2.id, { teacher_email: 'test.attendance@example.com' }, env.owner));
+  env.expectDenied('test.attendance@example.com', 'status.edit', 'previewMealChange', input(a, 'd_off', '2027-03-03T10:00:00'));
+  // (b') 2/20에 1학기에만 등록된 신입생을 d_gen(적용일 = 신청일 2/20, 2학기 기간): 그 기간 명단에 없으므로 안내 없이 거부
+  const env2 = makeEnv('2027-02-20T12:00:00');
+  const st = env2.asOwner((c) => c.appendRecord_('students', { student_no: '39992', name: '가짜신입2', gender: '남', grade: '1', class_no: '1', number: '92', track: '', email: '', memo: '가짜' }, env2.owner));
+  env2.asOwner((c) => c.appendRecord_('enrollments', { term_id: term2(env2).id, student_id: st.id, teacher_email: HALL, veritas: 'FALSE', commute_type: '일반', end_type: '23:00', memo: '' }, env2.owner));
+  env2.expectDenied(HALL, 'status.edit', 'previewMealChange', input(st.id, 'd_gen', '2027-02-20T10:00:00'));
+});
+
+test('대체 기간이 끝난 학생의 오류 문구는 적용일 기간 이름을 정확히 낸다(E1)', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const t1 = env.rows('terms').find((t) => t.name !== '2027 1학기');
+  const st = env.asOwner((c) => c.appendRecord_('students', { student_no: '39991', name: '가짜졸업2', gender: '남', grade: '3', class_no: '1', number: '91', track: '', email: '', memo: '가짜' }, env.owner));
+  env.asOwner((c) => c.appendRecord_('enrollments', { term_id: t1.id, student_id: st.id, teacher_email: HALL, veritas: 'FALSE', commute_type: '일반', end_type: '23:00', memo: '' }, env.owner));
+  const p = env.call(ADMIN, 'previewMealChange', input(st.id, 'd_off', '2027-03-03T10:00:00'));   // 적용일 3/15 = 1학기, 이 학생은 2학기(끝남)만 등록
+  assert.deepStrictEqual(p.errors.map((e) => e.message), ['"2027 1학기" 명단에 없는 학생입니다. 관리자에게 명단 등록을 요청해 주세요.']);
+});

@@ -214,11 +214,10 @@ function foodAuthorize_(input, c) {
   } catch (e) {
     // 다른 기간의 담당교사(예: 2학기 담당이 3월 적용 신청을 하려는 경우)에게는 이유를 알려 준다. 거부 기록은 이미 남았다. 그 학생과 아무 관계 없는 교사는 그대로 거부
     var u = getCurrentUser_();
-    // 안내는 틀리지 않을 때만: 그 기간이 끝나지 않았고, 학생이 그 기간 명단에 있고, 이 교사가 그 학생의 다른 기간 담당일 때
+    // 안내는 틀리지 않을 때만: 역할은 되는 교사(출결 전용 계정 등 제외)가 그 학생의 다른 기간 담당이고, 대상 기간이 끝나지 않았고 학생이 그 기간 명단에 있을 때
     var mine = readAll_('enrollments').filter(function (en) { return en.student_id === sid && normalizeEmail_(en.teacher_email) === u.email; });
     var inTerm = c.term ? readAll_('enrollments').some(function (en) { return en.term_id === c.term.id && en.student_id === sid; }) : false;
-    if (c.term && c.eff && e.message === '권한이 없습니다.' && c.term.end_date >= today_() && inTerm && mine.length &&
-      !mine.some(function (en) { return en.term_id === c.term.id; })) {
+    if (c.term && c.eff && e.message === '권한이 없습니다.' && c.term.end_date >= today_() && inTerm && mine.length && hasAnyAllowedRole_(u.roles, permissions_()['status.edit'].roles)) {
       throw new Error('이 신청(적용일 ' + foodDateKo_(c.eff) + ')은 ' + c.term.name + ' 담당교사나 관리자가 합니다.');
     }
     throw e;
@@ -272,16 +271,15 @@ function foodBefore_(changes, headId) {
 var FOOD_UNFINISHED = '이전 저장이 중간에 끊겨 덜 끝났습니다. 관리자에게 알려 주세요.';
 
 /**
- * 저장했다는 대표 행이 있는데 그 계획의 연결 행·취소·되살림이 빠져 있나(다시 눌렀을 때 "이미 저장"으로 넘기지 않으려고).
- * plan = 저장 전 모양(foodBefore_)으로 다시 세운 계획(F7: mealPlanChange_ 결과, F6: movePlan_ 결과), changes = 지금 그 학생의 행.
+ * 저장했다는 대표 행이 있는데 취소 쓰기가 빠졌나(다시 눌렀을 때 "이미 저장"으로 넘기지 않으려고).
+ * 대표+연결 행은 한 번에 쓰므로 반쯤 쓰이는 일은 없고, 끊길 수 있는 곳은 그 뒤의 취소 쓰기뿐이다.
+ * plan = 저장 전 모양(foodBefore_)으로 다시 세운 계획. 그 계획이 취소할 행이 있는데 이 대표 행의 "[자동] <대표 id>" 꼬리표가 붙은 행이 하나도 없으면 덜 끝난 것이다.
+ * 나중 저장이 이 저장의 행을 취소·되살려도 꼬리표는 남으므로 끝난 저장을 거짓으로 덜 끝났다고 하지 않는다.
+ * 덮여서 취소된 신청서(superseded 기록)는 취소 쓰기가 없으니 검사하지 않는다(부르는 쪽).
  */
 function foodUnfinished_(plan, changes, headId) {
-  var by = {};
-  changes.forEach(function (c) { by[c.id] = c; });
-  var live = function (id) { return String(by[id].status || '유효') === '유효'; };
-  var linked = changes.filter(function (c) { return c.linked_change_id === headId; }).length;
-  var expected = plan.followUps ? plan.followUps.length : plan.rows.length - 1;
-  return linked !== expected || plan.toCancel.some(function (x) { return by[x.id] && live(x.id); }) || (plan.toRestore || []).some(function (x) { return by[x.id] && !live(x.id); });
+  if (!plan.toCancel.length) return false;
+  return !changes.some(function (c) { return String(c.cancel_reason || '').indexOf('[자동] ' + headId + ' ') === 0; });
 }
 
 /* ───────────── 화면에서 부르는 서버 함수 ───────────── */
@@ -365,7 +363,7 @@ function saveMealChange(input, expect) {
     if (dup) {
       // 이미 저장된 신청서: 그 저장이 끝까지 갔는지(연결 행·취소)를 저장 전 모양에서 다시 세운 계획으로 확인한다. 덜 끝났으면 성공이라 하지 않는다
       var again = foodPlan_(rec, foodBefore_(d.changes, dup.id), today_(), d.cutoff).plan;
-      if (foodUnfinished_(again, d.changes, dup.id)) return { ok: false, errors: [{ field: '', message: FOOD_UNFINISHED }] };
+      if (String(dup.status || '유효') === '유효' && foodUnfinished_(again, d.changes, dup.id)) return { ok: false, errors: [{ field: '', message: FOOD_UNFINISHED }] };
       return { ok: true, duplicate: true, id: dup.id, superseded: String(dup.status) === '취소', date: dup.effective_date,
         dateKo: ymdIsValid_(String(dup.effective_date)) ? foodDateKo_(dup.effective_date) : '', label: rec.chipLabel, cancelCount: 0, followUpCount: 0, doc: String(dup.doc_submitted).toUpperCase() === 'TRUE' };
     }
