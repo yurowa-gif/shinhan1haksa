@@ -6,13 +6,13 @@
   .duty-card.today { border-color: var(--accent); }
   .duty-head { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 4px; flex-wrap: wrap; }
   .duty-head h2 { margin: 0; }
-  ul.list li.duty-slot { display: flex; gap: 8px; align-items: center; justify-content: flex-start; flex-wrap: wrap; min-height: 32px; }
+  ul.list li.duty-slot { display: flex; gap: 8px; align-items: center; justify-content: flex-start; flex-wrap: nowrap; min-height: 32px; }
   .duty-card.readonly { cursor: default; }
   .duty-slot .slot-label { flex: 0 0 5.5em; color: var(--muted-ink); white-space: nowrap; }
   .duty-sheet-slots .field { margin-bottom: 8px; }
   .row-btn { flex: 0 0 auto; white-space: nowrap; }   /* 줄 끝 버튼(교대·대신 근무)이 줄어들어 글자가 깨지지 않게 */
   .duty-slot .row-btn { margin-left: auto; min-height: var(--tap); }
-  .duty-slot .slot-who { display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; min-width: 0; }
+  .duty-slot .slot-who { display: flex; gap: 8px; align-items: center; flex: 1 1 0; flex-wrap: wrap; min-width: 0; word-break: keep-all; }
   .duty-gap { word-break: keep-all; }
   .nowrap { white-space: nowrap; }
 </style>
@@ -59,6 +59,7 @@
         else state.week = data.today.slice(0, 7) === data.month ? weekIndexOf(data.today) : 0;
         state.week = Math.max(0, Math.min(state.week, ws.length - 1));
         draw(opts.note, opts.noteWarn);
+        if (opts.scrollTop) window.scrollTo(0, 0);   // 고정 머리말에 첫 줄이 가리지 않게
       }).catch(function (err) { if (my !== state.seq) return; clear(head); clear(body); showError(body, err); });
     }
 
@@ -113,7 +114,7 @@
       var who = s.name ? el('b', { text: s.swapped ? s.swappedFrom + ' → ' + s.name : s.name }) : UI.statusPill('requested', '비어 있음');
       var kids = [el('span', { class: 'slot-label', text: s.label }), el('span', { class: 'slot-who' }, [
         who,
-        s.swapped ? UI.statusPill('confirmed', '교대') : null,
+        s.swapped && !s.canSwap ? UI.statusPill('confirmed', '교대') : null,
         s.mine ? UI.statusPill('todo', '내 근무') : null,
         s.slot === '예비' && s.name ? UI.statusPill('mute', '예비') : null
       ])];
@@ -143,7 +144,7 @@
         card.setAttribute('role', 'button'); card.setAttribute('tabindex', '0');
         card.setAttribute('aria-label', dayKo(x) + (state.data.canEdit ? ' 편성' : ' 운영 여부'));
         card.addEventListener('click', function () { openSheet(x); });
-        card.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openSheet(x); } });
+        card.addEventListener('keydown', function (e) { if (e.target !== card) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openSheet(x); } });
       }
       return card;
     }
@@ -220,8 +221,9 @@
           if (!r.ok) { busy = false; refresh(); err.textContent = r.errors.map(function (e) { return e.message; }).join(' '); return; }
           sheet.close();
           var msg = proxy ? '대신 근무로 기록했습니다.' : '교대했습니다.';
-          if (r.notified) UI.toast(msg + ' 상대 선생님과 근무표 담당자에게 메일을 보냈습니다.');
-          load(state.month, { week: state.week, note: r.notified ? msg + ' 메일을 보냈습니다.' : msg + ' 메일을 보내지 못했습니다. 상대 선생님께 직접 알려 주세요.', noteWarn: !r.notified });
+          var fail = msg + ' 메일을 보내지 못했습니다. 상대 선생님께 직접 알려 주세요.';
+          UI.toast(r.notified ? msg + ' 상대 선생님과 근무표 담당자에게 메일을 보냈습니다.' : fail, r.notified ? undefined : { kind: 'warn', ms: 8000 });
+          load(state.month, { week: state.week, note: r.notified ? '' : fail, noteWarn: !r.notified, scrollTop: true });
         }).catch(function (e) { busy = false; refresh(); err.textContent = (e && e.message) || String(e); });
       }
       sheet = UI.bottomSheet({
@@ -288,7 +290,11 @@
       function refresh() { if (sheet) sheet.buttons[1].disabled = busy || !dirty(); }
 
       var content = el('div', {}, [
-        pastLocked ? el('div', { class: 'notice warn', text: '지난 날짜는 바꿀 수 없습니다. 실제로 바뀐 근무는 교대로 기록해 주세요. 운영 여부는 필요하면 관리자에게 알려 주세요.' }) : null,
+        pastLocked ? el('div', { class: 'notice warn', text: '지난 날짜는 바꿀 수 없습니다. 실제로 바뀐 근무는 아래 [대신 근무 기록]으로 남겨 주세요. 운영 여부는 필요하면 관리자에게 알려 주세요.' }) : null,
+        pastLocked ? el('div', {}, x.slots.filter(function (q) { return q.canSwap; }).map(function (q) {
+          return el('button', { type: 'button', class: 'btn secondary row-btn', style: 'margin:4px 8px 8px 0', text: q.label + ' 대신 근무 기록',
+            onclick: function () { sheet.close(); openSwap(x, q); } });
+        })) : null,
         opSeg ? UI.field('운영 여부', opSeg) : null,
         opSeg ? UI.field('메모(선택)', memoIn, { hint: '예: 수능 전날, 학교 행사' }) : (x.memo ? el('div', { class: 'muted', text: '메모: ' + x.memo }) : null),
         slotBox, el('div', { class: 'fix', id: 'duty-err' })
