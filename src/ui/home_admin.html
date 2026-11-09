@@ -73,7 +73,8 @@
       el('h2', { text: '급식·입퇴실 서류' }),
       el('div', { class: n ? '' : 'muted', text: n ? '서류 미제출 ' + n + '건이 남아 있습니다.' : '서류 미제출 기록이 없습니다.' }),
       el('a', { class: n ? 'btn' : 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=moves&tab=history', text: '학생 기록 보기' }),
-      el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=moves', text: '급식 변경 신청' })
+      el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=moves&tab=meal', text: '급식 변경 신청' }),
+      el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=moves', text: '입퇴실 신청' })
     ]));
   }
 </script>

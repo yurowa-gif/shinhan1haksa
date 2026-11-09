@@ -227,10 +227,11 @@ function foodRemark_(rows) {
  * status_changes에 쓴다(F7·F6 공용). 반드시 withLock_ 안에서 부른다.
  *  head: 대표 행 데이터(id는 만들어진다). linked: 연결 행 데이터 배열(linked_change_id = 대표 id, doc_submitted '' 이 기본).
  *  cancels: [{id, cancel_reason}] — status '취소', cancel_reason = '[자동] <대표 id> <사유>'(되살릴 때 꼬리표로 찾는다).
- *  행마다 appendRecord_(audit create), 취소는 bulkUpdateRecords_(audit bulk_update). 지우지 않는다.
+ *  restores: [{id}] — 꼬리표로 취소됐던 행을 되살린다(status 유효, cancel_reason 비움, 퇴실 정리·F6 쪽 되살림).
+ *  행마다 appendRecord_(audit create), 취소·되살림은 bulkUpdateRecords_(audit bulk_update). 지우지 않는다.
  * → {head, linked}
  */
-function foodWrite_(head, linked, cancels, actorEmail) {
+function foodWrite_(head, linked, cancels, actorEmail, restores) {
   var base = { linked_change_id: '', doc_submitted: '', status: '유효', memo: '', cancel_reason: '' };
   var h = appendRecord_('status_changes', Object.assign({}, base, head), actorEmail);
   var rows = (linked || []).map(function (l) {
@@ -241,6 +242,9 @@ function foodWrite_(head, linked, cancels, actorEmail) {
     bulkUpdateRecords_('status_changes', cancels.map(function (c) {
       return { id: c.id, patch: { status: '취소', cancel_reason: '[자동] ' + h.id + ' ' + (c.cancel_reason || '새 신청으로 대체') } };
     }), actorEmail);
+  }
+  if (restores && restores.length) {
+    bulkUpdateRecords_('status_changes', restores.map(function (r) { return { id: r.id, patch: { status: '유효', cancel_reason: '' } }; }), actorEmail);
   }
   return { head: h, linked: rows };
 }
