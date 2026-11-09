@@ -121,13 +121,12 @@ test('거부: 남의 칸·이미 넘긴 원래 근무자·지난 날짜의 본�
   x.slot(YESTERDAY, '21:30조', R1);           // 지난 날짜의 본인 칸
   x.slot(FRI, '단독', R2); x.slot(FRI, '예비', R1);   // 예비 감독 본인
   x.slot(FRI, '23:00조', R1, undefined, { status: '취소' });
-  const [a, b, c, d, e, f] = x.rows();
+  const [a, b, c, d, e] = x.rows();
   expectDenied(x, R2, a.id, x.r3, '남의 칸');
   expectDenied(x, R2, b.id, x.r1, '이미 넘긴 원래 근무자');
   expectDenied(x, R1, c.id, x.r2, '지난 날짜의 본인 칸');
   expectDenied(x, R1, e.id, x.r2, '예비 감독 본인');
-  expectDenied(x, R1, f.id, x.r2, '취소된 칸');
-  expectDenied(x, R1, 'no-such-row', x.r2, '없는 칸');
+  // 취소된 칸·없는 칸은 denied가 아니라 '바뀌었습니다' 오류(아래 별도 테스트)
   for (const who of [HOMEROOM, STUDENT, PARENT, ATT]) {
     const err = x.env.errorOf(who, (cc) => cc.swapDuty(a.id, x.r2));
     assert.ok(err && /권한이 없습니다/.test(err.message), who);
@@ -201,7 +200,8 @@ test('운영 안 하는 날의 칸은 교대할 수 없다(입력 오류), 같�
   const row = x.rows()[0];
   x.env.call(DUTY, 'setDutyOperating', { date: TOMORROW, operating: false, confirmIds: x.env.call(DUTY, 'setDutyOperating', { date: TOMORROW, operating: false }).confirmIds });
   assert.strictEqual(x.rows()[0].status, '취소', '운영 안 함으로 바꾸면 그날 칸은 취소된다(결정 54)');
-  expectDenied(x, R1, row.id, x.r2, '취소된 칸');   // 취소된 칸은 없는 칸과 같다
+  const err = x.env.errorOf(R1, (c) => c.swapDuty(row.id, x.r2));
+  assert.ok(err && /바뀌었습니다/.test(err.message), '취소된 칸은 낡은 화면 오류');
   const y = makeEnv();
   y.slot(TOMORROW, '21:30조', R1);
   const r0 = y.rows()[0];
@@ -229,4 +229,68 @@ test('swapDuty는 공개 함수 권한표에 duty.swap으로 등록되어 있고
   x.slot(TOMORROW, '21:30조', R1);
   for (const who of [STUDENT, PARENT, HOMEROOM]) x.env.expectDenied(who, 'duty.swap', 'swapDuty', x.rows()[0].id, x.r2);
   x.env.expectAllowed(R1, 'swapDuty', x.rows()[0].id, x.r2);
+});
+
+/* ───── #81 검토 반영 ───── */
+test('같은 (날짜, 칸)에 살아 있는 행이 둘이면 R8이 쓰는 최신 행만 교대할 수 있다 — 옛 행 id로 남의 근무를 빼앗고 out.save를 얻는 길이 없다', () => {
+  const x = makeEnv();
+  x.slot(TOMORROW, '21:30조', R2);          // 옛 행(손으로 고친 시트 등으로 남은 중복)
+  x.slot(TOMORROW, '21:30조', R1);          // 새 행: R8은 아래 행(= 지금 근무자 R1)을 쓴다
+  const [oldRow, newRow] = x.rows();
+  const w = JSON.stringify(x.rows());
+  const e = x.env.errorOf(R2, (c) => c.swapDuty(oldRow.id, x.r3));
+  assert.ok(e && /바뀌었습니다/.test(e.message), '낡은 행은 "근무표가 바뀌었습니다" 오류: ' + (e && e.message));
+  assert.strictEqual(JSON.stringify(x.rows()), w, '쓰기 0건');
+  // R2는 그 날 근무자가 아니므로 out.save도 계속 거부
+  const stu = x.env.rows('students')[0].id;
+  const denied = x.env.errorOf(R2, (c) => c.requirePermission_('out.save', { studentId: stu, ymd: TOMORROW }));
+  assert.ok(denied && /권한이 없습니다/.test(denied.message));
+  // 진짜 근무자(R1)는 새 행 id로 교대할 수 있다
+  assert.strictEqual(swap(x, R1, newRow.id, x.r3).r.ok, true);
+});
+
+test('취소된 칸·없는 칸·낡은 화면은 공격처럼 보이는 denied 기록 대신 "근무표가 바뀌었습니다" 오류(쓰기 0건), 진짜 거부(남의 칸·지난 날짜·예비)만 denied:duty.swap', () => {
+  const x = makeEnv();
+  x.slot(TOMORROW, '21:30조', R1, undefined, { status: '취소' });
+  x.slot(TOMORROW, '23:00조', R1);
+  const [dead, live] = x.rows();
+  const a = x.env.rows('audit_log').length;
+  for (const id of [dead.id, 'no-such-row']) {
+    const e = x.env.errorOf(R1, (c) => c.swapDuty(id, x.r2));
+    assert.ok(e && /바뀌었습니다/.test(e.message), id);
+  }
+  assert.strictEqual(x.env.rows('audit_log').length, a, '거부 기록이 남지 않는다');
+  const e2 = x.env.errorOf(R2, (c) => c.swapDuty(live.id, x.r3));
+  assert.ok(e2 && /권한이 없습니다/.test(e2.message));
+  const row = x.env.rows('audit_log').find((r) => r.action === 'denied:duty.swap');
+  assert.ok(row && row.detail.includes(x.r3), '거부 기록 detail에 대상(toUserId)');
+});
+
+test('교대마다 이유(memo)를 새로 정한다: 학사 교사는 이유를 못 넣고(옛 이유도 지움), 담당자만 넣을 수 있고, 원래 근무자로 되돌리면 교대 표시(swapped_at·by·memo)가 정리된다', () => {
+  const x = makeEnv();
+  x.slot(TOMORROW, '21:30조', R1);
+  const row = x.rows()[0];
+  swap(x, RM, row.id, x.r2, { reason: '병가 대신' });                 // 담당자 대신 근무: 이유 기록
+  assert.strictEqual(x.rows()[0].memo, '병가 대신');
+  swap(x, R2, row.id, x.r3, { reason: '내가 쓴 이유' });              // 학사 교사: 이유는 받지 않고 옛 이유는 지운다
+  assert.strictEqual(x.rows()[0].memo, '');
+  swap(x, RM, row.id, x.r1);                                          // 원래 근무자 R1로 되돌림
+  const back = x.rows()[0];
+  assert.deepStrictEqual([back.actual_email, back.swapped_at, back.swapped_by, back.memo], [R1, '', '', '']);
+  const d = x.env.call(ADMIN, 'getDutyMonth', '2027-03').days.find((q) => q.date === TOMORROW).slots[0];
+  assert.deepStrictEqual([d.name, d.swapped], ['실가짜1', false]);
+});
+
+test('앱 주소를 못 읽어도(ScriptApp 오류) 교대는 저장되고 메일은 주소만 빼고 나간다(notified:true)', () => {
+  const x = makeEnv();
+  const sent = [];
+  x.slot(TOMORROW, '21:30조', R1);
+  const r = plain(x.env.as(R1, (c) => {
+    c.MailApp = { sendEmail(m) { sent.push(m); }, getRemainingDailyQuota: () => 100 };
+    c.ScriptApp = { getService: () => { throw new Error('서비스 주소 오류(가짜)'); } };
+    return c.swapDuty(x.rows()[0].id, x.r2);
+  }));
+  assert.deepStrictEqual([r.ok, r.notified], [true, true]);
+  assert.ok(sent.length >= 1 && sent.every((m) => !/https?:/.test(JSON.stringify(m))), '주소 없이 발송');
+  assert.strictEqual(x.rows()[0].actual_email, R2);
 });

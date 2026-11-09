@@ -263,9 +263,13 @@ function swapDuty(slotId, toUserId, opts) {
   var res = withLock_(function () {
     ['duty_slots', 'day_schedules', 'blocks', 'users'].forEach(function (t) { invalidate_('db', t); });
     var row = findById_('duty_slots', String(slotId || ''));
+    // 없는 칸·취소된 칸·낡은 화면(그 사이 칸이 바뀜)·같은 (날짜, 칸)에 살아 있는 행이 둘일 때의 옛 행은 공격이 아니라 "화면이 낡음"이다.
+    // R8(dutyOn_)이 쓰는 최신 행만 교대할 수 있다 — 옛 행 id로 남의 근무를 빼앗는 길을 막는다
+    var current = row && ruleRowLive_(row) ? dutyPick_(readAll_('duty_slots'), String(row.date).trim()).bySlot[String(row.slot).trim()] : null;
+    if (!current || current.id !== row.id) throw new Error('근무표가 바뀌었습니다. 새로 고친 뒤 다시 해 주세요.');
     var denyIf = function (c) {
       if (!c.denied) return;
-      logDenied_(user.email, 'duty.swap', c.why + ' ' + JSON.stringify({ slotId: String(slotId || '') }));
+      logDenied_(user.email, 'duty.swap', c.why + ' ' + JSON.stringify({ slotId: String(slotId || ''), toUserId: String(toUserId || '') }));
       throw new Error('권한이 없습니다.');
     };
     denyIf(dtySwapCheck_({ email: user.email, canEdit: canEdit, today: today_() }, row, ''));
@@ -286,8 +290,10 @@ function swapDuty(slotId, toUserId, opts) {
     }
     var from = dutyEmail_(row.actual_email) || dutyEmail_(row.original_email);
     var patch = { actual_email: to.email, swapped_at: nowIso_(), swapped_by: user.email };
-    var reason = String(opts.reason || '').trim().slice(0, 100);
-    if (reason) patch.memo = reason;
+    // 이유(memo)는 교대마다 새로 정한다: 담당자·관리자만 넣을 수 있고, 학사 교사의 교대는 옛 이유를 지운다
+    patch.memo = canEdit ? String(opts.reason || '').trim().slice(0, 100) : '';
+    // 원래 근무자에게 되돌리면 교대 표시를 정리한다
+    if (to.email === dutyEmail_(row.original_email)) { patch.swapped_at = ''; patch.swapped_by = ''; patch.memo = ''; }
     updateRecord_('duty_slots', row.id, patch, user.email);
     var names = Object.create(null);
     readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = u.name; });
@@ -302,8 +308,14 @@ function swapDuty(slotId, toUserId, opts) {
   });
   if (!res.mail) return res;
   // 락 밖: 메일이 실패해도 저장은 되돌리지 않는다
-  var out = notifyMail_(res.mail.to, '[신한1학사] 근무 교대 알림', res.mail.body + '\n\n' + ScriptApp.getService().getUrl(), user.email);
-  return { ok: true, changed: true, notified: out.notified };
+  // 앱 주소·메일에서 오류가 나도 저장은 끝났다 — 다시 시도하면 "내 칸이 아님"으로 거부되므로 여기서는 던지지 않는다
+  var notified = false;
+  try {
+    var link = '';
+    try { link = ScriptApp.getService().getUrl(); } catch (e) { link = ''; }
+    notified = notifyMail_(res.mail.to, '[신한1학사] 근무 교대 알림', res.mail.body + (link ? '\n\n' + link : ''), user.email).notified;
+  } catch (e) { console.warn('교대 알림 실패: ' + e.message); }
+  return { ok: true, changed: true, notified: notified };
 }
 
 function ymdKoShort_(ymd) {
