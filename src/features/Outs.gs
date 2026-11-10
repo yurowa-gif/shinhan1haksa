@@ -441,7 +441,9 @@ function vioMeetingInfo_(user, term, studentIds, byId, rows) {
     out[id] = { state: state,
       meeting: g.meetingNote ? { date: g.meetingNote.date, teacher: names[normalizeEmail_(g.meetingNote.teacher_email)] || '(등록 안 된 교사)', noteId: mine ? g.meetingNote.id : undefined } : null,
       // 결정 51: 면담이 있었는데 연결한 OUT이 취소돼 인정되지 않는 경우(카드가 '면담 필요'로 돌아가고 안내가 붙는다)
-      staleMeeting: state === 'need' && notes.some(function (n) { return n.student_id === id && ruleRowLive_(n) && String(n.type).trim() === CNS_TYPE_OUT2; }),
+      // 연결한 OUT이 이번 기간 violations 행(취소 포함)일 때만 stale — 지난 기간 면담은 해당 없음
+      staleMeeting: state === 'need' && notes.some(function (n) { return n.student_id === id && ruleRowLive_(n) && String(n.type).trim() === CNS_TYPE_OUT2 && rows.some(function (v) { return String(v.id) === String(n.linked_violation_id); }); }),
+      prevExit: state === 'left' ? '' : cnsLastOut2Exit_(changes, id),   // 재입실 학생에 '이전 퇴실 처리됨(M월 D일)'
       trigger: g.triggerOutId ? (function () { var t = rows.filter(function (v) { return String(v.id) === g.triggerOutId; })[0]; return t ? { occurredAt: String(t.occurred_at), ruleName: t.rule_name } : null; })() : null,
       canMeeting: isTeacher && !!facts[id].isAssigned && state === 'need', canConfirm: isAdmin && state === 'recorded' };
   });

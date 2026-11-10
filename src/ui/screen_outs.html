@@ -309,6 +309,7 @@
       else if (st === 'need') msg = x.canMeeting ? '학부모 면담을 하고 기록해 주세요. 기록이 있어야 관리자가 퇴실을 확정할 수 있습니다.' : '담당교사가 학부모 면담을 기록하면 관리자가 퇴실을 확정합니다.';
       else if (st === 'recorded') msg = '면담 ' + dayKo(x.meeting.date) + ' · ' + x.meeting.teacher + (x.canConfirm ? '' : ' — 관리자가 퇴실을 확정합니다.');
       if (msg) card.appendChild(el('div', { style: 'margin:8px 0', text: msg }));
+      if (x.prevExit) card.appendChild(el('div', { class: 'muted', text: '이전 퇴실 처리됨(' + dayKo(x.prevExit) + ')' }));
       if (x.canMeeting) card.appendChild(el('button', { type: 'button', class: 'btn block', text: '면담 기록하기', onclick: function () { openMeeting(x); } }));
       if (x.canConfirm) card.appendChild(el('button', { type: 'button', class: 'btn block', text: '퇴실 확정', onclick: function () { confirmDismissal(x); } }));
       else if (st === 'need' && r.isAdmin) card.appendChild(el('button', { type: 'button', class: 'btn block', 'aria-disabled': 'true', text: '퇴실 확정 — 면담 기록 필요', onclick: function (e) { e.preventDefault(); } }));
@@ -337,15 +338,18 @@
     }
     function openMeeting(x) {
       var sheet = null, busy = false;
-      var dateIn = UI.dateField({ label: '면담 날짜', value: state.ctx ? state.ctx.today : '', max: state.ctx ? state.ctx.today : undefined, name: 'mdate' });
+      var dateIn = UI.dateField({ label: '면담 날짜', value: state.ctx ? state.ctx.today : '', max: state.ctx ? state.ctx.today : undefined, name: 'mdate',
+        shortcuts: state.ctx ? [{ label: '오늘', value: state.ctx.today }] : [] });
+      var minYmd = x.trigger ? x.trigger.occurredAt.slice(0, 10) : '';
+      if (x.prevExit) { var pe = addDaysYmd(x.prevExit, 1); if (pe > minYmd) minYmd = pe; }   // 둘째 OUT 날과 이전 퇴실 다음 날 중 늦은 날
       var content = el('textarea', { maxlength: '2000', rows: '5', 'aria-label': '면담 내용' });
       var fc = UI.field('면담 내용', content, { hint: '면담 내용은 담당교사와 관리자만 볼 수 있습니다. 입퇴실 기록에는 면담 날짜도 쓰이지 않습니다.' });
       var trig = x.trigger ? dayKo(x.trigger.occurredAt) + ' ' + x.trigger.ruleName : '';
-      if (x.trigger) { var mn = dateIn.querySelector('input[type=date]'); if (mn) mn.min = x.trigger.occurredAt.slice(0, 10); }
+      if (minYmd) { var mn = dateIn.querySelector('input[type=date]'); if (mn) mn.min = minYmd; }
       var body = el('div', {}, [el('div', { text: UI.util.studentLabel(x.student) + ' 학부모 면담' }), trig ? el('div', { class: 'muted', style: 'margin:4px 0 8px', text: '연결 OUT(2번째): ' + trig }) : null, dateIn, fc]);
-      function refresh() { if (sheet) sheet.buttons[1].disabled = busy || !content.value.trim() || !dateIn.getValue() || (x.trigger && dateIn.getValue() < x.trigger.occurredAt.slice(0, 10)); }
+      function refresh() { if (sheet) sheet.buttons[1].disabled = busy || !content.value.trim() || !dateIn.getValue() || (minYmd && dateIn.getValue() < minYmd); }
       content.addEventListener('input', refresh);
-      dateIn.querySelector('input[type=date]').addEventListener('change', function () { if (x.trigger && dateIn.getValue() < x.trigger.occurredAt.slice(0, 10)) dateIn.setError('면담 날짜는 2번째 OUT(' + dayKo(x.trigger.occurredAt) + ') 이후여야 합니다.'); else dateIn.setError(''); refresh(); });
+      dateIn.querySelector('input[type=date]').addEventListener('change', function () { if (minYmd && dateIn.getValue() < minYmd) dateIn.setError('면담 날짜는 ' + dayKo(minYmd) + ' 이후여야 합니다.'); else dateIn.setError(''); refresh(); });
       sheet = UI.bottomSheet({ title: '학부모 면담 기록', content: body, actions: [
         { text: '닫기', kind: 'secondary', onclick: function () { sheet.close(); } },
         { text: '면담 기록 저장', kind: 'primary', disabled: true, onclick: function () {
@@ -380,7 +384,7 @@
     function confirmDismissal(x) {
       var tomorrow = dayKo(addDaysYmd(state.ctx ? state.ctx.today : (state.list && state.list.date) || '', 1));
       UI.confirmSheet({ title: '퇴실을 확정합니다', lead: UI.util.studentLabel(x.student) + ' · 2OUT 퇴실',
-        lines: ['면담이 기록되어 있습니다(' + dayKo(x.meeting.date) + ' · ' + x.meeting.teacher + ')', '확정하면 입퇴실 신청서가 미리 채워집니다', '적용일은 확정 다음 날(' + tomorrow + ')이고 다음 화면에서 고칠 수 있습니다', '유예는 없습니다'],
+        lines: ['면담이 기록되어 있습니다(' + dayKo(x.meeting.date) + ' · ' + x.meeting.teacher + ')', '확정하면 입퇴실 신청서가 미리 채워집니다', '적용일은 확정 다음 날, ' + tomorrow + '이고 다음 화면에서 고칠 수 있습니다', '유예는 없습니다'],
         confirmText: '퇴실 확정', danger: true,
         onconfirm: function () {
           call('confirmOutDismissal', x.studentId).then(function (r) {
