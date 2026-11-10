@@ -41,7 +41,18 @@ function foodHomeInfo_(user, role) {
     var shown = {};
     list.slice(0, 10).forEach(function (x) { shown[x.studentId + '|' + x.kind] = true; });
     var hidden = miss.filter(function (m) { return !shown[m.studentId + '|' + (m.row.source === 'F6' ? '입퇴실' : '급식 변경')]; }).length;   // 가려진 줄에 속한 행 수(제목의 건수와 맞춘다)
-    return { docMissing: miss.length, docList: list.slice(0, 10), docMore: hidden };
+    var out = { docMissing: miss.length, docList: list.slice(0, 10), docMore: hidden };
+    if (role === 'admin') {   // 관리자 홈: 오늘 인원과 자습실·SA 공석(C19, 식수 집계 화면과 같은 모델). 기숙사 정원 대비 공석은 넣지 않는다(F8)
+      var today = today_(), m = foodCountsModel_(today, { terms: terms, students: students, enrollments: enrollments, changes: changes });
+      out.counts = null; out.noTerm = !m.term;
+      if (m.term) {
+        var all = m.counts.groups['전체'] || {};
+        out.counts = { date: today, dateKo: foodDateKo_(today), termName: m.term.name, hall: all.hall, dorm: all.dorm, dormMale: (m.counts.groups['남 합계'] || {}).dorm,
+          dormFemale: (m.counts.groups['여 합계'] || {}).dorm, nonDorm: all.nonDorm, breakfast: all.breakfast, hallDinner: all.hallDinner, generalDinner: all.generalDinner };
+        out.vacancy = foodVacancy_(m.term, today);
+      }
+    }
+    return out;
   }
   if (role === 'homeroom') {   // 담임: 우리 반 이번 주 신청(보기만)
     var today = today_(), from = ymdMondayOf_(today), to = ymdAddDays_(from, 6);
@@ -59,6 +70,21 @@ function foodHomeInfo_(user, role) {
     return { week: week };
   }
   return {};
+}
+
+/** 자습실·SA실 좌석 수와 공석 수(그날, 퇴실·미배정·미입실 모두 공석). SA1~6은 "SA실" 하나로 묶는다 */
+function foodVacancy_(term, ymd) {
+  var d = seatLoad_();
+  var map = seatMapOn_(d.seats, d.assignments, d.enrollments, d.changes, term.id, ymd);
+  var groups = { '자습실': { label: '자습실', total: 0, vacant: 0 }, 'SA실': { label: 'SA실', total: 0, vacant: 0 } };
+  var spaceName = {};
+  d.spaces.forEach(function (sp) { spaceName[sp.id] = String(sp.name || ''); });
+  d.seats.forEach(function (x) {
+    if (x.kind !== '좌석' || !map.bySeat[x.id]) return;
+    var g = groups[/^SA/i.test(spaceName[x.space_id] || '') ? 'SA실' : '자습실'];
+    g.total++; if (map.bySeat[x.id].vacant) g.vacant++;
+  });
+  return [groups['자습실'], groups['SA실']].filter(function (g) { return g.total > 0; });
 }
 
 /* ───────────── 순수·읽기 도우미 ───────────── */
@@ -311,7 +337,8 @@ function foodRemark_(rows) {
  * status_changes에 쓴다(F7·F6 공용). 반드시 withLock_ 안에서 부른다.
  *  head: 대표 행 데이터(id는 만들어진다). linked: 연결 행 데이터 배열(linked_change_id = 대표 id, doc_submitted '' 이 기본).
  *  cancels: [{id, cancel_reason}] — status '취소', cancel_reason = '[자동] <대표 id> <사유>'(되살릴 때 꼬리표로 찾는다).
- *  행마다 appendRecord_(audit create), 취소는 bulkUpdateRecords_(audit bulk_update). 지우지 않는다.
+ *  restores: [{id}] — 꼬리표로 취소됐던 행을 되살린다(status 유효, cancel_reason 비움, 퇴실 정리·F6 쪽 되살림).
+ *  대표+연결 행은 bulkAppend_ 한 번(audit bulk_create 한 줄), 취소·되살림은 bulkUpdateRecords_ 한 번(audit bulk_update 한 줄). 지우지 않는다.
  * → {head, linked}
  */
 function foodWrite_(head, linked, cancels, actorEmail, restores) {
@@ -322,15 +349,12 @@ function foodWrite_(head, linked, cancels, actorEmail, restores) {
     return Object.assign({}, base, { student_id: h.student_id, requested_at: h.requested_at }, l, { id: Utilities.getUuid(), linked_change_id: id });
   });
   bulkAppend_('status_changes', [h].concat(rows), actorEmail);
-  if (cancels && cancels.length) {
-    bulkUpdateRecords_('status_changes', cancels.map(function (c) {   // 규칙이 이미 '[자동] <원인 행 id> …'를 준 사유(되살린 신청이 다시 취소하는 행)는 그대로 쓴다
-      var r = String(c.cancel_reason || '');
-      return { id: c.id, patch: { status: '취소', cancel_reason: /^\[자동\] /.test(r) ? r : '[자동] ' + id + ' ' + (r || '새 신청으로 대체') } };
-    }), actorEmail);
-  }
-  if (restores && restores.length) {
-    bulkUpdateRecords_('status_changes', restores.map(function (r) { return { id: r.id, patch: { status: '유효', cancel_reason: '' } }; }), actorEmail);
-  }
+  // 취소와 되살림은 한 번의 bulkUpdateRecords_(한 번의 setValues)로 쓴다 — 둘 사이에서 끊겨 되살림만 빠지는 일이 없게
+  var patches = (cancels || []).map(function (c) {   // 규칙이 이미 '[자동] <원인 행 id> …'를 준 사유(되살린 신청이 다시 취소하는 행)는 그대로 쓴다
+    var r = String(c.cancel_reason || '');
+    return { id: c.id, patch: { status: '취소', cancel_reason: /^\[자동\] /.test(r) ? r : '[자동] ' + id + ' ' + (r || '새 신청으로 대체') } };
+  }).concat((restores || []).map(function (r) { return { id: r.id, patch: { status: '유효', cancel_reason: '' } }; }));
+  if (patches.length) bulkUpdateRecords_('status_changes', patches, actorEmail);
   return { head: h, linked: rows };
 }
 
@@ -345,14 +369,15 @@ var FOOD_UNFINISHED = '이전 저장이 중간에 끊겨 덜 끝났습니다. �
 
 /**
  * 저장했다는 대표 행이 있는데 취소 쓰기가 빠졌나(다시 눌렀을 때 "이미 저장"으로 넘기지 않으려고).
- * 대표+연결 행은 한 번에 쓰므로 반쯤 쓰이는 일은 없고, 끊길 수 있는 곳은 그 뒤의 취소 쓰기뿐이다.
+ * 대표+연결 행은 한 번에, 취소·되살림도 한 번에 쓰므로 반쯤 쓰이는 일은 없고, 끊길 수 있는 곳은 그 둘 사이뿐이다.
  * plan = 저장 전 모양(foodBefore_)으로 다시 세운 계획. 그 계획이 취소할 행이 있는데 이 대표 행의 "[자동] <대표 id>" 꼬리표가 붙은 행이 하나도 없으면 덜 끝난 것이다.
  * 나중 저장이 이 저장의 행을 취소·되살려도 꼬리표는 남으므로 끝난 저장을 거짓으로 덜 끝났다고 하지 않는다.
  * 덮여서 취소된 신청서(superseded 기록)는 취소 쓰기가 없으니 검사하지 않는다(부르는 쪽).
  */
 function foodUnfinished_(plan, changes, headId) {
   if (!plan.toCancel.length) return false;
-  return !changes.some(function (c) { return String(c.cancel_reason || '').indexOf('[자동] ' + headId + ' ') === 0; });
+  // '더 새 신청'으로 끝나는 꼬리표는 덮인 신청서(superseded 기록)가 덮은 행 id를 달고 있는 것이라 이 대표의 취소 꼬리표가 아니다
+  return !changes.some(function (c) { var r = String(c.cancel_reason || ''); return r.indexOf('[자동] ' + headId + ' ') === 0 && !/더 새 신청$/.test(r); });
 }
 
 /* ───────────── 화면에서 부르는 서버 함수 ───────────── */
@@ -465,6 +490,67 @@ function saveMealChange(input, expect) {
     return { ok: true, id: w.head.id, superseded: plan.superseded, date: plan.date, dateKo: plan.date ? foodDateKo_(plan.date) : '', label: rec.chipLabel,
       cancelCount: plan.toCancel.length, followUpCount: w.linked.length, doc: rec.doc };
   });
+}
+
+/* ───────────── 식수 집계(C19) ───────────── */
+
+/**
+ * 그 날짜의 식수 집계 모델(캐시 없음 — 입력 즉시 반영, PRD 성공 기준). 신청 기준 인원: 결석·외박은 반영하지 않는다.
+ * 운영 기간이 아닌 날(기간 사이·첫 기간 전·마지막 기간 뒤)에는 term이 null이고 counts가 없다(화면이 멈추지 않게 던지지 않는다).
+ * docRows = 서류 미제출 행 수(날짜와 무관한 전체), docUnsubmitted = 그 행이 있는 학생 수. src = 이미 읽은 시트 행(홈이 재사용)
+ */
+function foodCountsModel_(ymd, src) {
+  src = src || {};
+  var terms = src.terms || readAll_('terms'), students = src.students || readAll_('students'), enr = src.enrollments || readAll_('enrollments'), changes = src.changes || readAll_('status_changes');
+  var term = termOnDate_(ymd, terms);
+  var miss = {}, name = {}, rows = foodMissingDocs_(changes, enr, terms);
+  students.forEach(function (s) { name[s.id] = s.name; });
+  rows.forEach(function (m) { miss[m.studentId] = true; });   // 홈과 같은 집계: 기간이 바뀌어도 표시할 때까지 남는다
+  var out = { date: ymd, term: term, counts: null, operating: false, docRows: rows.length, docUnsubmitted: Object.keys(miss).length, name: name };
+  if (!term) return out;
+  out.counts = mealCountsOn_(students, enr, changes, term.id, ymd);
+  out.operating = resolveDayPlan_(ymd, { termType: calTermTypeOn_(terms, ymd), daySchedule: pickDaySchedule_(readAll_('day_schedules'), ymd),
+    blocks: readAll_('blocks'), defaults: calDefaults_(readAll_('settings', 'config')) }).operating;
+  return out;
+}
+
+function foodCountsDate_(date) {
+  var ymd = String(date || '').trim() || today_();
+  if (!ymdIsValid_(ymd)) throw new Error('날짜를 골라 주세요.');
+  return ymd;
+}
+
+/**
+ * 식수 집계(관리자). 행 순서는 여1…전체(출력물과 같다). unknown = 성별·학년을 알 수 없어 줄에 넣지 못한 학생(이름은 관리자 화면에만).
+ * 서류 미제출은 학생 수(이름 없음). 퇴실 후 석식 유지 = 학사 퇴실했지만 석식 중단일 전이라 학사 석식에 포함된 학생.
+ */
+function getMealCounts(date) {
+  requirePermission_('meal.count');
+  var m = foodCountsModel_(foodCountsDate_(date));
+  if (!m.term) {   // 운영 기간이 아닌 날: 던지지 않고 안내만(화면이 그 날짜에서 ‹ ›로 계속 넘어갈 수 있게)
+    return { date: m.date, dateKo: foodDateKo_(m.date), term: null, operating: false, rows: [], afterLeaveHallDinner: 0, docUnsubmitted: m.docUnsubmitted, docRows: m.docRows,
+      unknown: [], warnings: [], message: '운영 기간이 아닙니다.' };
+  }
+  var c = m.counts;
+  return {
+    date: m.date, dateKo: foodDateKo_(m.date), term: { id: m.term.id, name: m.term.name }, operating: m.operating,
+    rows: printMealRowOrder_(Object.keys(c.groups)).map(function (k) { return Object.assign({ key: k }, c.groups[k]); }),
+    afterLeaveHallDinner: c.afterLeaveHallDinner, docUnsubmitted: m.docUnsubmitted, docRows: m.docRows,
+    unknown: c.unknownGroup.map(function (id) { return { id: id, name: m.name[id] || '(알 수 없음)' }; }),
+    warnings: c.warnings.filter(function (w) { return w.indexOf(' 학생의 ') < 0; })
+  };
+}
+
+/** 식수 집계 PDF(급식실 제출용 임시 양식, 방식은 sheetMakePdf_ — C0 결과로 바뀔 수 있다). 공유·저장 없이 base64로 내려준다 */
+function getMealCountsPdf(date) {
+  var user = requirePermission_('meal.count');
+  var m = foodCountsModel_(foodCountsDate_(date));
+  if (!m.term) return { ok: false, error: '운영 기간이 아닌 날은 출력할 수 없습니다.' };
+  var html = printRenderMealCounts_({ date: m.date, termName: m.term.name, operating: m.operating, counts: m.counts, docUnsubmitted: m.docUnsubmitted,
+    preparedBy: user.name, generatedAt: nowIso_().slice(0, 16).replace('T', ' ') });
+  var name = '식수집계_' + m.date + '(' + ymdWeekdayKo_(m.date) + ').pdf';
+  var bytes = sheetMakePdf_(html, name).getBytes();
+  return { ok: true, name: name, base64: Utilities.base64Encode(bytes), bytes: bytes.length };
 }
 
 /** 기록 줄에 보일 말: 시스템 글자(F7·[자동] <id>) 대신 교사용 말 */

@@ -77,6 +77,7 @@ function readAll_(sheetName, kind) {
 }
 
 function findById_(sheetName, id, kind) {
+  if (id === undefined || id === null || String(id).trim() === '') return null;   // 빈 id는 어떤 줄도 가리키지 않는다(id가 빈 줄에 닿지 않게)
   var rows = readAll_(sheetName, kind);
   for (var i = 0; i < rows.length; i++) if (rows[i].id === id) return rows[i];
   return null;
@@ -153,6 +154,16 @@ function appendRecord_(sheetName, data, actorEmail, kind, opts) {
 }
 
 /**
+ * 쓰기 전 id 확인: 같은 id의 줄이 둘 이상이면(시트에서 복사·붙여넣은 줄) 어느 줄인지 알 수 없으므로 고치지 않는다.
+ * 빈 id는 findById_가 null을 돌려주므로 '기록을 찾을 수 없습니다'로 끝난다.
+ */
+function assertUniqueId_(sheetName, id, kind) {
+  var n = 0, rows = readAll_(sheetName, kind);
+  for (var i = 0; i < rows.length; i++) if (rows[i].id === id) n++;
+  if (n > 1) throw new Error('같은 id의 줄이 여러 개라 고칠 수 없습니다(' + sheetName + '). 시트 소유자에게 알려 주세요.');
+}
+
+/**
  * 행 수정(부분 갱신). 변경 전·후를 audit_log에 남긴다.
  */
 function updateRecord_(sheetName, id, patch, actorEmail, kind) {
@@ -161,6 +172,7 @@ function updateRecord_(sheetName, id, patch, actorEmail, kind) {
     invalidate_(kind, sheetName);
     var before = findById_(sheetName, id, kind);
     if (!before) throw new Error('기록을 찾을 수 없습니다: ' + id);
+    assertUniqueId_(sheetName, id, kind);
     var sh = getSheet_(kind, sheetName);
     var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(cellToString_);
     var after = {};
@@ -282,15 +294,16 @@ function bulkUpdateRecords_(sheetName, patches, actorEmail, kind) {
     var sh = getSheet_(kind, sheetName);
     var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(cellToString_);
     var rows = readAll_(sheetName, kind);
-    var byId = {};
-    rows.forEach(function (r) { byId[r.id] = r; });
+    var byId = {}, dup = {};
+    rows.forEach(function (r) { if (byId[r.id]) dup[r.id] = true; byId[r.id] = r; });
     var firstRow = 2;
     var values = rows.length ? sh.getRange(firstRow, 1, sh.getLastRow() - 1, headers.length).getValues() : [];
     var now = nowIso_();
     var changed = [];   // [{id, before:{col:old}, after:{col:new}}]
     patches.forEach(function (p) {
-      var row = byId[p.id];
+      var row = p.id === undefined || p.id === null || String(p.id).trim() === '' ? null : byId[p.id];
       if (!row) throw new Error('기록을 찾을 수 없습니다: ' + p.id);
+      if (dup[p.id]) throw new Error('같은 id의 줄이 여러 개라 고칠 수 없습니다(' + sheetName + '). 시트 소유자에게 알려 주세요.');
       var idx = row._row - firstRow;
       var before = {}, after = {};
       Object.keys(p.patch).forEach(function (k) {

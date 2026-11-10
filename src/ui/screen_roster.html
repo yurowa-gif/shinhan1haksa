@@ -157,7 +157,8 @@
         if (p.lists.updatedStudents.length) { card.appendChild(el('h2', { style: 'margin-top:12px', text: '정보가 바뀌는 학생' })); card.appendChild(nameList(p.lists.updatedStudents)); }
         if (p.lists.leaving.length) {
           card.appendChild(el('h2', { style: 'margin-top:12px', text: '명단에 없는 학사생(퇴실 후보)' }));
-          card.appendChild(el('div', { class: 'muted', text: '자동으로 퇴실 처리하지 않습니다. 퇴실은 입퇴실 화면(2단계)에서 처리합니다.' }));
+          card.appendChild(el('div', { class: 'muted', text: '자동으로 퇴실 처리하지 않습니다. 퇴실은 입퇴실 화면에서 처리합니다.' }));
+          card.appendChild(el('a', { class: 'btn secondary', style: 'margin:8px 0', href: (document.querySelector('a.back') || { href: '' }).href + '?page=moves', text: '입퇴실 화면 열기' }));
           card.appendChild(nameList(p.lists.leaving));
         }
       } else {
