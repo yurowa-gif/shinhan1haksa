@@ -34,10 +34,10 @@ test('wideView(보기 키): 학사 교사도 이번 기간 학사생 전체, 미
   assert.ok(!wide(['homeroom'], { isEnrolled: true }), '담임은 wide여도 자기 반만');
   assert.ok(!wide(['parent'], { isEnrolled: true }) && !wide(['student'], { isEnrolled: true }));
 });
-test('permissions_: wideView는 보기 키 3개에만(student.view·status.view·exception.view), 쓰기·면담 키는 없다', () => {
+test('permissions_: wideView는 보기 키 4개에만(student.view·status.view·exception.view·out.view), 쓰기·면담 키는 없다', () => {
   const p = ctx.permissions_();
   const wideKeys = Object.keys(p).filter((k) => p[k].wideView).sort();
-  assert.deepStrictEqual(wideKeys, ['exception.view', 'status.view', 'student.view']);
+  assert.deepStrictEqual(wideKeys, ['exception.view', 'out.view', 'status.view', 'student.view']);
 });
 test('담임: 자기 반만', () => {
   assert.ok(can(['homeroom'], { inHomeroom: true }));

@@ -6,13 +6,48 @@
 /**
  * 교사 홈의 OUT 카드 데이터(getHomeData가 부른다). 아직 없으면 null.
  * 보고 있는 홈 역할(role)이 out.view를 가질 때만 불린다. 던진 오류는 getHomeData가 잡아 {error}로 바꾼다.
- * C11a: OUT 기록 카드는 기록할 수 있는 역할(학사 교사·관리자)에게만. 숫자 카드는 C11b.
+ * → {canRecord(기록 카드는 학사 교사·관리자만), out1, out2(이번 기간 1OUT·퇴실 대상 학생 수), today(오늘 건수), perStudent(담임: 우리 반 학생별 OUT 수)}
  */
 function vioHomeInfo_(user, role) {
-  return { canRecord: role === 'hall_teacher' || role === 'admin' };
+  var out = { canRecord: role === 'hall_teacher' || role === 'admin', out1: 0, out2: 0, today: 0, perStudent: {}, list: [], periodWord: vioPeriodWord_(getCurrentTerm_()), mailOn: PropertiesService.getScriptProperties().getProperty('MAIL_ENABLED') === 'true' };
+  var term = getCurrentTerm_();
+  if (!term) return out;
+  var vu = Object.assign({}, user, { roles: [role] });   // 보고 있는 홈 역할 하나로만 센다
+  // 홈은 학사 교사에게 '내 담당 학생'만(면담할 사람이 자기 학생을 알아보게). 목록 화면의 넓은 보기(결정 45·53)와 다르다
+  var visible = vioVisibleIds_(vu, readAll_('enrollments'), readAll_('students'), term.id, false);
+  var live = vioViolations_(term).filter(function (v) { return ruleRowLive_(v) && visible[String(v.student_id)]; });
+  var per = Object.create(null), today = today_();
+  var changes0 = readAll_('status_changes');
+  live.forEach(function (v) { if (String(v.occurred_at).slice(0, 10) === today) out.today++; });   // 오늘 건수는 [오늘] 탭과 같게 퇴실 학생 행도 센다
+  live = live.filter(function (v) { return !vioIsLeft_(changes0, v.student_id, today); });   // 1OUT·퇴실 대상 학생 수에서만 퇴실 처리된 학생을 뺀다(목록과 같은 규칙)
+  live.forEach(function (v) { per[v.student_id] = (per[v.student_id] || 0) + 1; });
+  var byStu = {};
+  readAll_('students').forEach(function (s) { byStu[s.id] = s; });
+  Object.keys(per).forEach(function (id) {
+    if (per[id] >= 2) out.out2++; else out.out1++;
+    if (role === 'homeroom') out.perStudent[id] = per[id];
+    var st = byStu[id];
+    if (st) out.list.push({ studentId: id, student: { name: st.name, grade: +st.grade, classNo: st.class_no, number: st.number }, count: per[id] });
+  });
+  out.list.sort(function (a, b) { return b.count - a.count; });
+  out.list = out.list.slice(0, 6);   // 홈 카드에는 많은 순 6명만
+  return out;
 }
 
 var VIO_MEMO_MAX = 200;
+
+/**
+ * 퇴실 처리됨인가(보기용, 누구에게 보여도 되는 status_changes 값): ymd에 학사 퇴실이거나, 앞으로 적용될 살아 있는 2OUT 퇴실(메모 [2OUT]·사유 '2OUT 퇴실')이 잡혀 있음.
+ * R9 outDismissalGate_의 alreadyLeft와 같은 기준이라 목록·홈·관문이 어긋나지 않는다.
+ */
+function vioIsLeft_(changes, studentId, ymd) {
+  var sid = ruleStr_(studentId);
+  if (statusOn_(changes, sid, '학사', ymd) === '퇴실') return true;
+  return (changes || []).some(function (c) {
+    return c && ruleRowLive_(c) && ruleStr_(c.student_id) === sid && ruleStr_(c.item) === '학사' && ruleStr_(c.value) === '퇴실' &&
+      ruleStr_(c.effective_date) > ymd && (ruleStr_(c.memo).indexOf('[2OUT]') === 0 || ruleStr_(c.reason) === '2OUT 퇴실');
+  });
+}
 
 /** '이번 학기' | '이번 기간'(방학) */
 function vioPeriodWord_(term) { return term && String(term.type).trim() === '방학' ? '이번 기간' : '이번 학기'; }
@@ -222,4 +257,142 @@ function saveOut(input) {
     }
   }
   return { ok: true, after: res.after, notified: sent.notified, notifyWarn: reason === 'failed' || reason === 'quota', notifyReason: reason };
+}
+
+
+/* ───── C11b: 목록·취소 ───── */
+
+/** 보기 범위가 넓은지: 권한표 out.view의 wideView 표시(학사 교사도 이번 기간 학사생 전체, 결정 45·53). 쓰기(out.save)에는 쓰지 않는다 */
+function vioViewWide_() { return !!permissions_()['out.view'].wideView; }
+
+/**
+ * 이 사용자가 볼 수 있는 학생 id 집합(순수): 그 기간 등록 학생 중 관리자·출결 담당 = 전체, 학사 교사 = wide면 전체(근무 여부는 보지 않는다)·아니면 담당 학생,
+ * 담임 = 자기 반(여러 역할이면 합집합). 범위는 excVisibleIds_(Exceptions.gs)와 같다 — 그 파일에 기대지 않으려고 따로 둔다.
+ */
+function vioVisibleIds_(user, enrollments, students, termId, wide) {
+  var byId = {};
+  (students || []).forEach(function (s) { byId[s.id] = s; });
+  var ids = Object.create(null);
+  var roles = user.roles || [];
+  var all = roles.indexOf('admin') >= 0 || roles.indexOf('attendance') >= 0;
+  (enrollments || []).forEach(function (e) {
+    if (e.term_id !== termId) return;
+    var s = byId[e.student_id];
+    if (!s) return;
+    if (all ||
+        (roles.indexOf('hall_teacher') >= 0 && (wide || normalizeEmail_(e.teacher_email) === user.email)) ||
+        (roles.indexOf('homeroom') >= 0 && sameClass_(user.homeroomClass, s.grade, s.class_no))) ids[s.id] = true;
+  });
+  return ids;
+}
+
+/** 입력·취소가 닫힌 기간인가: 끝난 다음 날까지만 열려 있다(저장 검사와 같은 기준) */
+function vioTermClosed_(term) { return today_() > ymdAddDays_(term.end_date, 1); }
+
+/**
+ * OUT 목록. filter = {scope:'student'|'term'|'today', termId, studentId, date}
+ *  - term: 그 기간 전체(기본 이번 기간)  - student: 한 학생의 그 기간 누적  - today: 오늘(또는 date) 발생한 것
+ * 볼 수 있는 학생(vioVisibleIds_)만. 이메일은 내보내지 않고 이름으로 바꾼다. 지난 기간도 조회는 된다.
+ * → {ok, term, terms:[{id,name}], items:[...], summary:[{studentId, student, count, label}], canCancel}
+ */
+function listOuts(filter) {
+  var user = requirePermission_('out.view');
+  filter = filter || {};
+  var scope = String(filter.scope || 'term');
+  if (['student', 'term', 'today'].indexOf(scope) < 0) throw new Error('볼 범위를 다시 골라 주세요.');
+  var terms = readAll_('terms').filter(function (t) { return t.start_date && t.end_date; }).sort(function (a, b) { return a.start_date < b.start_date ? 1 : -1; });
+  var today = String(filter.date || '').trim() || today_();
+  if (scope === 'today' && !ymdIsValid_(today)) throw new Error('날짜를 골라 주세요.');
+  var term;
+  if (scope === 'today') term = termOnDate_(today, terms) || getCurrentTerm_();   // 오늘 탭은 고른 기간과 상관없이 그날이 속한 기간
+  else if (filter.termId) {
+    term = terms.filter(function (t) { return t.id === String(filter.termId); })[0];
+    if (!term) throw new Error('운영 기간을 찾을 수 없습니다. 새로 고친 뒤 다시 해 주세요.');
+  } else term = getCurrentTerm_();
+  var out = { ok: true, date: today, term: null, terms: terms.map(function (t) { return { id: t.id, name: t.name }; }), items: [], summary: [], canCancel: false };
+  if (!term) return out;
+  var enrollments = readAll_('enrollments'), students = readAll_('students'), changes = readAll_('status_changes');
+  var visible = vioVisibleIds_(user, enrollments, students, term.id, vioViewWide_());
+  var myStudents = {};   // 내 담당 학생(보기 범위와 별개로 [내 담당] 표시용)
+  enrollments.forEach(function (e) { if (e.term_id === term.id && normalizeEmail_(e.teacher_email) === user.email) myStudents[e.student_id] = true; });
+  if (scope === 'student' && !visible[String(filter.studentId || '')]) {
+    logDenied_(user.email, 'out.view', '범위 밖 학생');
+    throw new Error('권한이 없습니다.');
+  }
+  var closed = vioTermClosed_(term);
+  out.term = { id: term.id, name: term.name, type: term.type, start_date: term.start_date, end_date: term.end_date, closed: closed };
+  out.canCancel = hasRole_(user, 'admin') && !closed;
+  var names = {}, byEmail = {}, byId = {};
+  readAll_('users').forEach(function (u) { byEmail[normalizeEmail_(u.email)] = u; });
+  students.forEach(function (s) { byId[s.id] = s; });
+  var rows = vioViolations_(term).filter(function (v) { return visible[String(v.student_id)]; });
+  // 적발 교사 칸은 이메일 하나 또는 자동 OUT의 근무자 여럿('a@x,b@x')일 수 있다: 각각 이름으로 바꿔 '·'로 잇고, 없는 사람만 미등록으로 적는다
+  var nameOf = function (emails) {
+    return String(emails || '').split(',').map(function (e) { return e.trim(); }).filter(Boolean).map(function (e) {
+      var u = byEmail[normalizeEmail_(e)]; return u && String(u.name || '') ? String(u.name) : '(등록 안 된 교사)';
+    }).join('·');
+  };
+  var count = Object.create(null);
+  rows.forEach(function (v) { if (ruleRowLive_(v)) count[v.student_id] = (count[v.student_id] || 0) + 1; });
+  var shown = rows.filter(function (v) {
+    if (scope === 'student') return String(v.student_id) === String(filter.studentId);
+    if (scope === 'today') return String(v.occurred_at).slice(0, 10) === today;
+    return true;
+  }).sort(function (a, b) { return String(a.occurred_at) < String(b.occurred_at) ? 1 : -1; });
+  var label = function (n) { return n >= 2 ? '퇴실 대상' : n === 1 ? '1OUT' : ''; };
+  out.items = shown.map(function (v) {
+    var s = byId[v.student_id] || {};
+    var live = ruleRowLive_(v);
+    return { id: v.id, termId: term.id, studentId: v.student_id, student: { name: s.name || '', grade: +s.grade, classNo: s.class_no, number: s.number, studentNo: s.student_no },
+      occurredAt: String(v.occurred_at), ruleName: v.rule_name, memo: v.memo || '', detectedBy: v.detected_by ? nameOf(v.detected_by) : '(모름)',
+      enteredBy: nameOf(v.entered_by), source: v.source, status: live ? '유효' : '취소', cancelReason: v.cancel_reason || '',
+      canCancel: out.canCancel && live };
+  });
+  var seen = Object.create(null);
+  (scope === 'term' ? Object.keys(count) : shown.map(function (v) { return v.student_id; })).forEach(function (id) {
+    if (seen[id]) return; seen[id] = true;
+    var s = byId[id] || {};
+    var mine = rows.filter(function (v) { return ruleRowLive_(v) && String(v.student_id) === id; }).sort(function (a, b) { return String(a.occurred_at) < String(b.occurred_at) ? 1 : -1; })[0];
+    out.summary.push({ studentId: id, student: { name: s.name || '', grade: +s.grade, classNo: s.class_no, number: s.number, studentNo: s.student_no }, count: count[id] || 0, label: label(count[id] || 0),
+      isMine: !!myStudents[id], left: vioIsLeft_(changes, id, today_()),
+      latest: mine ? { occurredAt: String(mine.occurred_at), ruleName: mine.rule_name, source: mine.source } : null });
+  });
+  // 퇴실 처리된 학생은 맨 뒤로 보내고 1OUT·퇴실 대상 학생 수에서 뺀다
+  out.hasMine = Object.keys(myStudents).length > 0;
+  out.stats = { records: 0, out1Students: 0, out2Students: 0 };
+  rows.forEach(function (v) { if (ruleRowLive_(v)) out.stats.records++; });
+  Object.keys(count).forEach(function (id) {
+    var sm = out.summary.filter(function (x) { return x.studentId === id; })[0];
+    if (sm && sm.left) return;
+    if (count[id] >= 2) out.stats.out2Students++; else if (count[id] === 1) out.stats.out1Students++;
+  });
+  out.summary.sort(function (a, b) { return (a.left ? 1 : 0) - (b.left ? 1 : 0) || b.count - a.count || String(a.student.studentNo).localeCompare(String(b.student.studentNo)); });   // 퇴실 처리됨은 맨 뒤
+  return out;
+}
+
+/**
+ * OUT 취소(관리자만): status를 '취소'로 바꾸고 사유를 남긴다(삭제하지 않는다, audit). 사유 2~200자.
+ * '[자동]'으로 시작하는 사유는 규칙이 자동 취소할 때만 쓰는 머리말이라 거부(vocabulary.md). 닫힌 기간(끝난 다음 날 이후)은 거부.
+ */
+function cancelOut(termId, id, reason) {
+  var user = requirePermission_('out.cancel');
+  var err = function (field, message) { return { ok: false, errors: [{ field: field, message: message }] }; };
+  if (typeof reason !== 'string') return err('reason', '취소 사유를 적어 주세요.');
+  var why = reason.trim();
+  if (why.length < 2 || why.length > 200) return err('reason', '취소 사유를 2자 이상 200자 안으로 적어 주세요.');
+  if (why.indexOf('[자동]') === 0) return err('reason', '[자동]으로 시작하는 사유는 쓸 수 없습니다.');
+  return withLock_(function () {
+    ['terms', 'enrollments', 'students'].forEach(function (t) { invalidate_('db', t); });
+    var term = readAll_('terms').filter(function (t) { return t.id === String(termId || ''); })[0];
+    if (!term) return err('termId', '운영 기간을 찾을 수 없습니다. 새로 고친 뒤 다시 해 주세요.');
+    if (vioTermClosed_(term)) return err('termId', '끝난 운영 기간의 OUT은 볼 수만 있습니다.');
+    var sheet = termSheetName_('violations', term.id);
+    invalidate_('db', sheet);
+    var row = vioViolations_(term).filter(function (v) { return v.id === String(id || ''); })[0];
+    if (!row) return err('id', 'OUT 기록을 찾을 수 없습니다. 새로 고친 뒤 다시 해 주세요.');
+    if (!ruleRowLive_(row)) return err('id', '이미 취소된 OUT입니다.');
+    updateRecord_(sheet, row.id, { status: '취소', cancel_reason: why }, user.email);
+    var rows = vioViolations_(term);
+    return { ok: true, after: outLevel_(rows, row.student_id, term.id) };
+  });
 }

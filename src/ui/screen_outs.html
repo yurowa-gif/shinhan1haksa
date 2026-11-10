@@ -2,13 +2,25 @@
   .out-chips { display: flex; gap: 8px; flex-wrap: wrap; }
   .out-chips .chip { flex: 0 1 auto; max-width: 100%; white-space: normal; text-align: left; height: auto; min-height: var(--tap); line-height: 1.3; }
   .out-time { max-width: 12rem; }
+  ul.list li.out-item { display: block; }
+  .out-item .out-line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .out-item .out-cancelled { text-decoration: line-through; color: var(--muted-ink); }
+  .out-item .row-btn { margin-top: 8px; min-height: var(--tap); }
+  .out-who { word-break: keep-all; }
+  .out-rowbtn { all: unset; display: flex; flex-direction: column; gap: 4px; width: 100%; cursor: pointer; min-height: var(--tap); box-sizing: border-box; }
+  .out-rowbtn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  ul.out-sub { margin-top: 8px; padding-left: 12px; border-left: 3px solid var(--line); }
 </style>
 <script>
-  /** OUT 화면(C11a): [기록] 탭 — 학생 → 항목 → 일시·적발 교사 → 메모 → 저장(홈에서 탭 4 + 입력 1). 목록·취소는 C11b, 면담은 C13. */
+  /** OUT 화면: [기록](C11a: 학생 → 항목 → 일시·적발 교사 → 메모 → 저장) · [이번 학기](C11b: 학생별 요약·기록, 관리자 취소) · [오늘 현황]. 면담은 C13. */
   function renderScreen(root) {
-    var state = { dateTouched: false, timeTouched: false, skewMs: 0, ctx: null, student: null, ruleId: '', date: '', time: '', detectedBy: '', memo: '', busy: false, seq: 0 };
+    var state = { dateTouched: false, timeTouched: false, skewMs: 0, tab: '', termId: '', listStudent: '', list: null, ctx: null, student: null, ruleId: '', date: '', time: '', detectedBy: '', memo: '', busy: false, seq: 0, listSeq: 0, scope: 'mine', open: {} };
+    var tabsBox = el('div');
     var body = el('div');
+    var listBox = el('div');
+    root.appendChild(tabsBox);
     root.appendChild(body);
+    root.appendChild(listBox);
     var bar = null, saveBtn = null, noticeBox = null, statusBox = null, errSetters = {};
 
     function pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -40,6 +52,14 @@
       call('getOutContext', date || '').then(function (ctx) {
         if (my !== state.seq) return;   // 더 나중에 누른 날짜의 응답만 쓴다
         state.ctx = ctx;
+        if (!state.tab) {   // 처음: 주소의 tab, 없으면 기록할 수 있는 사람은 [기록], 아니면 [이번 학기]
+          var want = window.SCREEN_TAB;
+          state.tab = want === 'term' || want === 'today' ? want : (want === 'record' && ctx.canRecord) || (!want && ctx.canRecord) ? 'record' : 'term';
+          if (state.tab === 'record' && !ctx.canRecord) state.tab = 'term';
+          if (window.SCREEN_STUDENT && state.tab !== 'record') { state.tab = 'term'; state.scope = 'all'; state.open[window.SCREEN_STUDENT] = true; }
+          drawTabs(); setVisible();
+          if (state.tab !== 'record') loadList();
+        }
         if (!state.date) state.date = ctx.today;
         state.skewMs = Date.parse(ctx.today + 'T' + ctx.now + ':00') - Date.now();
         refreshTime();   // 기본 시각은 서버 시계(휴대폰 시계가 아님). 오늘이 아닌 날(어제 밤 일)은 사용자가 입력
@@ -64,6 +84,7 @@
 
     function draw(note, noteWarn) {
       var c = state.ctx;
+      if (state.tab !== 'record') return;
       clear(body);
       if (bar && bar.parentNode) bar.parentNode.removeChild(bar);
       bar = null; saveBtn = null; noticeBox = null; errSetters = {};
@@ -203,12 +224,149 @@
         var warn = r.notifyWarn ? ' 알림 메일이 가지 않았습니다. 필요하면 담당 선생님께 직접 알려 주세요.' : '';
         UI.toast(msg + warn, r.notifyWarn ? { kind: 'warn', ms: 8000 } : undefined);
         resetForm();
-        load(state.date, msg + warn, !!r.notifyWarn);
+        if (state.tab === 'record') load(state.date, msg + warn, !!r.notifyWarn); else loadList(msg + warn, !!r.notifyWarn);
         window.scrollTo(0, 0);
       }).catch(function (err) {
         state.busy = false; refresh();
         showFailure((err && err.message) || String(err));
       });
+    }
+
+    /* ───────── 탭 ───────── */
+    function drawTabs() {
+      clear(tabsBox);
+      var opts = [];
+      if (state.ctx && state.ctx.canRecord) opts.push({ value: 'record', label: '기록' });
+      opts.push({ value: 'term', label: state.ctx && state.ctx.periodWord === '이번 기간' ? '기간' : '학기' }, { value: 'today', label: '오늘' });
+      tabsBox.appendChild(UI.segmented({ label: '화면', value: state.tab, options: opts, onchange: function (v) { state.tab = v; showTab(); } }));
+    }
+    function setVisible() {
+      var rec = state.tab === 'record';
+      body.style.display = rec ? '' : 'none';
+      listBox.style.display = rec ? 'none' : '';
+    }
+    function showTab() {
+      var rec = state.tab === 'record';
+      setVisible();
+      if (!rec) { if (bar && bar.parentNode) bar.parentNode.removeChild(bar); bar = null; saveBtn = null; loadList(); }
+      else if (state.ctx) { load(state.date); }   // 다시 열면 서버 값으로 새로 그린다
+    }
+
+    /* ───────── 목록(C11b): [학기] 학생별 현황(펼치면 기록), [오늘] 그날 기록 ───────── */
+    function dayKo(ymd) { return (+ymd.slice(5, 7)) + '월 ' + (+ymd.slice(8, 10)) + '일(' + '일월화수목금토'.charAt(new Date(+ymd.slice(0, 4), +ymd.slice(5, 7) - 1, +ymd.slice(8, 10)).getDay()) + ')'; }
+    function hm(at) { return dayKo(at) + ' ' + at.slice(11, 16); }
+    function loadList(note, noteWarn) {
+      var my = ++state.listSeq;   // 기록 탭의 load()와 따로 센다(저장 직후 탭을 바꿔도 목록 응답이 버려지지 않게)
+      var filter = state.tab === 'today' ? { scope: 'today' } : { scope: 'term', termId: state.termId };   // 오늘 탭은 고른 기간과 상관없다
+      call('listOuts', filter).then(function (r) {
+        if (my !== state.listSeq || state.tab === 'record') return;
+        state.list = r; drawList(note, noteWarn);
+      }).catch(function (err) { if (my !== state.listSeq) return; clear(listBox); showError(listBox, err); });
+    }
+    function toggleRow(id) { state.open[id] = !state.open[id]; drawList(); }
+    function drawList(note, noteWarn) {
+      var r = state.list;
+      clear(listBox);
+      if (note) listBox.appendChild(el('div', { class: 'notice ' + (noteWarn ? 'warn' : 'info'), text: note }));
+      if (!r.term) { listBox.appendChild(UI.emptyState('운영 기간이 없습니다.')); return; }
+      var head = el('div', { class: 'card' }, [el('h2', { text: r.term.name }),
+        el('div', { class: 'muted', text: dayKo(r.term.start_date) + ' ~ ' + dayKo(r.term.end_date) + (r.term.closed ? ' · 끝난 기간(조회만)' : '') })]);
+      if (r.terms.length > 1 && state.tab === 'term') {
+        var sel = el('select', { 'aria-label': '운영 기간' }, r.terms.map(function (t) { return el('option', { value: t.id, text: t.name }); }));
+        sel.value = r.term.id;
+        sel.addEventListener('change', function () { state.termId = sel.value; loadList(); });
+        head.appendChild(UI.field('기간', sel));
+      }
+      listBox.appendChild(head);
+      if (state.tab === 'today') { drawToday(r); return; }
+      // [학기]: 숫자 3개 → (내 담당 | 전체) → 학생 줄(펼치면 기록)
+      listBox.appendChild(el('div', { class: 'stats', style: 'margin-bottom:12px;grid-template-columns:repeat(3,1fr)' }, [statBox(r.stats.records, 'OUT 기록'), statBox(r.stats.out1Students, '1OUT 학생'), statBox(r.stats.out2Students, '퇴실 대상')]));
+      var hasMine = !!r.hasMine;   // 내 담당 학생이 있으면(OUT이 0건이어도) 내 담당/전체를 보인다
+      if (hasMine) {
+        listBox.appendChild(UI.segmented({ label: '보기', value: state.scope, options: [{ value: 'mine', label: '내 담당' }, { value: 'all', label: '전체' }],
+          onchange: function (v) { state.scope = v; drawList(); } }));
+      }
+      var rows = r.summary.filter(function (x) { return !hasMine || state.scope === 'all' || x.isMine; });
+      var card = el('div', { class: 'card' });
+      if (!rows.length) card.appendChild(UI.emptyState(hasMine && state.scope === 'mine' ? '내 담당 학생 중 OUT이 기록된 학생이 없습니다.' : '이 기간에 기록된 OUT이 없습니다.'));
+      else {
+        var ul = el('ul', { class: 'list' });
+        rows.forEach(function (x) { ul.appendChild(studentRow(x, r)); });
+        card.appendChild(ul);
+      }
+      listBox.appendChild(card);
+    }
+    function studentRow(x, r) {
+      var open = !!state.open[x.studentId];
+      var pill = x.left ? UI.statusPill('mute', '퇴실 처리됨') : x.count >= 2 ? UI.statusPill('out2') : UI.statusPill('out1');
+      var li = el('li', { class: 'out-item' }, [
+        el('button', { type: 'button', class: 'out-rowbtn', 'aria-expanded': open ? 'true' : 'false', onclick: function () { toggleRow(x.studentId); } }, [
+          el('span', { class: 'out-line' }, [el('b', { class: 'out-who', text: UI.util.studentLabel(x.student) }), pill]),
+          x.latest ? el('span', { class: 'muted', text: '가장 최근: ' + dayKo(x.latest.occurredAt) + ' ' + x.latest.ruleName + (x.latest.source === 'F1자동' ? '(자동)' : '') }) : null
+        ])
+      ]);
+      if (open) {
+        var mine = r.items.filter(function (i) { return i.studentId === x.studentId; });
+        li.appendChild(el('ul', { class: 'list out-sub' }, mine.map(function (i) { return itemRow(i); })));
+      }
+      return li;
+    }
+    function drawToday(r) {
+      var live = r.items.filter(function (i) { return i.status === '유효'; }).length;
+      var card = el('div', { class: 'card' }, [el('h2', { style: 'word-break:keep-all', text: dayKo(r.date || state.ctx && state.ctx.today || r.term.start_date) + ' ' + live + '건' + (live !== r.items.length ? ' · 취소 ' + (r.items.length - live) + '건' : '') })]);
+      if (!r.items.length) {
+        card.appendChild(UI.emptyState('오늘 기록된 OUT이 없습니다.', state.ctx && state.ctx.canRecord ? { text: 'OUT 기록하기', onclick: function () { state.tab = 'record'; drawTabs(); showTab(); } } : null));
+      } else {
+        var ul = el('ul', { class: 'list' });
+        r.items.forEach(function (i) { ul.appendChild(itemRow(i, true)); });
+        card.appendChild(ul);
+      }
+      listBox.appendChild(card);
+    }
+    /** 기록 한 줄. withStudent: 오늘 탭처럼 학생 이름을 앞에 */
+    function itemRow(i, withStudent) {
+      var gone = i.status === '취소';
+      var li = el('li', { class: 'out-item' }, [
+        el('div', { class: 'out-line' }, [
+          el('b', { class: 'out-who' + (gone ? ' out-cancelled' : ''), text: withStudent ? i.occurredAt.slice(11, 16) + ' · ' + UI.util.studentLabel(i.student) : hm(i.occurredAt) }),
+          gone ? UI.statusPill('canceled') : null,
+          UI.statusPill('mute', i.source === 'F1자동' ? '자동' : '직접')
+        ]),
+        el('div', { class: gone ? 'out-cancelled' : '', text: i.ruleName }),
+        i.memo ? el('div', { class: 'muted', text: '메모: ' + i.memo }) : null,
+        el('div', { class: 'muted', text: '적발 ' + i.detectedBy + ' · 입력 ' + i.enteredBy }),
+        gone ? el('div', { class: 'muted', text: '취소 사유: ' + (i.cancelReason || '') }) : null
+      ]);
+      if (i.canCancel) li.appendChild(el('button', { type: 'button', class: 'btn secondary row-btn', text: '취소 처리', 'aria-label': UI.util.studentLabel(i.student) + ' ' + hm(i.occurredAt) + ' OUT 취소', onclick: function () { openCancel(i); } }));
+      return li;
+    }
+    function openCancel(i) {
+      var sheet = null, busy = false;
+      var reason = el('textarea', { maxlength: '200', 'aria-label': '취소 사유' });
+      var rf = UI.field('취소 사유(2~200자)', reason, { hint: '0/200' });
+      var hint = rf.querySelector('.hint');
+      var auto = i.source === 'F1자동';
+      var content = el('div', {}, [
+        el('div', { text: UI.util.studentLabel(i.student) + ' · ' + hm(i.occurredAt) + ' · ' + i.ruleName }),
+        el('div', { class: 'muted', style: 'margin:8px 0', text: '기록은 지워지지 않고 취소로 남으며, OUT 수에서만 빠집니다.' }),
+        auto ? el('div', { class: 'notice warn', text: '자동 OUT은 그 특이사항을 취소하면 함께 취소됩니다. 여기서 취소하면 특이사항을 다시 확정해도 OUT이 다시 생기지 않습니다.' }) : null,
+        rf
+      ]);
+      function refresh() { if (hint) hint.textContent = reason.value.length + '/200'; if (sheet) sheet.buttons[1].disabled = busy || reason.value.trim().length < 2; }
+      reason.addEventListener('input', refresh);
+      sheet = UI.bottomSheet({ title: 'OUT 취소 처리', content: content, actions: [
+        { text: '돌아가기', kind: 'secondary', onclick: function () { sheet.close(); } },
+        { text: '취소 처리', kind: 'danger', disabled: true, onclick: function () {
+          if (busy) return; busy = true; refresh(); rf.setError('');
+          call('cancelOut', i.termId, i.id, reason.value.trim()).then(function (r) {
+            busy = false;
+            if (!r.ok) { refresh(); rf.setError(r.errors.map(function (e) { return e.message; }).join(' ')); return; }
+            sheet.close(); UI.toast('취소했습니다.');
+            loadList('취소했습니다. 이 학생은 ' + (r.after.label ? '지금 ' + r.after.label + '입니다.' : '이제 OUT이 없습니다.'));
+            window.scrollTo(0, 0);
+          }).catch(function (e) { busy = false; refresh(); rf.setError((e && e.message) || String(e)); });
+        } }] });
+      sheet.open(); refresh();
     }
 
     load('');
