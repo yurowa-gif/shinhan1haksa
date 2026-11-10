@@ -288,3 +288,13 @@ test('홈 숫자는 퇴실 처리된 학생(오늘 퇴실·내일부터 적용�
   const tt = call(z, T1, 'listOuts', { scope: 'term', termId: t2.id });
   assert.deepStrictEqual([tt.hasMine, tt.summary.find((q) => q.studentId === z.mine.id).isMine], [false, false]);
 });
+
+test('홈 오늘 건수는 [오늘] 탭 건수와 같다(퇴실 처리된 학생의 오늘 행도 센다), 1OUT·퇴실 대상 학생 수에서만 뺀다', () => {
+  const x = makeEnv();
+  x.add(x.mine, { occurred_at: '2027-03-02T20:00:00' }); x.add(x.mine); x.add(x.other);
+  x.env.asOwner((c) => c.appendRecord_('status_changes', { student_id: x.mine.id, item: '학사', value: '퇴실', effective_date: '2027-03-04', reason: '2OUT 퇴실', memo: '[2OUT] out:x note:y', status: '유효' }, ADMIN));
+  const home = plain(x.env.call(ADMIN, 'getHomeData', 'admin')).out;
+  const today = call(x, ADMIN, 'listOuts', { scope: 'today' });
+  assert.deepStrictEqual([home.today, today.items.filter((i) => i.status === '유효').length], [2, 2], '오늘 탭과 같은 건수');
+  assert.deepStrictEqual([home.out2, home.out1], [0, 1], '퇴실 처리된 학생은 학생 수에서만 빠진다');
+});
