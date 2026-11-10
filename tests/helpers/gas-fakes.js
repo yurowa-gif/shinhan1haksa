@@ -32,7 +32,11 @@
  * - LockService는 늘 얻을 수 있다. env.lock.failNext = n이면 다음 n번 실패("다른 사람이 저장 중" 시험).
  *   createGasEnv({strictLock:true}) 또는 env.strictLock = true면 락 없이 시트에 쓰는 순간 오류.
  * - Session: env.as(email)의 접속자 = email, 실행 계정 = 소유자("나로 실행"). email ''은 접속자 이메일을 못 받은 경우(PRD 6.1).
- * - 흉내 내지 않는 서비스(DriveApp, UrlFetchApp, Utilities.newBlob, ScriptApp.getOAuthToken 등)는 '[gas-fakes] …' 오류.
+ * - DriveApp(O1 백업용 최소): getFileById·getFolderById·createFolder, 폴더 getFiles/createFile/getId/getName, 파일 makeCopy·setTrashed·isTrashed·
+ *   getName·getId·getSharingAccess·setSharing·getEditors·getViewers, Access.PRIVATE/ANYONE_WITH_LINK, Permission.NONE/VIEW. 데이터는 env.drive({files, folders}).
+ *   시험이 env.drive.addFile(name, {parent, sharing})로 파일을 만든다. 복사본이 공유로 생기는 상황은 env.drive.copySharing = 'ANYONE_WITH_LINK'.
+ *   ScriptApp 트리거(O1): getProjectTriggers·newTrigger(fn).timeBased().everyDays(1).atHour(h).create()·deleteTrigger. 기록은 env.triggers.
+ * - 흉내 내지 않는 서비스(그 밖의 DriveApp 기능, UrlFetchApp, Utilities.newBlob, ScriptApp.getOAuthToken 등)는 '[gas-fakes] …' 오류.
  * - vm 안에서 만든 Date·배열은 Node 쪽과 다른 realm이다. assert.deepStrictEqual 전에 JSON 복사(plain)하거나 call()을 쓴다.
  */
 const fs = require('fs');
@@ -292,10 +296,72 @@ function createGasEnv(opts) {
     userProps: {},
     cache: {},                    // key → {value, expires}
     mail: [],                     // MailApp.sendEmail 기록
+    triggers: [],                 // ScriptApp 트리거 {id, fn, hour, everyDays}
+    drive: null,                  // 아래에서 만든다
     lock: { held: false, tries: 0, failNext: 0 },   // failNext = n: 다음 n번 tryLock 실패(다른 사람이 저장 중)
     user: { active: '', effective: '' }
   };
   const ctxTime = () => env._nowMs;
+
+  /* ───────── DriveApp(최소) ───────── */
+  const drive = env.drive = { files: {}, folders: {}, seq: 0, copySharing: 'PRIVATE', failCopy: null };
+  const iter = (arr) => { let i = 0; return { hasNext: () => i < arr.length, next: () => arr[i++] }; };
+  function makeFile(name, o) {
+    const id = 'fake-file-' + pad(++drive.seq, 3);
+    const f = { id, name: String(name), trashed: false, parent: o.parent || null, sharing: o.sharing || 'PRIVATE', editors: [], viewers: [], content: o.content || '', mime: o.mime || '' };
+    drive.files[id] = f;
+    return wrapFile(f);
+  }
+  function wrapFile(f) {
+    return {
+      _f: f,
+      getId: () => f.id, getName: () => f.name, setName(n) { f.name = String(n); return this; },
+      isTrashed: () => f.trashed, setTrashed(t) { f.trashed = !!t; return this; },
+      getSharingAccess: () => f.sharing, getSharingPermission: () => 'NONE',
+      setSharing(a) { f.sharing = a; if (a === 'PRIVATE') { f.viewers = []; f.editors = []; } return this; },
+      getEditors: () => f.editors.map((e) => ({ getEmail: () => e })), getViewers: () => f.viewers.map((e) => ({ getEmail: () => e })),
+      getBlob: notFaked('File.getBlob'),
+      getBlobText: () => f.content,
+      getMimeType: () => f.mime,
+      makeCopy(name, folder) {
+        if (drive.failCopy && f.name.indexOf(drive.failCopy) >= 0) throw new Error('복사 실패(시험): ' + f.name);
+        const c = makeFile(name, { parent: folder ? folder.getId() : null, sharing: drive.copySharing, content: f.content, mime: f.mime });
+        if (drive.copySharing !== 'PRIVATE') c._f.viewers = ['someone@fakeschool.invalid'];
+        return c;
+      }
+    };
+  }
+  function makeFolder(name, o) {
+    const id = 'fake-folder-' + pad(++drive.seq, 3);
+    const d = { id, name: String(name), trashed: false, sharing: (o && o.sharing) || 'PRIVATE' };
+    drive.folders[id] = d;
+    return wrapFolder(d);
+  }
+  function wrapFolder(d) {
+    return {
+      getId: () => d.id, getName: () => d.name, isTrashed: () => d.trashed,
+      getSharingAccess: () => d.sharing,
+      getFiles: () => iter(Object.keys(drive.files).map((k) => drive.files[k]).filter((f) => f.parent === d.id && !f.trashed).map(wrapFile)),
+      createFile: (name, content, mime) => makeFile(name, { parent: d.id, content: String(content), mime: mime || '' })
+    };
+  }
+  drive.addFile = (name, o) => makeFile(name, o || {});
+  drive.addFolder = (name, o) => makeFolder(name, o);
+  drive.filesIn = (folderId) => Object.keys(drive.files).map((k) => drive.files[k]).filter((f) => f.parent === folderId);
+  const driveApi = {
+    Access: { PRIVATE: 'PRIVATE', ANYONE_WITH_LINK: 'ANYONE_WITH_LINK', ANYONE: 'ANYONE', DOMAIN: 'DOMAIN' },
+    Permission: { NONE: 'NONE', VIEW: 'VIEW', EDIT: 'EDIT' },
+    getFileById(id) { const f = drive.files[id] || drive.spreadsheetFile(id); if (!f) throw new Error('해당 항목을 찾을 수 없습니다: ' + id); return f._f ? f : wrapFile(f); },
+    getFolderById(id) { const d = drive.folders[id]; if (!d) throw new Error('해당 항목을 찾을 수 없습니다: ' + id); return wrapFolder(d); },
+    createFolder: (name) => makeFolder(name)
+  };
+  // 스프레드시트 파일: 처음 열 때 드라이브 파일로 한 번 등록한다(이름 = 스프레드시트 이름)
+  drive.spreadsheetFile = (id) => {
+    const ss = env.spreadsheets[id];
+    if (!ss) return null;
+    if (!drive.files[id]) drive.files[id] = { id, name: ss.getName(), trashed: false, parent: null, sharing: 'PRIVATE', editors: [], viewers: [], content: '', mime: 'application/vnd.google-apps.spreadsheet' };
+    return drive.files[id];
+  };
 
   const propsApi = (store) => ({
     getProperty: (k) => (Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null),
@@ -391,6 +457,16 @@ function createGasEnv(opts) {
     },
     ScriptApp: {
       getService: () => ({ getUrl: () => 'https://script.google.com/macros/s/FAKE/exec' }),
+      getProjectTriggers: () => env.triggers.map((t) => ({ getHandlerFunction: () => t.fn, getUniqueId: () => t.id })),
+      deleteTrigger: (tr) => { env.triggers = env.triggers.filter((t) => t.id !== tr.getUniqueId()); },
+      newTrigger: (fn) => {
+        const t = { id: 'fake-trigger-' + (env.triggers.length + 1) + '-' + (++env._uuidSeq), fn, hour: null, everyDays: null };
+        const b = {
+          timeBased: () => b, everyDays: (n) => { t.everyDays = n; return b; }, atHour: (h) => { t.hour = h; return b; }, nearMinute: () => b,
+          create: () => { env.triggers.push(t); return { getHandlerFunction: () => t.fn, getUniqueId: () => t.id }; }
+        };
+        return b;
+      },
       getOAuthToken: notFaked('ScriptApp.getOAuthToken')
     },
     HtmlService: {
@@ -408,7 +484,7 @@ function createGasEnv(opts) {
       getRemainingDailyQuota: () => 100
     },
     Logger: { log: () => {} },
-    DriveApp: new Proxy({}, { get: (_, k) => notFaked('DriveApp.' + String(k)) }),
+    DriveApp: new Proxy(driveApi, { get: (o, k) => (k in o ? o[k] : notFaked('DriveApp.' + String(k))) }),
     UrlFetchApp: new Proxy({}, { get: (_, k) => notFaked('UrlFetchApp.' + String(k)) })
   };
 

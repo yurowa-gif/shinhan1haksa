@@ -71,6 +71,14 @@
     "saveOutRule": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "installNightlyBackup": {
+      "use": "편집기",
+      "guard": "assertOwnerRun_"
+    },
+    "runBackupNow": {
+      "use": "편집기",
+      "guard": "assertOwnerRun_"
     }
   }
 }
