@@ -67,7 +67,7 @@
 | status_changes | source(연결 행) | 퇴실 정리 급식 행(미실시 중단 행)은 `F6`. F7 신청의 followUps는 **규칙이 준 `source`를 그대로** 쓴다(미실시 중단 행 = `F6`, 재입실 뒤 값 행 = `F7`, rules-api.md R11b). **F6 화면이 퇴실과 함께 만든 일반 석식 행은 `F7`**(신청이다 — MealRules.gs:168·183·261은 F6 행을 정리 행으로 보고 superseded·퇴실 취소 대상에서 뺀다) |
 | status_changes | doc_submitted | 대표 행 `TRUE`·`FALSE`. 연결 행(일반 석식 행 포함)과 명단업로드 행은 `''`. 서류 미제출 목록은 `FALSE`만 센다 |
 | status_changes | effective_date_auto | 규칙 계산값. effective_date와 다르면 교사가 고친 행(사유는 reason) |
-| status_changes | reason(자동) | 퇴실 정리 행 `학사 퇴실 조식 중단`·`학사 퇴실 석식 중단`(movePlan_), 2OUT 퇴실 대표 행 `2OUT 퇴실`(날짜·면담 정보 없음) |
+| status_changes | reason(자동) | 퇴실 정리 행 `학사 퇴실 조식 중단`·`학사 퇴실 석식 중단`(movePlan_), 2OUT 퇴실 대표 행 `2OUT 퇴실`(날짜·면담 정보 없음). `2OUT 퇴실` 사유와 `[2OUT]`으로 시작하는 memo는 **예약어**다. 일반 입퇴실 입력(관리자 포함)에서는 거부하고, C20(`out.dismiss` + 면담 관문) 서버만 쓴다 |
 | status_changes | memo(자동) | 2OUT 퇴실 대표 행 `[2OUT] out:<OUT id> note:<면담 id>`. 화면에 내보내지 않는다 |
 | status_changes | cancel_reason | `[자동] <원인 행 id> …`(규칙이 취소) 또는 사람이 적은 사유(2자 이상) |
 
