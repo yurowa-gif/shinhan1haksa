@@ -438,7 +438,7 @@ test('요청자가 이미 확정된 요청을 취소하려 하면 권한 없음�
   x.env.call(ATT, 'confirmException', x.term.id, r.groupId);
   const n = x.env.auditActions('denied:exception.cancel').length;
   const out = x.env.call(TEACHER, 'cancelException', x.term.id, r.groupId, '확정됐지만 취소하고 싶어요');
-  assert.strictEqual(out.ok, false); assert.ok(out.error.includes('이미 확정되어 출결 담당만 취소할 수 있습니다'), out.error);
+  assert.strictEqual(out.ok, false); assert.ok(out.error.includes('이미 확정되어 출결 담당 선생님만 취소할 수 있습니다'), out.error);
   assert.strictEqual(x.env.auditActions('denied:exception.cancel').length, n, '정상 안내라서 거부 기록을 남기지 않는다');
   assert.ok(x.tab().filter((q) => q.group_id === r.groupId).every((q) => q.status === '확정'));
   const other = x.env.call(HOMEROOM, 'getExceptionContext').students[0];

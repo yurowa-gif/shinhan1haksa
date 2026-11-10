@@ -472,7 +472,7 @@ function cancelException(termId, groupId, reason, onlyDate) {
       if (!live.length) return { ok: false, error: only + '은(는) 이 묶음에 없거나 이미 취소된 날입니다. 목록을 새로 불러와 주세요.' };
     }
     if (!excCanConfirm_(user) && live.some(function (r) { return r.status !== '요청'; })) {
-      return { ok: false, error: '이미 확정되어 출결 담당만 취소할 수 있습니다. 출결 담당 선생님께 취소를 요청해 주세요.' };
+      return { ok: false, error: '이미 확정되어 출결 담당 선생님만 취소할 수 있습니다. 출결 담당 선생님께 취소를 요청해 주세요.' };
     }
     if (why.length < EXC_CANCEL_REASON_MIN) return { ok: false, error: '취소 사유를 ' + EXC_CANCEL_REASON_MIN + '자 이상 적어 주세요.' };
     if (why.length > EXC_REASON_MAX) return { ok: false, error: '취소 사유는 ' + EXC_REASON_MAX + '자 안으로 적어 주세요.' };

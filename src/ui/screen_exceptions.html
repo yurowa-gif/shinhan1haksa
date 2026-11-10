@@ -150,7 +150,7 @@
         });
         var sel = c.types.filter(function (t) { return t.name === state.type; })[0];
         if (sel) typeNote.appendChild(el('div', { class: 'muted', text: '선택: ' + sel.name }));
-        if (sel && sel.auto) typeNote.appendChild(el('div', { class: 'notice warn', text: c.mode === 'confirm' ? '미인정 유형입니다. 저장하면 1OUT이 기록됩니다.' : '미인정 유형입니다. 출결 담당이 확정하면 1OUT이 기록됩니다.' }));
+        if (sel && sel.auto) typeNote.appendChild(el('div', { class: 'notice warn', text: c.mode === 'confirm' ? '미인정 유형입니다. 저장하면 1OUT이 기록됩니다.' : '미인정 유형입니다. 출결 담당 선생님이 확정하면 1OUT이 기록됩니다.' }));
       }
       drawTypes();
 
