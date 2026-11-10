@@ -2,7 +2,8 @@
 const assert = require('assert');
 const { test, loadGs, plain } = require('../helpers/harness');
 
-const ctx = loadGs(['src/Schema.gs', 'src/dev/FakeData.gs', 'src/dev/FakeSeats.gs', 'src/dev/FakeStage1.gs']);
+const ctx = loadGs(['src/Schema.gs', 'src/rules/DateRules.gs', 'src/rules/StatusRules.gs', 'src/rules/MealRules.gs', 'src/rules/MoveRules.gs',
+  'src/dev/FakeData.gs', 'src/dev/FakeSeats.gs', 'src/dev/FakeStage1.gs']);
 const fake = ctx.buildFakeData_({ ownerEmail: 'owner@test.invalid' });
 const d = plain(ctx.buildFakeStage1_(fake));
 const students = plain(fake.students);
@@ -60,12 +61,27 @@ test('초기 상태: 학생 전원 학사 입실, 중도 퇴실 1명(적용일 �
   for (const c of d.statusChanges) {
     assert.ok(['학사', '기숙사', '조식', '석식'].includes(c.item), c.item);
     assert.strictEqual(c.status, '유효');
-    assert.ok(['TRUE', 'FALSE'].includes(c.doc_submitted), 'vocabulary.md: doc_submitted');
+    assert.ok(['TRUE', 'FALSE', ''].includes(c.doc_submitted), 'vocabulary.md: doc_submitted');
     assert.ok(['명단업로드', 'F6', 'F7'].includes(c.source), c.source);
-    assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(c.effective_date) && c.requested_at.startsWith(c.effective_date));
+    assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(c.effective_date));
     assert.strictEqual(c.effective_date_auto, c.effective_date);
+    if (c.source === '명단업로드') assert.deepStrictEqual([c.requested_at, c.doc_submitted], ['', ''], '명단 행은 신청 일시·서류 없음');
   }
   assert.ok(d.statusChanges.filter((c) => c.item === '석식').every((c) => ['학사 석식', '일반 석식', '미실시'].includes(c.value)));
+  assert.strictEqual(d.statusChanges.filter((c) => c.doc_submitted === 'FALSE').length, 1, '서류 미제출 카드는 퇴실 대표 행 1건만');
+});
+
+test('29번 중도 퇴실 = movePlan_ 결과: 대표 행(서류 미제출) + 석식 정리 연결 행(결정 35: 3/8 월 15:00 신청 → 3/15)', () => {
+  const mine = d.statusChanges.filter((c) => c.student_id === d.leaverId && c.source !== '명단업로드');
+  const head = mine.find((c) => c.linked_change_id === '');
+  assert.deepStrictEqual([head.item, head.value, head.effective_date, head.requested_at, head.doc_submitted, head.source],
+    ['학사', '퇴실', '2027-03-10', '2027-03-08T15:00:00', 'FALSE', 'F6']);
+  const linked = mine.filter((c) => c !== head);
+  assert.ok(linked.length >= 1 && linked.every((c) => c.linked_change_id === head.id && c.doc_submitted === '' && c.requested_at === head.requested_at));
+  const all = d.statusChanges;
+  assert.strictEqual(ctx.statusOn_(all, d.leaverId, '학사', '2027-03-10'), '퇴실');
+  assert.strictEqual(ctx.statusOn_(all, d.leaverId, '석식', '2027-03-14'), '학사 석식');
+  assert.strictEqual(ctx.statusOn_(all, d.leaverId, '석식', '2027-03-15'), '미실시');
 });
 
 test('날짜별 일정 2건: 운영 안 함 1, 종료 22:00 1', () => {

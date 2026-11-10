@@ -1,9 +1,10 @@
-/** T1a 가짜 2단계 근무표(src/dev/FakeStage2.gs): 순수 함수 검사 + 편집기 함수를 gas-fakes에서 두 번 실행 */
+/** T1a·T1b 가짜 2단계 근무표·생활 기록(src/dev/FakeStage2.gs): 순수 함수 검사 + 편집기 함수를 gas-fakes에서 두 번 실행 */
 const assert = require('assert');
 const { test, loadGs, plain } = require('../helpers/harness');
 const { createGasEnv } = require('../helpers/gas-fakes');
 
-const ctx = loadGs(['src/Schema.gs', 'src/rules/DateRules.gs', 'src/rules/ScheduleRules.gs', 'src/rules/DutyRules.gs',
+const ctx = loadGs(['src/Schema.gs', 'src/rules/DateRules.gs', 'src/rules/ScheduleRules.gs', 'src/rules/StatusRules.gs',
+  'src/rules/MealRules.gs', 'src/rules/MoveRules.gs', 'src/rules/OutRules.gs', 'src/rules/DutyRules.gs',
   'src/dev/FakeData.gs', 'src/dev/FakeSeats.gs', 'src/dev/FakeStage1.gs', 'src/dev/FakeStage2.gs']);
 const TESTER = 'test.teacher@example.com';
 const fake = ctx.buildFakeData_({ ownerEmail: 'owner@test.invalid', teacherEmail: TESTER });
@@ -97,6 +98,68 @@ test('dutyRecord_ 합계 = 실제 근무자(원래 근무자 합계와 다름), 
   assert.ok(!rec.standby.find((s) => s.email === T1).dates.includes('2027-01-23'), '대신 근무한 날은 예비에서 뺌');
 });
 
+/* ---------- T1b: 2027-03 생활 기록 ---------- */
+const RULES = plain(ctx.DEFAULT_VIOLATION_RULES).map((r, i) => ({ id: 'rule-' + (i + 1), name: r[0], status: '' }));
+const life = plain(ctx.buildFakeStage2Life_(fake, RULES));
+const stage1 = plain(ctx.buildFakeStage1_(fake));
+
+test('생활 기록 학생은 1단계가 쓰는 학생(특이사항·고정 일정·퇴실·중도 입실)과 겹치지 않는다', () => {
+  const used = new Set([].concat(stage1.exceptions.map((e) => e.student_id), stage1.fixedSchedules.map((f) => f.student_id),
+    [stage1.leaverId, stage1.lateEntrantId]));
+  const mine = [life.out2Id, life.out1Id, life.pendingId].concat(life.noDocIds);
+  assert.strictEqual(new Set(mine).size, 5);
+  for (const id of mine) assert.ok(!used.has(id), id);
+});
+
+test('2027-03 직접 OUT: 2건 학생 1명(퇴실 대상) · 1건 학생 1명, 1학기·항목 참조·어휘', () => {
+  assert.strictEqual(life.term.name, '2027 1학기');
+  assert.strictEqual(life.violations.length, 3);
+  const ruleOf = Object.fromEntries(RULES.map((r) => [r.id, r.name]));
+  for (const v of life.violations) {
+    assert.strictEqual(v.term_id, life.term.id);
+    assert.strictEqual(ruleOf[v.rule_id], v.rule_name, 'rule_id ↔ rule_name');
+    assert.notStrictEqual(v.rule_name, RULES[0].name, '자동 항목(무단 지각·결석·이탈)은 직접 OUT에 쓰지 않음');
+    assert.deepStrictEqual([v.status, v.source, v.source_exception_id, v.cancel_reason], ['유효', '직접', '', '']);
+    assert.ok(/^2027-03-\d{2}T\d{2}:\d{2}:\d{2}$/.test(v.occurred_at) && v.occurred_at >= life.term.start_date);
+    assert.ok(v.detected_by && v.entered_by);
+  }
+  const lv = (id) => plain(ctx.outLevel_(life.violations, id, life.term.id));
+  assert.deepStrictEqual(lv(life.out2Id), { count: 2, level: 2, label: '퇴실 대상' });
+  assert.deepStrictEqual(lv(life.out1Id), { count: 1, level: 1, label: '1OUT' });
+  assert.strictEqual(new Set(life.violations.map((v) => v.student_id)).size, 2, '그 밖의 학생은 OUT 없음');
+  assert.throws(() => ctx.buildFakeStage2Life_(fake, []), /setup/, 'violation_rules가 비면 만들지 않음');
+});
+
+test('서류 미제출 F7 급식 신청 2건: 미제출이어도 적용(결정 3), 적용일 = 11:30 규칙(당일·다음 날)', () => {
+  const rows = life.statusChanges.filter((r) => r.doc_submitted === 'FALSE');
+  assert.strictEqual(rows.length, 2);
+  assert.deepStrictEqual(rows.map((r) => r.student_id), life.noDocIds);
+  const term2 = plain(fake.terms)[1].id;
+  assert.ok(plain(fake.enrollments).some((e) => e.term_id === term2 && e.student_id === life.noDocIds[1] && e.teacher_email === TESTER),
+    '서류 미제출 1건은 시험 학사 교사 담당 학생(홈 카드 확인용)');
+  assert.ok(rows.every((r) => r.doc_submitted === 'FALSE' && r.source === 'F7' && r.status === '유효' && r.linked_change_id === ''));
+  assert.deepStrictEqual(rows.map((r) => [r.requested_at, r.effective_date, r.effective_date_auto]), [
+    ['2027-03-08T10:00:00', '2027-03-08', '2027-03-08'], ['2027-03-09T14:00:00', '2027-03-10', '2027-03-10']]);
+  const all = stage1.statusChanges.concat(rows);
+  for (const r of rows) {
+    const before = ctx.ymdAddDays_(r.effective_date, -1);
+    assert.strictEqual(ctx.statusOn_(all, r.student_id, '석식', before), '학사 석식');
+    assert.strictEqual(ctx.statusOn_(all, r.student_id, '석식', r.effective_date), '일반 석식');
+  }
+  const ids = life.violations.concat(life.statusChanges, stage1.statusChanges, d.dutySlots).map((r) => r.id);
+  assert.strictEqual(new Set(ids).size, ids.length, 'id 고유');
+});
+
+test('F7 대기 행 1건: 수요일 미실시 신청 → 다다음 주 월요일(3/22), 그 전까지는 학사 석식', () => {
+  const p = life.statusChanges.filter((r) => r.doc_submitted !== 'FALSE');
+  assert.strictEqual(p.length, 1);
+  assert.deepStrictEqual([p[0].student_id, p[0].item, p[0].value, p[0].requested_at, p[0].effective_date, p[0].doc_submitted, p[0].source],
+    [life.pendingId, '석식', '미실시', '2027-03-10T09:00:00', '2027-03-22', 'TRUE', 'F7']);
+  const all = stage1.statusChanges.concat(life.statusChanges);
+  assert.strictEqual(ctx.statusOn_(all, life.pendingId, '석식', '2027-03-21'), '학사 석식');
+  assert.strictEqual(ctx.statusOn_(all, life.pendingId, '석식', '2027-03-22'), '미실시');
+});
+
 /** setup → seedFakeData (→ seedFakeStage1) 순서로 시드한다. 미등록 학생 등 다른 학생을 넣지 않는다(가짜 DB 판정은 정확히 일치). */
 function seededEnv(props, opts) {
   const env = createGasEnv({ owner: 'owner@example.com', now: '2026-12-20T10:00:00' });
@@ -111,14 +174,32 @@ const counts = (env) => [env.rows('duty_slots').length, env.rows('day_schedules'
 test('seedFakeStage2: 가짜 DB에 쓰고, 두 번 실행해도 중복 없음, 시트에서 읽은 기록 = 순수 함수 기록', () => {
   const env = seededEnv({}, { stage1: true });
   const before = env.rows('day_schedules').length;
-  assert.strictEqual(env.asOwner((c) => c.seedFakeStage2()), '가짜 2단계 데이터: duty_slots +62, day_schedules +1');
-  assert.strictEqual(env.asOwner((c) => c.seedFakeStage2()), '가짜 2단계 데이터: duty_slots +0, day_schedules +0');
+  const vtab = ctx.termSheetName_('violations', life.term.id);
+  assert.strictEqual(env.asOwner((c) => c.seedFakeStage2()),
+    '가짜 2단계 데이터: duty_slots +62, day_schedules +1, ' + vtab + ' +3, status_changes +3');
+  assert.strictEqual(env.asOwner((c) => c.seedFakeStage2()),
+    '가짜 2단계 데이터: duty_slots +0, day_schedules +0, ' + vtab + ' +0, status_changes +0');
+  const vs = env.rows(vtab);
+  const ruleIds = env.rows('violation_rules').map((r) => r.id);
+  assert.ok(vs.length === 3 && vs.every((v) => ruleIds.includes(v.rule_id)), 'rule_id는 setup이 만든 항목');
+  assert.strictEqual(env.as(T1, (c) => c.outLevel_(c.readAll_(vtab), life.out2Id, life.term.id).label), '퇴실 대상');
   assert.deepStrictEqual(counts(env), [62, before + 1]);
   const rec = env.as(T2, (c) => plain(c.dutyRecord_(c.readAll_('duty_slots'), '2027-01')));
   const pure = plain(ctx.dutyRecord_(d.dutySlots, '2027-01'));
   assert.deepStrictEqual(rec.teachers, pure.teachers);
   assert.deepStrictEqual(rec.swaps, pure.swaps);
   assert.deepStrictEqual(rec.standby, pure.standby);
+});
+
+test('seedFakeStage2: 1단계 가짜 데이터가 없으면 근무표만 쓰고 생활 기록은 건너뛴다(나중에 1단계 뒤 다시 실행하면 채움)', () => {
+  const env = seededEnv();
+  assert.strictEqual(env.asOwner((c) => c.seedFakeStage2()),
+    '가짜 2단계 데이터: duty_slots +62, day_schedules +1, 생활 기록 건너뜀(seedFakeStage1을 먼저 실행하면 함께 씁니다)');
+  assert.strictEqual(env.rows('status_changes').length, 0);
+  env.asOwner((c) => c.seedFakeStage1());
+  const vtab = ctx.termSheetName_('violations', life.term.id);
+  assert.strictEqual(env.asOwner((c) => c.seedFakeStage2()),
+    '가짜 2단계 데이터: duty_slots +0, day_schedules +0, ' + vtab + ' +3, status_changes +3');
 });
 
 test('seedFakeStage2: 가짜가 아닌 학생이 하나라도 있거나 학생이 없으면 쓰지 않는다', () => {
@@ -144,6 +225,29 @@ test('seedFakeStage2: 이미 있는 1월 근무 칸·1/1 일정(다른 행)이 �
     memo: '', status: '유효' }, env2.owner));
   assert.match(env2.errorOf(env2.owner, (c) => c.seedFakeStage2()).message, /다른 행/);
   assert.deepStrictEqual(counts(env2), [0, 1]);
+});
+
+test('seedFakeStage2: env.seedFake()처럼 "가짜 데이터(등록 없음)" 학생이 섞이면 거부(가짜 판정은 정확히 일치)', () => {
+  const env = createGasEnv({ owner: 'owner@example.com', now: '2026-12-20T10:00:00' });
+  env.seedFake({ stage1: true });
+  assert.match(env.errorOf(env.owner, (c) => c.seedFakeStage2()).message, /가짜 학생/);
+  assert.deepStrictEqual(counts(env), [0, 2], '1단계 일정 2행만, 2단계는 0행');
+  assert.strictEqual(ctx.fake1DbIsAllFake_([{ memo: '가짜 데이터' }, { memo: '가짜 데이터(등록 없음)' }]), false);
+  assert.strictEqual(ctx.fake1DbIsAllFake_([{ memo: '가짜 데이터' }]), true);
+});
+
+test('seedFakeStage2: 시험 교사 비활성·담당자 역할 없음·가짜 기간 없음이면 쓰지 않는다', () => {
+  const userId = (env, email) => env.rows('users').find((u) => u.email === email).id;
+  const a = seededEnv({}, { stage1: true });
+  a.asOwner((c) => c.updateRecord_('users', userId(a, TESTER), { active: 'FALSE' }, a.owner));
+  assert.match(a.errorOf(a.owner, (c) => c.seedFakeStage2()).message, /학사 교사로 없습니다/);
+  const b = seededEnv({}, { stage1: true });
+  b.asOwner((c) => c.updateRecord_('users', userId(b, T2), { roles: 'hall_teacher' }, b.owner));
+  assert.match(b.errorOf(b.owner, (c) => c.seedFakeStage2()).message, /근무표 담당자/);
+  const e = seededEnv({}, { stage1: true });
+  e.asOwner((c) => c.getSheet_('db', 'terms').getRange(3, 1).setValue('zzzzzzzz-0000-4000-8000-000000000000'));   // 둘째 가짜 기간 id를 바꿈
+  assert.match(e.errorOf(e.owner, (c) => c.seedFakeStage2()).message, /가짜 운영 기간/);
+  for (const env of [a, b, e]) assert.deepStrictEqual(counts(env).slice(0, 1), [0]);
 });
 
 test('seedFakeStage2: TEST_TEACHER_EMAIL이 없거나 users에 학사 교사로 없으면 쓰지 않는다', () => {
