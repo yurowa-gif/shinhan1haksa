@@ -265,7 +265,7 @@ test('결정 40 첫 동작 ②: 넓힌 직후 첫 동작이 다른 묶음의 취
   const x = makeEnv();
   x.env.setNow('2027-03-03T20:00:00');
   assert.strictEqual(save(x, ATT, x.input(x.a.id, { type: '기타', reason: '가짜 사유', blocks: '22:00-24:00' })).r.out.created, 0);   // 넓히기 전 확정
-  const other = save(x, ATT, x.input(x.b.id, { type: '병결', from: '2027-03-22', to: '2027-03-22' })).r;   // 다른 묶음
+  const other = save(x, ATT, x.input(x.a.id, { type: '병결', from: '2027-03-22', to: '2027-03-22' })).r;   // 같은 학생의 다른 묶음(취소하면 그 학생의 OUT이 다시 맞춰진다)
   const row = x.env.rows('settings', 'config').find((q) => q.key === 'exception.auto_out_types');
   x.env.setNow('2027-03-04T09:00:00');
   x.env.asOwner((c) => c.updateRecord_('settings', row.id, { value: row.value + ',기타' }, ADMIN, 'config'));
