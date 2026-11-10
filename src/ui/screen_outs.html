@@ -297,6 +297,7 @@
     }
     /* ───────── OUT 항목 관리(C15, 관리자): 추가·이름·설명·순서·켜기/끄기 ───────── */
     function loadRules(note) {
+      if (state.tab !== 'rules') return;   // 탭을 바꾼 뒤 늦게 온 콜백이 다른 탭 아래에 항목 목록을 그리지 않게
       var my = ++state.listSeq;
       call('getOutRules').then(function (r) {
         if (my !== state.listSeq || state.tab !== 'rules') return;
@@ -317,7 +318,9 @@
         var row = el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-top:8px' });
         row.appendChild(el('button', { type: 'button', class: 'btn secondary row-btn', style: 'margin-top:0', text: '수정', 'aria-label': x.name + ' 수정', onclick: function () { openRule(x); } }));
         if (!x.isAuto) row.appendChild(el('button', { type: 'button', class: 'btn secondary row-btn', style: 'margin-top:0', text: x.active ? '끄기' : '켜기', 'aria-label': x.name + (x.active ? ' 끄기' : ' 켜기'),
-          onclick: function () { call('saveOutRule', { id: x.id, name: x.name, description: x.description, active: !x.active }).then(function (r) { if (!r.ok) UI.toast(r.errors[0].message, { kind: 'warn', ms: 5000 }); loadRules(r.ok ? (x.active ? '꺼졌습니다. 입력 목록에서 빠집니다.' : '켰습니다. 입력 목록에 나옵니다.') : ''); }).catch(function (e) { UI.toast((e && e.message) || String(e), { kind: 'warn', ms: 5000 }); }); } }));
+          onclick: function (e, btn) {
+            var b = e && e.currentTarget; if (b) { if (b.disabled) return; b.disabled = true; }   // 저장 중에는 다시 누를 수 없게(두 번 눌러 변경 기록이 둘 생기지 않게)
+            call('saveOutRule', { id: x.id, name: x.name, description: x.description, active: !x.active }).then(function (r) { if (!r.ok) UI.toast(r.errors[0].message, { kind: 'warn', ms: 5000 }); loadRules(r.ok ? (x.active ? '꺼졌습니다. 입력 목록에서 빠집니다.' : '켰습니다. 입력 목록에 나옵니다.') : ''); if (!r.ok && b) b.disabled = false; }).catch(function (err) { if (b) b.disabled = false; UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }); } }));
         li.appendChild(row);
         ul.appendChild(li);
       });

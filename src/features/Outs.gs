@@ -477,11 +477,15 @@ var VIO_RULE_DESC_MAX = 100;
 
 function vioRuleView_(r) {
   return { id: r.id, name: String(r.name), description: String(r.description || ''), active: isTruthy_(r.active), sortOrder: +r.sort_order || 0,
-    isAuto: String(r.name).trim() === DEFAULT_VIOLATION_RULES[0][0] };
+    isAuto: vioRuleKey_(r.name) === vioRuleKey_(DEFAULT_VIOLATION_RULES[0][0]) };
 }
 
 /** 항목 이름 비교용: 앞뒤·중복 공백을 정리한다 */
-function vioRuleKey_(name) { return String(name === undefined || name === null ? '' : name).replace(/\s+/g, ' ').trim(); }
+function vioRuleKey_(name) {
+  var t = String(name === undefined || name === null ? '' : name);
+  try { t = t.normalize('NFC'); } catch (e) { /* 정규화를 못 하는 환경이면 그대로 */ }
+  return t.replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').replace(/\s+/g, ' ').trim();   // 영폭 문자 제거·공백 정리
+}
 
 /** 관리자: 항목 전체(꺼진 것 포함, sort_order 순). 자동 항목은 isAuto. */
 function getOutRules() {
@@ -499,26 +503,30 @@ function saveOutRule(input) {
   var user = requirePermission_('out.rules');
   input = input || {};
   var errors = [], add = function (field, message) { errors.push({ field: field, message: message }); };
-  var name = vioRuleKey_(input.name), desc = String(input.description === undefined || input.description === null ? '' : input.description).trim();
+  var name = vioRuleKey_(input.name);
+  var hasDesc = input.description !== undefined && input.description !== null;
+  var desc = hasDesc ? String(input.description).trim() : '';
   if (!name) add('name', '항목 이름을 적어 주세요.');
   else if (name.length > VIO_RULE_NAME_MAX) add('name', '항목 이름은 ' + VIO_RULE_NAME_MAX + '자 안으로 적어 주세요.');
   if (desc.length > VIO_RULE_DESC_MAX) add('description', '설명은 ' + VIO_RULE_DESC_MAX + '자 안으로 적어 주세요.');
   var order = input.sortOrder === undefined || input.sortOrder === null || input.sortOrder === '' ? null : Number(input.sortOrder);
   if (order !== null && (!isFinite(order) || order % 1 !== 0 || order < 0 || order > 999)) add('sortOrder', '순서는 0~999 사이의 정수로 적어 주세요.');
+  if (input.active !== undefined && input.active !== null && input.active !== true && input.active !== false) add('active', '켜기·끄기 값이 올바르지 않습니다.');
   if (errors.length) return { ok: false, errors: errors };
   return withLock_(function () {
     invalidate_('db', 'violation_rules');
-    var rows = readAll_('violation_rules'), autoName = DEFAULT_VIOLATION_RULES[0][0];
+    var rows = readAll_('violation_rules'), autoName = vioRuleKey_(DEFAULT_VIOLATION_RULES[0][0]);
     var cur = input.id ? rows.filter(function (r) { return String(r.id) === String(input.id); })[0] : null;
     if (input.id && !cur) return { ok: false, errors: [{ field: 'id', message: '항목을 찾을 수 없습니다. 새로 고친 뒤 다시 해 주세요.' }] };
-    var isAuto = !!cur && String(cur.name).trim() === autoName;
+    var isAuto = !!cur && vioRuleKey_(cur.name) === autoName;
     if (isAuto && name !== autoName) return { ok: false, errors: [{ field: 'name', message: '자동 항목의 이름은 바꿀 수 없습니다.' }] };
-    if (!isAuto && name === autoName) return { ok: false, errors: [{ field: 'name', message: '자동 항목과 같은 이름은 쓸 수 없습니다.' }] };
+    if (!isAuto && (name === autoName || name.indexOf(autoName + '(') === 0)) return { ok: false, errors: [{ field: 'name', message: '자동 항목과 같은 이름은 쓸 수 없습니다.' }] };
     if (rows.some(function (r) { return (!cur || r.id !== cur.id) && vioRuleKey_(r.name) === name; })) return { ok: false, errors: [{ field: 'name', message: '같은 이름의 항목이 이미 있습니다.' }] };
-    var active = input.active === undefined || input.active === null ? (cur ? isTruthy_(cur.active) : true) : (input.active === true || String(input.active).toUpperCase() === 'TRUE');
-    if (isAuto && !active) return { ok: false, errors: [{ field: 'active', message: '자동 항목은 끌 수 없습니다.' }] };
-    var sort = order === null ? (cur ? +cur.sort_order || 0 : rows.reduce(function (m, r) { return Math.max(m, +r.sort_order || 0); }, 0) + 1) : order;
-    var rec = { name: name, description: desc, active: active ? 'TRUE' : 'FALSE', sort_order: String(sort) };
+    var active = input.active === undefined || input.active === null ? (cur ? isTruthy_(cur.active) : true) : input.active === true;
+    if (isAuto) active = true;   // 자동 항목은 늘 켜짐(시트에서 꺼졌다면 저장 때 되돌린다)
+    if (isAuto && input.active === false) return { ok: false, errors: [{ field: 'active', message: '자동 항목은 끌 수 없습니다.' }] };
+    var sort = order === null ? (cur ? +cur.sort_order || 0 : Math.min(999, rows.reduce(function (m, r) { return Math.max(m, +r.sort_order || 0); }, 0) + 1)) : order;
+    var rec = { name: name, description: hasDesc ? desc : (cur ? String(cur.description || '') : ''), active: active ? 'TRUE' : 'FALSE', sort_order: String(sort) };
     var saved = cur ? updateRecord_('violation_rules', cur.id, rec, user.email) : appendRecord_('violation_rules', rec, user.email);
     return { ok: true, rule: vioRuleView_(Object.assign({ id: saved.id }, saved)) };
   });

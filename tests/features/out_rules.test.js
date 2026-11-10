@@ -89,3 +89,33 @@ test('이름을 바꿔도 옛 OUT 행의 rule_name은 그대로', () => {
   assert.strictEqual(save(x, { id: phone.id, name: '휴대폰 사용' }).ok, true);
   assert.strictEqual(x.env.rows(tab)[0].rule_name, phone.name);
 });
+
+test('이름 비교는 NFC·영폭 문자·공백을 정리하고, 자동 이름으로 시작하는 "무단 지각·결석·이탈(…" 이름은 거부, 설명을 안 보내면 기존 값 유지, active는 true/false만', () => {
+  const x = makeEnv();
+  const phone = x.rules().find((q) => q.name.startsWith('휴대폰'));
+  const field = (r) => r.errors && r.errors[0].field;
+  assert.strictEqual(field(save(x, { name: '기숙사​ 생활 위반' })), 'name', '영폭 문자를 넣어도 같은 이름');
+  assert.strictEqual(field(save(x, { name: '무​단 지각·결석·이탈' })), 'name', '영폭 문자로 자동 이름 흉내');
+  assert.strictEqual(field(save(x, { name: AUTO + '(흉내)' })), 'name', '자동 이름 + 괄호');
+  const d = save(x, { id: phone.id, name: phone.name, description: '설명 있음' });
+  assert.strictEqual(d.rule.description, '설명 있음');
+  assert.strictEqual(save(x, { id: phone.id, name: phone.name }).rule.description, '설명 있음', '설명을 안 보내면 기존 값 유지');
+  for (const bad of ['FALSE', 'no', 0, 1, 'true']) assert.strictEqual(field(save(x, { id: phone.id, name: phone.name, active: bad })), 'active', String(bad));
+});
+
+test('시트에서 꺼진 자동 항목은 저장 때 켜짐으로 되돌린다, 새 항목 기본 순서는 999를 넘지 않는다, 락을 못 잡으면 오류·0쓰기', () => {
+  const x = makeEnv();
+  const auto = x.rules().find((q) => q.name === AUTO);
+  x.env.asOwner((c) => c.updateRecord_('violation_rules', auto.id, { active: 'FALSE' }, ADMIN));
+  const r = save(x, { id: auto.id, name: AUTO, description: '다시 저장' });
+  assert.deepStrictEqual([r.ok, r.rule.active], [true, true]);
+  assert.strictEqual(x.rules().find((q) => q.id === auto.id).active, 'TRUE');
+  const big = x.rules().find((q) => q.name.startsWith('휴대폰'));
+  x.env.asOwner((c) => c.updateRecord_('violation_rules', big.id, { sort_order: '999' }, ADMIN));
+  assert.strictEqual(save(x, { name: '순서 상한' }).rule.sortOrder, 999);
+  const w = JSON.stringify(x.rules());
+  x.env.lock.failNext = 1;
+  const err = x.env.errorOf(ADMIN, (c) => c.saveOutRule({ name: '락 실패' }));
+  assert.ok(err && /다른 사람이 저장 중/.test(err.message), err && err.message);
+  assert.strictEqual(JSON.stringify(x.rules()), w);
+});
