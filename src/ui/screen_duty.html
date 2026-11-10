@@ -16,9 +16,9 @@
   .row-btn { flex: 0 0 auto; white-space: nowrap; }   /* 줄 끝 버튼(교대·대신 근무)이 줄어들어 글자가 깨지지 않게 */
   .duty-slot .row-btn { margin-left: auto; min-height: var(--tap); }
   .duty-slot .slot-who { display: flex; gap: 8px; align-items: center; flex: 1 1 0; flex-wrap: wrap; min-width: 0; word-break: keep-all; }
-  @media (max-width: 480px) {   /* 좁은 화면: 라벨은 윗줄, 이름·칩·버튼은 아랫줄 */
-    ul.list li.duty-slot { flex-wrap: wrap; row-gap: 0; }
-    .duty-slot .slot-label { flex: 1 0 100%; }
+  @media (max-width: 480px) {   /* 좁은 화면, 담당자만(줄마다 [대신 근무] 버튼이 있다): 라벨은 윗줄, 이름·칩·버튼은 아랫줄. 학사 교사는 버튼 없는 줄이 많아 한 줄 그대로 */
+    ul.list.duty-proxy li.duty-slot { flex-wrap: wrap; row-gap: 0; }
+    .duty-proxy .duty-slot .slot-label { flex: 1 0 100%; }
   }
   .duty-gap { word-break: keep-all; }
   .nowrap { white-space: nowrap; }
@@ -146,7 +146,7 @@
         card.appendChild(el('div', { class: 'muted', text: (x.memo ? '메모: ' + x.memo + ' · ' : '') + (state.data.canOperate ? '눌러서 운영으로 바꿀 수 있습니다.' : '근무표 담당자·관리자가 바꿉니다.') }));
       } else {
         if (x.memo) card.appendChild(el('div', { class: 'muted', text: '메모: ' + x.memo }));
-        card.appendChild(el('ul', { class: 'list' }, x.slots.map(function (s) { return slotRow(s, x); })));
+        card.appendChild(el('ul', { class: 'list' + (state.data.canEdit ? ' duty-proxy' : '') }, x.slots.map(function (s) { return slotRow(s, x); })));
       }
       if (editable) {
         card.setAttribute('role', 'button'); card.setAttribute('tabindex', '0');
