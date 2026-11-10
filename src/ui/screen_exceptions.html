@@ -55,6 +55,7 @@
     }
     function drawTab() {
       clear(body); removeBar();
+      if (state.tab !== 'input' && state.lastWarn) { body.appendChild(el('div', { class: 'notice warn', text: state.lastWarn })); state.lastWarn = ''; }   // 확정·취소 뒤 경고는 한 번 화면에도 남긴다
       if (state.tab === 'input') drawInput();
       else if (state.tab === 'requests') drawRequests('pending', '처리할 요청이 없습니다.');
       else if (state.tab === 'mine') drawRequests('mine', '아직 보낸 요청이 없습니다. "요청 보내기"에서 보낼 수 있습니다.');
@@ -252,7 +253,7 @@
       var item = el('div', { class: 'exc-item' });
       item.appendChild(el('div', { class: 'exc-line' }, [
         el('b', { class: cancelled ? 'exc-cancelled' : '', text: g.display + ' · ' + g.short }),
-        el('span', {}, [pillFor(g), g.auto && !cancelled ? ' ' : null, g.auto && !cancelled ? (g.status === '확정' ? (g.hasOut ? UI.statusPill('out1', '1OUT') : UI.statusPill('mute', '미인정')) : UI.statusPill('out1', '확정되면 1OUT')) : null])
+        el('span', {}, [pillFor(g), !cancelled && (g.hasOut || (g.auto && g.status !== '확정')) ? ' ' : null, !cancelled ? (g.hasOut ? UI.statusPill('out1', '1OUT') : (g.auto && g.status !== '확정' ? UI.statusPill('out1', '확정되면 1OUT') : null)) : null])
       ]));
       // 묶음 전체 기간을 보인다(하루 카드에서도): 취소·확정이 묶음 단위라는 것을 알 수 있게
       item.appendChild(el('div', { class: cancelled ? 'muted exc-cancelled' : 'muted', text: datesText(g) + ' · ' + g.blocksText + (g.requestedByName ? ' · ' + g.requestedByName : '') }));
@@ -277,6 +278,7 @@
           onconfirm: function (reason) { call('cancelException', g.termId, g.groupId, reason, only || '').then(function (r) {
             if (!r.ok) { UI.toast(r.error, { kind: 'warn', ms: 5000 }); } else {
               var cw = autoWarn(r.out);
+              state.lastWarn = cw;   // 경고는 토스트에만 두지 않고 화면에도 남긴다
               UI.toast('취소 처리했습니다.' + (r.out && r.out.canceled ? ' 연결된 자동 OUT도 취소되었습니다.' : '') + (cw ? ' ' + cw : ''), { kind: cw ? 'warn' : 'ok', ms: cw ? 7000 : undefined });
             }
             reload();
@@ -303,6 +305,7 @@
             }
             if (!r.ok) UI.toast(r.error, { kind: 'warn', ms: 5000 }); else {
               var cf = autoWarn(r.out);
+              state.lastWarn = cf;
               UI.toast('확정했습니다.' + (r.out && r.out.created ? ' 1OUT이 기록되었습니다.' : '') + (cf ? ' ' + cf : ''), { kind: cf ? 'warn' : 'ok', ms: cf ? 7000 : undefined });
             }
             reload();

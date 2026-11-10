@@ -228,3 +228,56 @@ test('결정 40 보강: 넓히기 전에 낸 요청을 넓힌 뒤 확정하면 O
   assert.ok(Array.isArray(JSON.parse(x.env.scriptProps.AUTO_OUT_SINCE).types));
   assert.strictEqual(x.vtab().filter((v) => v.student_id === x.a.id).length, 1, '넓히기 전 확정(pre)에는 여전히 OUT 없음(요청이 확정된 OUT 하나뿐)');
 });
+
+
+test('이름이 바뀐 특이사항 탭: 그 뒤 웹 저장으로 빈 탭이 새로 생겨도 syncAutoOutsAll·같은 학생 저장이 자동 OUT을 취소하지 않고 멈춘다', () => {
+  const x = makeEnv();
+  save(x, ATT, x.input(x.a.id)); save(x, ATT, x.input(x.b.id));
+  const name = 'exceptions_' + x.term.id.slice(0, 8);
+  x.env.asOwner((c) => { const ss = c.openFile_('db'); ss.getSheetByName(name).setName('특이사항(1학기)'); c.invalidate_('db', name); });
+  let m1 = ''; try { sync(x); } catch (e) { m1 = String(e.message); }
+  assert.ok(/특이사항 탭을 찾을 수 없어/.test(m1), m1);
+  save(x, ATT, x.input(x.b.id, { type: '병결', from: '2027-03-22', to: '2027-03-22' }));   // 빈 exceptions 탭이 새로 생긴다(병결이라 OUT은 아님)
+  let m2 = ''; try { sync(x); } catch (e) { m2 = String(e.message); }
+  assert.ok(/가리키는 특이사항 행을 찾을 수 없어/.test(m2), m2);
+  assert.strictEqual(x.vtab().filter((v) => v.status === '유효').length, 2, '자동 OUT은 그대로');
+  const again = save(x, ATT, x.input(x.a.id, { from: '2027-03-23', to: '2027-03-23' })).r;   // 같은 학생을 저장해도 기존 OUT을 취소하지 않는다
+  assert.ok(again.out.error, '동기화는 멈추고 안내: ' + JSON.stringify(again.out));
+  assert.strictEqual(x.vtab().filter((v) => v.status === '유효').length, 2);
+});
+
+test('결정 40 첫 동작 ①: 넓힌 직후 첫 동작이 넓히기 전에 낸 요청의 확정이면 OUT 1건', () => {
+  const x = makeEnv();
+  x.env.setNow('2027-03-03T20:00:00');
+  const req = save(x, RT, x.input(x.a.id, { type: '기타', reason: '가짜 사유', blocks: '22:00-24:00' })).r;
+  assert.strictEqual(req.status, '요청');
+  const row = x.env.rows('settings', 'config').find((q) => q.key === 'exception.auto_out_types');
+  x.env.setNow('2027-03-04T09:00:00');
+  x.env.asOwner((c) => c.updateRecord_('settings', row.id, { value: row.value + ',기타' }, ADMIN, 'config'));
+  delete x.env.scriptProps.AUTO_OUT_SINCE;   // 넓힌 뒤 아직 아무 동작도 없는 상태
+  x.env.setNow('2027-03-04T10:00:00');
+  const c = plain(x.env.call(ATT, 'confirmException', x.term.id, req.groupId));
+  assert.deepStrictEqual([c.ok, c.out.created], [true, 1], '확정 시각이 since와 같으므로 OUT이 생긴다');
+  assert.strictEqual(JSON.parse(x.env.scriptProps.AUTO_OUT_SINCE).since['기타'], x.env.rows('exceptions_' + x.term.id.slice(0, 8)).find((e) => e.status === '확정').confirmed_at);
+});
+
+test('결정 40 첫 동작 ②: 넓힌 직후 첫 동작이 다른 묶음의 취소여도 넓히기 전에 확정된 기타에는 OUT이 없다', () => {
+  const x = makeEnv();
+  x.env.setNow('2027-03-03T20:00:00');
+  assert.strictEqual(save(x, ATT, x.input(x.a.id, { type: '기타', reason: '가짜 사유', blocks: '22:00-24:00' })).r.out.created, 0);   // 넓히기 전 확정
+  const other = save(x, ATT, x.input(x.a.id, { type: '병결', from: '2027-03-22', to: '2027-03-22' })).r;   // 같은 학생의 다른 묶음(취소하면 그 학생의 OUT이 다시 맞춰진다)
+  const row = x.env.rows('settings', 'config').find((q) => q.key === 'exception.auto_out_types');
+  x.env.setNow('2027-03-04T09:00:00');
+  x.env.asOwner((c) => c.updateRecord_('settings', row.id, { value: row.value + ',기타' }, ADMIN, 'config'));
+  delete x.env.scriptProps.AUTO_OUT_SINCE;
+  x.env.setNow('2027-03-04T10:00:00');
+  assert.strictEqual(plain(x.env.call(ATT, 'cancelException', x.term.id, other.groupId, '다른 묶음 취소')).ok, true);
+  assert.strictEqual(x.vtab().filter((v) => v.student_id === x.a.id).length, 0, '그 전에 확정된 기타(a)에는 OUT이 생기지 않는다');
+  assert.ok(JSON.parse(x.env.scriptProps.AUTO_OUT_SINCE).since['기타'], '취소 때도 스냅숏이 만들어진다');
+});
+
+test('메일이 켜져 있고 받을 사람이 모두 @example.com이면(한도가 모자라 보여도) 경고하지 않는다', () => {
+  const x = makeEnv(); x.env.scriptProps.MAIL_ENABLED = 'true';
+  const r = plain(x.env.as(ATT, (c) => { c.MailApp = { sendEmail() {}, getRemainingDailyQuota: () => 0 }; return c.saveException(x.input(x.b.id)); }));   // b의 담당·담임은 @example.com뿐
+  assert.deepStrictEqual([r.ok, r.out.created, !!r.out.notifyWarn], [true, 1, false]);
+});
