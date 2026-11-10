@@ -63,6 +63,14 @@
     "getDutyRecordFile": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getOutRules": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveOutRule": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }

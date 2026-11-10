@@ -54,11 +54,11 @@
         state.ctx = ctx;
         if (!state.tab) {   // 처음: 주소의 tab, 없으면 기록할 수 있는 사람은 [기록], 아니면 [이번 학기]
           var want = window.SCREEN_TAB;
-          state.tab = want === 'term' || want === 'today' || want === 'dismiss' ? want : (want === 'record' && ctx.canRecord) || (!want && ctx.canRecord) ? 'record' : 'term';
+          state.tab = want === 'term' || want === 'today' || want === 'dismiss' || (want === 'rules' && ctx.isAdmin) ? want : (want === 'record' && ctx.canRecord) || (!want && ctx.canRecord) ? 'record' : 'term';
           if (state.tab === 'record' && !ctx.canRecord) state.tab = 'term';
           if (window.SCREEN_STUDENT && state.tab !== 'record') { state.tab = 'term'; state.scope = 'all'; state.open[window.SCREEN_STUDENT] = true; }
           drawTabs(); setVisible();
-          if (state.tab !== 'record') loadList();
+          if (state.tab === 'rules') loadRules(); else if (state.tab !== 'record') loadList();
         }
         if (!state.date) state.date = ctx.today;
         state.skewMs = Date.parse(ctx.today + 'T' + ctx.now + ':00') - Date.now();
@@ -238,6 +238,7 @@
       var opts = [];
       if (state.ctx && state.ctx.canRecord) opts.push({ value: 'record', label: '기록' });
       opts.push({ value: 'term', label: state.ctx && state.ctx.periodWord === '이번 기간' ? '기간' : '학기' }, { value: 'today', label: '오늘' }, { value: 'dismiss', label: '2OUT' });
+      if (state.ctx && state.ctx.isAdmin) opts.push({ value: 'rules', label: '항목' });
       tabsBox.appendChild(UI.segmented({ label: '화면', value: state.tab, options: opts, onchange: function (v) { state.tab = v; state.afterConfirm = null; showTab(); } }));
     }
     function setVisible() {
@@ -248,6 +249,7 @@
     function showTab() {
       var rec = state.tab === 'record';
       setVisible();
+      if (state.tab === 'rules') { if (bar && bar.parentNode) bar.parentNode.removeChild(bar); bar = null; saveBtn = null; loadRules(); return; }
       if (!rec) { if (bar && bar.parentNode) bar.parentNode.removeChild(bar); bar = null; saveBtn = null; loadList(); }
       else if (state.ctx) { load(state.date); }   // 다시 열면 서버 값으로 새로 그린다
     }
@@ -298,6 +300,60 @@
       }
       listBox.appendChild(card);
     }
+    /* ───────── OUT 항목 관리(C15, 관리자): 추가·이름·설명·순서·켜기/끄기 ───────── */
+    function loadRules(note) {
+      if (state.tab !== 'rules') return;   // 탭을 바꾼 뒤 늦게 온 콜백이 다른 탭 아래에 항목 목록을 그리지 않게
+      var my = ++state.listSeq;
+      call('getOutRules').then(function (r) {
+        if (my !== state.listSeq || state.tab !== 'rules') return;
+        drawRules(r.rules, note);
+      }).catch(function (err) { if (my !== state.listSeq) return; clear(listBox); showError(listBox, err); });
+    }
+    function drawRules(rules, note) {
+      clear(listBox);
+      if (note) listBox.appendChild(el('div', { class: 'notice info', text: note }));
+      var card = el('div', { class: 'card' }, [el('h2', { text: 'OUT 항목' }),
+        el('div', { class: 'muted', text: '교사가 OUT을 기록할 때 고르는 항목입니다. 지우지 않고 끄기만 합니다(이미 기록된 OUT은 그대로).' })]);
+      var ul = el('ul', { class: 'list', style: 'margin-top:8px' });
+      rules.forEach(function (x) {
+        var li = el('li', { class: 'out-item' }, [
+          el('div', { class: 'out-line' }, [el('b', { class: 'out-who', text: x.name }), x.isAuto ? UI.statusPill('mute', '자동') : null, x.active ? null : UI.statusPill('canceled', '꺼짐')]),
+          x.description ? el('div', { class: 'muted', text: x.description }) : null
+        ]);
+        var row = el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-top:8px' });
+        row.appendChild(el('button', { type: 'button', class: 'btn secondary row-btn', style: 'margin-top:0', text: '수정', 'aria-label': x.name + ' 수정', onclick: function () { openRule(x); } }));
+        if (!x.isAuto) row.appendChild(el('button', { type: 'button', class: 'btn secondary row-btn', style: 'margin-top:0', text: x.active ? '끄기' : '켜기', 'aria-label': x.name + (x.active ? ' 끄기' : ' 켜기'),
+          onclick: function (e, btn) {
+            var b = e && e.currentTarget; if (b) { if (b.disabled) return; b.disabled = true; }   // 저장 중에는 다시 누를 수 없게(두 번 눌러 변경 기록이 둘 생기지 않게)
+            call('saveOutRule', { id: x.id, name: x.name, description: x.description, active: !x.active }).then(function (r) { if (!r.ok) UI.toast(r.errors[0].message, { kind: 'warn', ms: 5000 }); loadRules(r.ok ? (x.active ? '꺼졌습니다. 입력 목록에서 빠집니다.' : '켰습니다. 입력 목록에 나옵니다.') : ''); if (!r.ok && b) b.disabled = false; }).catch(function (err) { if (b) b.disabled = false; UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }); } }));
+        li.appendChild(row);
+        ul.appendChild(li);
+      });
+      card.appendChild(ul);
+      card.appendChild(el('button', { type: 'button', class: 'btn block', style: 'margin-top:12px', text: '항목 추가', onclick: function () { openRule(null); } }));
+      listBox.appendChild(card);
+    }
+    function openRule(x) {
+      var sheet = null, busy = false;
+      var name = el('input', { type: 'text', maxlength: '60' }), desc = el('input', { type: 'text', maxlength: '100' }), order = el('input', { type: 'number', min: '0', max: '999', inputmode: 'numeric' });
+      if (x) { name.value = x.name; desc.value = x.description; order.value = String(x.sortOrder); if (x.isAuto) name.disabled = true; }
+      var fn = UI.field('이름', name, { hint: x && x.isAuto ? '자동 항목의 이름은 바꿀 수 없습니다.' : '' }), fd = UI.field('설명(선택)', desc), fo = UI.field('순서(작을수록 위)', order);
+      var fields = { name: fn, description: fd, sortOrder: fo };
+      function refresh() { if (sheet) sheet.buttons[1].disabled = busy || !name.value.trim(); }
+      name.addEventListener('input', refresh);
+      sheet = UI.bottomSheet({ title: x ? 'OUT 항목 수정' : 'OUT 항목 추가', content: el('div', {}, [fn, fd, fo]), actions: [
+        { text: '돌아가기', kind: 'secondary', onclick: function () { sheet.close(); } },
+        { text: '저장', kind: 'primary', disabled: !x, onclick: function () {
+          if (busy) return; busy = true; refresh(); Object.keys(fields).forEach(function (k) { fields[k].setError(''); });
+          call('saveOutRule', { id: x ? x.id : '', name: name.value, description: desc.value, sortOrder: order.value, active: x ? x.active : true }).then(function (r) {
+            busy = false;
+            if (!r.ok) { refresh(); r.errors.forEach(function (e) { (fields[e.field] || fn).setError(e.message); }); return; }
+            sheet.close(); UI.toast('저장했습니다.'); loadRules('저장했습니다.'); window.scrollTo(0, 0);
+          }).catch(function (e) { busy = false; refresh(); fn.setError((e && e.message) || String(e)); });
+        } }] });
+      sheet.open(); refresh();
+    }
+
     /* ───────── 2OUT 퇴실 대상(C13, F4-3): 면담 필요 → 면담 기록됨(관리자는 퇴실 확정 가능) → 퇴실 처리됨 ───────── */
     function targetCard(x, r) {
       var st = x.state;
