@@ -86,6 +86,20 @@
   function renderStage2B(d, root) {
     var f = d.food;
     if (!f || f.error) return;
+    if (f.noTerm) {
+      root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '오늘 급식·인원' }), el('div', { class: 'muted', text: '오늘은 운영 기간이 아닙니다.' }),
+        el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=mealcount', text: '식수 집계 열기' })]));
+    } else if (f.counts) {   // 오늘 인원과 빈자리(C19)
+      var c = f.counts;
+      root.appendChild(el('div', { class: 'card' }, [
+        el('h2', { text: '오늘 급식·인원' }),
+        el('div', { class: 'muted', style: 'margin-bottom:8px', text: c.dateKo + ' · ' + c.termName }),
+        el('div', { class: 'stats', style: 'margin:4px 0 12px' }, [statBox(c.hall, '학사'), statBox(c.dorm, '기숙'), statBox(c.breakfast, '조식'), statBox(c.hallDinner + c.generalDinner, '석식')]),
+        el('div', { class: 'muted', style: 'word-break:keep-all', text: '기숙 남 ' + c.dormMale + ' · 여 ' + c.dormFemale + ' / 석식 학사 ' + c.hallDinner + ' · 일반 ' + c.generalDinner }),
+        el('div', { style: 'margin-top:8px;word-break:keep-all', text: (f.vacancy || []).map(function (v) { return v.label + ' 빈자리 ' + v.vacant + ' (전체 ' + v.total + '석)'; }).join(' · ') }),
+        el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=mealcount', text: '식수 집계 열기' })
+      ]));
+    }
     var n = f.docMissing || 0;
     var kids = [el('h2', { text: '급식·입퇴실 서류' }),
       el('div', { class: n ? '' : 'muted', text: n ? '서류 미제출 ' + n + '건이 남아 있습니다.' : '서류 미제출 기록이 없습니다.' })];
