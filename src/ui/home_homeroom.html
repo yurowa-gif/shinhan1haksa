@@ -1,13 +1,22 @@
 <script>
   /** 2단계 A 카드(CODING-A: 근무·OUT·면담). 이 함수의 몸통만 고친다(docs/plan/stage2.md 1절) */
   function renderStage2A(d, root) {
-    return;
+    if (!d.out || d.out.error) return;
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '우리 반 OUT' }),
+      el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin:8px 0' }, [
+        d.out.out1 ? UI.statusPill('out1', '1OUT ' + d.out.out1 + '명') : UI.statusPill('mute', '1OUT 0명'),
+        d.out.out2 ? UI.statusPill('out2', '퇴실 대상 ' + d.out.out2 + '명') : UI.statusPill('mute', '퇴실 대상 0명')]),
+      d.out.mailOn ? el('div', { class: 'muted', style: 'word-break:keep-all', text: '우리 반 학생에게 새 OUT이 기록되면 메일로도 알려 드립니다.' }) : null,
+      el('a', { class: 'btn secondary', style: 'margin-top:4px', href: d.appUrl + '?page=outs&tab=term', text: (d.out.periodWord === '이번 기간' ? '이번 기간 보기' : '이번 학기 보기') })
+    ]));
   }
 
   /** 담임 홈: 우리 반 학사생 목록(요청 상태 pill)과 특이사항 요청 (PRD 8절, docs/design/screens.md 1절) */
   function renderHome(d, root) {
     var m = (d.exc && d.exc.mine) || { requested: 0, confirmed: 0, canceled: 0 };
     var per = (d.exc && d.exc.perStudent) || {};
+    var outN = (d.out && d.out.perStudent) || {};   // 학생별 이번 기간 OUT 수(1이면 1OUT, 2 이상이면 퇴실 대상)
     var listCard = el('div', { class: 'card' }, [
       el('h2', { text: d.homeroomClass + ' 학사생 (' + d.students.length + '명)' }),
       el('div', { class: 'muted', text: d.termName })
@@ -23,7 +32,7 @@
         // 이름을 누르면 그 학생의 특이사항 기록(학생별 목록)으로 간다
         ul.appendChild(el('li', {}, [
           el('a', { href: d.appUrl + '?page=exceptions&tab=list&student=' + encodeURIComponent(s.id), text: s.name }),
-          el('span', { class: 'muted' }, [s.number + '번 ', per[s.id] ? UI.statusPill('requested', '요청 ' + per[s.id]) : null])
+          el('span', { class: 'muted' }, [s.number + '번 ', outN[s.id] ? UI.statusPill(outN[s.id] >= 2 ? 'out2' : 'out1') : null, per[s.id] ? UI.statusPill('requested', '요청 ' + per[s.id]) : null])
         ]));
       });
       listBox.appendChild(ul);

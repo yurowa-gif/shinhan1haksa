@@ -28,15 +28,47 @@
       "use": "화면",
       "guard": "requirePermission_"
     },
+    "listOuts": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "cancelOut": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveOutMeeting": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "cancelOutMeeting": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "confirmOutDismissal": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
     "swapDuty": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "syncAutoOutsAll": {
+      "use": "편집기",
+      "guard": "assertOwnerRun_"
     },
     "getDutyRecord": {
       "use": "화면",
       "guard": "requirePermission_"
     },
     "getDutyRecordFile": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getOutRules": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveOutRule": {
       "use": "화면",
       "guard": "requirePermission_"
     }

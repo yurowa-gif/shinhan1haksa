@@ -15,7 +15,7 @@ const STAGE2_KEYS = {
   'duty.operating': { roles: ['admin', 'duty_manager'] },
   'duty.swap': { roles: ['admin', 'duty_manager', 'hall_teacher'] },
   'duty.record': { roles: ['admin', 'duty_manager'] },
-  'out.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] },
+  'out.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'], wideView: true },
   'out.save': { roles: ['admin', 'hall_teacher'], scope: 'student', dutyWindow: 1 },
   'out.cancel': { roles: ['admin'] },
   'out.rules': { roles: ['admin'] },
