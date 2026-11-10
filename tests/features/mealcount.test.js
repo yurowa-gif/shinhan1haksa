@@ -154,3 +154,20 @@ test('서류 수: docRows(건)와 docUnsubmitted(학생 수)는 한 학생의 �
   const c1 = counts(env, '2027-03-03');
   assert.strictEqual(c1.docRows - c0.docRows, 2); assert.strictEqual(c1.docUnsubmitted - c0.docUnsubmitted, 1);
 });
+
+test('PDF·홈·화면 문구: 퇴실 후 석식 유지 N명과 서류 "건" 기준이 PDF에 나오고, 홈 카드 값에도 afterLeaveHallDinner가 있다', () => {
+  const env = makeEnv();
+  const sid = mineOf(env).find((s) => stat(env, s, '석식', '2027-03-20') === '학사 석식' && stat(env, s, '기숙사', '2027-03-20') === '입실');
+  [['학사', '퇴실', '2027-03-05'], ['기숙사', '퇴실', '2027-03-05'], ['석식', '미실시', '2027-03-15']]
+    .forEach(([item, value, effective_date]) => append(env, { student_id: sid, item, value, effective_date, requested_at: '2027-03-03T15:00:00', source: 'F6', doc_submitted: 'FALSE' }));
+  const n = counts(env, '2027-03-10').afterLeaveHallDinner; assert.ok(n >= 1);
+  let html = '';
+  const r = env.as(ADMIN, (c) => { c.sheetMakePdf_ = (h) => { html = h; return { getBytes: () => [37, 80, 68, 70] }; }; return c.getMealCountsPdf('2027-03-10'); });
+  assert.strictEqual(r.ok, true);
+  assert.ok(html.includes('퇴실 후 석식 유지 ' + n + '명'), 'PDF 퇴실 후 석식 유지 문구');
+  const docRows = counts(env, '2027-03-10').docRows;
+  assert.ok(docRows >= 1 && html.includes('아직 서류가 없는 신청 ' + docRows + '건'), 'PDF 서류 문구가 화면과 같은 건 기준');
+  assert.ok(!html.includes('서류 미제출'), '명 기준 옛 문구가 없다');
+  const f = env.call(ADMIN, 'getHomeData', 'admin').food;
+  assert.strictEqual(typeof f.counts.afterLeaveHallDinner, 'number');
+});
