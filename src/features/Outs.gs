@@ -18,8 +18,9 @@ function vioHomeInfo_(user, role) {
   var live = vioViolations_(term).filter(function (v) { return ruleRowLive_(v) && visible[String(v.student_id)]; });
   var per = Object.create(null), today = today_();
   var changes0 = readAll_('status_changes');
-  live = live.filter(function (v) { return !vioIsLeft_(changes0, v.student_id, today); });   // 퇴실 처리된 학생은 세지 않는다(목록과 같은 규칙)
-  live.forEach(function (v) { per[v.student_id] = (per[v.student_id] || 0) + 1; if (String(v.occurred_at).slice(0, 10) === today) out.today++; });
+  live.forEach(function (v) { if (String(v.occurred_at).slice(0, 10) === today) out.today++; });   // 오늘 건수는 [오늘] 탭과 같게 퇴실 학생 행도 센다
+  live = live.filter(function (v) { return !vioIsLeft_(changes0, v.student_id, today); });   // 1OUT·퇴실 대상 학생 수에서만 퇴실 처리된 학생을 뺀다(목록과 같은 규칙)
+  live.forEach(function (v) { per[v.student_id] = (per[v.student_id] || 0) + 1; });
   var byStu = {};
   readAll_('students').forEach(function (s) { byStu[s.id] = s; });
   Object.keys(per).forEach(function (id) {
