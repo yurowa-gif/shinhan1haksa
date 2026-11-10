@@ -91,7 +91,7 @@ function inoutSignature_(plan) {
  */
 function inoutPlan_(rec, changes, d) {
   var plan = movePlan_(changes, rec.studentId, { type: rec.type, effectiveDate: rec.effectiveDate, requestedAt: rec.requestedAt, dinner: rec.dinner,
-    breakfastWithDorm: rec.breakfastWithDorm, breakfastStopWithDorm: rec.breakfastStopWithDorm }, { today: today_(), cutoff: d.cutoff });
+    breakfastWithDorm: rec.breakfastWithDorm, breakfastStopWithDorm: rec.breakfastStopWithDorm }, { today: today_(), cutoff: d.cutoff, terms: d.terms });   // terms: 결정 63(2OUT 퇴실 뒤 재입실 금지)을 규칙이 판정할 때 쓴다(규칙 함수가 오기 전에는 무시됨)
   plan.errors = plan.errors.map(inoutKo_);
   plan.warnings = plan.warnings.map(inoutKo_);
   return plan;
