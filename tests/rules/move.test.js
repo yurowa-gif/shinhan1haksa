@@ -793,3 +793,30 @@ test("G3: moveUndoPlan_ 꼬리표는 id 전체로 맞춘다('[자동] H1 …'은
     CH('석식', '미실시', '2027-03-22', { id: 'z', source: 'F7', requested_at: '2027-03-02T09:00:00', status: '취소', cancel_reason: '[자동] H12 퇴실 정리' })]);
   assert.deepStrictEqual(undo(rows, 'H1', '2027-03-08').toRestore, []);
 });
+
+/* ───── 총괄 6차 검토(#57) ───── */
+
+test('W(기숙사 입실 뒤 늦게 입력한 옛 조식 신청서): PLRD·LPRD·LRPD·LRDP 모두 3/15 미실시, 따로 한 기숙사 퇴실 POD·OPD·ODP도', () => {
+  const ev = {
+    P: (s) => { s.rows = saveReq(s.rows, '조식', '미실시', '2027-03-03T11:40:00', '2027-03-08'); },
+    L: (s) => { s.rows = saveMove(s.rows, { type: '학사 및 기숙사 퇴실', effectiveDate: '2027-03-06', requestedAt: '2027-03-04T20:50:00' }, '2027-03-08').rows; },
+    O: (s) => { s.rows = saveMove(s.rows, { type: '기숙사 퇴실', effectiveDate: '2027-03-06', requestedAt: '2027-03-04T20:50:00', breakfastStopWithDorm: false }, '2027-03-08').rows; },
+    R: (s) => { s.rows = saveMove(s.rows, { type: '학사 입실', effectiveDate: '2027-03-09', requestedAt: '2027-03-07T20:00:00' }, '2027-03-08').rows; },
+    D: (s) => { s.rows = saveMove(s.rows, { type: '기숙사 입실', effectiveDate: '2027-03-10', requestedAt: '2027-03-08T10:00:00' }, '2027-03-08').rows; }
+  };
+  for (const o of ['PLRD', 'LPRD', 'LRPD', 'LRDP', 'POD', 'OPD', 'ODP']) assert.strictEqual(at(runSeq(DORM, ev, o.split('')), '조식', '2027-03-15'), '미실시', o);
+});
+
+test('W 경계: 같은 날 기숙사 퇴실·입실(W3), 두 번 퇴실이면 마지막 퇴실 기록 기준(W4), 기록 시각과 같은 신청은 남기지 않음(W7)', () => {
+  const O = (r, e, at) => saveMove(r, { type: '기숙사 퇴실', effectiveDate: e, requestedAt: at, breakfastStopWithDorm: false }, at.slice(0, 10)).rows;
+  const D = (r, e, at) => saveMove(r, { type: '기숙사 입실', effectiveDate: e, requestedAt: at }, at.slice(0, 10)).rows;
+  const P = (r, at) => saveReq(r, '조식', '미실시', at, at.slice(0, 10), '2027-03-15');
+  // W3: 같은 날 3/10 퇴실(기록 3/8)·입실(기록 3/9), 그 전 신청(3/5) P는 남음
+  assert.strictEqual(at(D(O(P(DORM(), '2027-03-05T09:00:00'), '2027-03-10', '2027-03-08T10:00:00'), '2027-03-10', '2027-03-09T10:00:00'), '조식', '2027-03-15'), '미실시');
+  // W4: O1(기록 3/4) → D1 → P(3/6 12:00) → O2(기록 3/8) → D2: P는 마지막 퇴실 기록 전이라 남음
+  let r = D(O(DORM(), '2027-03-05', '2027-03-04T10:00:00'), '2027-03-07', '2027-03-06T10:00:00');
+  r = D(O(P(r, '2027-03-06T12:00:00'), '2027-03-09', '2027-03-08T10:00:00'), '2027-03-11', '2027-03-10T10:00:00');
+  assert.strictEqual(at(r, '조식', '2027-03-15'), '미실시');
+  // W7: 퇴실 기록 시각과 같은 신청 일시는 '전'이 아니다 → 입실 조식이 취소
+  assert.strictEqual(at(D(P(O(DORM(), '2027-03-05', '2027-03-04T10:00:00'), '2027-03-04T10:00:00'), '2027-03-08', '2027-03-06T10:00:00'), '조식', '2027-03-15'), '실시');
+});

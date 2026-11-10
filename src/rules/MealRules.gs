@@ -260,17 +260,23 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
 }
 
 /**
- * 행 c가 재입실(학사 입실 대표에 연결된 급식 행)이고, 신청 일시 req가 그 재입실 직전 학사 퇴실의 기록(requested_at)보다 이르면 true —
+ * 행 c가 재입실(학사 입실 대표에 연결된 급식 행) 또는 기숙사 입실 조식 행이고, 신청 일시 req가 그 입실 직전 같은 항목 퇴실의 기록
+ * (requested_at)보다 이르면 true —
  * 재입실은 퇴실 기록 전에 낸 대기 신청을 취소하지 않는다(MoveRules 재입실 keepBefore와 같은 기준).
  */
 function mealReentryKeeps_(rows, c, req) {
+  var leave = mealReentryLeave_(rows, c);
+  return !!leave && req < ruleIso_(leave.requested_at);
+}
+
+/** 행 c가 (재)입실 대표(학사·기숙사 입실)에 연결된 급식 행이면 그 입실 직전 같은 항목 퇴실 행, 아니면 null. */
+function mealReentryLeave_(rows, c) {
   var hid = ruleStr_(c.linked_change_id);
   var head = hid && rows.filter(function (x) { return ruleStr_(x.id) === hid; })[0];
-  if (!head || ruleStr_(head.item) !== '학사' || ruleStr_(head.value) !== '입실') return false;
-  var leave = rows.filter(function (x) {
-    return ruleStr_(x.item) === '학사' && ruleStr_(x.value) === '퇴실' && ruleStr_(x.effective_date) <= ruleStr_(head.effective_date);
-  }).sort(function (a, b) { return ruleStr_(a.effective_date) < ruleStr_(b.effective_date) ? -1 : 1; }).pop();
-  return !!leave && req < ruleIso_(leave.requested_at);
+  if (!head || !/^(학사|기숙사)$/.test(ruleStr_(head.item)) || ruleStr_(head.value) !== '입실') return null;
+  return rows.filter(function (x) {
+    return ruleStr_(x.item) === ruleStr_(head.item) && ruleStr_(x.value) === '퇴실' && ruleStr_(x.effective_date) <= ruleStr_(head.effective_date);
+  }).sort(function (a, b) { return ruleStr_(a.effective_date) < ruleStr_(b.effective_date) ? -1 : 1; }).pop() || null;
 }
 
 /**

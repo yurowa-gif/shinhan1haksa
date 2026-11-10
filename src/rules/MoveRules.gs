@@ -60,7 +60,7 @@ function movePlan_(changes, studentId, move, opts) {
   if (type === '기숙사 입실' && dorm === '입실') out.errors.push(E + '에 이미 기숙사 입실 상태입니다');
   if ((type === '기숙사 퇴실' || type === '학사 및 기숙사 퇴실') && dorm !== '입실') out.errors.push(E + '에 기숙사 입실 상태가 아닙니다');
   // 적용일 뒤의 입퇴실 기록은 이 계획이 뒤집을 수 있어(상태 검사는 그날 하루만 본다) 먼저 취소하게 한다
-  // ASSUMPTION(총괄 결정): 명단 업로드 행(다음 기간 명단을 미리 올린 학사 입실 등)은 보지 않는다 — 그 행은 [퇴실 취소]로 지울 수 없어 이번
+  // 결정 62: source '명단업로드' 행은 모두(다음 기간 명단을 미리 올린 학사 입실 등 학사·기숙사 행 전체) 보지 않는다 — 그 행은 [퇴실 취소]로 지울 수 없어 이번
   // 기간의 모든 입퇴실을 막게 된다. 다음 기간 명단과 겹치는 상태는 명단 반영(R4) 쪽이 정한다
   var laterRec = live.filter(function (c) { return /^(학사|기숙사)$/.test(ruleStr_(c.item)) && ruleStr_(c.effective_date) > E && ruleStr_(c.source) !== '명단업로드'; })
     .sort(function (a, b) { return ruleStr_(a.effective_date) < ruleStr_(b.effective_date) ? -1 : 1; })[0];
