@@ -322,3 +322,26 @@ test('칸 이름 뒤 공백("예비 ")이 있어도 학사 교사는 예비 칸�
   const standby = x.rows()[1];
   expectDenied(x, R1, standby.id, x.r3, '공백 있는 예비 칸');
 });
+
+test('칸 이름 뒤 공백이 있어도 메일·확인 문구에 "undefined"가 없다', () => {
+  const x = makeEnv();
+  x.slot(TOMORROW, '21:30조 ', R1);
+  const row = x.rows()[0];
+  const { r, sent } = swap(x, R1, row.id, x.r2);
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.ok(sent.length && sent.every((m) => !m.body.includes('undefined') && m.body.includes('21:30조')), sent[0] && sent[0].body);
+});
+
+test('칸 이름 뒤 공백: 확인 경고(acknowledge 없이)는 "23:00조에 편성"으로 나오고 undefined가 없으며, 금요일 "단독 " 칸의 메일 본문에 라벨이 trim되어 들어간다', () => {
+  const x = makeEnv();
+  x.slot(TOMORROW, '21:30조', R1); x.slot(TOMORROW, '23:00조 ', R2);
+  const first = x.rows()[0];
+  const a = swap(x, R1, first.id, x.r2).r;
+  assert.strictEqual(a.needsConfirm, true, JSON.stringify(a));
+  assert.ok(a.warnings[0].includes('23:00조에 편성') && !a.warnings[0].includes('undefined'), a.warnings[0]);
+  const y = makeEnv();
+  y.slot(FRI, '단독 ', R1);
+  const { r, sent } = swap(y, R1, y.rows()[0].id, y.r2);
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.ok(sent.length && sent.every((m) => m.body.includes('(금) 근무 ') && !m.body.includes('undefined')), sent[0] && sent[0].body);
+});
