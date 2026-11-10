@@ -2,6 +2,7 @@
 const assert = require('assert');
 const { test, plain } = require('../helpers/harness');
 const { createGasEnv } = require('../helpers/gas-fakes');
+const okCount = (r) => ({ ok: r.ok, count: r.count });   // 응답의 out(자동 OUT, C12)은 별도 시험에서 본다
 
 const ATT = 'test.attendance@example.com', ADMIN = 'test.admin@example.com', TEACHER = 'test.teacher@example.com',
   HOMEROOM = 'test.homeroom@example.com', STUDENT = 'test.student@example.com', PARENT = 'test.parent@example.com', DUTY = 'test.duty@example.com';
@@ -204,7 +205,7 @@ test('confirmException: 출결 담당이 요청 묶음을 확정(확정자·시�
   x.env.expectDenied(HOMEROOM, 'exception.confirm', 'confirmException', x.term.id, r.groupId);
   assert.ok(x.tab().filter((q) => q.group_id === r.groupId).every((q) => q.status === '요청'));
   const ok = x.env.expectAllowed(ATT, 'confirmException', x.term.id, r.groupId);
-  assert.deepStrictEqual(ok, { ok: true, count: 3 });
+  assert.deepStrictEqual(okCount(ok), { ok: true, count: 3 });
   const rows = x.tab().filter((q) => q.group_id === r.groupId);
   assert.ok(rows.every((q) => q.status === '확정' && q.confirmed_by === ATT && q.confirmed_at === '2027-03-03T20:00:00'));
   const again = x.env.call(ATT, 'confirmException', x.term.id, r.groupId);
@@ -229,12 +230,12 @@ test('cancelException: 사유 필수·행은 남고 status 취소·audit에 전�
   assert.strictEqual(short.ok, false); assert.ok(short.error.includes('2자 이상'));
   assert.strictEqual(x.tab().find((q) => q.group_id === req.groupId).status, '요청');
   const okT = x.env.expectAllowed(TEACHER, 'cancelException', x.term.id, req.groupId, '잘못 보냄');
-  assert.deepStrictEqual(okT, { ok: true, count: 1 });
+  assert.deepStrictEqual(okCount(okT), { ok: true, count: 1 });
   const rowT = x.tab().find((q) => q.group_id === req.groupId);
   assert.deepStrictEqual([rowT.status, rowT.cancel_reason], ['취소', '잘못 보냄']);
   // 출결 담당: 확정된 2일 묶음도 취소(사유 필수), 행은 지워지지 않는다
   const okA = x.env.call(ATT, 'cancelException', x.term.id, conf.groupId, '사유 없음으로 취소');
-  assert.deepStrictEqual(okA, { ok: true, count: 2 });
+  assert.deepStrictEqual(okCount(okA), { ok: true, count: 2 });
   assert.ok(x.tab().filter((q) => q.group_id === conf.groupId).every((q) => q.status === '취소' && q.cancel_reason === '사유 없음으로 취소'));
   assert.strictEqual(x.tab().length, total + 1, '행은 지워지지 않고(교사 요청 1건만 더 늘었다)');
   assert.strictEqual(x.env.call(ATT, 'cancelException', x.term.id, conf.groupId, '또 취소').ok, false, '이미 취소');
@@ -325,21 +326,21 @@ test('하루 카드 취소: 목록 카드는 묶음 전체 기간을 보이고, 
   assert.strictEqual(g.dates.length, 5, '카드에는 묶음 전체(3/22~3/26)가 보인다');
   assert.deepStrictEqual(g.rangeDates, ['2027-03-23']);
   const day = x.env.call(ATT, 'cancelException', x.term.id, r.groupId, '이 날은 출석', '2027-03-23');
-  assert.deepStrictEqual(day, { ok: true, count: 1 });
+  assert.deepStrictEqual(okCount(day), { ok: true, count: 1 });
   const rows = x.tab().filter((q) => q.group_id === r.groupId);
   assert.deepStrictEqual(rows.filter((q) => q.status === '취소').map((q) => q.date), ['2027-03-23']);
   assert.strictEqual(rows.filter((q) => q.status === '확정').length, 4, '나머지 4일은 그대로 한 묶음');
   assert.strictEqual(x.env.call(ATT, 'cancelException', x.term.id, r.groupId, '또', '2027-03-23').ok, false, '이미 취소된 날');
   assert.strictEqual(x.env.call(ATT, 'cancelException', x.term.id, r.groupId, '이 묶음에 없는 날', '2027-04-30').ok, false);
   const all = x.env.call(ATT, 'cancelException', x.term.id, r.groupId, '묶음 전체 취소');
-  assert.deepStrictEqual(all, { ok: true, count: 4 });
+  assert.deepStrictEqual(okCount(all), { ok: true, count: 4 });
   assert.ok(x.tab().filter((q) => q.group_id === r.groupId).every((q) => q.status === '취소'));
 });
 
 test('교사는 자기 요청의 한 날만 취소할 수 있다(남의 요청·확정은 거부)', () => {
   const x = makeEnv();
   const r = x.env.call(TEACHER, 'saveException', { studentId: x.mine[0].id, from: '2027-03-22', to: '2027-03-24', blocks: 'ALL', type: '병결' });
-  assert.deepStrictEqual(x.env.expectAllowed(TEACHER, 'cancelException', x.term.id, r.groupId, '하루만 취소', '2027-03-23'), { ok: true, count: 1 });
+  assert.deepStrictEqual(okCount(x.env.expectAllowed(TEACHER, 'cancelException', x.term.id, r.groupId, '하루만 취소', '2027-03-23')), { ok: true, count: 1 });
   assert.deepStrictEqual(x.tab().filter((q) => q.group_id === r.groupId).map((q) => q.status), ['요청', '취소', '요청']);
   x.env.expectDenied(HOMEROOM, 'exception.cancel', 'cancelException', x.term.id, r.groupId, '남의 요청', '2027-03-22');
 });
@@ -367,7 +368,7 @@ test('다음 기간 날짜로 낸 요청·특이사항도 요청 처리 목록·
   assert.ok(x.env.call(ATT, 'getHomeData', 'attendance').exc.pending >= 1, '홈 배지');
   assert.deepStrictEqual(x.env.call(TEACHER, 'listExceptions', { scope: 'mine' }).groups.map((q) => q.groupId), [r.groupId]);
   assert.deepStrictEqual(x.env.call(TEACHER, 'getHomeData', 'hall_teacher').exc.mine, { requested: 1, confirmed: 0, canceled: 0 });
-  assert.deepStrictEqual(x.env.expectAllowed(ATT, 'confirmException', g.termId, r.groupId), { ok: true, count: 1 });
+  assert.deepStrictEqual(okCount(x.env.expectAllowed(ATT, 'confirmException', g.termId, r.groupId)), { ok: true, count: 1 });
 });
 
 test('이번 주가 기간 경계에 걸치면 두 기간의 탭을 모두 읽는다', () => {
@@ -425,10 +426,10 @@ test('확정 경로에도 겹침 경고: 겹치는 요청을 확정하려면 확
   const no = x.env.call(ATT, 'confirmException', x.term.id, req.groupId);
   assert.strictEqual(no.ok, false); assert.strictEqual(no.needsConfirm, true); assert.ok(no.warnings.length >= 1);
   assert.ok(x.tab().filter((q) => q.group_id === req.groupId).every((q) => q.status === '요청'), '확정되지 않았다');
-  assert.deepStrictEqual(x.env.call(ATT, 'confirmException', x.term.id, req.groupId, true), { ok: true, count: 1 });
+  assert.deepStrictEqual(okCount(x.env.call(ATT, 'confirmException', x.term.id, req.groupId, true)), { ok: true, count: 1 });
   // 겹치지 않는 요청은 확인 없이 확정
   const r2 = x.env.call(TEACHER, 'saveException', { studentId: sid, from: '2027-03-13', blocks: 'ALL', type: '병결' });
-  assert.deepStrictEqual(x.env.call(ATT, 'confirmException', x.term.id, r2.groupId), { ok: true, count: 1 });
+  assert.deepStrictEqual(okCount(x.env.call(ATT, 'confirmException', x.term.id, r2.groupId)), { ok: true, count: 1 });
 });
 
 test('요청자가 이미 확정된 요청을 취소하려 하면 권한 없음이 아니라 안내(거부 기록 없음), 남의 요청은 여전히 거부', () => {

@@ -5,7 +5,7 @@
  *   출결 담당이 확정하거나 사유를 적어 취소한다.
  * - 기간 입력은 날짜마다 1행, 같은 묶음(group_id). 확정·취소는 묶음 단위. 기록은 지우지 않는다(취소 = status '취소' + cancel_reason,
  *   변경 전후 값은 audit_log).
- * - 미인정 유형(exception.auto_out_types)은 '1OUT 예정'만 표시한다. 자동 OUT 연결은 2단계(F4)라 여기서 OUT을 만들지 않는다.
+ * - 미인정 유형(exception.auto_out_types)을 확정하면 그 묶음마다 자동 1OUT이 기록된다(2단계 C12, AutoOuts.gs). 취소하면 그 OUT도 함께 취소된다.
  * - 출석부 칸에는 유형 약어만 나간다(사유 메모는 안 나감, decisions 23 ⑥).
  *
  * 순수 함수(exc…)는 tests/features/exceptions.test.js가 R4 gas-fakes 환경에서 검사한다.
@@ -39,7 +39,7 @@ function excSettings_(rows) {
   return { types: split(get('exception.types')), typeShort: typeShort, autoOut: split(get('exception.auto_out_types')) };
 }
 
-/** 화면 칩용 유형 목록: [{name, short, auto}] (auto = 미인정 유형, "1OUT 예정" 표시) */
+/** 화면 칩용 유형 목록: [{name, short, auto}] (auto = 미인정 유형: 확정하면 자동 1OUT이 기록된다) */
 function excTypeChips_(settings) {
   return settings.types.map(function (t) {
     return { name: t, short: attTypeShort_(t, settings.typeShort) || t, auto: settings.autoOut.indexOf(t) >= 0 };
@@ -268,7 +268,7 @@ function previewException(input) {
  */
 function saveException(input) {
   var user = requirePermission_('exception.save', { studentId: input && input.studentId, ymd: excYmd_(input) });
-  return withLock_(function () {
+  var res = withLock_(function () {
     ['terms', 'students', 'enrollments'].forEach(function (n) { invalidate_('db', n); });
     var d = excLoad_();
     var v = excValidate_(input, { terms: d.terms, types: d.settings.types });
@@ -285,18 +285,30 @@ function saveException(input) {
     var confirm = excCanConfirm_(user);
     var now = nowIso_();
     var group = Utilities.getUuid();
+    var since = confirm ? vioAutoSince_(d.settings.autoOut, now) : null;   // 쓰기 전에, confirmed_at에 쓰는 바로 그 now로
     bulkAppend_(sheet, v.dates.map(function (date) {
       return { term_id: v.term.id, group_id: group, student_id: studentId, date: date, blocks: v.rec.blocks, type: v.rec.type,
         reason: v.rec.reason, status: confirm ? '확정' : '요청', requested_by: user.email, requested_at: now,
         confirmed_by: confirm ? user.email : '', confirmed_at: confirm ? now : '', cancel_reason: '' };
     }), user.email);
+    var auto = confirm ? vioAfterExceptionWrite_(v.term, [studentId], user.email, since, [group]) : { out: { created: 0, canceled: 0, level: {} }, mails: [] };
     return { ok: true, groupId: group, count: v.dates.length, status: confirm ? '확정' : '요청', warnings: warnings,
       display: excDisplay_(student), type: v.rec.type, from: v.dates[0], to: v.dates[v.dates.length - 1],
-      autoOut: d.settings.autoOut.indexOf(v.rec.type) >= 0 };
+      autoOut: d.settings.autoOut.indexOf(v.rec.type) >= 0, out: auto.out, _mails: auto.mails };
   });
+  return excFinishAuto_(res, user);
 }
 
-function excGroupView_(g, term, d, namesByEmail, studentById, user, range) {
+/** 락이 끝난 뒤: 자동 OUT 알림을 보내고(실패해도 저장은 그대로) 응답에서 내부 칸을 뗀다 */
+function excFinishAuto_(res, user) {
+  if (!res || !res._mails) return res;
+  var mails = res._mails;
+  delete res._mails;
+  if (mails.length) { var m = vioSendAutoMail_(mails, user.email); res.out = Object.assign({}, res.out, { notified: m.notified, notifyWarn: m.warn }); }
+  return res;
+}
+
+function excGroupView_(g, term, d, namesByEmail, studentById, user, range, outIds) {
   var s = studentById[g.studentId] || {};
   var chip = excTypeChips_(d.settings).filter(function (c) { return c.name === g.type; })[0];
   var mine = g.requestedBy === user.email;
@@ -308,7 +320,9 @@ function excGroupView_(g, term, d, namesByEmail, studentById, user, range) {
     dates: g.dates, canceledDates: g.dates.filter(function (x) { return g.liveDates.indexOf(x) < 0; }), rangeDates: rangeDates,
     rangeCanceled: !!range && !!rangeDates.length && !liveInRange.length,   // 이 날(조회 범위)은 이미 취소된 날
     blocks: g.blocks, blocksText: excBlocksText_(g.blocks),
-    type: g.type, short: chip ? chip.short : g.type, auto: !!chip && chip.auto, reason: g.reason, status: g.status,
+    type: g.type, short: chip ? chip.short : g.type, auto: !!chip && chip.auto,
+    hasOut: g.ids.some(function (id) { return !!(outIds && outIds[id]); }),   // 이 묶음에 살아 있는 자동 1OUT이 있는가(설정만 보고 1OUT이라 하지 않는다)
+    reason: g.reason, status: g.status,
     requestedByName: namesByEmail[g.requestedBy] || g.requestedBy, mine: mine, cancelReason: g.cancelReason,
     // 끝난 기간은 보기만 — 눌러도 늘 거부되는 버튼은 보이지 않게 한다
     canConfirm: !ended && g.status === '요청' && excCanConfirm_(user),
@@ -362,6 +376,8 @@ function listExceptions(filter) {
   var groups = [];
   terms.forEach(function (term) {
     var visible = excVisibleIds_(user, d.enrollments, d.students, term.id, excViewWide_());
+    var liveOutIds = {};   // 살아 있는 F1자동 OUT이 가리키는 특이사항 행 id
+    try { vioViolations_(term).forEach(function (v) { if (ruleRowLive_(v) && String(v.source) === 'F1자동') liveOutIds[String(v.source_exception_id)] = true; }); } catch (e) { liveOutIds = {}; }
     var rows = excRows_(term).rows.filter(function (r) { return visible[r.student_id] || (scope === 'mine' && r.requested_by === user.email); });
     if (scope === 'pending') rows = rows.filter(function (r) { return r.status === '요청'; });
     else if (scope === 'mine') rows = rows.filter(function (r) { return r.requested_by === user.email; });
@@ -374,7 +390,7 @@ function listExceptions(filter) {
     }
     excGroups_(rows).forEach(function (g) {
       if (inRange && !inRange[g.groupId]) return;
-      groups.push(excGroupView_(g, term, d, names, byId, user, range));
+      groups.push(excGroupView_(g, term, d, names, byId, user, range, liveOutIds));
     });
   });
   if (scope === 'range') groups.sort(function (a, b) { return a.rangeDates[0] < b.rangeDates[0] ? -1 : a.rangeDates[0] > b.rangeDates[0] ? 1 : 0; });
@@ -399,7 +415,7 @@ function confirmException(termId, groupId, acknowledge) {
   var user = requirePermission_('exception.confirm');
   var gid = String(groupId || '').trim();
   if (!gid) return { ok: false, error: '묶음을 찾을 수 없습니다. 목록을 새로 불러와 주세요.' };   // 빈 id가 group_id가 빈 여러 행과 맞지 않게
-  return withLock_(function () {
+  var res = withLock_(function () {
     var term = excFindTerm_(termId);
     if (excTermEnded_(term)) return { ok: false, error: EXC_ENDED_MSG };
     var sheet = termSheetName_('exceptions', term.id);
@@ -421,10 +437,15 @@ function confirmException(termId, groupId, acknowledge) {
     });
     if (warnings.length && !acknowledge) return { ok: false, needsConfirm: true, warnings: warnings };
     var now = nowIso_();
+    var since = vioAutoSince_(excSettings_(readAll_('settings', 'config')).autoOut, now);   // 쓰기 전에, confirmed_at에 쓰는 바로 그 now로
     bulkUpdateRecords_(sheet, pending.map(function (r) { return { id: r.id, patch: { status: '확정', confirmed_by: user.email, confirmed_at: now } }; }), user.email);
-    return { ok: true, count: pending.length };
+    var auto = vioAfterExceptionWrite_(term, excUnique_(pending.map(function (r) { return r.student_id; })), user.email, since, [gid]);
+    return { ok: true, count: pending.length, out: auto.out, _mails: auto.mails };
   });
+  return excFinishAuto_(res, user);
 }
+
+function excUnique_(list) { var seen = {}, out = []; list.forEach(function (x) { if (!seen[x]) { seen[x] = true; out.push(x); } }); return out; }
 
 /**
  * 한 묶음을 취소한다(사유 필수, 행은 남고 status '취소'). onlyDate(YYYY-MM-DD)를 주면 그 날 행 하나만 취소하고 묶음은 그대로 둔다.
@@ -434,7 +455,7 @@ function cancelException(termId, groupId, reason, onlyDate) {
   var user = requirePermission_('exception.cancel');
   var gid = String(groupId || '').trim();
   if (!gid) return { ok: false, error: '묶음을 찾을 수 없습니다. 목록을 새로 불러와 주세요.' };
-  return withLock_(function () {
+  var res = withLock_(function () {
     var why = String(reason || '').trim();
     var term = excFindTerm_(termId);
     if (excTermEnded_(term)) return { ok: false, error: EXC_ENDED_MSG };
@@ -455,9 +476,12 @@ function cancelException(termId, groupId, reason, onlyDate) {
     }
     if (why.length < EXC_CANCEL_REASON_MIN) return { ok: false, error: '취소 사유를 ' + EXC_CANCEL_REASON_MIN + '자 이상 적어 주세요.' };
     if (why.length > EXC_REASON_MAX) return { ok: false, error: '취소 사유는 ' + EXC_REASON_MAX + '자 안으로 적어 주세요.' };
+    var since = vioAutoSince_(excSettings_(readAll_('settings', 'config')).autoOut, nowIso_());
     bulkUpdateRecords_(sheet, live.map(function (r) { return { id: r.id, patch: { status: '취소', cancel_reason: why } }; }), user.email);
-    return { ok: true, count: live.length };
+    var auto = vioAfterExceptionWrite_(term, excUnique_(live.map(function (r) { return r.student_id; })), user.email, since);
+    return { ok: true, count: live.length, out: auto.out, _mails: auto.mails };
   });
+  return excFinishAuto_(res, user);
 }
 
 /**
