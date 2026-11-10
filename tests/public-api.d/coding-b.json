@@ -31,6 +31,18 @@
     "getMealCountsPdf": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getMoveContext": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "previewMove": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveMove": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }
