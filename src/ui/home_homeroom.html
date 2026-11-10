@@ -7,7 +7,7 @@
       el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin:8px 0' }, [
         d.out.out1 ? UI.statusPill('out1', '1OUT ' + d.out.out1 + '명') : UI.statusPill('mute', '1OUT 0명'),
         d.out.out2 ? UI.statusPill('out2', '퇴실 대상 ' + d.out.out2 + '명') : UI.statusPill('mute', '퇴실 대상 0명')]),
-      el('div', { class: 'muted', text: '우리 반 학생에게 새 OUT이 기록되면 메일로도 알려 드립니다.' }),
+      d.out.mailOn ? el('div', { class: 'muted', style: 'word-break:keep-all', text: '우리 반 학생에게 새 OUT이 기록되면 메일로도 알려 드립니다.' }) : null,
       el('a', { class: 'btn secondary', style: 'margin-top:4px', href: d.appUrl + '?page=outs&tab=term', text: (d.out.periodWord === '이번 기간' ? '이번 기간 보기' : '이번 학기 보기') })
     ]));
   }

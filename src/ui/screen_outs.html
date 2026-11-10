@@ -308,7 +308,7 @@
     }
     function drawToday(r) {
       var live = r.items.filter(function (i) { return i.status === '유효'; }).length;
-      var card = el('div', { class: 'card' }, [el('h2', { text: dayKo(r.date || state.ctx && state.ctx.today || r.term.start_date) + ' ' + live + '건' + (live !== r.items.length ? ' (취소 ' + (r.items.length - live) + '건 포함해 ' + r.items.length + '줄)' : '') })]);
+      var card = el('div', { class: 'card' }, [el('h2', { style: 'word-break:keep-all', text: dayKo(r.date || state.ctx && state.ctx.today || r.term.start_date) + ' ' + live + '건' + (live !== r.items.length ? ' · 취소 ' + (r.items.length - live) + '건' : '') })]);
       if (!r.items.length) {
         card.appendChild(UI.emptyState('오늘 기록된 OUT이 없습니다.', state.ctx && state.ctx.canRecord ? { text: 'OUT 기록하기', onclick: function () { state.tab = 'record'; drawTabs(); showTab(); } } : null));
       } else {
