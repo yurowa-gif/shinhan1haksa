@@ -49,6 +49,12 @@ function vioSyncAuto_(term, studentIds, actorEmail, since, touchedGroups) {
     return { created: 0, canceled: 0, updated: 0, mails: [], level: {} };
   }
   var ex = exr.rows;
+  // 특이사항 행은 지우지 않으므로, 살아 있는 자동 OUT이 가리키는 행이 어느 상태로도 없으면 탭이 바뀌었거나 비워진 것이다 — 취소하지 않고 멈춘다
+  var exIds = {};
+  ex.forEach(function (e) { exIds[String(e.id)] = true; });
+  if (violations.some(function (v) { return ruleRowLive_(v) && String(v.source) === 'F1자동' && !exIds[String(v.source_exception_id)]; })) {
+    throw new Error('자동 OUT이 가리키는 특이사항 행을 찾을 수 없어 자동 OUT을 맞추지 않았습니다. 특이사항 탭이 바뀌었는지 시트를 확인해 주세요.');
+  }
   var autoName = DEFAULT_VIOLATION_RULES[0][0];
   var rule = readAll_('violation_rules').filter(function (r) { return String(r.name).trim() === autoName; })[0];
   var settings = excSettings_(readAll_('settings', 'config'));
@@ -102,7 +108,10 @@ function vioSendAutoMail_(mails, actorEmail) {
   try { link = ScriptApp.getService().getUrl(); } catch (e) { link = ''; }
   var enabled = PropertiesService.getScriptProperties().getProperty('MAIL_ENABLED') === 'true';
   var notified = true, warn = false;
-  (mails || []).forEach(function (m) {
+  // 걸러 낼 주소(가짜 example.com·여러 주소 한 칸 등)는 notifyMail_과 같은 기준으로 먼저 뺀다 — 한도는 실제로 보낼 사람 수와 비교한다
+  var sendable = function (e) { return !!e && e.indexOf('@') >= 1 && !/[\s,;<>]/.test(e) && !/@([^@]*\.)?example\.com$/.test(e); };
+  (mails || []).forEach(function (m0) {
+    var m = { to: m0.to.filter(sendable), body: m0.body };
     if (!m.to.length) return;
     try {
       var r = notifyMail_(m.to, '[신한1학사] OUT 알림', m.body + (link ? '\n\n' + link : ''), actorEmail);
