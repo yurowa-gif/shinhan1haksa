@@ -234,7 +234,7 @@
       var want = prefillId; prefillId = '';
       call('confirmOutDismissal', want).then(function (r) {
         if (!alive) return;
-        if (r.ok) dismiss = r.prefill; else dismissMsg = '2OUT 퇴실 확정을 열 수 없습니다: ' + r.reason + '. OUT 화면의 [퇴실 대상]에서 확인해 주세요.';
+        if (r.ok) dismiss = r.prefill; else dismissMsg = '2OUT 퇴실 확정을 열 수 없습니다: ' + String(r.reason).replace(/\.$/, '') + '. OUT 화면의 [퇴실 대상]에서 확인해 주세요.';
         draw();
       }).catch(function (err) { if (!alive) return; dismissMsg = '2OUT 퇴실 확정을 열 수 없습니다: ' + ((err && err.message) || err); draw(); });
     }).catch(function (err) { if (!alive) return; clear(body); showError(body, err); });
@@ -349,9 +349,17 @@
           call('previewMove', payload()).then(function (p) {
             if (!alive || mine !== seq) return;
             if (!atTouched && p.now && p.now.slice(0, 16) !== at.value && retried !== true) { at.value = p.now.slice(0, 16); at.max = at.value; refresh(true); return; }
+            if (gateClosed(p)) return;
             last = p; drawResult(); drawBar();
           }).catch(function (err) { if (alive && mine === seq) fail(err); });
         }, 250);
+      }
+      /** 2OUT 퇴실 확정인데 관문이 닫혔다(면담 취소 등): 옛 '면담 확인' 안내를 남기지 않고 이유를 보이며 일반 입력으로 돌린다 */
+      function gateClosed(p) {
+        var g = dismiss && (p.errors || []).filter(function (e) { return e.field === 'gate'; })[0];
+        if (!g) return false;
+        dismiss = null; dismissMsg = '2OUT 퇴실 확정을 열 수 없습니다: ' + String(g.message).replace(/\.$/, '') + '. OUT 화면의 [퇴실 대상]에서 확인해 주세요.';
+        draw(); return true;
       }
       function confirmSave() {
         var p = last;
@@ -362,6 +370,7 @@
               if (r.ok) UI.toast(r.duplicate ? '이미 저장된 신청서입니다.' : r.lead + ' · 저장했습니다.');   // 다른 탭으로 옮긴 뒤 와도 결과는 알린다
               if (!alive) return;
               if (r.stale) { busy = false; UI.toast(r.error, { kind: 'warn', ms: 5000 }); refresh(); return; }
+              if (!r.ok && gateClosed(r)) { busy = false; return; }
               if (!r.ok) { busy = false; UI.toast((r.errors && r.errors[0] && r.errors[0].message) || '저장하지 못했습니다.', { kind: 'warn', ms: 5000 }); refresh(); return; }
               resetState(); dismiss = null; dismissMsg = '';
               window.scrollTo(0, 0);

@@ -126,3 +126,46 @@ test('같은 값의 일반 퇴실 신청서가 이미 있어도 2OUT 퇴실 신�
   assert.ok(!r.duplicate, '일반 행을 2OUT 신청의 중복으로 돌려주지 않는다'); assert.strictEqual(r.ok, false);
   assert.strictEqual(x.rows().filter((q) => q.reason === '2OUT 퇴실').length, 0);
 });
+
+// ── 총괄 검토 nit(#100) ──
+const makeAt = (day, hour) => {   // now를 바꿔 만든 환경(기간 끝날 확정 등)
+  const env = createGasEnv({ now: day + 'T' + (hour || '20:00:00') });
+  env.seedFake({ stage1: true });
+  env.strictLock = true;
+  return env;
+};
+
+test('기간 마지막 날(7/17)에 확정하면 기본 적용일(다음 날 7/18)도 저장된다. 끝난 다음 날보다 늦거나 기간 시작 전이면 거부', () => {
+  const y = (() => {   // now가 7/17인 새 환경에 같은 준비를 한다
+    const e = makeAt('2027-07-17');
+    const term = e.rows('terms').find((t) => t.name === '2027 1학기');
+    const enr = e.rows('enrollments').filter((q) => q.term_id === term.id);
+    const mine = e.rows('students').find((s) => enr.some((q) => q.student_id === s.id && q.teacher_email === T1) && !e.rows('status_changes').some((c) => c.student_id === s.id && c.item === '학사' && c.effective_date > '2027-07-17'));
+    const rule = e.rows('violation_rules').find((r) => r.name.startsWith('휴대폰')), tab = 'violations_' + term.id.slice(0, 8);
+    ['2027-07-16T20:00:00', '2027-07-17T19:00:00'].forEach((at) => e.asOwner((c) => c.appendRecord_(tab, { term_id: term.id, student_id: mine.id, occurred_at: at, rule_id: rule.id, rule_name: rule.name, memo: '', detected_by: T1, entered_by: T1, status: '유효', source: '직접', source_exception_id: '', cancel_reason: '' }, ADMIN)));
+    const dorm = e.rows('status_changes').some((r) => r.student_id === mine.id && r.item === '기숙사' && r.value === '입실');
+    return { env: e, mine, type: dorm ? '학사 및 기숙사 퇴실' : '학사 퇴실', rows: () => e.rows('status_changes').filter((r) => r.student_id === mine.id) };
+  })();
+  plain(y.env.call(T1, 'saveOutMeeting', { studentId: y.mine.id, date: '2027-07-17', content: MARK }));
+  const base = { studentId: y.mine.id, type: y.type, requestedAt: '2027-07-17T19:30:00', dinner: '중단', docSubmitted: false, outDismissal: true };
+  const tryEff = (eff) => { const i = Object.assign({ effectiveDate: eff }, base); const p = plain(y.env.call(ADMIN, 'previewMove', i)); return { p, s: plain(y.env.call(ADMIN, 'saveMove', i, p.expect || '')) }; };
+  const late = tryEff('2027-07-19'); assert.strictEqual(late.s.ok, false); assert.ok(late.s.errors.some((e) => e.field === 'effectiveDate'));
+  const early = tryEff('2027-03-01'); assert.strictEqual(early.s.ok, false); assert.ok(early.s.errors.some((e) => e.field === 'effectiveDate'));
+  const ok = tryEff('2027-07-18'); assert.strictEqual(ok.s.ok, true, JSON.stringify(ok));
+  assert.ok(y.rows().some((r) => r.item === '학사' && r.value === '퇴실' && r.effective_date === '2027-07-18' && r.reason === '2OUT 퇴실'));
+});
+
+test('적용일이 면담 날짜보다 이르면 거부(둘째 OUT·면담이 3/3인데 3/2 퇴실)', () => {
+  const x = makeEnv(); two(x); meet(x);
+  const r = save(x, ADMIN, inp(x, { effectiveDate: '2027-03-02' }), '');
+  assert.strictEqual(r.ok, false); assert.ok(r.errors.some((e) => e.field === 'effectiveDate' && /면담/.test(e.message)));
+});
+
+test('같은 신청서인데 석식 선택이 다르면 "이미 저장"이 아니라 다른 내용으로 저장됨을 알린다', () => {
+  const x = makeEnv(); two(x); meet(x);
+  const a = go(x, ADMIN); assert.strictEqual(a.ok, true);
+  const i = inp(x, { dinner: '일반 석식' }), p = prev(x, ADMIN, i);
+  const b = save(x, ADMIN, i, p.expect || '');
+  assert.strictEqual(b.ok, false); assert.ok(!b.duplicate); assert.match(b.errors[0].message, /다른 내용으로 이미 저장/);
+  assert.strictEqual(x.rows().filter((q) => q.reason === '2OUT 퇴실').length, 1);
+});

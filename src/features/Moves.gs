@@ -124,8 +124,11 @@ function inoutAuthorize_(input, c) { return foodAuthorize_(input, c); }   // 다
 function inoutDismissGate_(c) {
   if (!c.rec || c.errors.length) return c;
   var g = cnsGateFor_(c.rec.studentId);
-  if (!g.gate.ok) { c.errors = [{ field: '', message: g.gate.reason }]; return c; }
-  if (!c.term || c.term.id !== g.term.id) { c.errors = [{ field: 'effectiveDate', message: '2OUT 퇴실의 적용일은 이번 운영 기간 안의 날짜여야 합니다.' }]; return c; }
+  if (!g.gate.ok) { c.errors = [{ field: 'gate', message: g.gate.reason }]; return c; }
+  // 적용일: 면담 날짜 이후(아래), 이번 기간 끝 다음 날까지(끝나는 날 확정하면 기본 적용일이 다음 날이라 일반 퇴실처럼 방학 첫날도 된다)
+  var eff = c.rec.effectiveDate;
+  if (eff > ymdAddDays_(g.term.end_date, 1)) { c.errors = [{ field: 'effectiveDate', message: '2OUT 퇴실의 적용일은 이번 운영 기간이 끝난 다음 날까지만 정할 수 있습니다.' }]; return c; }
+  if (eff < g.gate.meetingNote.date) { c.errors = [{ field: 'effectiveDate', message: '적용일은 학부모 면담 날짜보다 빠를 수 없습니다.' }]; return c; }
   c.memo = '[2OUT] out:' + g.gate.triggerOutId + ' note:' + g.gate.meetingNote.id;
   return c;
 }
@@ -200,7 +203,12 @@ function saveMove(input, expect) {
     // 저장된 대표 행이 있어도 그 계획의 연결 행·취소·되살림이 빠져 있으면(중간에 끊긴 저장) 성공이라 하지 않는다
     var dup = c.rec && !c.errors.length ? inoutFindDuplicate_(c.rec, inoutHeadOf_(c.rec.type, c.rec.effectiveDate), d.changes, dismiss) : null;
     if (dup) {
-      if (foodUnfinished_(inoutPlan_(c.rec, foodBefore_(d.changes, dup.id), d), d.changes, dup.id)) return { ok: false, errors: [{ field: '', message: FOOD_UNFINISHED }] };
+      var before = inoutPlan_(c.rec, foodBefore_(d.changes, dup.id), d);
+      // 같은 신청서인데 급식 정리 선택(석식 등)이 다르면 조용히 "이미 저장"이라 하지 않는다 — 저장된 연결 행과 이번 계획의 연결 행을 견준다
+      var key = function (r) { return [r.item, r.value, r.effective_date].join('|'); };
+      var saved = d.changes.filter(function (x) { return x.linked_change_id === dup.id; }).map(key).sort().join(',');
+      if (!before.errors.length && before.rows.slice(1).map(key).sort().join(',') !== saved) return { ok: false, errors: [{ field: '', message: '다른 내용으로 이미 저장되어 있습니다. 학생 기록을 확인해 주세요.' }] };
+      if (foodUnfinished_(before, d.changes, dup.id)) return { ok: false, errors: [{ field: '', message: FOOD_UNFINISHED }] };
       return { ok: true, duplicate: true, id: dup.id, lead: foodDateKo_(c.rec.effectiveDate) + '부터 ' + c.rec.type, doc: String(dup.doc_submitted).toUpperCase() === 'TRUE' };
     }
     // 면담 관문은 같은 락 안에서 다시 확인한다(화면의 '확정 가능'을 믿지 않는다)
