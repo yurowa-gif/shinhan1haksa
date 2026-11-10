@@ -134,6 +134,9 @@ test('서류 미제출 F7 급식 신청 2건: 미제출이어도 적용(결정 3
   const rows = life.statusChanges.filter((r) => r.doc_submitted === 'FALSE');
   assert.strictEqual(rows.length, 2);
   assert.deepStrictEqual(rows.map((r) => r.student_id), life.noDocIds);
+  const term2 = plain(fake.terms)[1].id;
+  assert.ok(plain(fake.enrollments).some((e) => e.term_id === term2 && e.student_id === life.noDocIds[1] && e.teacher_email === TESTER),
+    '서류 미제출 1건은 시험 학사 교사 담당 학생(홈 카드 확인용)');
   assert.ok(rows.every((r) => r.doc_submitted === 'FALSE' && r.source === 'F7' && r.status === '유효' && r.linked_change_id === ''));
   assert.deepStrictEqual(rows.map((r) => [r.requested_at, r.effective_date, r.effective_date_auto]), [
     ['2027-03-08T10:00:00', '2027-03-08', '2027-03-08'], ['2027-03-09T14:00:00', '2027-03-10', '2027-03-10']]);

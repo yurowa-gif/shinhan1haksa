@@ -57,8 +57,8 @@ function buildFakeStage2Duty_(fake) {
   return { dutySlots: slots, daySchedules: daySchedules, teachers: pool, manager: manager };
 }
 
-/* 생활 기록 학생: 1단계가 쓰지 않는 번호(특이사항 0~8, 고정 일정 10~17, 퇴실 28, 입실 29) */
-var FAKE2_OUT2 = 19, FAKE2_OUT1 = 20, FAKE2_NODOC = [21, 22], FAKE2_PENDING = 23;
+/* 생활 기록 학생: 1단계가 쓰지 않는 번호(특이사항 0~8, 고정 일정 10~17, 퇴실 28, 입실 29). 25번은 시험 학사 교사 담당(서류 미제출 카드 확인용) */
+var FAKE2_OUT2 = 19, FAKE2_OUT1 = 20, FAKE2_NODOC = [21, 25], FAKE2_PENDING = 23;
 
 function buildFakeStage2Life_(fake, ruleRows) {
   var stage1 = buildFakeStage1_(fake);
@@ -68,7 +68,7 @@ function buildFakeStage2Life_(fake, ruleRows) {
     if (!r) throw new Error('violation_rules에 항목이 없습니다(setup을 먼저 실행하세요): ' + name);
     return r.id;
   };
-  var by = 'fake.teacher1@example.com';   // 그날 근무교사(가짜교사1)가 적발·입력
+  var by = 'fake.teacher1@example.com';   // 가짜교사1이 적발·입력(3월 근무표는 시드에 없다)
   var violations = [];
   var addOut = function (i, at, name, memo) {
     violations.push({ id: fakeId_('f8200000', violations.length + 1), term_id: term.id, student_id: st[i].id, occurred_at: at,
