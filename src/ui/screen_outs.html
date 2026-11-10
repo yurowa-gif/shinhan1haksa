@@ -145,7 +145,7 @@
       memo.value = state.memo;
       memo.addEventListener('input', function () { state.memo = memo.value; });
       var whoField = UI.field('적발 교사', who), memoField = UI.field('상황 메모(선택)', memo, { hint: '200자까지. 길게 쓰지 않습니다.' });
-      var timeField = UI.field('시각', time, { hint: state.date !== c.today && !state.time ? '어제 밤 일이라면 그 시각을 입력해 주세요.' : '' });
+      var timeField = UI.field('시각', time, { hint: !state.time ? '시각을 입력해 주세요(어제 밤 일이라면 그 시각).' : '' });
       errSetters.occurredAt = timeField.setError;   // 날짜는 위 카드가 먼저 막으므로 이 단계의 날짜·시각 오류는 시각 칸 아래에
       errSetters.detectedBy = whoField.setError; errSetters.memo = memoField.setError;
       var whenCard = el('div', { class: 'card' }, [el('h2', { text: '언제·누가' }), dateField, timeField, whoField, memoField]);
@@ -153,7 +153,7 @@
 
       bar = UI.actionBar([
         { text: '저장', kind: 'primary', disabled: true, onclick: onSave },
-        { text: '비우기', kind: 'secondary', onclick: function () { var touched = state.dateTouched; reset(); if (!touched && state.ctx) state.date = serverYmd(); load(state.date); } }
+        { text: '비우기', kind: 'secondary', onclick: function () { resetForm(); load(state.date); } }
       ], { mount: true });
       saveBtn = bar.querySelectorAll('button')[0];
       refresh();
@@ -163,6 +163,8 @@
       var d = new Date(Date.UTC(+ymd.slice(0, 4), +ymd.slice(5, 7) - 1, +ymd.slice(8, 10) + n));
       return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
     }
+    /** 비우기·저장 뒤: 손으로 고른 과거 날짜(어젯밤 일)는 그대로 두고, 오늘 날짜를 보고 있었다면 서버의 오늘로(자정을 넘겼어도 맞게) */
+    function resetForm() { var wasToday = state.ctx && state.date === state.ctx.today; reset(); if (wasToday) state.date = serverYmd(); }
     function reset() { state.student = null; state.ruleId = ''; state.memo = ''; state.time = ''; state.timeTouched = false; state.dateTouched = false; }
     /** 카드 안 오류 칸(빨간 글씨·테두리): 학생·항목 오류용 */
     function cardError(card) {
@@ -196,8 +198,9 @@
     function onSave() { if (canSave()) doSave(false); }
     function doSave(ack) {
       if (dayRolled()) return;   // [그래도 저장] 확인 뒤에 자정을 넘긴 경우에도
-      state.busy = true; refresh();
       showErrors([]);
+      if (!state.time) { showErrors([{ field: 'occurredAt', message: '시각을 입력해 주세요.' }]); return; }   // 시각이 비면 서버를 부르지 않는다(빈 시각으로 권한 판정이 거짓 거부 기록을 남기지 않게)
+      state.busy = true; refresh();
       var v = inputValue(); if (ack) v.acknowledge = true;
       call('saveOut', v).then(function (r) {
         state.busy = false;
@@ -215,7 +218,7 @@
         var msg = '저장했습니다. ' + state.ctx.periodWord + ' ' + r.after.label + '입니다.';
         var warn = r.notifyWarn ? ' 알림 메일이 가지 않았습니다. 필요하면 담당 선생님께 직접 알려 주세요.' : '';
         UI.toast(msg + warn, r.notifyWarn ? { kind: 'warn', ms: 8000 } : undefined);
-        reset();
+        resetForm();
         if (state.tab === 'record') load(state.date, msg + warn, !!r.notifyWarn); else loadList(msg + warn, !!r.notifyWarn);
         window.scrollTo(0, 0);
       }).catch(function (err) {
@@ -306,6 +309,7 @@
       else if (st === 'need') msg = x.canMeeting ? '학부모 면담을 하고 기록해 주세요. 기록이 있어야 관리자가 퇴실을 확정할 수 있습니다.' : '담당교사가 학부모 면담을 기록하면 관리자가 퇴실을 확정합니다.';
       else if (st === 'recorded') msg = '면담 ' + dayKo(x.meeting.date) + ' · ' + x.meeting.teacher + (x.canConfirm ? '' : ' — 관리자가 퇴실을 확정합니다.');
       if (msg) card.appendChild(el('div', { style: 'margin:8px 0', text: msg }));
+      if (x.prevExit) card.appendChild(el('div', { class: 'muted', text: '이전 퇴실 처리됨(' + dayKo(x.prevExit) + ')' }));
       if (x.canMeeting) card.appendChild(el('button', { type: 'button', class: 'btn block', text: '면담 기록하기', onclick: function () { openMeeting(x); } }));
       if (x.canConfirm) card.appendChild(el('button', { type: 'button', class: 'btn block', text: '퇴실 확정', onclick: function () { confirmDismissal(x); } }));
       else if (st === 'need' && r.isAdmin) card.appendChild(el('button', { type: 'button', class: 'btn block', 'aria-disabled': 'true', text: '퇴실 확정 — 면담 기록 필요', onclick: function (e) { e.preventDefault(); } }));
@@ -334,15 +338,18 @@
     }
     function openMeeting(x) {
       var sheet = null, busy = false;
-      var dateIn = UI.dateField({ label: '면담 날짜', value: state.ctx ? state.ctx.today : '', max: state.ctx ? state.ctx.today : undefined, name: 'mdate' });
+      var dateIn = UI.dateField({ label: '면담 날짜', value: state.ctx ? state.ctx.today : '', max: state.ctx ? state.ctx.today : undefined, name: 'mdate',
+        shortcuts: state.ctx ? [{ label: '오늘', value: state.ctx.today }] : [] });
+      var minYmd = x.trigger ? x.trigger.occurredAt.slice(0, 10) : '';
+      if (x.prevExit) { var pe = addDaysYmd(x.prevExit, 1); if (pe > minYmd) minYmd = pe; }   // 둘째 OUT 날과 이전 퇴실 다음 날 중 늦은 날
       var content = el('textarea', { maxlength: '2000', rows: '5', 'aria-label': '면담 내용' });
       var fc = UI.field('면담 내용', content, { hint: '면담 내용은 담당교사와 관리자만 볼 수 있습니다. 입퇴실 기록에는 면담 날짜도 쓰이지 않습니다.' });
       var trig = x.trigger ? dayKo(x.trigger.occurredAt) + ' ' + x.trigger.ruleName : '';
-      if (x.trigger) { var mn = dateIn.querySelector('input[type=date]'); if (mn) mn.min = x.trigger.occurredAt.slice(0, 10); }
+      if (minYmd) { var mn = dateIn.querySelector('input[type=date]'); if (mn) mn.min = minYmd; }
       var body = el('div', {}, [el('div', { text: UI.util.studentLabel(x.student) + ' 학부모 면담' }), trig ? el('div', { class: 'muted', style: 'margin:4px 0 8px', text: '연결 OUT(2번째): ' + trig }) : null, dateIn, fc]);
-      function refresh() { if (sheet) sheet.buttons[1].disabled = busy || !content.value.trim() || !dateIn.getValue() || (x.trigger && dateIn.getValue() < x.trigger.occurredAt.slice(0, 10)); }
+      function refresh() { if (sheet) sheet.buttons[1].disabled = busy || !content.value.trim() || !dateIn.getValue() || (minYmd && dateIn.getValue() < minYmd); }
       content.addEventListener('input', refresh);
-      dateIn.querySelector('input[type=date]').addEventListener('change', function () { if (x.trigger && dateIn.getValue() < x.trigger.occurredAt.slice(0, 10)) dateIn.setError('면담 날짜는 2번째 OUT(' + dayKo(x.trigger.occurredAt) + ') 이후여야 합니다.'); else dateIn.setError(''); refresh(); });
+      dateIn.querySelector('input[type=date]').addEventListener('change', function () { if (minYmd && dateIn.getValue() < minYmd) dateIn.setError('면담 날짜는 ' + dayKo(minYmd) + ' 이후여야 합니다.'); else dateIn.setError(''); refresh(); });
       sheet = UI.bottomSheet({ title: '학부모 면담 기록', content: body, actions: [
         { text: '닫기', kind: 'secondary', onclick: function () { sheet.close(); } },
         { text: '면담 기록 저장', kind: 'primary', disabled: true, onclick: function () {
@@ -377,7 +384,7 @@
     function confirmDismissal(x) {
       var tomorrow = dayKo(addDaysYmd(state.ctx ? state.ctx.today : (state.list && state.list.date) || '', 1));
       UI.confirmSheet({ title: '퇴실을 확정합니다', lead: UI.util.studentLabel(x.student) + ' · 2OUT 퇴실',
-        lines: ['면담이 기록되어 있습니다(' + dayKo(x.meeting.date) + ' · ' + x.meeting.teacher + ')', '확정하면 입퇴실 신청서가 미리 채워집니다', '적용일은 확정 다음 날(' + tomorrow + ')이고 다음 화면에서 고칠 수 있습니다', '유예는 없습니다'],
+        lines: ['면담이 기록되어 있습니다(' + dayKo(x.meeting.date) + ' · ' + x.meeting.teacher + ')', '확정하면 입퇴실 신청서가 미리 채워집니다', '적용일은 확정 다음 날, ' + tomorrow + '이고 다음 화면에서 고칠 수 있습니다', '유예는 없습니다'],
         confirmText: '퇴실 확정', danger: true,
         onconfirm: function () {
           call('confirmOutDismissal', x.studentId).then(function (r) {
@@ -408,7 +415,7 @@
     }
     function drawToday(r) {
       var live = r.items.filter(function (i) { return i.status === '유효'; }).length;
-      var card = el('div', { class: 'card' }, [el('h2', { text: dayKo(r.date || state.ctx && state.ctx.today || r.term.start_date) + ' ' + live + '건' + (live !== r.items.length ? ' (취소 ' + (r.items.length - live) + '건 포함해 ' + r.items.length + '줄)' : '') })]);
+      var card = el('div', { class: 'card' }, [el('h2', { style: 'word-break:keep-all', text: dayKo(r.date || state.ctx && state.ctx.today || r.term.start_date) + ' ' + live + '건' + (live !== r.items.length ? ' · 취소 ' + (r.items.length - live) + '건' : '') })]);
       if (!r.items.length) {
         card.appendChild(UI.emptyState('오늘 기록된 OUT이 없습니다.', state.ctx && state.ctx.canRecord ? { text: 'OUT 기록하기', onclick: function () { state.tab = 'record'; drawTabs(); showTab(); } } : null));
       } else {
