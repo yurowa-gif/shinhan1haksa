@@ -21,6 +21,7 @@ function cnsLastOut2Exit_(changes, studentId) {
  * 퇴실 관문이 읽는 면담 목록(내용 없이).
  * ASSUMPTION: 같은 기간에 2OUT 퇴실 뒤 다시 입실한 학생은 그 퇴실 적용일 **이후** 날짜의 면담만 인정한다(옛 면담으로 관문이 다시 열리지 않게).
  * 선생님 답이 오면 R9 규칙(outDismissalGate_)으로 옮긴다(followups R9 질문).
+ * 결정 63: 2OUT으로 퇴실한 학생은 그 학기·다음 학기에 다시 들어올 수 없다(재입실은 규칙·입퇴실 저장 쪽에서 막는다). 그래도 퇴실 취소(결정 59)로 되돌린 경우에는 이 가정이 맞는 동작이다.
  */
 function cnsNotesForGate_(changes) {
   changes = changes || readAll_('status_changes');
