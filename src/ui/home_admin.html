@@ -97,6 +97,7 @@
     });
     if (f.docMore) kids.push(el('div', { class: 'muted', style: 'margin-top:8px', text: '그 밖에 ' + f.docMore + '건이 더 있습니다.' }));
     kids.push(el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=moves&tab=meal', text: '급식 변경 신청' }));
+    kids.push(el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=moves', text: '입퇴실 신청' }));
     root.appendChild(el('div', { class: 'card' }, kids));
   }
 </script>
