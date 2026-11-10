@@ -7,6 +7,8 @@
         el('div', { class: 'muted', text: '오늘 적발한 학생의 OUT을 30초 안에 기록합니다.' }),
         el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin:8px 0' }, [
           UI.statusPill('out1', '1OUT ' + (d.out.out1 || 0) + '명'), UI.statusPill('out2', '퇴실 대상 ' + (d.out.out2 || 0) + '명'), UI.statusPill('mute', '오늘 ' + (d.out.today || 0) + '건')]),
+        d.out.targets && (d.out.targets.need + d.out.targets.ready) > 0 ? el('a', { class: 'notice warn', style: 'display:block;margin:8px 0;text-decoration:none', href: d.appUrl + '?page=outs&tab=dismiss',
+          text: '2OUT 대상 ' + d.out.targets.n + '명 · 면담 필요 ' + d.out.targets.need + ' · 확정 가능 ' + d.out.targets.ready }) : null,
         el('a', { class: 'btn', style: 'margin-top:4px', href: d.appUrl + '?page=outs&tab=record', text: 'OUT 기록하기' }),
         el('a', { class: 'btn secondary', style: 'margin:4px 0 0 8px', href: d.appUrl + '?page=outs&tab=term', text: (d.out.periodWord === '이번 기간' ? '이번 기간 보기' : '이번 학기 보기') })
       ]));

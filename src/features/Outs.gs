@@ -31,6 +31,14 @@ function vioHomeInfo_(user, role) {
   });
   out.list.sort(function (a, b) { return b.count - a.count; });
   out.list = out.list.slice(0, 6);   // 홈 카드에는 많은 순 6명만
+  if (role === 'admin') {   // 2OUT 대상 N명 · 면담 필요 N · 확정 가능 N
+    var byId = {};
+    readAll_('students').forEach(function (s) { byId[s.id] = s; });
+    var ids = Object.keys(per).filter(function (id) { return per[id] >= 2; });
+    var info = vioMeetingInfo_(vu, term, ids, byId, vioViolations_(term));
+    out.targets = { n: 0, need: 0, ready: 0 };   // 퇴실 처리된 학생은 세지 않는다
+    Object.keys(info).forEach(function (id) { if (info[id].state === 'left') return; out.targets.n++; if (info[id].state === 'need') out.targets.need++; if (info[id].state === 'recorded') out.targets.ready++; });
+  }
   return out;
 }
 
@@ -299,7 +307,7 @@ function listOuts(filter) {
   var user = requirePermission_('out.view');
   filter = filter || {};
   var scope = String(filter.scope || 'term');
-  if (['student', 'term', 'today'].indexOf(scope) < 0) throw new Error('볼 범위를 다시 골라 주세요.');
+  if (['student', 'term', 'today', 'targets'].indexOf(scope) < 0) throw new Error('볼 범위를 다시 골라 주세요.');
   var terms = readAll_('terms').filter(function (t) { return t.start_date && t.end_date; }).sort(function (a, b) { return a.start_date < b.start_date ? 1 : -1; });
   var today = String(filter.date || '').trim() || today_();
   if (scope === 'today' && !ymdIsValid_(today)) throw new Error('날짜를 골라 주세요.');
@@ -309,7 +317,7 @@ function listOuts(filter) {
     term = terms.filter(function (t) { return t.id === String(filter.termId); })[0];
     if (!term) throw new Error('운영 기간을 찾을 수 없습니다. 새로 고친 뒤 다시 해 주세요.');
   } else term = getCurrentTerm_();
-  var out = { ok: true, date: today, term: null, terms: terms.map(function (t) { return { id: t.id, name: t.name }; }), items: [], summary: [], canCancel: false };
+  var out = { ok: true, date: today, term: null, terms: terms.map(function (t) { return { id: t.id, name: t.name }; }), items: [], summary: [], canCancel: false, isAdmin: hasRole_(user, 'admin') };
   if (!term) return out;
   var enrollments = readAll_('enrollments'), students = readAll_('students'), changes = readAll_('status_changes');
   var visible = vioVisibleIds_(user, enrollments, students, term.id, vioViewWide_());
@@ -335,6 +343,7 @@ function listOuts(filter) {
   var count = Object.create(null);
   rows.forEach(function (v) { if (ruleRowLive_(v)) count[v.student_id] = (count[v.student_id] || 0) + 1; });
   var shown = rows.filter(function (v) {
+    if (scope === 'targets') return ruleRowLive_(v) && count[v.student_id] >= 2;   // 퇴실 대상 학생의 살아 있는 OUT
     if (scope === 'student') return String(v.student_id) === String(filter.studentId);
     if (scope === 'today') return String(v.occurred_at).slice(0, 10) === today;
     return true;
@@ -349,7 +358,7 @@ function listOuts(filter) {
       canCancel: out.canCancel && live };
   });
   var seen = Object.create(null);
-  (scope === 'term' ? Object.keys(count) : shown.map(function (v) { return v.student_id; })).forEach(function (id) {
+  (scope === 'term' || scope === 'targets' ? Object.keys(count) : shown.map(function (v) { return v.student_id; })).forEach(function (id) {
     if (seen[id]) return; seen[id] = true;
     var s = byId[id] || {};
     var mine = rows.filter(function (v) { return ruleRowLive_(v) && String(v.student_id) === id; }).sort(function (a, b) { return String(a.occurred_at) < String(b.occurred_at) ? 1 : -1; })[0];
@@ -367,6 +376,11 @@ function listOuts(filter) {
     if (count[id] >= 2) out.stats.out2Students++; else if (count[id] === 1) out.stats.out1Students++;
   });
   out.summary.sort(function (a, b) { return (a.left ? 1 : 0) - (b.left ? 1 : 0) || b.count - a.count || String(a.student.studentNo).localeCompare(String(b.student.studentNo)); });   // 퇴실 처리됨은 맨 뒤
+  // 2OUT 학생의 면담 칸(상담 보기 범위를 통과한 학생만)
+  var targetIds = out.summary.filter(function (x) { return x.count >= 2; }).map(function (x) { return x.studentId; });
+  var info = vioMeetingInfo_(user, term, targetIds, byId, vioViolations_(term));
+  out.summary.forEach(function (x) { if (info[x.studentId]) Object.assign(x, info[x.studentId]); });
+  if (scope === 'targets') out.summary = out.summary.filter(function (x) { return x.count >= 2; });
   return out;
 }
 
@@ -395,4 +409,64 @@ function cancelOut(termId, id, reason) {
     var rows = vioViolations_(term);
     return { ok: true, after: outLevel_(rows, row.student_id, term.id) };
   });
+}
+
+
+/* ───── C13: 2OUT 면담 칸·퇴실 확정 관문 ───── */
+
+/**
+ * 2OUT(살아 있는 OUT 2건 이상) 학생마다 면담 상태. 면담 날짜·교사는 상담 보기 범위(counsel.view, 근무 여부 안 봄)를 통과한 학생에게만 준다 — 담당이 아닌 학사 교사·출결 담당은 빈칸.
+ * 이번 기간(getCurrentTerm_)만 본다(지난 기간은 조회용). 상담 파일은 볼 수 있는 학생이 있을 때만 읽는다. 내용(content)은 어디에도 없다.
+ * → {studentId: {state:'need'|'recorded'|'left', meeting:{date, teacher, noteId?}|null, canMeeting, canConfirm}} (볼 수 없는 학생은 키가 없다)
+ */
+function vioMeetingInfo_(user, term, studentIds, byId, rows) {
+  var cur = getCurrentTerm_();
+  var out = {};
+  if (!cur || cur.id !== term.id || !studentIds.length) return out;
+  var allowedRoles = permissions_()['counsel.view'].roles, ok = [], facts = {};
+  studentIds.forEach(function (id) {
+    var s = byId[id];
+    if (!s) return;
+    var f = studentFacts_(user, s, today_(), 0, true);   // 근무 여부는 보지 않는다(noDuty)
+    f.isOnDuty = false;   // 이 PR만으로도 근무교사가 면담 칸을 못 보게(studentFacts_의 noDuty에 기대지 않는다)
+    if (canAccessStudentByFacts_(user.roles, f, allowedRoles, false)) { ok.push(id); facts[id] = f; }
+  });
+  if (!ok.length) return out;
+  var changes = readAll_('status_changes'), notes = cnsNotesForGate_(changes), names = {};
+  readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = String(u.name || ''); });
+  var isTeacher = hasRole_(user, 'hall_teacher'), isAdmin = hasRole_(user, 'admin');
+  ok.forEach(function (id) {
+    var g = outDismissalGate_(rows, notes, changes, id, term.id, today_());
+    var state = g.alreadyLeft ? 'left' : g.meetingNote ? 'recorded' : 'need';
+    var mine = g.meetingNote && normalizeEmail_(g.meetingNote.teacher_email) === user.email;
+    out[id] = { state: state,
+      meeting: g.meetingNote ? { date: g.meetingNote.date, teacher: names[normalizeEmail_(g.meetingNote.teacher_email)] || '(등록 안 된 교사)', noteId: mine ? g.meetingNote.id : undefined } : null,
+      // 결정 51: 면담이 있었는데 연결한 OUT이 취소돼 인정되지 않는 경우(카드가 '면담 필요'로 돌아가고 안내가 붙는다)
+      // 연결한 OUT이 이번 기간 violations 행(취소 포함)일 때만 stale — 지난 기간 면담은 해당 없음
+      staleMeeting: state === 'need' && notes.some(function (n) { return n.student_id === id && ruleRowLive_(n) && String(n.type).trim() === CNS_TYPE_OUT2 && rows.some(function (v) { return String(v.id) === String(n.linked_violation_id); }); }),
+      prevExit: state === 'left' ? '' : cnsLastOut2Exit_(changes, id),   // 재입실 학생에 '이전 퇴실 처리됨(M월 D일)'
+      trigger: g.triggerOutId ? (function () { var t = rows.filter(function (v) { return String(v.id) === g.triggerOutId; })[0]; return t ? { occurredAt: String(t.occurred_at), ruleName: t.rule_name } : null; })() : null,
+      canMeeting: isTeacher && !!facts[id].isAssigned && state === 'need', canConfirm: isAdmin && state === 'recorded' };
+  });
+  return out;
+}
+
+/**
+ * 퇴실 확정 관문(관리자): 통과하면 {ok:true, prefill} — 입퇴실 화면이 이 값으로 신청서를 미리 채운다(Q8: 사유 '2OUT 퇴실', 적용일 확정 다음 날, 유형은 고르게).
+ * 막히면 {ok:false, reason}(업무 차단이라 거부 기록은 남기지 않는다): '퇴실 대상 아님' | '면담 기록 필요' | '이미 퇴실'.
+ * 면담 날짜·교사는 이 응답의 면담 칸에만 있다. 내용은 없다.
+ */
+function confirmOutDismissal(studentId) {
+  requirePermission_('out.dismiss');
+  var student = findById_('students', String(studentId || ''));
+  if (!student) return { ok: false, reason: '학생을 찾을 수 없습니다.' };
+  var g = cnsGateFor_(student.id);
+  if (!g.gate.ok) return { ok: false, reason: g.gate.reason };
+  var names = {};
+  readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = String(u.name || ''); });
+  var m = g.gate.meetingNote;
+  return { ok: true, prefill: {
+    studentId: student.id, student: { name: student.name, grade: +student.grade, classNo: student.class_no, number: student.number },
+    reason: '2OUT 퇴실', effectiveDate: ymdAddDays_(today_(), 1),
+    meeting: { date: m.date, teacher: names[normalizeEmail_(m.teacher_email)] || '(등록 안 된 교사)' } } };
 }
