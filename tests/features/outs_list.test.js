@@ -257,3 +257,34 @@ test('listOuts 오늘 탭: date를 다른 기간 날짜로 주면 그 기간(2�
   assert.strictEqual(as.canRecord, false);
   assert.ok(as.out1 + as.out2 >= info.out1 + info.out2, '출결 담당으로 보면 전체');
 });
+
+test('홈 숫자는 퇴실 처리된 학생(오늘 퇴실·내일부터 적용되는 2OUT 퇴실)을 빼며 목록 left와 같다. mailOn은 설정을 따른다. 다른 기간에 담당이 다르면 isMine·hasMine이 거짓', () => {
+  const x = makeEnv();
+  const enr = x.env.rows('enrollments').filter((e) => e.term_id === x.term.id);
+  const ownS = x.env.rows('students').find((s) => enr.some((e) => e.student_id === s.id && e.teacher_email === T1));
+  x.add(ownS); x.add(ownS, { occurred_at: '2027-03-02T20:00:00' });
+  const adm = () => plain(x.env.call(ADMIN, 'getHomeData', 'admin')).out;
+  const t1 = () => plain(x.env.call(T1, 'getHomeData', 'hall_teacher')).out;
+  assert.deepStrictEqual([adm().out2, t1().out2], [1, 1]);
+  assert.strictEqual(adm().mailOn, false);
+  x.env.scriptProps.MAIL_ENABLED = 'true';
+  assert.strictEqual(adm().mailOn, true);
+  // 내일부터 적용되는 2OUT 퇴실: 목록 left true, 홈에서 빠진다
+  x.env.asOwner((c) => c.appendRecord_('status_changes', { student_id: ownS.id, item: '학사', value: '퇴실', effective_date: '2027-03-04', reason: '2OUT 퇴실', memo: '[2OUT] out:x note:y', status: '유효' }, ADMIN));
+  assert.deepStrictEqual([adm().out2, t1().out2, adm().list ? adm().list.length : 0], [0, 0, 0]);
+  assert.strictEqual(call(x, ADMIN, 'listOuts', { scope: 'term' }).summary.find((q) => q.studentId === ownS.id).left, true);
+  // 사유만 있는 퇴실도, 오늘 적용되는 일반 퇴실도 같은 규칙
+  const y = makeEnv();
+  y.add(y.mine); y.add(y.mine, { occurred_at: '2027-03-02T20:00:00' });
+  y.env.asOwner((c) => c.appendRecord_('status_changes', { student_id: y.mine.id, item: '학사', value: '퇴실', effective_date: '2027-03-03', reason: '개인 사정', memo: '', status: '유효' }, ADMIN));
+  assert.strictEqual(plain(y.env.call(ADMIN, 'getHomeData', 'admin')).out.out2, 0);
+  // 2학기에 담당이 다르면 isMine·hasMine 거짓
+  const z = makeEnv();
+  z.env.asOwner((c) => c.appendRecord_('terms', { name: '2027 2학기 가짜', type: '학기', start_date: '2027-08-20', end_date: '2027-12-20', memo: '' }, ADMIN));
+  const t2 = z.env.rows('terms').find((t) => t.name === '2027 2학기 가짜');
+  const e1 = z.env.rows('enrollments').find((e) => e.term_id === z.term.id && e.student_id === z.mine.id);
+  z.env.asOwner((c) => { c.appendRecord_('enrollments', { term_id: t2.id, student_id: z.mine.id, teacher_email: 'someone.else@example.com', veritas: e1.veritas, commute_type: e1.commute_type, end_type: '', memo: '' }, ADMIN); c.ensureTermSheet_('violations', t2.id); });
+  z.env.asOwner((c) => c.appendRecord_('violations_' + t2.id.slice(0, 8), { term_id: t2.id, student_id: z.mine.id, occurred_at: '2027-08-25T20:00:00', rule_id: z.rule.id, rule_name: z.rule.name, memo: '', detected_by: '', entered_by: ADMIN, status: '유효', source: '직접', source_exception_id: '', cancel_reason: '' }, ADMIN));
+  const tt = call(z, T1, 'listOuts', { scope: 'term', termId: t2.id });
+  assert.deepStrictEqual([tt.hasMine, tt.summary.find((q) => q.studentId === z.mine.id).isMine], [false, false]);
+});

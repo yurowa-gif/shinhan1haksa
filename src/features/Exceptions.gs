@@ -39,7 +39,7 @@ function excSettings_(rows) {
   return { types: split(get('exception.types')), typeShort: typeShort, autoOut: split(get('exception.auto_out_types')) };
 }
 
-/** 화면 칩용 유형 목록: [{name, short, auto}] (auto = 미인정 유형, "1OUT 예정" 표시) */
+/** 화면 칩용 유형 목록: [{name, short, auto}] (auto = 미인정 유형: 확정하면 자동 1OUT이 기록된다) */
 function excTypeChips_(settings) {
   return settings.types.map(function (t) {
     return { name: t, short: attTypeShort_(t, settings.typeShort) || t, auto: settings.autoOut.indexOf(t) >= 0 };
@@ -291,7 +291,7 @@ function saveException(input) {
         reason: v.rec.reason, status: confirm ? '확정' : '요청', requested_by: user.email, requested_at: now,
         confirmed_by: confirm ? user.email : '', confirmed_at: confirm ? now : '', cancel_reason: '' };
     }), user.email);
-    var auto = confirm ? vioAfterExceptionWrite_(v.term, [studentId], user.email, since) : { out: { created: 0, canceled: 0, level: {} }, mails: [] };
+    var auto = confirm ? vioAfterExceptionWrite_(v.term, [studentId], user.email, since, [group]) : { out: { created: 0, canceled: 0, level: {} }, mails: [] };
     return { ok: true, groupId: group, count: v.dates.length, status: confirm ? '확정' : '요청', warnings: warnings,
       display: excDisplay_(student), type: v.rec.type, from: v.dates[0], to: v.dates[v.dates.length - 1],
       autoOut: d.settings.autoOut.indexOf(v.rec.type) >= 0, out: auto.out, _mails: auto.mails };
@@ -304,11 +304,11 @@ function excFinishAuto_(res, user) {
   if (!res || !res._mails) return res;
   var mails = res._mails;
   delete res._mails;
-  if (mails.length) res.out = Object.assign({}, res.out, { notified: vioSendAutoMail_(mails, user.email) });
+  if (mails.length) { var m = vioSendAutoMail_(mails, user.email); res.out = Object.assign({}, res.out, { notified: m.notified, notifyWarn: m.warn }); }
   return res;
 }
 
-function excGroupView_(g, term, d, namesByEmail, studentById, user, range) {
+function excGroupView_(g, term, d, namesByEmail, studentById, user, range, outIds) {
   var s = studentById[g.studentId] || {};
   var chip = excTypeChips_(d.settings).filter(function (c) { return c.name === g.type; })[0];
   var mine = g.requestedBy === user.email;
@@ -320,7 +320,9 @@ function excGroupView_(g, term, d, namesByEmail, studentById, user, range) {
     dates: g.dates, canceledDates: g.dates.filter(function (x) { return g.liveDates.indexOf(x) < 0; }), rangeDates: rangeDates,
     rangeCanceled: !!range && !!rangeDates.length && !liveInRange.length,   // 이 날(조회 범위)은 이미 취소된 날
     blocks: g.blocks, blocksText: excBlocksText_(g.blocks),
-    type: g.type, short: chip ? chip.short : g.type, auto: !!chip && chip.auto, reason: g.reason, status: g.status,
+    type: g.type, short: chip ? chip.short : g.type, auto: !!chip && chip.auto,
+    hasOut: g.ids.some(function (id) { return !!(outIds && outIds[id]); }),   // 이 묶음에 살아 있는 자동 1OUT이 있는가(설정만 보고 1OUT이라 하지 않는다)
+    reason: g.reason, status: g.status,
     requestedByName: namesByEmail[g.requestedBy] || g.requestedBy, mine: mine, cancelReason: g.cancelReason,
     // 끝난 기간은 보기만 — 눌러도 늘 거부되는 버튼은 보이지 않게 한다
     canConfirm: !ended && g.status === '요청' && excCanConfirm_(user),
@@ -374,6 +376,8 @@ function listExceptions(filter) {
   var groups = [];
   terms.forEach(function (term) {
     var visible = excVisibleIds_(user, d.enrollments, d.students, term.id, excViewWide_());
+    var liveOutIds = {};   // 살아 있는 F1자동 OUT이 가리키는 특이사항 행 id
+    try { vioViolations_(term).forEach(function (v) { if (ruleRowLive_(v) && String(v.source) === 'F1자동') liveOutIds[String(v.source_exception_id)] = true; }); } catch (e) { liveOutIds = {}; }
     var rows = excRows_(term).rows.filter(function (r) { return visible[r.student_id] || (scope === 'mine' && r.requested_by === user.email); });
     if (scope === 'pending') rows = rows.filter(function (r) { return r.status === '요청'; });
     else if (scope === 'mine') rows = rows.filter(function (r) { return r.requested_by === user.email; });
@@ -386,7 +390,7 @@ function listExceptions(filter) {
     }
     excGroups_(rows).forEach(function (g) {
       if (inRange && !inRange[g.groupId]) return;
-      groups.push(excGroupView_(g, term, d, names, byId, user, range));
+      groups.push(excGroupView_(g, term, d, names, byId, user, range, liveOutIds));
     });
   });
   if (scope === 'range') groups.sort(function (a, b) { return a.rangeDates[0] < b.rangeDates[0] ? -1 : a.rangeDates[0] > b.rangeDates[0] ? 1 : 0; });
@@ -435,7 +439,7 @@ function confirmException(termId, groupId, acknowledge) {
     var now = nowIso_();
     var since = vioAutoSince_(excSettings_(readAll_('settings', 'config')).autoOut, now);   // 쓰기 전에, confirmed_at에 쓰는 바로 그 now로
     bulkUpdateRecords_(sheet, pending.map(function (r) { return { id: r.id, patch: { status: '확정', confirmed_by: user.email, confirmed_at: now } }; }), user.email);
-    var auto = vioAfterExceptionWrite_(term, excUnique_(pending.map(function (r) { return r.student_id; })), user.email, since);
+    var auto = vioAfterExceptionWrite_(term, excUnique_(pending.map(function (r) { return r.student_id; })), user.email, since, [gid]);
     return { ok: true, count: pending.length, out: auto.out, _mails: auto.mails };
   });
   return excFinishAuto_(res, user);

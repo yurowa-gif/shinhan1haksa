@@ -61,7 +61,7 @@ test('담당교사 saveOutMeeting: 상담 파일에 행(type·target·둘째 OUT
   assert.strictEqual(call(x, ADMIN, 'confirmOutDismissal', x.mine.id).ok, true, '다시 불러도 ok');
 });
 
-test('저장 입력 검사: 1건뿐·둘째 OUT 이전 날짜·미래·내용 없음·너무 김·이미 면담 있음·이미 퇴실 — 모두 거부이고 행이 늘지 않는다', () => {
+test('저장 입력 검사((가정) 면담은 학생당 하나 포함): 1건뿐·둘째 OUT 이전 날짜·미래·내용 없음·너무 김·이미 면담 있음·이미 퇴실 — 모두 거부이고 행이 늘지 않는다', () => {
   const x = makeEnv();
   x.addOut(x.mine, '2027-03-02T20:00:00');
   assert.strictEqual(meet(x, T1).ok, false, '1건뿐');
@@ -107,7 +107,7 @@ test('cancelOutMeeting: 작성한 담당교사 본인만(남의 면담 id는 den
   assert.strictEqual(meet(x, T1).ok, true, '다시 기록할 수 있다');
 });
 
-test('면담이 연결된 OUT이 취소되면 그 면담은 세지 않는다(결정 51), 퇴실이 잡힌 뒤에는 면담을 취소할 수 없다', () => {
+test('면담이 연결된 OUT이 취소되면 그 면담은 세지 않는다(결정 51), (가정) 퇴실이 잡힌 뒤에는 면담을 취소할 수 없다', () => {
   const x = makeEnv();
   x.two(x.mine);
   meet(x, T1);
@@ -178,7 +178,7 @@ test('listOuts targets: 2OUT 학생의 살아 있는 OUT 목록이 함께 오고
   assert.deepStrictEqual([t2.summary[0].state, t2.summary[0].staleMeeting, t2.summary[0].meeting], ['need', true, null]);
 });
 
-test('재입실: 2OUT 퇴실 뒤 다시 입실하면 옛 면담으로 관문이 다시 열리지 않고(면담 기록 필요), 퇴실 이후 날짜의 새 면담만 인정. 퇴실 메모가 가리키는 면담은 취소 불가', () => {
+test('(가정) 재입실: 2OUT 퇴실 뒤 다시 입실하면 옛 면담으로 관문이 다시 열리지 않고(면담 기록 필요), 퇴실 이후 날짜의 새 면담만 인정. 퇴실 메모가 가리키는 면담은 취소 불가', () => {
   const x = makeEnv();
   x.two(x.mine); meet(x, T1);
   const note = x.notes()[0];
@@ -227,4 +227,36 @@ test('퇴실 처리됨(left)은 면담 권한이 없는 사람에게도 보이�
     const j = JSON.stringify(plain(x.env.call(who, 'getHomeData', role)));
     assert.ok(!j.includes(MARK), who);
   }
+});
+
+test('내일부터 적용되는 2OUT 퇴실(확정 기본값)도 누구에게나 퇴실 처리됨으로 보이고, need일 때 canConfirm은 거짓, targets에 1OUT 학생은 없다', () => {
+  const x = makeEnv();
+  x.two(x.mine); x.addOut(x.other, '2027-03-02T20:00:00');   // other는 1OUT
+  const a = call(x, ADMIN, 'listOuts', { scope: 'targets' });
+  assert.deepStrictEqual([a.summary.length, a.summary[0].state, a.summary[0].canConfirm, a.summary[0].left], [1, 'need', false, false], 'need일 때 관리자도 확정 불가, 1OUT 학생은 targets에 없다');
+  meet(x, T1);
+  x.env.asOwner((c) => c.appendRecord_('status_changes', { student_id: x.mine.id, item: '학사', value: '퇴실', effective_date: '2027-03-04', reason: '2OUT 퇴실', memo: '', status: '유효' }, ADMIN));   // 사유만 있는 퇴실, 내일부터
+  for (const who of [ADMIN, ATT, T1, T2, 'test.homeroom@example.com']) {
+    const r = call(x, who, 'listOuts', { scope: 'targets' }).summary.find((s) => s.studentId === x.mine.id);
+    if (r) assert.strictEqual(r.left, true, who + ': 내일 적용 퇴실도 퇴실 처리됨');
+  }
+  const home = plain(x.env.as(ADMIN, (c) => c.vioHomeInfo_(c.requirePermission_('out.view'), 'admin')));
+  assert.deepStrictEqual([home.out2, home.targets.n], [0, 0], '홈 숫자도 같은 규칙');
+});
+
+test('(가정) 경계·다른 학생: 퇴실 적용일 당일 면담은 세지 않고(이후 날짜만), 다른 학생의 [2OUT] 메모·퇴실은 이 학생의 면담 인정·취소에 영향이 없다', () => {
+  const x = makeEnv();
+  x.two(x.mine); x.two(x.other);
+  meet(x, T1);   // mine 면담 3/3
+  const note = x.notes()[0];
+  // 다른 학생 other의 2OUT 퇴실(메모에 mine의 면담 id가 아닌 다른 값) — mine 쪽은 그대로
+  x.env.asOwner((c) => c.appendRecord_('status_changes', { student_id: x.other.id, item: '학사', value: '퇴실', effective_date: '2027-03-03', reason: '2OUT 퇴실', memo: '[2OUT] out:x note:other-note', status: '유효' }, ADMIN));
+  assert.strictEqual(call(x, ADMIN, 'confirmOutDismissal', x.mine.id).ok, true, '다른 학생의 퇴실은 영향 없음');
+  assert.strictEqual(plain(x.env.call(T1, 'cancelOutMeeting', note.id, '다른 학생 메모는 막지 않음')).ok, true);
+  // 경계: mine의 퇴실 적용일 = 면담 날짜(3/3)이면 면담은 세지 않는다(이후 날짜만)
+  const y = makeEnv(); y.two(y.mine); meet(y, T1);
+  y.env.asOwner((c) => c.appendRecord_('status_changes', { student_id: y.mine.id, item: '학사', value: '퇴실', effective_date: '2027-03-03', reason: '2OUT 퇴실', memo: '[2OUT] out:x note:y', status: '유효' }, ADMIN));
+  y.env.asOwner((c) => c.appendRecord_('status_changes', { student_id: y.mine.id, item: '학사', value: '입실', effective_date: '2027-03-03', reason: '재입실', memo: '', status: '유효' }, ADMIN));
+  y.env.setNow('2027-03-05T10:00:00');
+  assert.strictEqual(call(y, ADMIN, 'confirmOutDismissal', y.mine.id).ok, false, '퇴실 당일 면담은 인정되지 않는다');
 });

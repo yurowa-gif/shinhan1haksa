@@ -43,7 +43,7 @@ test('출결 담당이 미인정결석을 저장하면 자동 OUT 1건(F1자동�
   const v = x.vtab().filter((q) => q.student_id === x.a.id);
   assert.strictEqual(v.length, 1);
   assert.deepStrictEqual([v[0].source, v[0].status, v[0].entered_by, v[0].rule_name, v[0].occurred_at.slice(0, 10), v[0].memo.startsWith('사전 특이사항 자동')], ['F1자동', '유효', ATT, NAME + '(미인정결석)', '2027-03-08', true]);
-  assert.ok(x.env.rows('audit_log').some((l) => l.action === 'create' && l.row_id === v[0].id));
+  assert.ok(x.env.rows('audit_log').some((l) => l.action === 'bulk_create' && JSON.stringify(l).includes(v[0].id)), '만든 행 id가 audit_log(bulk_create)에 남는다');
   assert.deepStrictEqual(sent.map((m) => m.to).sort(), [RH, RT].sort());
   assert.deepStrictEqual(locks, sent.map(() => false), '메일은 락 밖에서');
   assert.ok(sent.every((m) => !m.body.includes(x.a.name) && m.body.includes('3월 8일(월)') && m.body.includes('이번 학기 1OUT입니다.')), sent[0].body);
@@ -90,6 +90,8 @@ test('묶음 취소 → OUT 취소([자동] 사유·audit), 3일 묶음에서 �
 
 test('seedFakeStage1 뒤 syncAutoOutsAll: 확정된 2027-03-05 미인정 1건만 OUT, 메일 0통, 다시 돌려도 0건', () => {
   const x = makeEnv({ stage1: true });
+  x.env.setNow('2027-03-06T10:00:00');   // 확정(3/5) 뒤 시각
+  delete x.env.scriptProps.AUTO_OUT_SINCE;   // 스냅숏이 없는 처음 연결 상태
   const sent = [];
   x.env.scriptProps.MAIL_ENABLED = 'true';
   const r = plain(x.env.asOwner((c) => { c.MailApp = { sendEmail(to) { sent.push(to); }, getRemainingDailyQuota: () => 100 }; return c.syncAutoOutsAll(x.term.id); }));
@@ -134,4 +136,95 @@ test('결정 40: 설정에 기타를 더하면 그 전에 확정된 기타에는
   x.env.setNow('2027-03-05T09:00:00');
   assert.strictEqual(sync(x).created, 0);
   assert.deepStrictEqual(x.vtab().map((v) => v.student_id), [x.b.id]);
+});
+
+
+test('메일 경고는 메일이 켜져 있는데 못 갔을 때만: 꺼짐·@example.com뿐이면 경고 없음, 켜짐+발송 실패면 경고. 응답에 내부 칸(_mails)·이메일이 없다', () => {
+  const off = makeEnv();
+  const a = save(off, ATT, off.input(off.b.id)).r;   // b의 담당·담임은 @example.com뿐
+  assert.deepStrictEqual([a.ok, !!(a.out && a.out.notifyWarn), '_mails' in a], [true, false, false], JSON.stringify(a));
+  assert.ok(!JSON.stringify(a).includes('@'));
+  const on = makeEnv(); on.env.scriptProps.MAIL_ENABLED = 'true';
+  const b = plain(on.env.as(ATT, (c) => { c.MailApp = { sendEmail() { throw new Error('발송 실패(가짜)'); }, getRemainingDailyQuota: () => 100 }; return c.saveException(on.input(on.a.id)); }));
+  assert.deepStrictEqual([b.ok, b.out.created, b.out.notified, b.out.notifyWarn], [true, 1, false, true]);
+  const q = makeEnv(); q.env.scriptProps.MAIL_ENABLED = 'true';
+  const c2 = plain(q.env.as(ATT, (c) => { c.MailApp = { sendEmail() {}, getRemainingDailyQuota: () => 0 }; return c.saveException(q.input(q.a.id)); }));
+  assert.strictEqual(c2.out.notifyWarn, true, '한도 부족');
+});
+
+test('OUT 맞추기가 던져도 특이사항은 저장되고 out.error가 있으며(시트 소유자 안내), 다음 동기화에서 OUT이 생긴다', () => {
+  const x = makeEnv();
+  const r = plain(x.env.as(ATT, (c) => { c.vioSyncAuto_ = () => { throw new Error('가짜 동기화 오류'); }; return c.saveException(x.input(x.a.id)); }));
+  assert.strictEqual(r.ok, true);
+  assert.ok(r.out.error && r.out.error.includes('syncAutoOutsAll'), r.out.error);
+  assert.strictEqual(x.env.rows('exceptions_' + x.term.id.slice(0, 8)).filter((e) => e.student_id === x.a.id).length, 1, '특이사항은 남는다');
+  assert.strictEqual(x.vtab().length, 0);
+  assert.strictEqual(sync(x).created, 1, '다음 동기화에서 생긴다');
+});
+
+test('F1 목록 hasOut: 살아 있는 자동 OUT이 있을 때만 true — 관리자가 취소한 OUT·넓히기 전 확정된 기타에는 false', () => {
+  const x = makeEnv();
+  save(x, ATT, x.input(x.a.id));
+  const has = (who) => plain(x.env.call(who, 'listExceptions', { scope: 'student', studentId: x.a.id })).groups.map((g) => g.hasOut);
+  assert.deepStrictEqual(has(ATT), [true]);
+  x.env.call(ADMIN, 'cancelOut', x.term.id, x.vtab()[0].id, '관리자 판단');
+  assert.deepStrictEqual(has(ATT), [false], '관리자가 취소한 OUT');
+  const y = makeEnv();
+  save(y, ATT, y.input(y.a.id, { type: '기타', reason: '가짜 사유' }));
+  assert.deepStrictEqual(plain(y.env.call(ATT, 'listExceptions', { scope: 'student', studentId: y.a.id })).groups.map((g) => g.hasOut), [false]);
+});
+
+test('특이사항 탭이 없거나 이름이 바뀌면 syncAutoOutsAll은 자동 OUT을 취소하지 않고 오류를 낸다', () => {
+  const x = makeEnv();
+  save(x, ATT, x.input(x.a.id));
+  const name = 'exceptions_' + x.term.id.slice(0, 8);
+  x.env.asOwner((c) => { const ss = c.openFile_('db'); ss.getSheetByName(name).setName(name + '_old'); c.invalidate_('db', name); });
+  const e = x.env.errorOf(null, () => null);
+  let msg = ''; try { sync(x); } catch (err) { msg = String(err.message); }
+  assert.ok(/특이사항 탭을 찾을 수 없어/.test(msg), msg);
+  assert.strictEqual(x.vtab().filter((v) => v.status === '유효').length, 1, '자동 OUT은 그대로');
+});
+
+test('메일은 이번 호출이 저장한 묶음의 OUT만: 같은 동기화에서 함께 만들어진 같은 학생의 옛 묶음(처음 연결 때 쌓인 것)은 알리지 않는다', () => {
+  const x = makeEnv(); x.env.scriptProps.MAIL_ENABLED = 'true';
+  const tab = 'exceptions_' + x.term.id.slice(0, 8);
+  x.env.asOwner((c) => c.ensureTermSheet_('exceptions', x.term.id));
+  x.env.asOwner((c) => c.appendRecord_(tab, { term_id: x.term.id, group_id: 'g-old', student_id: x.a.id, date: '2027-03-02', blocks: 'ALL', type: '미인정결석', reason: '', status: '확정',
+    requested_by: ATT, requested_at: '2027-03-02T08:00:00', confirmed_by: ATT, confirmed_at: '2027-03-02T08:05:00', cancel_reason: '' }, ADMIN));
+  const { r, sent } = save(x, ATT, x.input(x.a.id));
+  assert.strictEqual(r.out.created, 2, '밀려 있던 같은 학생의 옛 묶음 OUT도 이번 동기화에서 만들어진다');
+  const toRT = sent.filter((m) => m.to === RT);
+  assert.strictEqual(toRT.length, 1, '담당교사에게 알림은 이번에 저장한 묶음 하나뿐: ' + JSON.stringify(sent.map((m) => m.to)));
+});
+
+test('결정 40 보강: 넓히기 전에 낸 요청을 넓힌 뒤 확정하면 OUT이 생기고, 넓힌 뒤 첫 동작이 취소여도 그 전에 확정된 기타에는 OUT이 없다. 모양이 틀린 스냅숏은 없는 것으로 본다', () => {
+  const x = makeEnv();
+  const etc = (sid, d, who) => save(x, who, x.input(sid, { type: '기타', reason: '가짜 사유', from: d, to: d, blocks: '22:00-24:00' })).r;
+  x.env.setNow('2027-03-03T20:00:00');
+  const pre = etc(x.a.id, '2027-03-08', ATT);                        // 넓히기 전 확정(OUT 없음)
+  const req = save(x, RT, x.input(x.a.id, { type: '기타', reason: '가짜 사유', from: '2027-03-09', to: '2027-03-09', blocks: '22:00-24:00' })).r;   // 넓히기 전에 낸 요청
+  assert.strictEqual(req.status, '요청');
+  const row = x.env.rows('settings', 'config').find((q) => q.key === 'exception.auto_out_types');
+  x.env.setNow('2027-03-04T09:00:00');
+  x.env.asOwner((c) => c.updateRecord_('settings', row.id, { value: row.value + ',기타' }, ADMIN, 'config'));
+  // 넓힌 뒤 첫 동작이 (다른 학생 b의) 취소
+  const other = etc(x.b.id, '2027-03-10', ATT);
+  x.env.setNow('2027-03-04T10:00:00');
+  assert.strictEqual(plain(x.env.call(ATT, 'cancelException', x.term.id, other.groupId, '넓힌 뒤 첫 동작은 취소')).ok, true);
+  assert.strictEqual(x.vtab().filter((v) => v.student_id === x.a.id).length, 0, '넓히기 전 확정(pre)에는 OUT 없음');
+  assert.deepStrictEqual(x.vtab().map((v) => v.status), ['취소'], '넓힌 뒤 확정한 b의 OUT은 생겼다가 취소로 남는다');
+  const snap = JSON.parse(x.env.scriptProps.AUTO_OUT_SINCE);
+  assert.ok(snap.since['기타'], '취소 때도 스냅숏이 갱신된다');
+  // 넓히기 전에 낸 요청을 넓힌 뒤 확정 → OUT
+  x.env.setNow('2027-03-04T11:00:00');
+  const c = plain(x.env.call(ATT, 'confirmException', x.term.id, req.groupId));
+  assert.deepStrictEqual([c.ok, c.out.created], [true, 1]);
+  assert.deepStrictEqual(x.vtab().filter((v) => v.student_id === x.a.id).map((v) => v.status), ['유효'], '요청(넓히기 전)을 넓힌 뒤 확정 → OUT');
+  assert.ok(pre.ok);
+  // 모양이 틀린 스냅숏은 없는 것으로(기본 3종이 아니므로 기타는 지금 시각부터)
+  x.env.scriptProps.AUTO_OUT_SINCE = '{"types":"x"}';
+  x.env.setNow('2027-03-05T09:00:00');
+  assert.strictEqual(sync(x).created, 0);
+  assert.ok(Array.isArray(JSON.parse(x.env.scriptProps.AUTO_OUT_SINCE).types));
+  assert.strictEqual(x.vtab().filter((v) => v.student_id === x.a.id).length, 1, '넓히기 전 확정(pre)에는 여전히 OUT 없음(요청이 확정된 OUT 하나뿐)');
 });

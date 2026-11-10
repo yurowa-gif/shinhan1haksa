@@ -9,7 +9,7 @@
  * → {canRecord(기록 카드는 학사 교사·관리자만), out1, out2(이번 기간 1OUT·퇴실 대상 학생 수), today(오늘 건수), perStudent(담임: 우리 반 학생별 OUT 수)}
  */
 function vioHomeInfo_(user, role) {
-  var out = { canRecord: role === 'hall_teacher' || role === 'admin', out1: 0, out2: 0, today: 0, perStudent: {}, list: [], periodWord: vioPeriodWord_(getCurrentTerm_()) };
+  var out = { canRecord: role === 'hall_teacher' || role === 'admin', out1: 0, out2: 0, today: 0, perStudent: {}, list: [], periodWord: vioPeriodWord_(getCurrentTerm_()), mailOn: PropertiesService.getScriptProperties().getProperty('MAIL_ENABLED') === 'true' };
   var term = getCurrentTerm_();
   if (!term) return out;
   var vu = Object.assign({}, user, { roles: [role] });   // 보고 있는 홈 역할 하나로만 센다
@@ -17,6 +17,8 @@ function vioHomeInfo_(user, role) {
   var visible = vioVisibleIds_(vu, readAll_('enrollments'), readAll_('students'), term.id, false);
   var live = vioViolations_(term).filter(function (v) { return ruleRowLive_(v) && visible[String(v.student_id)]; });
   var per = Object.create(null), today = today_();
+  var changes0 = readAll_('status_changes');
+  live = live.filter(function (v) { return !vioIsLeft_(changes0, v.student_id, today); });   // 퇴실 처리된 학생은 세지 않는다(목록과 같은 규칙)
   live.forEach(function (v) { per[v.student_id] = (per[v.student_id] || 0) + 1; if (String(v.occurred_at).slice(0, 10) === today) out.today++; });
   var byStu = {};
   readAll_('students').forEach(function (s) { byStu[s.id] = s; });
@@ -40,6 +42,19 @@ function vioHomeInfo_(user, role) {
 }
 
 var VIO_MEMO_MAX = 200;
+
+/**
+ * 퇴실 처리됨인가(보기용, 누구에게 보여도 되는 status_changes 값): ymd에 학사 퇴실이거나, 앞으로 적용될 살아 있는 2OUT 퇴실(메모 [2OUT]·사유 '2OUT 퇴실')이 잡혀 있음.
+ * R9 outDismissalGate_의 alreadyLeft와 같은 기준이라 목록·홈·관문이 어긋나지 않는다.
+ */
+function vioIsLeft_(changes, studentId, ymd) {
+  var sid = ruleStr_(studentId);
+  if (statusOn_(changes, sid, '학사', ymd) === '퇴실') return true;
+  return (changes || []).some(function (c) {
+    return c && ruleRowLive_(c) && ruleStr_(c.student_id) === sid && ruleStr_(c.item) === '학사' && ruleStr_(c.value) === '퇴실' &&
+      ruleStr_(c.effective_date) > ymd && (ruleStr_(c.memo).indexOf('[2OUT]') === 0 || ruleStr_(c.reason) === '2OUT 퇴실');
+  });
+}
 
 /** '이번 학기' | '이번 기간'(방학) */
 function vioPeriodWord_(term) { return term && String(term.type).trim() === '방학' ? '이번 기간' : '이번 학기'; }
@@ -347,7 +362,7 @@ function listOuts(filter) {
     var s = byId[id] || {};
     var mine = rows.filter(function (v) { return ruleRowLive_(v) && String(v.student_id) === id; }).sort(function (a, b) { return String(a.occurred_at) < String(b.occurred_at) ? 1 : -1; })[0];
     out.summary.push({ studentId: id, student: { name: s.name || '', grade: +s.grade, classNo: s.class_no, number: s.number, studentNo: s.student_no }, count: count[id] || 0, label: label(count[id] || 0),
-      isMine: !!myStudents[id], left: statusOn_(changes, id, '학사', today_()) === '퇴실',
+      isMine: !!myStudents[id], left: vioIsLeft_(changes, id, today_()),
       latest: mine ? { occurredAt: String(mine.occurred_at), ruleName: mine.rule_name, source: mine.source } : null });
   });
   // 퇴실 처리된 학생은 맨 뒤로 보내고 1OUT·퇴실 대상 학생 수에서 뺀다
@@ -426,7 +441,9 @@ function vioMeetingInfo_(user, term, studentIds, byId, rows) {
     out[id] = { state: state,
       meeting: g.meetingNote ? { date: g.meetingNote.date, teacher: names[normalizeEmail_(g.meetingNote.teacher_email)] || '(등록 안 된 교사)', noteId: mine ? g.meetingNote.id : undefined } : null,
       // 결정 51: 면담이 있었는데 연결한 OUT이 취소돼 인정되지 않는 경우(카드가 '면담 필요'로 돌아가고 안내가 붙는다)
-      staleMeeting: state === 'need' && notes.some(function (n) { return n.student_id === id && ruleRowLive_(n) && String(n.type).trim() === CNS_TYPE_OUT2; }),
+      // 연결한 OUT이 이번 기간 violations 행(취소 포함)일 때만 stale — 지난 기간 면담은 해당 없음
+      staleMeeting: state === 'need' && notes.some(function (n) { return n.student_id === id && ruleRowLive_(n) && String(n.type).trim() === CNS_TYPE_OUT2 && rows.some(function (v) { return String(v.id) === String(n.linked_violation_id); }); }),
+      prevExit: state === 'left' ? '' : cnsLastOut2Exit_(changes, id),   // 재입실 학생에 '이전 퇴실 처리됨(M월 D일)'
       trigger: g.triggerOutId ? (function () { var t = rows.filter(function (v) { return String(v.id) === g.triggerOutId; })[0]; return t ? { occurredAt: String(t.occurred_at), ruleName: t.rule_name } : null; })() : null,
       canMeeting: isTeacher && !!facts[id].isAssigned && state === 'need', canConfirm: isAdmin && state === 'recorded' };
   });
