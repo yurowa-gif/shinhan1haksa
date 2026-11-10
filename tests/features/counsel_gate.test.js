@@ -260,3 +260,18 @@ test('(가정) 경계·다른 학생: 퇴실 적용일 당일 면담은 세지 �
   y.env.setNow('2027-03-05T10:00:00');
   assert.strictEqual(call(y, ADMIN, 'confirmOutDismissal', y.mine.id).ok, false, '퇴실 당일 면담은 인정되지 않는다');
 });
+
+test('staleMeeting은 연결 OUT이 이번 기간 violations 행(취소 포함)일 때만, prevExit은 재입실 학생의 마지막 2OUT 퇴실일(없으면 빈칸)', () => {
+  const x = makeEnv();
+  x.two(x.mine);
+  // 지난 기간 OUT에 연결된(이번 기간 행이 아닌) 살아 있는 면담: stale이 아니다
+  x.env.asOwner((c) => c.appendRecord_('counsel_notes', { student_id: x.mine.id, date: '2026-12-01', teacher_email: T1, type: '2OUT 학부모 면담', target: '학부모', linked_violation_id: 'old-term-out-id', content: MARK, show_to_parent: 'TRUE', status: '유효', cancel_reason: '' }, T1, 'counsel'));
+  const row = () => call(x, ADMIN, 'listOuts', { scope: 'targets' }).summary.find((s) => s.studentId === x.mine.id);
+  assert.deepStrictEqual([row().state, row().staleMeeting, row().prevExit], ['need', false, ''], '지난 기간 면담은 stale 아님, 퇴실 이력 없음');
+  x.env.asOwner((c) => {
+    c.appendRecord_('status_changes', { student_id: x.mine.id, item: '학사', value: '퇴실', effective_date: '2027-03-04', reason: '2OUT 퇴실', memo: '[2OUT] out:x note:y', status: '유효' }, ADMIN);
+    c.appendRecord_('status_changes', { student_id: x.mine.id, item: '학사', value: '입실', effective_date: '2027-03-08', reason: '재입실', memo: '', status: '유효' }, ADMIN);
+  });
+  x.env.setNow('2027-03-10T10:00:00');
+  assert.strictEqual(row().prevExit, '2027-03-04', '재입실 학생의 이전 퇴실일');
+});
