@@ -119,3 +119,18 @@ test('시트에서 꺼진 자동 항목은 저장 때 켜짐으로 되돌린다,
   assert.ok(err && /다른 사람이 저장 중/.test(err.message), err && err.message);
   assert.strictEqual(JSON.stringify(x.rules()), w);
 });
+
+test('자동 항목과 똑같아 보이는 이름은 모두 거부: 가운뎃점 변형·보이지 않는 문자·채움 문자·soft hyphen·전각 괄호·띄어쓰기 괄호. 일반 항목도 같은 키로 중복 거부. 시트에 이미 있는 흉내 항목은 입력 목록에서 빠진다', () => {
+  const x = makeEnv();
+  const bad = (name) => { const r = save(x, { name }); assert.strictEqual(r.ok, false, JSON.stringify(name)); assert.strictEqual(r.errors[0].field, 'name', JSON.stringify(name)); };
+  const variants = ['무단 지각ㆍ결석ㆍ이탈', '무단 지각・결석・이탈', '무단 지각･결석･이탈', '무단 지각·결석·이탈‎', '무단 지각·결석·이탈ㅤ', '무단 지­각·결석·이탈', '무단 지͏각·결석·이탈',
+    '무단 지각·결석·이탈 (x)', '무단 지각·결석·이탈（x）', '무단지각·결석·이탈', '무단 지각·결석·이탈((a)(b))'];
+  variants.forEach(bad);
+  bad('기숙사 생활 위반‎');
+  bad('기숙사생활위반');
+  // 시트에 손으로 넣은 흉내 항목은 교사 입력 목록에 나오지 않는다
+  x.env.asOwner((c) => c.appendRecord_('violation_rules', { name: '무단 지각ㆍ결석ㆍ이탈', description: '', active: 'TRUE', sort_order: '9' }, ADMIN));
+  const ctx = plain(x.env.call(T1, 'getOutContext', ''));
+  assert.ok(!ctx.rules.some((q) => /무단/.test(q.name)), '흉내 항목은 칩에 없다');
+  assert.strictEqual(save(x, { name: '정상 새 항목' }).ok, true);
+});

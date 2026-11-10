@@ -95,8 +95,8 @@ function vioYmd_(input) {
 
 /** OUT 항목 중 사람이 고를 수 있는 것: 켜져 있고(active) 자동 항목('무단 지각·결석·이탈')이 아닌 것. sort_order 순 */
 function vioPickableRules_(rules) {
-  var autoName = DEFAULT_VIOLATION_RULES[0][0];
-  return (rules || []).filter(function (r) { return isTruthy_(r.active) && String(r.name).trim() !== autoName; })
+  var autoKey = vioRuleKey_(DEFAULT_VIOLATION_RULES[0][0]);   // 자동 항목과 똑같아 보이는 이름도 직접 입력에서 뺀다
+  return (rules || []).filter(function (r) { return isTruthy_(r.active) && vioRuleBase_(r.name) !== autoKey; })
     .sort(function (a, b) { return (+a.sort_order || 0) - (+b.sort_order || 0); });
 }
 
@@ -155,7 +155,7 @@ function vioValidate_(input, user) {
   }
   var rule = readAll_('violation_rules').filter(function (r) { return String(r.id) === String(input.ruleId || ''); })[0] || null;
   if (!rule || vioPickableRules_([rule]).length === 0) {
-    var isAuto = rule && String(rule.name).trim() === DEFAULT_VIOLATION_RULES[0][0];
+    var isAuto = rule && vioRuleBase_(rule.name) === vioRuleKey_(DEFAULT_VIOLATION_RULES[0][0]);
     add('ruleId', !rule ? '항목을 골라 주세요.' : isAuto ? '이 항목은 직접 입력할 수 없습니다(무단 지각·결석·이탈은 출결 담당의 미인정 특이사항으로 자동 기록).' : '지금 쓰지 않는 항목입니다. 다른 항목을 골라 주세요.');
   }
   var memo = String(input.memo === undefined || input.memo === null ? '' : input.memo).trim();
@@ -482,10 +482,25 @@ function vioRuleView_(r) {
 }
 
 /** 항목 이름 비교용: 앞뒤·중복 공백을 정리한다 */
-function vioRuleKey_(name) {
+function vioRuleDisplay_(name) {
   var t = String(name === undefined || name === null ? '' : name);
   try { t = t.normalize('NFC'); } catch (e) { /* 정규화를 못 하는 환경이면 그대로 */ }
-  return t.replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').replace(/\s+/g, ' ').trim();   // 영폭 문자 제거·공백 정리
+  return t.replace(/[\p{Cf}\u3164\u115F\u1160\u034F\u00AD]/gu, '').replace(/\s+/g, ' ').trim();   // 저장하는 이름: 보이지 않는 문자·채움 문자를 빼고 공백을 정리
+}
+
+/**
+ * 이름 비교 키: 보이는 모양이 같은 이름이 같은 키가 되게 한다 — NFKC(전각·반각), 보이지 않는 문자·채움 문자 제거,
+ * 가운뎃점 변형(・ ･ ㆍ ‧ •)을 ·로, 공백 모두 제거. 자동 항목과 똑같아 보이는 이름이 직접 OUT 항목으로 들어와 같은 일이 두 번 세어지지 않게 한다.
+ */
+function vioRuleKey_(name) {
+  var t = vioRuleDisplay_(name);
+  try { t = t.normalize('NFKC'); } catch (e) { /* 그대로 */ }
+  return t.replace(/[\p{Cf}\u3164\u115F\u1160\u034F\u00AD]/gu, '').replace(/[\u30FB\uFF65\u318D\u119E\u2027\u2022\u2219]/g, '·').replace(/\s+/g, '');
+}
+
+/** 키에서 끝의 괄호 부분을 뗀 것('무단지각·결석·이탈(x)' → '무단지각·결석·이탈'). 자동 이름 흉내 검사용 */
+function vioRuleBase_(name) {
+  return vioRuleKey_(name).replace(/\(.*\)$/, '');   // 첫 '('부터 끝 ')'까지(겹괄호 포함)를 뗀다
 }
 
 /** 관리자: 항목 전체(꺼진 것 포함, sort_order 순). 자동 항목은 isAuto. */
@@ -504,7 +519,7 @@ function saveOutRule(input) {
   var user = requirePermission_('out.rules');
   input = input || {};
   var errors = [], add = function (field, message) { errors.push({ field: field, message: message }); };
-  var name = vioRuleKey_(input.name);
+  var name = vioRuleDisplay_(input.name);
   var hasDesc = input.description !== undefined && input.description !== null;
   var desc = hasDesc ? String(input.description).trim() : '';
   if (!name) add('name', '항목 이름을 적어 주세요.');
@@ -516,13 +531,13 @@ function saveOutRule(input) {
   if (errors.length) return { ok: false, errors: errors };
   return withLock_(function () {
     invalidate_('db', 'violation_rules');
-    var rows = readAll_('violation_rules'), autoName = vioRuleKey_(DEFAULT_VIOLATION_RULES[0][0]);
+    var rows = readAll_('violation_rules'), autoKey = vioRuleKey_(DEFAULT_VIOLATION_RULES[0][0]), key = vioRuleKey_(name);
     var cur = input.id ? rows.filter(function (r) { return String(r.id) === String(input.id); })[0] : null;
     if (input.id && !cur) return { ok: false, errors: [{ field: 'id', message: '항목을 찾을 수 없습니다. 새로 고친 뒤 다시 해 주세요.' }] };
-    var isAuto = !!cur && vioRuleKey_(cur.name) === autoName;
-    if (isAuto && name !== autoName) return { ok: false, errors: [{ field: 'name', message: '자동 항목의 이름은 바꿀 수 없습니다.' }] };
-    if (!isAuto && (name === autoName || name.indexOf(autoName + '(') === 0)) return { ok: false, errors: [{ field: 'name', message: '자동 항목과 같은 이름은 쓸 수 없습니다.' }] };
-    if (rows.some(function (r) { return (!cur || r.id !== cur.id) && vioRuleKey_(r.name) === name; })) return { ok: false, errors: [{ field: 'name', message: '같은 이름의 항목이 이미 있습니다.' }] };
+    var isAuto = !!cur && vioRuleKey_(cur.name) === autoKey;
+    if (isAuto && key !== autoKey) return { ok: false, errors: [{ field: 'name', message: '자동 항목의 이름은 바꿀 수 없습니다.' }] };
+    if (!isAuto && vioRuleBase_(name) === autoKey) return { ok: false, errors: [{ field: 'name', message: '자동 항목과 같은 이름은 쓸 수 없습니다.' }] };
+    if (rows.some(function (r) { return (!cur || r.id !== cur.id) && vioRuleKey_(r.name) === key; })) return { ok: false, errors: [{ field: 'name', message: '같은 이름의 항목이 이미 있습니다.' }] };
     var active = input.active === undefined || input.active === null ? (cur ? isTruthy_(cur.active) : true) : input.active === true;
     if (isAuto) active = true;   // 자동 항목은 늘 켜짐(시트에서 꺼졌다면 저장 때 되돌린다)
     if (isAuto && input.active === false) return { ok: false, errors: [{ field: 'active', message: '자동 항목은 끌 수 없습니다.' }] };
