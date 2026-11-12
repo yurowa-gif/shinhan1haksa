@@ -31,6 +31,8 @@
  *   Db.gs는 '@'를 먼저 걸어 문자열 그대로 남는다. 꺼낸 값은 복사본이다. 범위 밖·모양이 다른 setValues는 오류.
  * - LockService는 늘 얻을 수 있다. env.lock.failNext = n이면 다음 n번 실패("다른 사람이 저장 중" 시험).
  *   createGasEnv({strictLock:true}) 또는 env.strictLock = true면 락 없이 시트에 쓰는 순간 오류.
+ *   env.strictLockRead = true(모든 실행) 또는 'call'(env.call — 화면 경계 — 실행만)이면 한 실행에서 락 밖에서 읽은 탭(머리글 아래)을, 지금 쥔 락 안에서 다시 읽지 않고 쓰는 순간 오류
+ *   (readAll_ 메모가 락 밖에서 읽은 값을 그대로 주면 "읽고 검사하고 쓰기"가 한 덩어리가 아니다). 기본 꺼짐.
  * - Session: env.as(email)의 접속자 = email, 실행 계정 = 소유자("나로 실행"). email ''은 접속자 이메일을 못 받은 경우(PRD 6.1).
  * - DriveApp(O1 백업용 최소): getFileById·getFolderById·createFolder, 폴더 getFiles/createFile/getId/getName, 파일 makeCopy·setTrashed·isTrashed·
  *   getName·getId·getSharingAccess·setSharing·getEditors·getViewers, Access.PRIVATE/ANYONE_WITH_LINK, Permission.NONE/VIEW. 데이터는 env.drive({files, folders}).
@@ -192,6 +194,8 @@ class FakeSheet {
     return this.getRange(r1, c1, r2 - r1 + 1, c2 - c1 + 1);
   }
   _cellsGet(r, c, nr, nc) {
+    const env = this._ss._env;
+    if (r + nr - 1 >= 2) (env.lock.held ? env._readIn : env._readOut)[this._id] = true;   // 머리글 아래(데이터)를 읽음: strictLockRead용
     const out = [];
     for (let i = 0; i < nr; i++) {
       const row = this._data[r - 1 + i] || [];
@@ -213,6 +217,10 @@ class FakeSheet {
     const env = this._ss._env;
     if (env.strictLock && !env.lock.held) {
       throw new Error('[gas-fakes] 락 없이 시트에 썼습니다(' + this._name + ' ' + r + '행). 쓰기는 withLock_ 안에서 합니다.');
+    }
+    const slr = env.strictLockRead === true || (env.strictLockRead === 'call' && env._inCall);
+    if (slr && env._readOut[this._id] && !env._readIn[this._id]) {
+      throw new Error('[gas-fakes] 락 밖에서 읽은 ' + this._name + ' 탭을 락 안에서 다시 읽지 않고 썼습니다(' + r + '행). 읽고 검사하고 쓰기는 한 withLock_ 안에서 합니다.');
     }
     values.forEach((line, i) => {
       const ri = r - 1 + i;
@@ -294,6 +302,9 @@ function createGasEnv(opts) {
     spreadsheets: {},             // id → FakeSpreadsheet
     scriptProps: Object.keys(opts.props || {}).reduce((o, k) => { o[k] = String(opts.props[k]); return o; }, {}),
     strictLock: !!opts.strictLock,   // true면 락 없이 시트에 쓰면 오류
+    strictLockRead: opts.strictLockRead === undefined ? 'call' : opts.strictLockRead,   // 기본 'call'(env.call만), true(모든 실행), false(끔): 켜져 있으면 락 밖에서 읽은 탭을 락 안에서 다시 읽지 않고 쓰면 오류
+    _inCall: false,
+    _readOut: {}, _readIn: {},    // 이번 실행에서 락 밖·지금 락 안에서 데이터를 읽은 시트 id
     userProps: {},
     cache: {},                    // key → {value, expires}
     mail: [],                     // MailApp.sendEmail 기록
@@ -424,6 +435,7 @@ function createGasEnv(opts) {
         tryLock: () => {
           env.lock.tries++;
           if (env.lock.failNext > 0) { env.lock.failNext--; return false; }
+          if (!env.lock.held) env._readIn = {};   // 새로 잡은 락: 이 락 안에서 읽은 것만 센다
           env.lock.held = true; return true;  // 한 실행 안에서 다시 잡아도 성공(Apps Script와 같음)
         },
         waitLock(ms) { if (!this.tryLock(ms)) throw new Error('잠금 시간이 초과되었습니다.'); },
@@ -538,6 +550,7 @@ function createGasEnv(opts) {
   function newExecution(active, effective, visitor) {
     env.user = { active: (active || '').toLowerCase(), effective: (effective || '').toLowerCase(), visitor: visitor || '' };
     env.lock.held = false;
+    env._readOut = {}; env._readIn = {};
     env.ctx = makeContext();
     return env.ctx;
   }
@@ -588,13 +601,14 @@ function createGasEnv(opts) {
       assertWireSafe(args, fnName + '(인자)');
       const wireArgs = JSON.parse(JSON.stringify(args));
       let r;
+      env._inCall = true;
       try {
         r = env.as(email, (c) => {
           if (typeof c[fnName] !== 'function') throw new Error('[gas-fakes] 없는 함수: ' + fnName);
           if (fnName.slice(-1) === '_') throw new Error('[gas-fakes] 이름이 _로 끝나는 함수는 화면에서 부를 수 없습니다: ' + fnName);
           return c[fnName].apply(null, wireArgs);
         });
-      } catch (e) { throw hostError(e); }
+      } catch (e) { throw hostError(e); } finally { env._inCall = false; }
       assertWireSafe(r, fnName + '(반환)');
       return r === undefined ? null : JSON.parse(JSON.stringify(r));
     },
