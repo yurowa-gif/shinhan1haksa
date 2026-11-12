@@ -161,4 +161,5 @@ test('roomBoard_: 방·층·성별 합계, 정원 초과는 인원 그대로(공
     { floor: '5', gender: '여', capacity: 4, count: 1, vacant: 3, byGrade: { 3: 1 } },
   ]);
   assert.deepStrictEqual(Object.keys(b.total).sort(), ['남', '여']);
+  assert.deepStrictEqual([b.total['남'].count, b.total['남'].capacity, b.total['남'].vacant], [3, 6, 4]);   // A 초과(+1)가 B 공석을 깎지 않음, 음수 아님
 });
