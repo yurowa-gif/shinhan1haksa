@@ -41,6 +41,7 @@ test('끝까지 ③: 직접 OUT + 자동 OUT → 2OUT → 면담 전 확정 막�
   const phone = env.rows('violation_rules').find((r) => r.name.startsWith('휴대폰'));
   const o1 = call(HALL, 'saveOut', { studentId: S, occurredAt: '2027-03-10T21:00', ruleId: phone.id, detectedBy: '', memo: '자습 중 휴대폰' });
   assert.strictEqual(o1.ok, true, JSON.stringify(o1));
+  assert.deepStrictEqual(call(ADMIN, 'confirmOutDismissal', S), { ok: false, reason: '퇴실 대상 아님' }, '1OUT일 때');
   const ex = call(ATT, 'saveException', { studentId: S, from: '2027-03-11', to: '2027-03-11', blocks: 'ALL', type: '미인정결석', reason: '' });
   assert.strictEqual(ex.ok, true, JSON.stringify(ex));
   const outs = env.rows(vtab).filter((v) => v.student_id === S && v.status === '유효');
@@ -54,7 +55,8 @@ test('끝까지 ③: 직접 OUT + 자동 OUT → 2OUT → 면담 전 확정 막�
   const n0 = rowsOfS().length;
   const early = call(ADMIN, 'previewMove', inp());
   assert.strictEqual(early.ok, false); assert.strictEqual(early.errors[0].message, '면담 기록 필요');
-  assert.strictEqual(call(ADMIN, 'saveMove', inp(), '').ok, false);
+  // 락 안에서 관문을 다시 본다: 오래된 서명(stale) 때문이 아니라 '면담 기록 필요'로 막혀야 한다
+  assert.deepStrictEqual(call(ADMIN, 'saveMove', inp(), '').errors.map((e) => e.message), ['면담 기록 필요']);
   assert.strictEqual(rowsOfS().length, n0);
 
   // 3) 면담 기록(담당교사): 둘째 OUT(3/11)보다 앞선 날짜는 받지 않는다(결정 51), 3/12는 받는다
@@ -94,6 +96,7 @@ test('끝까지 ③: 직접 OUT + 자동 OUT → 2OUT → 면담 전 확정 막�
   const before2 = changes().length;
   const r2 = call(ADMIN, 'saveMove', fake2, '');
   assert.strictEqual(r2.ok, false, '예약어 거부 ' + JSON.stringify(r2));
+  assert.ok(r2.errors.some((e) => e.field === 'reason'), '사유 칸 오류로 막힘(오래된 서명 때문이 아님) ' + JSON.stringify(r2));
   assert.strictEqual(changes().length, before2);
 
   // 8) 새는 곳 없음: 운영 DB audit_log·상태 행, 화면 응답, 근무교사의 학생 기록 화면에 면담 내용 없음
@@ -103,7 +106,9 @@ test('끝까지 ③: 직접 OUT + 자동 OUT → 2OUT → 면담 전 확정 막�
   env.asOwner((c) => c.appendRecord_('duty_slots', { date: TODAY, slot: '단독', end_time: '23:00', original_email: DUTY_T, actual_email: DUTY_T,
     swapped_at: '', swapped_by: '', status: '유효', memo: '' }, ADMIN));
   const st = plain(env.call(DUTY_T, 'listStudentStatus', S, TODAY));
-  assert.ok(!JSON.stringify(st).includes(MARK) && !JSON.stringify(st).includes('면담'), '근무교사 화면에 면담 표식·내용 없음');
+  const stj = JSON.stringify(st);
+  assert.ok(!stj.includes(MARK) && !stj.includes('면담'), '근무교사 화면에 면담 표식·내용 없음');
+  assert.ok(!stj.includes('[2OUT]') && !stj.includes(head.memo.split('note:')[1]), '근무교사 화면에 [2OUT] 메모·면담 기록 id 없음');
 
   // 9) 그날 출석부 모델에 OUT 표시가 없다(결정 36)
   const sheet = plain(env.call(ADMIN, 'getAttendanceSheet', TODAY));

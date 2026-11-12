@@ -78,6 +78,14 @@ test('끝까지 ①: 교대 3건 + 화면에서 1건 더 → 기록표 교사별
   assert.strictEqual(file.r.ok, true, JSON.stringify(file.r));
   assert.ok(!/[\w.]+@[\w-]+\.[\w.]+/.test(file.html), '파일에 이메일 없음');
   for (const e of Object.keys(after)) assert.ok(file.html.includes(nameOf(e)), nameOf(e));
+  // 교사별 줄의 근무 합계(끝에서 다섯째 칸 = 근무 합계, duty_record.test.js와 같은 읽기)
+  const cells = (tr) => tr.replace(/<[^>]*>/g, '|').split('|').map((q) => q.trim()).filter((q) => q && !/^ ?style=/.test(q));
+  const trs = file.html.split('<tr').filter((t) => t.includes('scope="row"')).map(cells);
+  for (const e of Object.keys(after)) {
+    const tr = trs.find((r) => r[0] === nameOf(e));
+    assert.ok(tr, '파일에 ' + nameOf(e) + ' 줄');
+    assert.strictEqual(Number(tr.slice(-5)[0]), after[e], nameOf(e) + ' 파일의 근무 합계 = 실제 근무자');
+  }
   for (const d of ['1월 5일', '1월 13일', '1월 23일', '1월 27일']) assert.ok(file.html.includes('2027년 ' + d), '교대 날짜 ' + d);
   env.expectDenied(TESTER, 'duty.record', 'getDutyRecordFile', MON, 'pdf');
 });
