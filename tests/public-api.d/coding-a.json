@@ -71,6 +71,10 @@
     "saveOutRule": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "seedDefaultRooms": {
+      "use": "편집기",
+      "guard": "assertOwnerRun_"
     }
   }
 }
