@@ -102,7 +102,7 @@ function moveUndoPlan_(changes, headId, opts)   // (R11b) opts = {today} → {to
 // src/rules/SeatRules.gs (R14, stage3.md 1절)
 function seatDraft_(spaces, seats, students, prev, fixed, avoids, seed)   // → {assignments:[{seat_id, student_id}], unplaced:[studentId], violations, warnings}
 function seatViolations_(spaces, seats, students, assignments, avoids)    // → [{seatId, kind:'같은 학년'|'떨어뜨릴 짝'|'성별', with}]
-function seatBoard_(spaces, seats)                                         // → {seats:{id:{id, space, sa}}, order:[id], nb:{id:[이웃 id]}}
+function seatBoard_(spaces, seats)                                         // → {seats:{id:{id, space, sa}}, order:[id](공간 이름·공간 id·행·열·칸 id 순), nb:{id:[이웃 id](위·아래·왼·오른쪽)}}
 function seatIsSa_(space)                                                  // → 이름이 'SA<숫자>'로 시작하면 true
 function seatGenderOk_(space, student)                                     // → 남·여 공간은 같은 성별만, 혼성·빈칸은 누구나
 function seatAvoidMap_(avoids, scopes)                                     // → {학생id:{상대id:true}}(살아 있는 짝, scope가 scopes 안)
@@ -315,7 +315,8 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd)
 
 - 좌석 = 살아 있는 공간의 살아 있는 `kind '좌석'` 칸. **이웃** = 같은 공간에서 행 또는 열이 1 차이(다른 하나는 같음)인 좌석 칸 — 기둥·창문·비상문·통로를 사이에 두면 2칸 떨어져 이웃이 아니다. 1층 짝줄(붙은 두 열)은 좌우 이웃이다.
 - **SA실** = 공간 이름이 `SA<숫자>`로 시작(Seats.gs `seatLabelStyle_`과 같은 기준). 공간 성별 `남`·`여`는 같은 성별만, `혼성`·빈칸은 누구나.
-- `seatDraft_` 순서: ① 고정 자리 그대로(좌석이 없거나 겹치면 경고하고 새로) ② 3학년은 지난 기간 자리가 좌석으로 있고 비어 있고 성별이 맞으면 유지 — ASSUMPTION: 베리타스 여부가 바뀌어 구역(SA/1층)이 달라졌으면 유지하지 않는다 ③ 베리타스는 같은 성별 SA실, 자리가 모자라면 1층으로 넘기고 경고 `… SA실 자리가 모자라 1층에 배정했습니다` ④ 나머지는 SA 아닌 공간. 비용(이웃 같은 학년 1, 떨어뜨릴 짝 10)이 가장 싼 빈자리를 seed로 섞은 차례로 고른 뒤, 같은 구역 안 맞바꾸기·빈자리 옮기기로 비용을 줄인다(고정·3학년 유지 자리는 움직이지 않음, 최대 30회). ⑤ 못 앉힌 학생은 `unplaced` + 경고. 다 못 지키면 그 결과(가장 덜 어긴 배치 — 탐색은 지역 최적)와 `violations`.
-- 같은 입력 + 같은 seed = 같은 결과(입력 행 순서와 무관: id 순으로 정렬한 뒤 seed로 섞는다). 떨어뜨릴 짝은 scope `좌석`·`둘 다`, 살아 있는 행만.
-- `seatViolations_`: 이웃 같은 학년·떨어뜨릴 짝은 **두 칸 모두에 한 줄씩**(`with` = 상대 칸 id), 성별은 `with ''`. 짝 위반은 kind만 뜻이 있다 — 상대 이름·사유는 서버가 보는 사람 권한에 따라 거른다(결정 64). 좌석 아닌 칸·명단에 없는 학생의 배정은 건너뛴다.
+- `seatDraft_` 순서: ① 고정 자리 그대로(좌석이 없거나 겹치면 경고하고 새로) ② 3학년은 지난 기간 자리가 좌석으로 있고 비어 있고 성별이 맞으면 유지 — ASSUMPTION: 베리타스 여부가 바뀌어 구역(SA/1층)이 달라졌으면 유지하지 않는다 ③ 베리타스는 같은 성별 SA실, 자리가 모자라면 1층으로 넘기고 경고 `… SA실 자리가 모자라 1층에 배정했습니다` ④ 나머지는 SA 아닌 공간 — 1층이 모자라면 같은 성별 SA실의 남은 자리에 앉히고 경고 `1층 자리가 모자라 N명을 SA실에 앉혔습니다`(한 줄, 그래도 남으면 unplaced). 비용(이웃 같은 학년 1, 떨어뜨릴 짝 10)이 가장 싼 빈자리를 seed로 섞은 차례로 고른 뒤, 같은 구역 안 맞바꾸기·빈자리 옮기기로 비용을 줄인다(고정·3학년 유지 자리는 움직이지 않음, 최대 30회). ⑤ 못 앉힌 학생은 `unplaced` + 경고. 다 못 지키면 그 결과(가장 덜 어긴 배치 — 탐색은 지역 최적)와 `violations`.
+- 같은 입력 + 같은 seed = 같은 결과(입력 행 순서와 무관: id 순으로 정렬한 뒤 seed로 섞는다. 지난 자리·고정에 같은 좌석이 둘이면 학생 id 순, 같은 이름 공간은 공간 id 순).
+- 알려진 한계: 혼성 공간과 성별 공간이 함께 있으면, 혼성 자리를 먼저 온 다른 성별 학생이 차지해 빈 성별 공간 자리가 있는데도 unplaced가 생길 수 있다(실제 배치 — 1층 혼성·SA 성별 — 에서는 없음). 떨어뜨릴 짝은 scope `좌석`·`둘 다`, 살아 있는 행만.
+- `seatViolations_`: 이웃 같은 학년·떨어뜨릴 짝은 **두 칸 모두에 한 줄씩**(`with` = 상대 칸 id), 성별은 `with ''`. 순서 = 칸은 `seatBoard_` 순(공간 이름 → 행·열), 한 칸 안에서는 성별 먼저, 그다음 이웃 위·아래·왼·오른쪽 순으로 같은 학년·짝. 짝 위반은 kind만 뜻이 있다 — 상대 이름·사유는 서버가 보는 사람 권한에 따라 거른다(결정 64). 좌석 아닌 칸·명단에 없는 학생의 배정은 건너뛴다.
 - 성능: 가짜 1층 146석 + SA 51석(src/dev/FakeSeats.gs)에 180명 — 수십 ms(시험은 3초 기준).

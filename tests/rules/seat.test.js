@@ -24,7 +24,7 @@ test('성별 구역: 남·여 공간에는 같은 성별만, 혼성은 누구나
   assert.deepStrictEqual(r.violations, []);
 });
 
-test('베리타스 = 같은 성별 SA실, 모자라면 1층으로 넘기고 경고 / 베리타스 아닌 학생은 SA실에 앉히지 않는다', () => {
+test('베리타스 = 같은 성별 SA실, 모자라면 1층으로 넘기고 경고 / 베리타스 아닌 학생은 1층에 자리가 있으면 SA실에 앉히지 않는다', () => {
   const spaces = [SP('F1', '1층 자습실', '혼성'), SP('SA3', 'SA3실', '여'), SP('SA1', 'SA1실', '남')];
   const seats = SEATS('F1', ['1,1', '1,3', '1,5', '1,7']).concat(SEATS('SA3', ['1,1']), SEATS('SA1', ['1,1']));
   const r = draft(spaces, seats, [STU('v1', '여', 1, true), STU('v2', '여', 2, true), STU('m', '남', 1, true), STU('n', '여', 3)]);
@@ -150,4 +150,96 @@ test('지난 자리 유지는 3학년만(2학년은 seed에 따라 다른 자리
   assert.deepStrictEqual([...places].sort(), ['R-1-1', 'R-1-3']);
   const r = draft(spaces, seats, [STU('a', '여', 1)], [], [{ seat_id: 'nope', student_id: 'a' }]);
   assert.ok(/^R-/.test(seatOf(r, 'a')) && r.warnings.some((w) => /고정 자리\(nope\)를 쓸 수 없어/.test(w)), JSON.stringify(r));
+});
+
+const SEEDS = Array.from({ length: 20 }, (_, i) => 'q' + i);
+
+test('1층이 모자라면 베리타스 아닌 학생을 같은 성별 SA실 남은 자리에 앉히고 경고(N명), 그래도 남으면 unplaced', () => {
+  const spaces = [SP('F1', '1층 자습실', '혼성'), SP('SA3', 'SA3실', '여'), SP('SA1', 'SA1실', '남')];
+  const seats = SEATS('F1', ['1,1']).concat(SEATS('SA3', ['1,1', '1,3', '1,5']), SEATS('SA1', ['1,1']));
+  for (const seed of SEEDS) {
+    const r = draft(spaces, seats, [STU('v1', '여', 1, true), STU('n1', '여', 2), STU('n2', '여', 3)], [], [], [], seed);
+    assert.strictEqual(seatOf(r, 'v1').split('-')[0], 'SA3', seed);
+    assert.deepStrictEqual(['n1', 'n2'].map((p) => seatOf(r, p).split('-')[0]).sort(), ['F1', 'SA3'], seed);
+    assert.deepStrictEqual([r.unplaced, r.warnings], [[], ['1층 자리가 모자라 1명을 SA실에 앉혔습니다']], seed);
+  }
+  // 남 학생 둘: 하나는 1층, 하나는 남 SA실(여 SA실에는 앉히지 않음) / 셋이면 하나는 unplaced
+  const r2 = draft(spaces, seats, [STU('a', '남', 1), STU('b', '남', 2), STU('c', '남', 3)]);
+  assert.deepStrictEqual([r2.assignments.map((x) => x.seat_id.split('-')[0]).sort(), r2.unplaced.length], [['F1', 'SA1'], 1]);
+  assert.ok(r2.warnings.includes('1층 자리가 모자라 1명을 SA실에 앉혔습니다'));
+});
+
+test('베리타스를 먼저 앉힌다 — SA 1석·1층 1석에 베리타스 둘·아닌 학생 하나면 못 앉는 학생은 늘 베리타스 아닌 학생', () => {
+  const spaces = [SP('F1', '1층 자습실', '혼성'), SP('SA1', 'SA1실', '남')];
+  const seats = SEATS('F1', ['1,1']).concat(SEATS('SA1', ['1,1']));
+  for (const seed of SEEDS) {
+    const r = draft(spaces, seats, [STU('v1', '남', 1, true), STU('v2', '남', 2, true), STU('n', '남', 3)], [], [], [], seed);
+    assert.deepStrictEqual(r.unplaced, ['n'], seed);
+  }
+});
+
+test('개선 단계도 성별·구역을 넘지 않는다 — 같은 학년 둘이 붙어도 다른 성별 공간·SA실 빈자리로 옮기거나 맞바꾸지 않음(seed 여럿)', () => {
+  const sp1 = [SP('M', '남 자습실', '남'), SP('W', '여 자습실', '여')];
+  const st1 = SEATS('M', ['1,1', '1,2']).concat(SEATS('W', ['1,1', '1,3']));
+  const sp2 = [SP('F', '1층 자습실', '혼성'), SP('S', 'SA1실', '남')];
+  const st2 = SEATS('F', ['1,1', '1,2']).concat(SEATS('S', ['1,1', '1,3']));
+  const sp3 = [SP('M', '남 자습실', '남'), SP('H', '혼성 자습실', '혼성')];
+  const st3 = SEATS('M', ['1,1', '1,2']).concat(SEATS('H', ['1,1']));
+  for (const seed of SEEDS) {
+    const r1 = draft(sp1, st1, [STU('m1', '남', 1), STU('m2', '남', 1), STU('f', '여', 2)], [], [], [], seed);
+    assert.deepStrictEqual([seatOf(r1, 'm1')[0], seatOf(r1, 'm2')[0], seatOf(r1, 'f')[0]], ['M', 'M', 'W'], seed);
+    const r2 = draft(sp2, st2, [STU('n1', '남', 1), STU('n2', '남', 1), STU('v', '남', 2, true)], [], [], [], seed);
+    assert.deepStrictEqual([seatOf(r2, 'n1')[0], seatOf(r2, 'n2')[0], seatOf(r2, 'v')[0]], ['F', 'F', 'S'], seed);
+    const r3 = draft(sp3, st3, [STU('m1', '남', 1), STU('m2', '남', 1), STU('f', '여', 2)], [], [], [], seed);   // 맞바꾸기: m↔f면 f가 남 공간으로
+    assert.ok(!r3.violations.some((v) => v.kind === '성별'), seed + JSON.stringify(r3));
+  }
+});
+
+test('개선 단계는 고정 자리를 움직이지 않는다 — 고정 학생과 짝인 학생이 옆에 와도 고정 학생 대신 옆 학생이 옮김(seed 여럿)', () => {
+  const spaces = [SP('R', '1층 자습실', '혼성')];
+  const seats = SEATS('R', ['1,1', '1,2', '3,1']);
+  const st = [STU('f', '남', 1), STU('n1', '남', 2), STU('n2', '남', 3)];
+  for (const seed of SEEDS) {
+    const r = draft(spaces, seats, st, [], [{ seat_id: 'R-1-1', student_id: 'f' }], [{ student_a: 'f', student_b: 'n1', scope: '좌석', status: '유효' }], seed);
+    assert.deepStrictEqual([seatOf(r, 'f'), seatOf(r, 'n1'), r.violations], ['R-1-1', 'R-3-1', []], seed);
+  }
+});
+
+test('위·아래 이웃: 2행 1열에 같은 학년 둘이면 위반, 3학년 지난 자리라도 성별이 안 맞으면 유지하지 않음', () => {
+  const spaces = [SP('R', '1층 자습실', '혼성'), SP('M', 'SA1실', '남')];
+  const seats = SEATS('R', ['1,1', '2,1', '4,1']).concat(SEATS('M', ['1,1']));
+  const st = [STU('a', '여', 1), STU('b', '남', 1)];
+  assert.deepStrictEqual(plain(ctx.seatViolations_(spaces, seats, st, [{ seat_id: 'R-1-1', student_id: 'a' }, { seat_id: 'R-2-1', student_id: 'b' }], [])),
+    [{ seatId: 'R-1-1', kind: '같은 학년', with: 'R-2-1' }, { seatId: 'R-2-1', kind: '같은 학년', with: 'R-1-1' }]);
+  for (const seed of SEEDS) {   // 위아래로만 붙는 자리 → 초안은 떨어뜨린다
+    const r = draft(spaces, seats, st, [], [], [], seed);
+    assert.deepStrictEqual(r.violations, [], seed);
+  }
+  const r = draft(spaces, seats, [STU('g', '여', 3, true)], [{ seat_id: 'M-1-1', student_id: 'g' }]);
+  assert.notStrictEqual(seatOf(r, 'g'), 'M-1-1');
+});
+
+test("취소된 좌석·공간은 쓰지 않음, 'SA<숫자>'만 SA실('SAX'는 아님)", () => {
+  const spaces = [SP('A', '1층 자습실', '혼성'), Object.assign(SP('X', '2층 자습실', '혼성'), { status: '취소' })];
+  const seats = SEATS('A', ['1,1', '1,3']).concat(SEATS('X', ['1,1']));
+  seats[0].status = '취소';
+  for (const seed of SEEDS) {
+    const r = draft(spaces, seats, [STU('a', '남', 1), STU('b', '여', 2)], [], [], [], seed);
+    assert.deepStrictEqual([r.assignments.map((x) => x.seat_id), r.unplaced.length], [['A-1-3'], 1], seed);
+  }
+  assert.deepStrictEqual(['SA1실', 'sa 2', ' SA12', 'SAX', 'XSA1', 'SA실'].map((n) => ctx.seatIsSa_({ name: n })), [true, true, true, false, false, false]);
+  const sax = draft([SP('S', 'SAX', '혼성')], SEATS('S', ['1,1']), [STU('n', '남', 1)]);
+  assert.strictEqual(seatOf(sax, 'n'), 'S-1-1');   // SA실이 아니므로 베리타스 아닌 학생이 그대로 앉음(넘침 경고 없음)
+  assert.deepStrictEqual(sax.warnings, []);
+});
+
+test('입력 행 순서와 무관: 지난 자리·고정에 같은 좌석이 둘이면 학생 id 순, 같은 이름 공간이 둘이어도 같은 결과', () => {
+  const spaces = [SP('B', '자습실', '혼성'), SP('A', '자습실', '혼성')];
+  const seats = SEATS('A', ['1,1', '1,3']).concat(SEATS('B', ['1,1', '1,3']));
+  const st = [STU('x', '남', 3), STU('y', '여', 3), STU('z', '남', 1)];
+  const prev = [{ seat_id: 'B-1-1', student_id: 'y' }, { seat_id: 'B-1-1', student_id: 'x' }];
+  const fixed = [{ seat_id: 'A-1-1', student_id: 'z' }, { seat_id: 'A-1-1', student_id: 'y' }];
+  const one = draft(spaces, seats, st, prev, fixed, [], 's');
+  assert.deepStrictEqual(draft(spaces.slice().reverse(), seats.slice().reverse(), st.slice().reverse(), prev.slice().reverse(), fixed.slice().reverse(), [], 's'), one);
+  assert.deepStrictEqual([seatOf(one, 'y'), seatOf(one, 'x')], ['A-1-1', 'B-1-1']);   // 고정 A-1-1은 y(id 순), 지난 자리 B-1-1은 x
 });
