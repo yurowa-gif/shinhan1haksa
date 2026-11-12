@@ -118,3 +118,16 @@ test('오라클 무작위 시험 100가지: 줄마다 숫자가 단순 계산과
     }
   }
 });
+
+test('결정 35 보충: prevTermId를 주면 직전 기간에만 등록된 학생도 그날 학사 석식이면 센다(학사·조식 0), 학사 석식이 아니면 안 셈, 이번 기간 등록생은 한 번만', () => {
+  const st = [ST('a', '여', '1'), ST('b', '여', '1'), ST('c', '남', '2')];
+  // a: 직전 기간(T0) 등록, 3/12 퇴실 뒤 석식 학사 석식이 3/22까지 / b: T0 등록, 일반 석식 / c: T0·T1 둘 다 등록
+  const ch = [].concat(STUDENT('a', '입실', '퇴실', '실시', '학사 석식'), [CH('a', '학사', '퇴실', '2027-03-12'), CH('a', '조식', '미실시', '2027-03-12'), CH('a', '석식', '미실시', '2027-03-22')],
+    STUDENT('b', '입실', '퇴실', '실시', '일반 석식'), [CH('b', '학사', '퇴실', '2027-03-12')], STUDENT('c', '입실', '퇴실', '실시', '학사 석식'));
+  const en = [EN('a', 'T0'), EN('b', 'T0'), EN('c', 'T0'), EN('c')];
+  const r = plain(ctx.mealCountsOn_(st, en, ch, 'T1', '2027-03-15', 'T0'));
+  assert.deepStrictEqual(r.groups['전체'], { hall: 1, dorm: 0, nonDorm: 1, breakfast: 1, hallDinner: 2, generalDinner: 0 });
+  assert.strictEqual(r.afterLeaveHallDinner, 1);
+  assert.deepStrictEqual(plain(ctx.mealCountsOn_(st, en, ch, 'T1', '2027-03-15')).groups['전체'].hallDinner, 1);   // 주지 않으면 지금처럼
+  assert.strictEqual(plain(ctx.mealCountsOn_(st, en, ch, 'T1', '2027-03-22', 'T0')).groups['전체'].hallDinner, 1);   // 중단일 뒤엔 안 셈
+});
