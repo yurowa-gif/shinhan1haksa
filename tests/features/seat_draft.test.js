@@ -266,3 +266,50 @@ test('날짜를 좁힌 배정(방학 날짜별 좌석표 등)이 있는 기간�
   assert.ok(/날짜를 좁혀 배정한 자리/.test(r.error));
   assert.strictEqual(JSON.stringify(rows(env)), before);
 });
+
+test('입실 전(미입실) 학생이 먼저 받은 자리는 초안이 지우지 않는다: 미리보기에 그대로·경고, 저장해도 그 행은 그대로, 입실 뒤에도 그 자리', () => {
+  const env = createGasEnv({ now: '2027-03-10T20:00:00' });
+  env.seedFake({ stage1: true });
+  const late = env.rows('status_changes').find((c) => c.item === '학사' && c.value === '입실' && c.effective_date === '2027-03-15');
+  assert.ok(late, '3/15 입실 예정 학생');
+  const d = get(env, ADMIN);
+  const seat = cellsOf(d).find((c) => c.kind === 'seat' && c.vacant);
+  assert.strictEqual(plain(env.call(ADMIN, 'assignSeat', d.term.id, seat.id, late.student_id, { [seat.id]: seat.token })).ok, true);
+  const row = () => rows(env).find((r) => r.student_id === late.student_id && r.status !== '취소' && !r.valid_to);
+  const first = row();
+  assert.ok(first);
+  const d2 = get(env, ADMIN);
+  assert.strictEqual(cellsOf(d2).find((c) => c.id === seat.id).reason, '미입실');
+  const p = preview(env, d2, [], 5, ADMIN);
+  assert.strictEqual(p.ok, true);
+  assert.ok(p.warnings.some((w) => /입실 전 학생 1명의 자리는 그대로 둡니다/.test(w)), JSON.stringify(p.warnings));
+  const stu = env.rows('students').find((s) => s.id === late.student_id);
+  assert.strictEqual(cellsOf({ spaces: p.spaces }).find((c) => c.id === seat.id).text, stu.grade + '. ' + stu.name);
+  assert.ok(!p.unplaced.length);
+  const r = save(env, d2, p, ADMIN);
+  assert.strictEqual(r.ok, true);
+  const after = row();
+  assert.deepStrictEqual([after.id, after.seat_id, after.valid_to, after.status], [first.id, seat.id, '', '배정'], '그 행은 그대로');
+  // 두 번째 미리보기는 바뀌는 자리 0(입실 전 학생의 자리도 바뀌는 것으로 세지 않는다)
+  assert.strictEqual(preview(env, get(env, ADMIN), p.fixed, p.seed, ADMIN).changed, 0);
+  // 입실한 뒤(3/16)에도 같은 자리
+  env.setNow('2027-03-16T20:00:00');
+  const d3 = get(env, ADMIN);
+  assert.strictEqual(cellsOf(d3).find((c) => c.id === seat.id).studentId, late.student_id);
+});
+
+test('지난 기간 배정이 같은 학생에게 둘이면 seatMapOn_와 같은 규칙(날짜를 좁힌 쪽 먼저)으로 하나를 쓴다', () => {
+  const env = makeEnv();
+  const d = get(env);
+  const old = env.rows('terms').find((t) => t.name.indexOf('2026') === 0);
+  const students = env.rows('students');
+  const enr = env.rows('enrollments').filter((e) => e.term_id === d.term.id);
+  const target = enr.map((e) => ({ e, s: students.find((s) => s.id === e.student_id) })).find((x) => x.s.grade === '3' && String(x.e.veritas).toUpperCase() !== 'TRUE');
+  const seats = d.spaces.find((s) => s.gender === '혼성').cells.filter((c) => c.kind === 'seat');
+  const bounded = seats[110], plainSeat = seats[111];
+  // 날짜를 좁힌 행(마지막 날까지)을 먼저, 기간 전체 행을 나중에 → 나중 행이 이기는 옛 방식이면 plainSeat가 나온다
+  env.asOwner((c) => c.appendRecord_('seat_assignments', { term_id: old.id, seat_id: bounded.id, student_id: target.s.id, valid_from: '', valid_to: old.end_date, status: '배정', memo: '' }, ADMIN));
+  env.asOwner((c) => c.appendRecord_('seat_assignments', { term_id: old.id, seat_id: plainSeat.id, student_id: target.s.id, valid_from: '', valid_to: '', status: '배정', memo: '' }, ADMIN));
+  const p = preview(env, d, [], 5);
+  assert.strictEqual(cellsOf({ spaces: p.spaces }).find((c) => c.id === bounded.id).text, target.s.grade + '. ' + target.s.name);
+});

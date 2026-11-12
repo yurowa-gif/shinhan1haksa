@@ -62,7 +62,7 @@ function sdrPrev_(d, term) {
     var rows = seatLiveAssignments_(d.assignments, older[i].id).filter(function (a) { return !seatEnded_(a, end) && !(a.valid_from && a.valid_from > end); });
     if (!rows.length) continue;
     var byStudent = {};
-    rows.forEach(function (a) { byStudent[a.student_id] = a; });   // 같은 학생이 둘이면 시트에서 아래 행
+    rows.forEach(function (a) { if (!byStudent[a.student_id] || statAssignmentWins_(a, byStudent[a.student_id])) byStudent[a.student_id] = a; });   // 같은 학생이 둘이면 seatMapOn_와 같은 규칙(날짜를 좁힌 쪽 → 늦은 valid_from → 늦은 updated_at → 아래 행)
     return Object.keys(byStudent).sort().map(function (sid) { return { seat_id: byStudent[sid].seat_id, student_id: sid }; });
   }
   return [];
@@ -83,7 +83,20 @@ function sdrContext_(termId) {
   var students = sdrStudents_(d, term, ymd);
   var byId = {};
   d.students.forEach(function (s) { byId[s.id] = s; });
-  return { d: d, term: term, ymd: ymd, map: map, liveActive: liveActive, students: students, byId: byId,
+  // 입실 전(미입실) 학생이 먼저 받은 자리: 이 기간 등록이 있고 자리가 잡혀 있으면 초안이 지우지 않는다(고정처럼 둔다)
+  var enrolled = {}, hold = [], holdSeen = {};
+  d.enrollments.forEach(function (e) { if (e.term_id === term.id && !enrolled[e.student_id]) enrolled[e.student_id] = e; });
+  Object.keys(map.bySeat).forEach(function (sid) {
+    if (map.bySeat[sid].reason !== '미입실') return;
+    var row = liveActive.filter(function (a) { return a.seat_id === sid; }).pop();
+    var e = row && enrolled[row.student_id];
+    if (!row || !e || !byId[row.student_id] || holdSeen[row.student_id]) return;
+    holdSeen[row.student_id] = true;
+    hold.push({ seat_id: sid, student_id: row.student_id });
+    var s = byId[row.student_id];
+    students.push({ id: s.id, gender: s.gender, grade: s.grade, veritas: isTruthy_(e.veritas) });
+  });
+  return { d: d, term: term, ymd: ymd, map: map, liveActive: liveActive, students: students, byId: byId, hold: hold,
     prev: sdrPrev_(d, term), avoids: sdrAvoids_(),
     bounded: liveActive.some(function (a) { return a.valid_to || (a.valid_from && a.valid_from > ymd); }) };
 }
@@ -165,7 +178,7 @@ function sdrSpacesView_(c, holder, bad, pinned) {
 
 /** 초안 계산(미리보기·저장 공통) → {draft, vios(원본), sig, assignments} */
 function sdrCompute_(c, fixed, seed) {
-  var draft = seatDraft_(c.d.spaces, c.d.seats, c.students, c.prev, fixed, c.avoids, seed);
+  var draft = seatDraft_(c.d.spaces, c.d.seats, c.students, c.prev, c.hold.concat(fixed), c.avoids, seed);   // 입실 전 학생의 자리가 먼저(같은 학생·자리를 다시 고정해도 R14가 한 번만 쓴다)
   return { draft: draft, sig: sdrHash_(seed + '\n' + sdrAssignKey_(draft.assignments)) };
 }
 
@@ -196,6 +209,7 @@ function previewSeatDraft(termId, fixedSeatIds, seed) {
   shown.forEach(function (v) { bad[v.seatId] = true; });
   var pinned = {};
   fx.fixed.forEach(function (f) { pinned[f.seat_id] = true; });
+  c.hold.forEach(function (h) { cur[h.seat_id] = h.student_id; });   // 입실 전 학생의 자리는 지금도 그 학생 것(바뀌는 자리로 세지 않는다)
   var changed = 0, seats = {};
   Object.keys(cur).forEach(function (sid) { seats[sid] = true; });
   Object.keys(holder).forEach(function (sid) { seats[sid] = true; });
@@ -203,7 +217,8 @@ function previewSeatDraft(termId, fixedSeatIds, seed) {
   return {
     ok: true, seed: seed, sig: r.sig, base: sdrHash_(sdrBaseKey_(c)),
     fixed: fx.fixed.map(function (f) { return { seatId: f.seat_id, studentId: f.student_id }; }),
-    changed: changed, violationCount: shown.length, violations: shown, warnings: sdrWarn_(c, r.draft.warnings),
+    changed: changed, violationCount: shown.length, violations: shown,
+    warnings: (c.hold.length ? ['입실 전 학생 ' + c.hold.length + '명의 자리는 그대로 둡니다.'] : []).concat(sdrWarn_(c, r.draft.warnings)),
     unplaced: r.draft.unplaced.map(function (id) { return c.byId[id] ? seatDisplay_(c.byId[id]) : ''; }).filter(Boolean),
     spaces: sdrSpacesView_(c, holder, bad, pinned), ymd: c.ymd, termName: c.term.name
   };
