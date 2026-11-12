@@ -34,6 +34,7 @@ var ROLE_PRIORITY = ['admin', 'attendance', 'hall_teacher', 'duty_manager', 'hom
  * 0단계: users, terms, students, enrollments, guardian_links + audit_log(권한 거부 기록용, 9절).
  * 1단계: status_changes, day_schedules, blocks, fixed_schedules, spaces, seats, seat_assignments + 기간별 탭(SCHEMA_TERM_TABS).
  * 2단계(결정 41): duty_slots, violation_rules, 기간별 violations, counsel_notes·status_changes 열 추가.
+ * 3단계(결정 64): avoid_pairs, rooms, room_assignments.
  */
 var SCHEMA = {
   db: {
@@ -69,7 +70,15 @@ var SCHEMA = {
     // 근무 칸. 기간별로 나누지 않는다(방학에도 근무, 집계는 달 단위). 근무자는 이메일. 마지막 교대만 남고 중간 단계는 audit_log
     duty_slots: ['date', 'slot', 'end_time', 'original_email', 'actual_email', 'swapped_at', 'swapped_by', 'status', 'memo'],
     // F4 위반 항목. 자동 항목 이름 '무단 지각·결석·이탈'은 바꾸지 않는다(R5가 이 이름으로 읽는다)
-    violation_rules: ['name', 'description', 'active', 'sort_order']
+    violation_rules: ['name', 'description', 'active', 'sort_order'],
+
+    /* ───── 3단계(결정 64 승인) ───── */
+    // 떨어뜨릴 짝. scope: 좌석·방·둘 다. status: 유효·취소. 사유·짝은 관리자·학사 교사만 본다(학생·학부모·담임 응답에 내보내지 않음)
+    avoid_pairs: ['student_a', 'student_b', 'scope', 'reason', 'status'],
+    // 호실. gender 남·여, capacity 정원, status 유효·취소. 기본 35실은 setup()·seedDefaultRooms()가 채운다(관리자가 고친다, 결정 24)
+    rooms: ['floor', 'room_no', 'gender', 'capacity', 'sort_order', 'status', 'memo'],
+    // 기간별 방 배정(seat_assignments와 같은 모양). valid_from·valid_to가 비면 기간 전체. status: 배정·취소
+    room_assignments: ['term_id', 'room_id', 'student_id', 'valid_from', 'valid_to', 'status', 'memo']
   },
   counsel: {
     // target·linked_violation_id·cancel_reason은 2단계(결정 41). 6단계 열은 그때 setup이 제자리에 끼운다

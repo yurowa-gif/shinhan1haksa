@@ -94,6 +94,10 @@ Apps Script는 같은 전역 이름을 경고 없이 덮는다. 새 전역 이�
 | spaces | gender | `남` · `여` · `혼성` |
 | seats | kind | `좌석` · `기둥` · `비상문` · `창문` |
 | seat_assignments | status | `배정` · `취소` |
+| avoid_pairs | scope | `좌석` · `방` · `둘 다` (결정 64) |
+| avoid_pairs, rooms | status | `유효` · `취소` |
+| rooms | gender | `남` · `여` |
+| room_assignments | status | `배정` · `취소` |
 
 ## 0단계 탭(참고)
 
