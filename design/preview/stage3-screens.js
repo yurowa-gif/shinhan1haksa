@@ -215,8 +215,9 @@ def('room-board', 'F8 방 배정', 'F8 방 배정 (층별 카드, 학년. 이름
 });
 
 def('room-edit', 'F8 방 배정', 'F8 손으로 고친 뒤 (정원 초과·떨어뜨릴 짝이 빨갛게)', {}, function (root) {
-  var m = frame(root, { wide: true, title: '방 배정', who: '박선생', bar: [{ text: '초안 만들기', kind: 'secondary' }, { text: '저장' }],
-    note: '시안 · 손으로 옮긴 뒤 다시 계산한 모습. 정원 초과(5/4)와 떨어뜨릴 짝(방)이 빨간 테두리 + ⚠ 글자로 보인다. 저장은 막히지 않는다.' });
+  var m = frame(root, { wide: true, title: '방 배정', who: '박선생', bar: [{ text: '초안 만들기', kind: 'secondary' }, { text: '저장', disabled: true }],
+    note: '시안 · 손으로 옮긴 뒤 다시 계산한 모습. 정원 초과(5/4)와 떨어뜨릴 짝(방)이 빨간 테두리 + ⚠ 글자로 보인다. 정원 초과·성별 불일치가 있으면 [저장]이 꺼진다(같은 학년·떨어뜨릴 짝은 표시만).' });
+  m.appendChild(el('div', { class: 'error', style: 'margin-bottom:12px', text: '정원 초과가 있어 저장할 수 없습니다. 3층 2호를 4명 이하로 맞춰 주세요. (떨어뜨릴 짝은 표시만 하며 저장을 막지 않습니다.)' }));
   m.appendChild(el('div', { class: 'stats', style: 'margin-bottom:12px' }, [statBox(2, '규칙 위반')]));
   m.appendChild(floorChips(3));
   var r2 = ROOM(3, 2).s.map(function (x) { return [x[0], x[1]]; }); r2.push([2, '황민석']);   // 4호에서 옮겨 와 5명
@@ -236,7 +237,7 @@ def('room-draft-preview', 'F8 방 배정', 'F8 초안 미리보기 (바뀌는 �
   var m = frame(root, { wide: true, title: '방 초안', who: '박선생', bar: [{ text: '취소', kind: 'secondary' }, { text: '저장' }],
     note: '시안 · 아직 저장 전. 기숙 학생만, 층의 성별은 고정, 방마다 학년을 섞고 떨어뜨릴 짝(방·둘 다)은 같은 방에 두지 않는다.' });
   m.appendChild(el('div', { class: 'stats', style: 'margin-bottom:12px' }, [statBox(24, '바뀌는 학생'), statBox(0, '규칙 위반')]));
-  m.appendChild(el('div', { class: 'notice ok', text: '규칙 위반이 없습니다. 저장하면 지금 배정은 "취소"로 남고 새 배정이 생깁니다.' }));
+  m.appendChild(el('div', { class: 'notice ok', text: '규칙 위반이 없습니다. 저장하면 지금 배정은 기준일 전날까지로 끝나고, 지난 날짜 기록은 그대로 남습니다.' }));
   m.appendChild(floorChips(5));
   m.appendChild(roomGrid(basicCards(5)));
   m.appendChild(el('div', { class: 'muted', text: '3층 남 4실(16명)·5층 여 2실(8명)이 새로 짜였습니다. 다른 층은 비어 있습니다.' }));
@@ -248,7 +249,7 @@ def('room-swap-confirm', 'F8 방 배정', 'F8 두 학생 맞바꾸기 확인', {
 });
 
 def('room-move-sheet', 'F8 방 배정', 'F8 학생을 다른 방으로 옮기기 (방 고르기)', { sheet: true }, function (root) {
-  frame(root, { title: '방 배정', who: '박선생', note: '시안 · 학생을 고르고 [방으로 옮기기]. 정원이 찬 방은 눌러도 되고 ⚠ 정원 초과로 알려 준다(막지 않음).' });
+  frame(root, { title: '방 배정', who: '박선생', note: '시안 · 학생을 고르고 [방으로 옮기기]. 정원이 찬 방도 고를 수 있고 ⚠ 정원 초과로 알려 준다(고르는 것은 막지 않지만 그대로는 저장할 수 없다).' });
   var list = el('ul', { class: 'picker-list' });
   [[1, 4, '정원 참'], [2, 4, '정원 참'], [3, 4, '정원 참'], [4, 3, '1자리 남음']].forEach(function (r) {
     var full = r[2] === '정원 참';
