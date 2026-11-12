@@ -72,6 +72,7 @@ var SCREENS = {
   sheet: { file: 'ui/screen_sheet', title: '출석부', view: 'sheet.view' },
   exceptions: { file: 'ui/screen_exceptions', title: '특이사항', view: 'exception.view' },
   seats: { file: 'ui/screen_seats', title: '좌석표', view: 'seat.view' },
+  avoid: { file: 'ui/screen_avoid', title: '떨어뜨릴 짝', view: 'avoid.view' },
   duty: { file: 'ui/screen_duty', title: '근무표', view: 'duty.view' },
   outs: { file: 'ui/screen_outs', title: 'OUT', view: 'out.view' },
   moves: { file: 'ui/screen_moves', title: '입퇴실·급식', view: 'status.list' },

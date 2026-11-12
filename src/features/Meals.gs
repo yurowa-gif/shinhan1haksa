@@ -584,6 +584,15 @@ function listStudentStatus(studentId, ymd) {
   var pendingRows = live.filter(function (c) { return c.effective_date > today; }).sort(function (a, b) { return a.effective_date < b.effective_date ? -1 : 1; });
   var pendingId = {};
   pendingRows.forEach(function (c) { pendingId[c.id] = true; });
+  var enrAll = readAll_('enrollments'), termsAll = readAll_('terms'), isAdmin = user.roles.indexOf('admin') >= 0;
+  /** [퇴실 취소] 버튼을 보일 행(보기 편의일 뿐 — cancelMove가 서버에서 다시 판정한다): F6 퇴실 대표, 적용일 전이면 책임 교사·관리자, 지난 뒤나 2OUT 퇴실이면 관리자 */
+  var canCancel = function (c) {
+    if (c.source !== 'F6' || String(c.linked_change_id || '') || c.value !== '퇴실' || String(c.status || '유효') !== '유효') return false;
+    if (isAdmin) return true;
+    if (c.effective_date < today || inoutIsDismissRow_(c) || user.roles.indexOf('hall_teacher') < 0) return false;
+    var term = ymdIsValid_(String(c.effective_date)) ? foodTermFor_(studentId, c.effective_date, termsAll, enrAll) : null;
+    return !!term && enrAll.some(function (e) { return e.term_id === term.id && e.student_id === studentId && normalizeEmail_(e.teacher_email) === user.email; });
+  };
   var view = function (c, noButton) {
     var head = !String(c.linked_change_id || '');
     var m = miss[c.id];
@@ -592,7 +601,7 @@ function listStudentStatus(studentId, ymd) {
       dateKo: ymdIsValid_(String(c.effective_date)) ? foodDateKoY_(c.effective_date, today) : '', edited: !!c.effective_date_auto && c.effective_date_auto !== c.effective_date,
       reason: c.reason, sourceLabel: foodSourceLabel_(c.source), status: String(c.status || '유효'), cancelText: foodCancelText_(c.cancel_reason),
       docState: m ? 'missing' : (head && c.source !== '명단업로드' && String(c.doc_submitted).toUpperCase() === 'TRUE' ? 'done' : ''),
-      head: head, canMarkDoc: mineDoc && !noButton };
+      head: head, canMarkDoc: mineDoc && !noButton, canCancelMove: !noButton && canCancel(c) };
   };
   return {
     student: { id: student.id, name: student.name, grade: +student.grade, classNo: student.class_no, number: student.number, studentNo: student.student_no },

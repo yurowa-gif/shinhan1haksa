@@ -410,7 +410,7 @@ D10 시안(`design/preview/stage3-screens.js`, 실행 `node design/preview/stage
 ### F5-3. 좌석 초안 만들기 → 미리보기 → 저장
 
 ```
-좌석 배치 · 초안 미리보기
+좌석 초안
 ┌ 21 바뀌는 자리 ┐┌ 5 규칙 위반 ┐          ← .stats
 ⚠ 베리타스 3명은 SA실이 모자라 1층 자습실로 배정했습니다.   ← .notice.warn (넘칠 때만)
 ( 1층 자습실 )( SA1 )…                          ← 공간 칩

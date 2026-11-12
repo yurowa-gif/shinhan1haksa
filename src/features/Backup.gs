@@ -135,14 +135,16 @@ function bakEnsurePrivate_(file) {
     return file.getSharingAccess() !== DriveApp.Access.PRIVATE || file.getEditors().length > 0 || file.getViewers().length > 0;
   }
   if (!open_()) return;
-  file.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
-  file.getEditors().forEach(function (u) { file.removeEditor(u.getEmail()); });
-  file.getViewers().forEach(function (u) { file.removeViewer(u.getEmail()); });
-  if (open_()) {
-    var name = file.getName();
-    file.setTrashed(true);
-    throw new Error('백업 사본이 공유되어 있어 닫지 못해 휴지통으로 보냈습니다: ' + name);
+  var name = file.getName(), closed = false;
+  try {
+    file.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+    file.getEditors().forEach(function (u) { file.removeEditor(u.getEmail()); });
+    file.getViewers().forEach(function (u) { file.removeViewer(u.getEmail()); });
+    closed = !open_();
+  } finally {
+    if (!closed) file.setTrashed(true);   // 닫는 중 오류가 나도 열린 사본을 남기지 않는다
   }
+  if (!closed) throw new Error('백업 사본이 공유되어 있어 닫지 못해 휴지통으로 보냈습니다: ' + name);
 }
 
 /** 앱 상태 JSON: 속성 이름 전부 + 허용 목록의 값만 */

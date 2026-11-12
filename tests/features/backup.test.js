@@ -144,6 +144,30 @@ test('이름으로 공유된 사람은 setSharing이 못 지운다 → 사람마
   assert.strictEqual(names(env).length, 4);
 });
 
+test('편집자(editor)로 붙은 사본도 사람마다 빼서 통과, 폴더에 편집자가 있으면 복사 전에 멈춘다', () => {
+  const env = makeEnv();
+  env.drive.copyEditors = ['editor@fakeschool.invalid'];
+  run(env);
+  env.drive.filesIn(folderId(env)).forEach((f) => assert.deepStrictEqual(f.viewers.concat(f.editors), [], f.name));
+  const n = env.drive.filesIn(folderId(env)).length;
+  env.drive.folders[folderId(env)].editors = ['someone@fakeschool.invalid'];
+  const e = env.errorOf(OWNER, (c) => c.runBackupNow());
+  assert.ok(e && /공유/.test(e.message));
+  assert.strictEqual(env.drive.filesIn(folderId(env)).length, n);
+});
+
+test('공유를 닫다가 오류가 나도 그 사본은 휴지통으로 보내고 실패(audit)', () => {
+  const env = makeEnv();
+  env.drive.copyEditors = ['editor@fakeschool.invalid'];
+  env.drive.throwOnRemove = true;
+  const e = env.errorOf(OWNER, (c) => c.runBackupNow());
+  assert.ok(e && /공유를 바꿀 수 없습니다/.test(e.message));
+  assert.deepStrictEqual(env.auditActions('backup:'), ['backup:failed']);
+  const copies = env.drive.filesIn(folderId(env)).filter((f) => f.editors.length);
+  assert.ok(copies.length >= 1);
+  copies.forEach((f) => assert.strictEqual(f.trashed, true, f.name));
+});
+
 test('사람을 못 지우면 그 사본을 휴지통으로 보내고 실패(audit·메일), 열린 사본이 남지 않는다', () => {
   const env = makeEnv();
   env.drive.copyViewers = ['someone@fakeschool.invalid'];
