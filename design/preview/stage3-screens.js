@@ -104,7 +104,7 @@ def('seat-assign', 'F5 좌석', 'F5 좌석 배정 + [초안 만들기] (처음)'
 function seatPreview(root, who) {
   var S = buildSeats(), vio = seatViolations(S);
   var admin = who !== 'homeroom';
-  var m = frame(root, { wide: true, title: '좌석 배치 · 초안 미리보기', who: '박선생', bar: [{ text: '취소', kind: 'secondary' }, { text: '저장' }],
+  var m = frame(root, { wide: true, title: '좌석 초안', who: '박선생', bar: [{ text: '취소', kind: 'secondary' }, { text: '저장' }],
     note: '시안 · 아직 저장 전. 규칙 위반이 있어도 [저장]은 막히지 않는다(빨간 표시는 알림일 뿐). 빨간 칸은 굵은 테두리 + ⚠ + 목록으로도 알린다.' });
   m.appendChild(el('div', { class: 'stats', style: 'margin-bottom:12px' }, [statBox(21, '바뀌는 자리'), statBox(vio.length, '규칙 위반')]));
   m.appendChild(el('div', { class: 'notice warn', text: '베리타스 학생 3명은 SA실 자리가 모자라 1층 자습실로 배정했습니다. 저장한 뒤 맞바꿀 수 있습니다.' }));
@@ -233,7 +233,7 @@ def('room-edit', 'F8 방 배정', 'F8 손으로 고친 뒤 (정원 초과·떨�
 });
 
 def('room-draft-preview', 'F8 방 배정', 'F8 초안 미리보기 (바뀌는 학생·규칙 위반 0)', {}, function (root) {
-  var m = frame(root, { wide: true, title: '방 배정 · 초안 미리보기', who: '박선생', bar: [{ text: '취소', kind: 'secondary' }, { text: '저장' }],
+  var m = frame(root, { wide: true, title: '방 초안', who: '박선생', bar: [{ text: '취소', kind: 'secondary' }, { text: '저장' }],
     note: '시안 · 아직 저장 전. 기숙 학생만, 층의 성별은 고정, 방마다 학년을 섞고 떨어뜨릴 짝(방·둘 다)은 같은 방에 두지 않는다.' });
   m.appendChild(el('div', { class: 'stats', style: 'margin-bottom:12px' }, [statBox(24, '바뀌는 학생'), statBox(0, '규칙 위반')]));
   m.appendChild(el('div', { class: 'notice ok', text: '규칙 위반이 없습니다. 저장하면 지금 배정은 "취소"로 남고 새 배정이 생깁니다.' }));
