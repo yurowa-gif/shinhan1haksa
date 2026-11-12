@@ -90,3 +90,21 @@ test('실제 경로: 같은 화면 표로 두 번 맞바꾸면 두 번째는 거
   const r = plain(env.call(ADMIN, 'assignSeat', late.term.id, empty.id, d.unseated[0].id, tok(late, empty.id)));
   assert.strictEqual(r.ok, false); assert.ok(r.error.includes('끝난 운영 기간'));
 });
+
+test('getSeatData: 자리를 가진 학생 이름(hold)과 퇴실·미입실 사정(reason)은 배정할 수 있는 사람에게만 — 담임·출결·근무표 응답에는 비어 있다(결정 45)', () => {
+  const env = makeEnv();
+  const cells = (d) => d.spaces.flatMap((s) => s.cells);
+  [ADMIN, HALL].forEach((w) => {
+    const c = cells(plain(env.call(w, 'getSeatData')));
+    assert.ok(c.some((x) => x.reason) && c.some((x) => x.hold), w + ': 시험 준비 — 퇴실·미입실 자리가 있다');
+  });
+  VIEW_ONLY.forEach((w) => {
+    const d = plain(env.call(w, 'getSeatData'));
+    assert.ok(cells(d).every((x) => x.reason === '' && x.hold === ''), w);
+    const t = JSON.stringify(d);
+    assert.ok(!/"reason":"[^"]/.test(t) && !/"hold":"[^"]/.test(t), w);
+    assert.strictEqual(d.spaces.every((s) => s.layoutToken === ''), true, '격자 표는 관리자에게만');
+  });
+  assert.strictEqual(plain(env.call(ADMIN, 'getSeatData')).spaces.every((s) => /^[0-9a-f]+$/.test(s.layoutToken)), true);
+  assert.strictEqual(plain(env.call(HALL, 'getSeatData')).spaces.every((s) => s.layoutToken === ''), true, '학사 교사는 격자를 못 고친다');
+});

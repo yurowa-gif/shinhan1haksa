@@ -17,7 +17,10 @@ function makeEnv() {
   return { env, id, t1: id(T1), t2: id(T2), t3: id(T3), slots: () => env.rows('duty_slots') };
 }
 const nameOf = (x, id) => x.env.rows('users').find((u) => u.id === id).name;
-const save = (x, who, input) => x.env.call(who, 'saveDutyDay', input);
+/** 그날 칸의 지금 '화면이 최신인가' 표(화면이 getDutyMonth로 받는 token). 날짜가 틀리면 {} */
+const tokens = (x, date) => { try { return x.env.asOwner((c) => plain(c.dtyDayTokens_(date))); } catch (e) { return {}; } };
+/** 화면처럼 지금 칸 표를 expect로 보낸다(input.expect로 덮어쓸 수 있다) */
+const save = (x, who, input) => x.env.call(who, 'saveDutyDay', Object.assign({ expect: tokens(x, input.date) }, input));
 const day = (x, who, date) => x.env.call(who, 'getDutyMonth', date.slice(0, 7)).days.find((d) => d.date === date);
 
 test('getDutyMonth: 달 전체 날짜와 그날 틀(월~목 두 조, 금·토·일 근무+예비), 응답에 이메일이 없다', () => {
@@ -110,7 +113,7 @@ test('saveDutyDay 권한: 학사 교사·출결 담당·담임·학생·학부�
   const w = x.slots().length;
   for (const who of [T1, ATT, HOMEROOM, STUDENT, PARENT]) x.env.expectDenied(who, 'duty.edit', 'saveDutyDay', { date: WED, slots: { '21:30조': x.t1 } });
   assert.strictEqual(x.slots().length, w);
-  x.env.expectAllowed(ADMIN, 'saveDutyDay', { date: WED, slots: { '21:30조': x.t1 } });
+  x.env.expectAllowed(ADMIN, 'saveDutyDay', { date: WED, slots: { '21:30조': x.t1 }, expect: tokens(x, WED) });
 });
 
 test('setDutyOperating: 담당자가 끄고 켠다 — day_schedules의 운영 여부·메모만, 기본으로 돌아오면 행은 취소', () => {
@@ -342,4 +345,38 @@ test('빈 날 수·홈 빈 날 목록은 오늘 이후만: 지난 빈 날은 세
   const open = x.env.call(DUTY, 'getHomeData', 'duty_manager').duty.open;
   assert.ok(open.length === 3 && open.every((o) => o.date >= '2027-03-17'), JSON.stringify(open));
   assert.strictEqual(open[0].date, future[0].date);
+});
+
+test('saveDutyDay 낡은 화면 방지: 다른 담당자가 먼저 편성한 칸을 옛 화면이 경고 없이 덮지 못하고({stale:true}, 쓰기 0건), 새 표로는 된다', () => {
+  const x = makeEnv();
+  const view = (who) => x.env.call(who, 'getDutyMonth', MAR).days.find((d) => d.date === WED).slots;
+  const seenA = Object.fromEntries(view(ADMIN).map((s) => [s.slot, s.token]));   // 두 담당자가 같은 화면(빈 칸)을 열었다
+  assert.ok(Object.values(seenA).every((t) => t === ''), '빈 칸의 표는 빈 글자');
+  assert.strictEqual(save(x, DUTY, { date: WED, slots: { '21:30조': x.t1 } }).ok, true);   // 근무표 담당자가 먼저 저장
+  const slotsBefore = JSON.stringify(x.slots());
+  const r = x.env.call(ADMIN, 'saveDutyDay', { date: WED, slots: { '21:30조': x.t2 }, expect: seenA });   // 옛 화면의 관리자
+  assert.deepStrictEqual([r.ok, r.stale, r.message], [false, true, '근무표가 바뀌었습니다. 새로 불러와 주세요.']);
+  assert.strictEqual(r.errors[0].message, r.message, '화면이 errors만 읽어도 같은 글이 보인다');
+  assert.strictEqual(JSON.stringify(x.slots()), slotsBefore, '쓰기 0건');
+  assert.strictEqual(x.slots().find((s) => s.slot === '21:30조').actual_email, T1, '먼저 저장한 편성이 그대로');
+  // 표가 없거나 모양이 틀려도 같다
+  [undefined, null, 'x', {}, { '21:30조': 5 }].forEach((e) => assert.strictEqual(x.env.call(ADMIN, 'saveDutyDay', { date: WED, slots: { '21:30조': x.t2 }, expect: e }).stale, true, JSON.stringify(e)));
+  assert.strictEqual(JSON.stringify(x.slots()), slotsBefore);
+  // 바꾸지 않는 칸(23:00조)의 옛 표는 상관없다: 옛 화면으로 23:00조만 저장하면 된다
+  assert.strictEqual(x.env.call(ADMIN, 'saveDutyDay', { date: WED, slots: { '23:00조': x.t3 }, expect: seenA }).ok, true);
+  // 새로 불러온 표로는 된다
+  const fresh = Object.fromEntries(view(ADMIN).map((s) => [s.slot, s.token]));
+  assert.strictEqual(x.env.call(ADMIN, 'saveDutyDay', { date: WED, slots: { '21:30조': x.t2 }, expect: fresh }).ok, true);
+  assert.strictEqual(x.slots().find((s) => s.slot === '21:30조').actual_email, T2);
+});
+
+test('getDutyMonth의 칸 표(token)는 편성·교대·같은 칸 수정으로 바뀌고, 응답에 이메일이 없다', () => {
+  const x = makeEnv();
+  const tok = () => x.env.call(ADMIN, 'getDutyMonth', MAR).days.find((d) => d.date === WED).slots.find((s) => s.slot === '21:30조').token;
+  const t0 = tok();
+  save(x, ADMIN, { date: WED, slots: { '21:30조': x.t1 } });
+  const t1 = tok();
+  save(x, ADMIN, { date: WED, slots: { '21:30조': x.t2 } });
+  const t2 = tok();
+  assert.deepStrictEqual([t0, t1 === t2, t1 === t0, /@/.test(t1 + t2)], ['', false, false, false]);
 });

@@ -314,6 +314,40 @@ test('지난 기간 배정이 같은 학생에게 둘이면 seatMapOn_와 같은
   assert.strictEqual(cellsOf({ spaces: p.spaces }).find((c) => c.id === bounded.id).text, target.s.grade + '. ' + target.s.name);
 });
 
+test('고정 자리는 지금 그 자리에 앉은 학생 쌍만 받는다: 다른 학생·빈 자리·지난 배정 쌍은 낡은 화면(stale)으로 거부, 쓰기 없음', () => {
+  const env = makeEnv();
+  const d = get(env);
+  const seated = cellsOf(d).filter((c) => c.studentId);
+  const [a, b] = seated;
+  const p = preview(env, d, [a.id], 7);
+  assert.strictEqual(p.ok, true);
+  const before = JSON.stringify(rows(env));
+  const bad = [
+    [{ seatId: a.id, studentId: b.studentId }],                          // 다른 학생을 그 자리에
+    [{ seatId: cellsOf(d).find((c) => c.vacant && c.kind === 'seat').id, studentId: a.studentId }],   // 빈 자리
+    [{ seatId: 'nope', studentId: a.studentId }],
+  ];
+  bad.forEach((fixed) => {
+    const r = plain(env.call(HALL, 'saveSeatDraft', d.term.id, { seed: p.seed, sig: p.sig, base: p.base, fixed }));
+    assert.deepStrictEqual([r.ok, r.stale], [false, true]);
+  });
+  assert.strictEqual(JSON.stringify(rows(env)), before);
+  // 입력 검사 자체도(sig 비교와 별개로): 지금 앉은 쌍만 받는다
+  const fx = (list) => plain(env.asOwner((c) => c.sdrFixedIn_(c.sdrContext_(d.term.id), list)));
+  assert.deepStrictEqual(fx([{ seatId: a.id, studentId: a.studentId }]).fixed, [{ seat_id: a.id, student_id: a.studentId }]);
+  bad.forEach((list) => assert.deepStrictEqual([fx(list).ok, fx(list).stale], [false, true]));
+  // 다른 선생님이 고정한 자리의 학생을 맞바꾼 뒤 저장하면(미리보기 때 쌍이 지금과 다름) 낡은 화면으로 거부
+  const tok = (c) => ({ [c.id]: c.token });
+  assert.strictEqual(env.call(ADMIN, 'swapSeats', d.term.id, a.id, b.id, Object.assign({}, tok(a), tok(b))).ok, true);
+  const r2 = save(env, d, p);
+  assert.deepStrictEqual([r2.ok, r2.stale], [false, true]);
+  // 정상: 미리보기가 준 쌍 그대로는 저장되고, 두 번째 저장은 noop(고정 자리가 그대로라 쌍이 계속 맞는다)
+  const d2 = get(env);
+  const p2 = preview(env, d2, [a.id], 8);
+  assert.strictEqual(save(env, d2, p2).ok, true);
+  assert.strictEqual(save(env, d2, p2).noop, true);
+});
+
 test('저장 확인창 문구: 지금 배정은 기준일 전날까지로 끝나고 기준일부터 새 배정(뜻이 거꾸로 읽히지 않게, 서버 동작과 같다)', () => {
   const fs = require('fs');
   const path = require('path');

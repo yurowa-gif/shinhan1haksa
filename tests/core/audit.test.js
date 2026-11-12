@@ -58,7 +58,7 @@ test('bulkAppend_를 쓰는 모든 경로(기본 블록·가짜 데이터·좌�
   // 좌석: 붙여넣기(Seats.gs importSeatGrid), 격자 저장(saveSpaceGrid), 배정(seatApplyOps_)
   step(['seats'], () => assert.strictEqual(env.call(OWNER, 'importSeatGrid', '공석\t공석', { name: '붙여넣기실', gender: '혼성' }).ok, true));
   const sp = env.call(OWNER, 'saveSpace', { name: '격자실', gender: '혼성', rows: 2, cols: 2 });
-  step(['seats'], () => assert.strictEqual(env.call(OWNER, 'saveSpaceGrid', sp.id, [{ row: 1, col: 1, kind: '좌석' }, { row: 2, col: 2, kind: '기둥' }]).ok, true));
+  step(['seats'], () => assert.strictEqual(env.call(OWNER, 'saveSpaceGrid', sp.id, [{ row: 1, col: 1, kind: '좌석' }, { row: 2, col: 2, kind: '기둥' }], plain(env.call(OWNER, 'getSeatData')).spaces.find((x) => x.id === sp.id).layoutToken).ok, true));
   const d = plain(env.call(OWNER, 'getSeatData'));
   const empty = d.spaces.flatMap((x) => x.cells).find((c) => c.kind === 'seat' && c.vacant && !c.hold);
   step(['seat_assignments'], () => assert.strictEqual(env.call(OWNER, 'assignSeat', d.term.id, empty.id, d.unseated[0].id, { [empty.id]: empty.token }).ok, true));

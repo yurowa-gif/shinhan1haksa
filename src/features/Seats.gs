@@ -344,6 +344,24 @@ function seatApplyOps_(sheet, ops, email) {
   bulkAppend_(sheet, creates, email);
 }
 
+var SEAT_LAYOUT_STALE_MSG = '다른 관리자가 먼저 이 공간을 바꿨습니다. 화면을 새로 불러온 뒤 다시 해 주세요.';
+
+/**
+ * 한 공간의 '화면이 최신인가' 표(격자·공간 저장용). 공간 행과 그 공간 칸 행 전부(취소 포함)의 id·상태·모양·updated_at을 해시한다.
+ * 락 안에서 다시 계산해 화면이 가져간 값과 다르면 {stale:true}로 거부한다(옛 화면이 다른 관리자의 변경을 경고 없이 덮지 않게).
+ * 호출하기 전에 seatFresh_()로 시트를 다시 읽어야 한다. 없는 공간은 ''.
+ */
+function seatLayoutToken_(spaceId) {
+  var sp = readAll_('spaces').filter(function (x) { return x.id === spaceId; })[0];
+  if (!sp) return '';
+  var parts = [['S', sp.id, sp.name, sp.gender, sp.rows, sp.cols, sp.sort_order, sp.status, sp.updated_at].join('|')];
+  readAll_('seats').filter(function (x) { return x.space_id === spaceId; }).forEach(function (x) {
+    parts.push(['C', x.id, x.row, x.col, x.kind, x.label || '', x.status || '', x.updated_at || ''].join('|'));
+  });
+  parts.sort();
+  return sdrHash_(parts.join('\n'));
+}
+
 /** 그 기간이 이미 끝났는가(끝난 기간은 보기만) */
 function seatTermEnded_(term, today) { return !!term.end_date && today > term.end_date; }
 
@@ -363,6 +381,7 @@ function getSeatData(termId) {
   var ymd = seatBaseYmd_(term, today);
   var ended = seatTermEnded_(term, today);
   var canEdit = !ended && hasAnyAllowedRole_(user.roles, permissions_()['seat.edit'].roles);
+  var canLayout = hasAnyAllowedRole_(user.roles, permissions_()['seat.layout'].roles);
   var map = seatMapOn_(d.seats, d.assignments, d.enrollments, d.changes, term.id, ymd);
   var live = seatLiveAssignments_(d.assignments, term.id);
   var studentById = {};
@@ -377,11 +396,14 @@ function getSeatData(termId) {
     var cells = d.seats.filter(function (s) { return s.space_id === sp.id; }).map(function (s) {
       var m = map.bySeat[s.id], st = m && m.studentId ? studentById[m.studentId] : null;
       return { id: s.id, row: +s.row, col: +s.col, kind: seatKindEn_(s.kind), seatLabel: s.label || '', bad: !!vio.bad[s.id],
-        text: st ? seatDisplay_(st) : '', vacant: s.kind === '좌석' && !st, reason: m && !st ? m.reason : '', studentId: st ? st.id : '',
-        hold: !st && holder[s.id] && studentById[holder[s.id]] ? seatDisplay_(studentById[holder[s.id]]) : '',
+        text: st ? seatDisplay_(st) : '', vacant: s.kind === '좌석' && !st, studentId: st ? st.id : '',
+        // 자리를 가진 학생의 이름(hold)과 퇴실·미입실 사정(reason)은 배정할 수 있는 사람(canEdit)에게만 준다(결정 45: 보기만 하는 담임 등에게 다른 반 학생의 퇴실을 알리지 않는다)
+        reason: canEdit && m && !st ? m.reason : '',
+        hold: canEdit && !st && holder[s.id] && studentById[holder[s.id]] ? seatDisplay_(studentById[holder[s.id]]) : '',
         token: s.kind === '좌석' ? seatToken_(live, s.id, ymd, m ? m.reason : '') : '' };
     });
-    return { id: sp.id, name: sp.name, gender: sp.gender, rows: +sp.rows, cols: +sp.cols, sortOrder: +sp.sort_order || 0, cells: cells };
+    return { id: sp.id, name: sp.name, gender: sp.gender, rows: +sp.rows, cols: +sp.cols, sortOrder: +sp.sort_order || 0, cells: cells,
+      layoutToken: canLayout ? seatLayoutToken_(sp.id) : '' };
   });
   var pickStudent = function (id) {
     var s = studentById[id] || {};
@@ -391,7 +413,7 @@ function getSeatData(termId) {
   return {
     term: { id: term.id, name: term.name }, ymd: ymd, ended: ended, terms: d.terms.map(function (t) { return { id: t.id, name: t.name }; }),
     canEdit: canEdit, violations: vio.violations,
-    canLayout: hasAnyAllowedRole_(user.roles, permissions_()['seat.layout'].roles),
+    canLayout: canLayout,
     spaces: spaces, unseated: canEdit ? map.unseated.map(pickStudent) : [], unseatedCount: map.unseated.length, warnings: map.warnings
   };
 }
@@ -412,7 +434,7 @@ function seatValidateSpace_(input, spaces) {
   return { ok: errors.length === 0, errors: errors, record: { name: name, gender: gender, rows: String(rows), cols: String(cols) } };
 }
 
-/** 공간 추가·수정(이름·성별·크기). 줄이는 크기 밖에 칸이 있으면 거부. 관리자만. */
+/** 공간 추가·수정(이름·성별·크기). 줄이는 크기 밖에 칸이 있으면 거부. 관리자만. 수정은 화면이 본 공간 표(input.token = getSeatData의 layoutToken)가 지금과 같아야 한다(아니면 {stale:true}). */
 function saveSpace(input) {
   var user = requirePermission_('seat.layout');
   input = input || {};
@@ -429,6 +451,7 @@ function saveSpace(input) {
     }
     var cur = spaces.filter(function (s) { return s.id === id; })[0];
     if (!cur) throw new Error('수정할 공간을 찾을 수 없습니다. 목록을 새로 불러와 주세요.');
+    if (typeof input.token !== 'string' || input.token !== seatLayoutToken_(id)) return { ok: false, stale: true, error: SEAT_LAYOUT_STALE_MSG };
     var out = seatActive_(readAll_('seats')).filter(function (s) { return s.space_id === id && (+s.row > +v.record.rows || +s.col > +v.record.cols); });
     if (out.length) return { ok: false, errors: [{ field: 'rows', message: '줄이려는 크기 밖에 칸이 ' + out.length + '개 있습니다. 격자 편집에서 그 칸을 먼저 비워 주세요.' }] };
     // 이름을 바꿔 번호 방식(SA실 ↔ 줄-순번)이 바뀌면 같은 락에서 번호를 다시 매긴다. 저장 전에 확인(needsConfirm)을 받는다.
@@ -506,11 +529,13 @@ function previewSpaceGrid(spaceId, cells) {
 /**
  * 한 공간의 칸을 통째로 저장한다. cells = [{row, col, kind}] (kind: 좌석·기둥·비상문·창문, 빈칸은 넣지 않는다). 관리자만.
  * 지금·앞으로의 기간에 앉은 학생이 있는 좌석을 없애거나 바꾸면 거부한다. 번호는 방식에 맞게 다시 매긴다(배정은 좌석 id로 이어진다).
+ * token = 화면이 본 공간 표(getSeatData의 layoutToken). 락 안에서 지금과 다르면 {stale:true}로 거부한다.
  */
-function saveSpaceGrid(spaceId, cells) {
+function saveSpaceGrid(spaceId, cells, token) {
   var user = requirePermission_('seat.layout');
   return withLock_(function () {
-    var r = seatGridPlanFor_(spaceId, cells);
+    var r = seatGridPlanFor_(spaceId, cells);   // 시트를 다시 읽는다(seatFresh_)
+    if (typeof token !== 'string' || token !== seatLayoutToken_(r.sp.id)) return { ok: false, stale: true, error: SEAT_LAYOUT_STALE_MSG };
     var plan = r.plan;
     if (!plan.ok) return { ok: false, errors: plan.errors };
     bulkUpdateRecords_('seats', plan.update.concat(plan.cancel), user.email);

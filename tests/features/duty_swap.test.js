@@ -26,9 +26,12 @@ function makeEnv(opts) {
   if (!opts || opts.mail !== false) env.scriptProps.MAIL_ENABLED = 'true';
   return { env, id, slot, rows, t2: id(T2), t3: id(T3), t4: id(T4), r1: id(R1), r2: id(R2), r3: id(R3) };
 }
-/** MailApp을 바꿔 끼워 swapDuty를 부른다 → {r, sent:[to], locks:[보낼 때 락 보유]} */
+/** 그 칸의 지금 '화면이 최신인가' 표(화면이 getDutyMonth로 받는 token) */
+const tokenOf = (x, slotId) => x.env.asOwner((c) => c.dtySlotToken_(c.readAll_('duty_slots').filter((r) => r.id === slotId).pop()));
+/** MailApp을 바꿔 끼워 swapDuty를 부른다 → {r, sent:[to], locks:[보낼 때 락 보유]}. 화면처럼 지금 칸 표를 expect로 보낸다(o.expect로 덮어쓸 수 있다) */
 function swap(x, who, slotId, toId, o, mailOpts) {
   mailOpts = mailOpts || {};
+  o = Object.assign({ expect: tokenOf(x, slotId) }, o);
   const sent = [], locks = [];
   const r = plain(x.env.as(who, (c) => {
     c.MailApp = { sendEmail(to, subject, body) { locks.push(c.LockService.getScriptLock().hasLock()); if (mailOpts.fail) throw new Error('발송 실패(가짜)'); sent.push({ to, subject, body }); },
@@ -228,7 +231,7 @@ test('swapDuty는 공개 함수 권한표에 duty.swap으로 등록되어 있고
   const x = makeEnv();
   x.slot(TOMORROW, '21:30조', R1);
   for (const who of [STUDENT, PARENT, HOMEROOM]) x.env.expectDenied(who, 'duty.swap', 'swapDuty', x.rows()[0].id, x.r2);
-  x.env.expectAllowed(R1, 'swapDuty', x.rows()[0].id, x.r2);
+  x.env.expectAllowed(R1, 'swapDuty', x.rows()[0].id, x.r2, { expect: tokenOf(x, x.rows()[0].id) });
 });
 
 /* ───── #81 검토 반영 ───── */
@@ -288,7 +291,7 @@ test('앱 주소를 못 읽어도(ScriptApp 오류) 교대는 저장되고 메�
   const r = plain(x.env.as(R1, (c) => {
     c.MailApp = { sendEmail(m) { sent.push(m); }, getRemainingDailyQuota: () => 100 };
     c.ScriptApp = { getService: () => { throw new Error('서비스 주소 오류(가짜)'); } };
-    return c.swapDuty(x.rows()[0].id, x.r2);
+    return c.swapDuty(x.rows()[0].id, x.r2, { expect: tokenOf(x, x.rows()[0].id) });
   }));
   assert.deepStrictEqual([r.ok, r.notified], [true, true]);
   assert.ok(sent.length >= 1 && sent.every((m) => !/https?:/.test(JSON.stringify(m))), '주소 없이 발송');
@@ -344,4 +347,114 @@ test('칸 이름 뒤 공백: 확인 경고(acknowledge 없이)는 "23:00조에 �
   const { r, sent } = swap(y, R1, y.rows()[0].id, y.r2);
   assert.strictEqual(r.ok, true, JSON.stringify(r));
   assert.ok(sent.length && sent.every((m) => m.body.includes('(금) 근무 ') && !m.body.includes('undefined')), sent[0] && sent[0].body);
+});
+
+/* ───── 결정 66: 이미 시작한 근무는 학사 교사가 넘길 수 없다 ───── */
+const STARTED_MSG = '이미 시작한 근무는 근무표 담당자에게 대신 근무로 기록해 달라고 하세요.';
+
+test('dtySwapCheck_: 시작한 칸은 학사 교사에게 안내 오류(거부 기록 아님), 남의 칸이면 안내보다 먼저 거부, 담당자·시작 전은 그대로', () => {
+  const r = chk({ started: true }, {});
+  assert.deepStrictEqual([r.ok, r.started, r.denied, r.error], [false, true, undefined, STARTED_MSG]);
+  assert.strictEqual(chk({ started: true }, { actual_email: 'z@x' }).denied, true, '남의 칸은 안내 없이 거부');
+  assert.strictEqual(chk({ started: true }, { date: YESTERDAY }).denied, true, '지난 날짜는 거부');
+  assert.strictEqual(chk({ canEdit: true, email: 'm@x', started: true }, { actual_email: 'z@x' }).ok, true, '담당자·관리자는 시작한 칸도 기록(결정 57)');
+  assert.strictEqual(chk({ started: false }, {}).ok, true, '시작 전 오늘 칸');
+});
+
+test('dtySlotStarted_: 월~목 21:30조는 자습 시작, 23:00조는 21:30부터, 다른 날짜는 날짜로 정한다', () => {
+  const started = (slot, date, now, start) => pure.dtySlotStarted_({ date, slot }, start === undefined ? { start: '19:00' } : { start }, now);
+  assert.strictEqual(started('21:30조', TODAY, TODAY + 'T18:59:59'), false);
+  assert.strictEqual(started('21:30조', TODAY, TODAY + 'T19:00:00'), true);
+  assert.strictEqual(started('23:00조', TODAY, TODAY + 'T21:29:59'), false);
+  assert.strictEqual(started('23:00조', TODAY, TODAY + 'T21:30:00'), true);
+  assert.strictEqual(started('23:00조', TODAY, TODAY + 'T23:40:00'), true, '근무가 끝난 뒤');
+  assert.strictEqual(started('단독', FRI, TODAY + 'T23:59:00'), false, '앞 날짜 칸');
+  assert.strictEqual(started('단독', YESTERDAY, TODAY + 'T00:00:00'), true, '지난 날짜 칸');
+  assert.strictEqual(started('21:30조', TODAY, TODAY + 'T00:00:00', ''), true, '시작 시각을 모르면 00:00');
+});
+
+test('swapDuty: 근무가 이미 시작한 오늘 칸은 학사 교사가 못 넘기고(안내, 쓰기·메일 없음), 담당자는 기록할 수 있다. 시작 전·다른 날 칸은 그대로 된다', () => {
+  const x = makeEnv();
+  x.slot(TODAY, '21:30조', R1); x.slot(TODAY, '23:00조', R2);
+  const [s1, s2] = x.rows();
+  const before = JSON.stringify(x.rows());
+  // 20:00: 21:30조(자습 시작 뒤)는 이미 시작, 23:00조는 21:30부터라 아직
+  const a = swap(x, R1, s1.id, x.r3);
+  assert.strictEqual(a.r.ok, false);
+  assert.deepStrictEqual(a.r.errors, [{ field: 'slot', message: STARTED_MSG }]);
+  assert.deepStrictEqual(a.sent, []);
+  assert.strictEqual(JSON.stringify(x.rows()), before, '거부되면 쓰지 않는다');
+  assert.ok(!x.env.rows('audit_log').some((l) => l.action === 'denied:duty.swap'), '거부 기록이 아니라 안내');
+  assert.strictEqual(swap(x, RM, s1.id, x.r3).r.ok, true, '담당자는 시작한 칸도 대신 근무로 기록');
+  assert.strictEqual(swap(x, R2, s2.id, x.t4).r.ok, true, '23:00조는 20:00에 아직 시작 전');
+});
+
+test('swapDuty: 23:00조는 21:30부터 시작이라 21:40·23:40에는 학사 교사가 못 넘기고, 이른 아침의 오늘 칸·내일 칸은 넘길 수 있다', () => {
+  const y = makeEnv();
+  y.slot(TODAY, '23:00조', R2);
+  y.env.setNow(TODAY + 'T21:40:00');
+  const late = swap(y, R2, y.rows()[0].id, y.r3);
+  assert.deepStrictEqual([late.r.ok, late.r.errors && late.r.errors[0].message], [false, STARTED_MSG]);
+  y.env.setNow(TODAY + 'T23:40:00');   // 총괄이 든 재현: 근무가 끝난 뒤 넘기면 out.save 권한이 뒤바뀐다
+  assert.strictEqual(swap(y, R2, y.rows()[0].id, y.r3).r.ok, false);
+  assert.strictEqual(y.rows()[0].actual_email, R2, '그대로');
+  const z = makeEnv();
+  z.slot(TODAY, '21:30조', R1); z.slot(TOMORROW, '21:30조', R1);
+  z.env.setNow(TODAY + 'T06:00:00');
+  assert.strictEqual(swap(z, R1, z.rows()[0].id, z.r3).r.ok, true, '아직 시작 전인 아침');
+  z.env.setNow(TODAY + 'T23:40:00');
+  assert.strictEqual(swap(z, R1, z.rows()[1].id, z.r2).r.ok, true, '내일 칸은 오늘 시각과 상관없다');
+});
+
+test('getDutyMonth: 이미 시작한 오늘 칸은 학사 교사에게 [교대] 버튼(canSwap)이 없고, 담당자에게는 있다', () => {
+  const x = makeEnv();
+  x.slot(TODAY, '21:30조', R1);
+  const month = (who) => plain(x.env.call(who, 'getDutyMonth', '2027-03'));
+  const cell = (d) => d.days.find((day) => day.date === TODAY).slots.find((s) => s.slot === '21:30조');
+  assert.strictEqual(cell(month(R1)).canSwap, false, '20:00 — 이미 시작');
+  assert.strictEqual(cell(month(RM)).canSwap, true);
+  x.env.setNow(TODAY + 'T06:00:00');
+  assert.strictEqual(cell(month(R1)).canSwap, true, '아침 — 아직 시작 전');
+});
+
+test('swapDuty 낡은 화면 방지: 같은 칸을 담당자 두 명이 옛 화면으로 연달아 교대하면 둘째는 {stale:true}(쓰기·메일 없음), 새 표로는 된다', () => {
+  const x = makeEnv();
+  x.slot(TOMORROW, '23:00조', R1);
+  const row = x.rows()[0];
+  const view = (who) => plain(x.env.call(who, 'getDutyMonth', '2027-03')).days.find((d) => d.date === TOMORROW).slots.find((s) => s.slotId === row.id);
+  const seenM2 = view(RM).token, seenAdmin = view(ADMIN).token;   // 두 사람이 같은 화면을 열었다
+  assert.strictEqual(seenM2, seenAdmin);
+  const first = swap(x, RM, row.id, x.r2, { expect: seenM2 });
+  assert.deepStrictEqual([first.r.ok, first.r.changed], [true, true]);
+  assert.strictEqual(x.rows()[0].actual_email, R2);
+  const after = JSON.stringify(x.rows()), mails = first.sent.length;
+  const second = swap(x, ADMIN, row.id, x.r3, { expect: seenAdmin });   // 옛 화면의 관리자
+  assert.deepStrictEqual([second.r.ok, second.r.stale, second.r.message], [false, true, '근무표가 바뀌었습니다. 새로 불러와 주세요.']);
+  assert.deepStrictEqual(second.sent, [], '메일이 두 번 가지 않는다');
+  assert.strictEqual(JSON.stringify(x.rows()), after, '쓰기 0건');
+  assert.ok(mails >= 1);
+  // 표가 없거나 틀리면 같다
+  [undefined, '', 'x', 5].forEach((e) => assert.strictEqual(swap(x, ADMIN, row.id, x.r3, { expect: e }).r.stale, true, String(e)));
+  assert.strictEqual(JSON.stringify(x.rows()), after);
+  // 새로 불러온 표로는 된다
+  const ok = swap(x, ADMIN, row.id, x.r3, { expect: view(ADMIN).token });
+  assert.strictEqual(ok.r.ok, true);
+  assert.strictEqual(x.rows()[0].actual_email, R3);
+  // 권한 없는 사람은 낡은 표여도 stale이 아니라 거부(표 정보로 칸 상태를 알아내지 못한다)
+  expectDenied(x, R2, row.id, x.r1, '남의 칸에 낡은 표');
+});
+
+test('swapDuty 낡은 화면: A→B→A로 원래 근무자가 돌아와도 그 사이 칸이 바뀐 것을 놓치지 않는다(표에 updated_at이 든다)', () => {
+  const x = makeEnv();
+  x.slot(TOMORROW, '23:00조', R1);
+  const row = x.rows()[0];
+  const seen = tokenOf(x, row.id);
+  x.env.advance(1);
+  assert.strictEqual(swap(x, RM, row.id, x.r2).r.ok, true);
+  x.env.advance(1);
+  assert.strictEqual(swap(x, RM, row.id, x.r1).r.ok, true);   // 다시 R1로 — 근무자는 처음과 같다
+  assert.strictEqual(x.rows()[0].actual_email, R1);
+  const s = swap(x, ADMIN, row.id, x.r3, { expect: seen });
+  assert.deepStrictEqual([s.r.ok, s.r.stale], [false, true]);
+  assert.strictEqual(x.rows()[0].actual_email, R1);
 });
