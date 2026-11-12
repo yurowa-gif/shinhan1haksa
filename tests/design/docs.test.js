@@ -100,6 +100,14 @@ test('3단계 선생님 확인 체크리스트: 번호(A1~E8)가 겹치지 않�
   [...src.matchAll(/^def\('([^']+)'/gm)].map((m) => m[1]).forEach((id) => assert.ok(doc.indexOf('`' + id + '`') >= 0, '`' + id + '` 시안 사진이 없다'));
 });
 
+test('rules.md 가 글꼴을 내려받지 않는다는 결정과 UI 용어집 링크를 적고, Styles 에 글꼴 내려받는 코드가 없다', () => {
+  const rules = css.readFile('docs/design/rules.md');
+  assert.ok(rules.indexOf('글꼴 파일을 내려받지 않는다') >= 0 && rules.indexOf('OFL') >= 0 && rules.indexOf('로딩 시간') >= 0);
+  assert.ok(rules.indexOf('docs/design/ui-vocabulary.md') >= 0);
+  const styles = css.readFile('src/ui/Styles.html');
+  assert.ok(!/@font-face|fonts\.googleapis|cdn\.jsdelivr/.test(styles), '글꼴을 내려받는 코드가 들어갔다');
+});
+
 test('2단계 선생님 확인 체크리스트: 단계 번호(A1~E4)가 겹치지 않고 모든 줄이 7칸(번호·누가·누르는 것·통과 모습·사진·결과)이며, print-check 9·10절 번호(44~66)가 이어진다', () => {
   const doc = css.readFile('docs/design/stage2-teacher-checks.md');
   const rows = doc.split('\n').filter((l) => /^\| [A-E]\d+ \|/.test(l));

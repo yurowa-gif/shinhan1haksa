@@ -60,6 +60,8 @@
 
 글자색 이름이 `-ink`인 토큰은 같은 계열 `-weak` 바탕 위에서만 쓴다(대비를 맞춰 둔 짝이다).
 
+**글꼴:** `Styles.html`의 `font-family`는 `"Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif` 순서다. **글꼴 파일을 내려받지 않는다**(`@font-face`·`<link>` 없음, 결정: 총괄 권장 채택). 그래서 Pretendard가 깔린 기기에서만 그 글꼴이 쓰이고, 나머지는 기기 기본 한글 글꼴(안드로이드 Noto Sans, 아이폰 Apple SD 고딕, 윈도우 맑은 고딕)로 나온다. 이유: 학교 망에서 글꼴 내려받기 지연, 외부 요청 없음(개인정보·차단 걱정 없음), 모양이 기기마다 조금 달라도 업무 화면 읽기에 지장이 없다. 글꼴을 불러오려면 먼저 (1) 그 글꼴의 라이선스(OFL 등)가 웹 임베딩을 허용하는지 확인하고 (2) `HtmlService`에서 로딩 시간을 학교 망에서 재어 총괄에게 보고한 뒤 결정한다(그 전에는 코드에 넣지 않는다).
+
 ## 4. 상태 표시
 
 상태는 `.pill`(둥근 표) 하나로 보인다. **색 + 앞 글자(모양) + 테두리 + 낱말**을 모두 쓰므로 흑백 인쇄·색각 차이에서도 구분된다. 낱말(확정·요청…)은 반드시 글자로 함께 쓴다.
@@ -129,3 +131,4 @@
 - 화면 와이어프레임: `docs/design/screens.md`(D2).
 - 출석부 인쇄: `src/print/AttendanceSheetHtml.gs`(D4), 확인표 `docs/design/print-check.md`(D5).
 - 값 어휘: `docs/contracts/vocabulary.md`. 출석부 모델: `docs/contracts/sheet-model.md`.
+- UI 용어집(일반 웹 용어 ↔ 우리 부품, 화면 고칠 때 말하는 법, UI 프롬프트 틀): `docs/design/ui-vocabulary.md`.
