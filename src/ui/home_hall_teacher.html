@@ -75,6 +75,16 @@
   function renderStage2B(d, root) {
     var f = d.food;
     if (!f || f.error) return;
+    if (f.dorm) {   // 기숙사 빈 자리(남·여) — 방 배정·정원 현황으로 들어가는 입구(C23). 학생 이름 없음
+      var dm = f.dorm;
+      root.appendChild(el('div', { class: 'card' }, [
+        el('h2', { text: '기숙사 빈 자리' }),
+        el('div', { class: 'stats', style: 'margin:4px 0 12px' }, [statBox(dm.male.vacant, '남 빈 자리(정원 ' + dm.male.capacity + ')'), statBox(dm.female.vacant, '여 빈 자리(정원 ' + dm.female.capacity + ')')]),
+        el('div', { class: 'muted', style: 'word-break:keep-all', text: '기숙 ' + dm.dormCount + '명 · 방 배정 안 됨 ' + dm.unassignedCount + '명' }),
+        el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=rooms&tab=stats', text: '정원 현황판 열기' }),
+        el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=rooms', text: '방 배정 열기' })
+      ]));
+    }
     var n = f.docMissing || 0;
     var kids = [el('h2', { text: '급식·입퇴실 서류' }),
       el('div', { class: n ? '' : 'muted', text: n ? '서류 미제출 ' + n + '건이 남아 있습니다.' : '서류 미제출 기록이 없습니다.' })];
