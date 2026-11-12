@@ -318,6 +318,7 @@ function outLevel_(violations, studentId, termId) {
  *   기본에 없는 유형은 since = nowIso(스냅숏을 잃어도 넓혔던 유형은 소급하지 않는다).
  * - 새로 나타난 유형 → since = nowIso(다시 넓혀도 덮어쓴다). 빠진 유형의 since는 남긴다. 괄호 설명은 떼고 비교.
  * - widened = 유형별 넓힌 시각 이력(오름차순, 다시 넓힐 때마다 nowIso를 더함). 옛 스냅숏(widened 없음)은 since 값 하나로 시작한다.
+ *   이력의 마지막은 늘 since[유형]이다: since보다 늦은 값·형식이 틀린 값은 버리고, 마지막이 since가 아니면 since를 붙인다(손으로 고친 속성).
  *   reconcileAutoOuts_의 autoTypeSince로 since 대신 widened를 넘기면 '다시 넓힌 뒤 처음 넓히기 전 행' 지름길이 없어진다.
  * 잘못된 nowIso는 Error.
  */
@@ -331,7 +332,12 @@ function outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes) {
   };
   var base = norm(snapshot ? snapshot.types : defaultTypes), cur = norm(currentTypes);
   var since = Object.assign({}, snapshot && snapshot.since), widened = {}, old = (snapshot && snapshot.widened) || {};
-  Object.keys(since).forEach(function (t) { widened[t] = (Array.isArray(old[t]) ? old[t] : [since[t]]).map(ruleIso_).filter(Boolean).sort(); });
+  var isoOk = function (v) { return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(v); };
+  Object.keys(since).forEach(function (t) {   // 이력은 since 이하의 바른 값만, 마지막은 늘 since(손으로 고친 속성에서도 소급하지 않게)
+    var last = ruleIso_(since[t]);
+    widened[t] = (Array.isArray(old[t]) ? old[t] : []).map(ruleIso_).filter(function (v) { return isoOk(v) && (!isoOk(last) || v <= last); }).sort();
+    if (isoOk(last) && widened[t][widened[t].length - 1] !== last) widened[t].push(last);
+  });
   cur.forEach(function (t) { if (base.indexOf(t) < 0) { since[t] = now; widened[t] = (widened[t] || []).concat([now]); } });
   var changed = !snapshot || base.length !== cur.length || cur.some(function (t) { return base.indexOf(t) < 0; });
   return { snapshot: { types: cur, since: since, widened: widened }, since: since, widened: widened, changed: changed };

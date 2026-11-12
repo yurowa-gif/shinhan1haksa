@@ -494,6 +494,26 @@ test('학생을 바로잡아 다시 만든 OUT은 per를 group→row로 바꾼 �
   assert.deepStrictEqual(run(exc, vio, Object.assign({}, o, { per: 'group' })).toCancel, []);
 });
 
+test('outAutoSinceNext_: widened의 마지막은 늘 since — since보다 늦거나 틀린 값은 버리고 since를 붙인다(손으로 고친 속성에서 소급 OUT 없음)', () => {
+  const hand = { types: DEF.concat(['기타']), since: { '기타': '2027-03-08T00:00:00' }, widened: { '기타': ['2027-03-05T00:00:00'] } };
+  const r = snap(hand, DEF.concat(['기타']), '2027-03-10T09:00:00');
+  assert.deepStrictEqual([r.changed, r.widened], [false, { '기타': ['2027-03-05T00:00:00', '2027-03-08T00:00:00'] }]);
+  const o = { autoTypes: ['미인정결석', '기타'], autoTypeSince: r.widened };
+  assert.deepStrictEqual(run([EX('e1', { type: '기타', confirmed_at: '2027-03-06T09:00:00' })], [], o).toCreate, []);   // 3/8 넓힘 전 확정: 소급하지 않음
+  const bad = snap({ types: DEF.concat(['기타']), since: { '기타': '2027-03-08T00:00:00' }, widened: { '기타': [null, 5, '2027-03-09T00:00:00', '2027-03-02T00:00:00'] } }, DEF.concat(['기타']), '2027-03-10T09:00:00');
+  assert.deepStrictEqual(bad.widened, { '기타': ['2027-03-02T00:00:00', '2027-03-08T00:00:00'] });
+});
+
+test('세 번 넓힘: 3/2 넓힘 → 좁힘 → 3/5 넓힘 → 3/6 OUT → 좁힘 → 3/8 넓힘, e1(3/3 확정)·e2(3/6 확정) 묶음에서 e2를 취소하면 OUT 취소(OUT 생성 때 넓힘 = 3/5)', () => {
+  const G = (st2) => [EX('e1', { group_id: 'G', type: '기타', confirmed_at: '2027-03-03T09:00:00' }),
+    EX('e2', { group_id: 'G', type: '기타', date: '2027-03-04', confirmed_at: '2027-03-06T09:00:00', status: st2 })];
+  const at35 = { autoTypes: ['미인정결석', '기타'], autoTypeSince: { '기타': ['2027-03-02T00:00:00', '2027-03-05T00:00:00'] } };
+  const v = settle(G('확정'), [], at35).map((x) => Object.assign({ created_at: '2027-03-06T10:00:00' }, x));
+  assert.deepStrictEqual(v.map((x) => x.source_exception_id), ['e2']);
+  const hist = { autoTypes: at35.autoTypes, autoTypeSince: { '기타': ['2027-03-02T00:00:00', '2027-03-05T00:00:00', '2027-03-08T00:00:00'] } };
+  assert.deepStrictEqual(run(G('취소'), v, hist).toCancel.map((c) => c.violationId), [v[0].id]);
+});
+
 test('outAutoSinceNext_: 잘못된 시각은 Error', () => {
   assert.throws(() => snap(null, DEF.concat(['기타']), '3월 1일'), /일시/);
 });
