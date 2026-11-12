@@ -2,7 +2,7 @@
 const assert = require('assert');
 const { test, loadGs, plain } = require('../helpers/harness');
 
-const FILES = ['src/Schema.gs', 'src/Auth.gs', 'src/rules/DateRules.gs', 'src/rules/StatusRules.gs', 'src/rules/RosterRules.gs',
+const FILES = ['src/Schema.gs', 'src/Auth.gs', 'src/rules/DateRules.gs', 'src/rules/StatusRules.gs', 'src/rules/RosterRules.gs', 'src/rules/MealRules.gs', 'src/rules/MoveRules.gs',
   'src/dev/FakeData.gs', 'src/features/Roster.gs'];
 const fakeCtx = loadGs(['src/Schema.gs', 'src/dev/FakeData.gs']);
 const fake = plain(fakeCtx.buildFakeData_({}));

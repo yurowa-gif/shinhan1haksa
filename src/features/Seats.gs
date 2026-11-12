@@ -371,10 +371,12 @@ function getSeatData(termId) {
   d.enrollments.forEach(function (e) { if (e.term_id === term.id) enrolled[e.student_id] = e; });
   var holder = {};   // 자리 → 배정된 학생(앉아 있지 않아도: 퇴실·입실 전)
   live.forEach(function (a) { if (!seatEnded_(a, ymd)) holder[a.seat_id] = a.student_id; });
+  // 규칙 위반(빨간 칸): 같은 학년·성별은 보기 권한이 있으면 모두, 떨어뜨릴 짝은 avoid.view가 있는 사람에게만(항목째 뺀다, 결정 64)
+  var vio = sdrCurrentViolations_(d, term, ymd, map, hasAnyAllowedRole_(user.roles, permissions_()['avoid.view'].roles));
   var spaces = d.spaces.slice().sort(function (a, b) { return (+a.sort_order || 0) - (+b.sort_order || 0); }).map(function (sp) {
     var cells = d.seats.filter(function (s) { return s.space_id === sp.id; }).map(function (s) {
       var m = map.bySeat[s.id], st = m && m.studentId ? studentById[m.studentId] : null;
-      return { id: s.id, row: +s.row, col: +s.col, kind: seatKindEn_(s.kind), seatLabel: s.label || '',
+      return { id: s.id, row: +s.row, col: +s.col, kind: seatKindEn_(s.kind), seatLabel: s.label || '', bad: !!vio.bad[s.id],
         text: st ? seatDisplay_(st) : '', vacant: s.kind === '좌석' && !st, reason: m && !st ? m.reason : '', studentId: st ? st.id : '',
         hold: !st && holder[s.id] && studentById[holder[s.id]] ? seatDisplay_(studentById[holder[s.id]]) : '',
         token: s.kind === '좌석' ? seatToken_(live, s.id, ymd, m ? m.reason : '') : '' };
@@ -388,7 +390,7 @@ function getSeatData(termId) {
   };
   return {
     term: { id: term.id, name: term.name }, ymd: ymd, ended: ended, terms: d.terms.map(function (t) { return { id: t.id, name: t.name }; }),
-    canEdit: canEdit,
+    canEdit: canEdit, violations: vio.violations,
     canLayout: hasAnyAllowedRole_(user.roles, permissions_()['seat.layout'].roles),
     spaces: spaces, unseated: canEdit ? map.unseated.map(pickStudent) : [], unseatedCount: map.unseated.length, warnings: map.warnings
   };

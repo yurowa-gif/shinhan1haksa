@@ -42,6 +42,7 @@ function foodHomeInfo_(user, role) {
     list.slice(0, 10).forEach(function (x) { shown[x.studentId + '|' + x.kind] = true; });
     var hidden = miss.filter(function (m) { return !shown[m.studentId + '|' + (m.row.source === 'F6' ? '입퇴실' : '급식 변경')]; }).length;   // 가려진 줄에 속한 행 수(제목의 건수와 맞춘다)
     var out = { docMissing: miss.length, docList: list.slice(0, 10), docMore: hidden };
+    out.dorm = roomHomeInfo_();   // 기숙사 빈 자리(남·여) 카드(C23). 방 구성이 없으면 null
     if (role === 'admin') {   // 관리자 홈: 오늘 인원과 자습실·SA 공석(C19, 식수 집계 화면과 같은 모델). 기숙사 정원 대비 공석은 넣지 않는다(F8)
       var today = today_(), m = foodCountsModel_(today, { terms: terms, students: students, enrollments: enrollments, changes: changes });
       out.counts = null; out.noTerm = !m.term;
@@ -509,7 +510,9 @@ function foodCountsModel_(ymd, src) {
   rows.forEach(function (m) { miss[m.studentId] = true; });   // 홈과 같은 집계: 기간이 바뀌어도 표시할 때까지 남는다
   var out = { date: ymd, term: term, counts: null, operating: false, docRows: rows.length, docUnsubmitted: Object.keys(miss).length, name: name };
   if (!term) return out;
-  out.counts = mealCountsOn_(students, enr, changes, term.id, ymd);
+  // 결정 35 보충: 직전 운영 기간 id를 넘긴다(학기 막바지 퇴실 뒤 석식이 방학·다음 기간까지 이어지는 학생을 센다)
+  var prev = terms.filter(function (t) { return t.end_date && t.end_date < term.start_date; }).sort(function (a, b) { return a.start_date < b.start_date ? 1 : -1; })[0];
+  out.counts = mealCountsOn_(students, enr, changes, term.id, ymd, prev ? prev.id : '');
   out.operating = resolveDayPlan_(ymd, { termType: calTermTypeOn_(terms, ymd), daySchedule: pickDaySchedule_(readAll_('day_schedules'), ymd),
     blocks: readAll_('blocks'), defaults: calDefaults_(readAll_('settings', 'config')) }).operating;
   return out;
@@ -584,6 +587,15 @@ function listStudentStatus(studentId, ymd) {
   var pendingRows = live.filter(function (c) { return c.effective_date > today; }).sort(function (a, b) { return a.effective_date < b.effective_date ? -1 : 1; });
   var pendingId = {};
   pendingRows.forEach(function (c) { pendingId[c.id] = true; });
+  var enrAll = readAll_('enrollments'), termsAll = readAll_('terms'), isAdmin = user.roles.indexOf('admin') >= 0;
+  /** [퇴실 취소] 버튼을 보일 행(보기 편의일 뿐 — cancelMove가 서버에서 다시 판정한다): F6 퇴실 대표, 적용일 전이면 책임 교사·관리자, 지난 뒤나 2OUT 퇴실이면 관리자 */
+  var canCancel = function (c) {
+    if (c.source !== 'F6' || String(c.linked_change_id || '') || c.value !== '퇴실' || String(c.status || '유효') !== '유효') return false;
+    if (isAdmin) return true;
+    if (c.effective_date < today || inoutIsDismissRow_(c) || user.roles.indexOf('hall_teacher') < 0) return false;
+    var term = ymdIsValid_(String(c.effective_date)) ? foodTermFor_(studentId, c.effective_date, termsAll, enrAll) : null;
+    return !!term && enrAll.some(function (e) { return e.term_id === term.id && e.student_id === studentId && normalizeEmail_(e.teacher_email) === user.email; });
+  };
   var view = function (c, noButton) {
     var head = !String(c.linked_change_id || '');
     var m = miss[c.id];
@@ -592,7 +604,7 @@ function listStudentStatus(studentId, ymd) {
       dateKo: ymdIsValid_(String(c.effective_date)) ? foodDateKoY_(c.effective_date, today) : '', edited: !!c.effective_date_auto && c.effective_date_auto !== c.effective_date,
       reason: c.reason, sourceLabel: foodSourceLabel_(c.source), status: String(c.status || '유효'), cancelText: foodCancelText_(c.cancel_reason),
       docState: m ? 'missing' : (head && c.source !== '명단업로드' && String(c.doc_submitted).toUpperCase() === 'TRUE' ? 'done' : ''),
-      head: head, canMarkDoc: mineDoc && !noButton };
+      head: head, canMarkDoc: mineDoc && !noButton, canCancelMove: !noButton && canCancel(c) };
   };
   return {
     student: { id: student.id, name: student.name, grade: +student.grade, classNo: student.class_no, number: student.number, studentNo: student.student_no },

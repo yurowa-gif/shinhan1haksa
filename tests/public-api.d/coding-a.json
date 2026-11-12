@@ -72,7 +72,19 @@
       "use": "화면",
       "guard": "requirePermission_"
     },
+    "installNightlyBackup": {
+      "use": "편집기",
+      "guard": "assertOwnerRun_"
+    },
+    "runBackupNow": {
+      "use": "편집기",
+      "guard": "assertOwnerRun_"
+    },
     "seedDefaultRooms": {
+      "use": "편집기",
+      "guard": "assertOwnerRun_"
+    },
+    "nightlyBackup": {
       "use": "편집기",
       "guard": "assertOwnerRun_"
     },
@@ -89,6 +101,14 @@
       "guard": "requirePermission_"
     },
     "cancelAvoidPair": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "previewSeatDraft": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveSeatDraft": {
       "use": "화면",
       "guard": "requirePermission_"
     }

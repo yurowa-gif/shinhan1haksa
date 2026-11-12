@@ -125,7 +125,7 @@ test('취소: status 취소·행은 남고 audit update, 목록 맨 아래(live 
   assert.strictEqual(plain(env.call(ADMIN, 'cancelAvoidPair', 'nope')).errors[0].field, 'id');
 });
 
-test('시트가 읽는 중 바뀐 id 두 줄(같은 id) 등 이상한 입력에도 한 줄만 고친다: 취소 직후 다시 불러도 같은 결과', () => {
+test('취소한 짝은 다시 불러도 한 줄만 남고 취소 상태 그대로다', () => {
   const env = makeEnv();
   const { s } = pick(env);
   const id = add(env, HALL, s[0].id, s[1].id).id;

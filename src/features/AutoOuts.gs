@@ -8,8 +8,9 @@
 var VIO_AUTO_DEFAULT_TYPES = ['미인정지각', '미인정조퇴', '미인정결석'];
 
 /**
- * 설정으로 새로 자동 대상이 된 유형의 시작 시각(since). 스냅숏(스크립트 속성 AUTO_OUT_SINCE)을 갱신한다 — 락 안, 특이사항을 쓰기 전에 부른다.
+ * 설정으로 새로 자동 대상이 된 유형의 넓힘 이력(유형별 넓힌 시각들, 오름차순 — 마지막이 가장 최근 since). 스냅숏(스크립트 속성 AUTO_OUT_SINCE, widened 포함)을 갱신한다 — 락 안, 특이사항을 쓰기 전에 부른다.
  * now는 confirmed_at에 쓰는 바로 그 값(넓힌 직후 첫 확정 1건에는 OUT이 생기게).
+ * 돌려주는 값은 reconcileAutoOuts_의 autoTypeSince로 그대로 넘긴다: 한 시각이 아니라 이력을 주어야 다시 넓힌 뒤에도 처음 넓히기 전에 확정된 행이 OUT을 붙들지 않는다(followups R5).
  */
 function vioAutoSince_(autoTypes, now) {
   var props = PropertiesService.getScriptProperties();
@@ -19,7 +20,7 @@ function vioAutoSince_(autoTypes, now) {
   if (snap && !(typeof snap === 'object' && Array.isArray(snap.types) && snap.since && typeof snap.since === 'object' && !Array.isArray(snap.since))) snap = null;
   var r = outAutoSinceNext_(snap, autoTypes, now, VIO_AUTO_DEFAULT_TYPES);
   if (r.changed) props.setProperty('AUTO_OUT_SINCE', JSON.stringify(r.snapshot));
-  return r.since;
+  return r.widened;
 }
 
 /** 날짜별 그날 근무교사 이메일(배열). 근무표를 못 읽으면 빈 값 */

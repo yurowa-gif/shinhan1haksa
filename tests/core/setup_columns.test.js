@@ -166,3 +166,10 @@ test('appsscript.json: 메일 보내기 범위(script.send_mail)가 있다(결�
   const scopes = JSON.parse(fs.readFileSync(path.join(__dirname, '../../src/appsscript.json'), 'utf8')).oauthScopes;
   assert.ok(scopes.includes('https://www.googleapis.com/auth/script.send_mail'), JSON.stringify(scopes));
 });
+
+test('appsscript.json: 백업에 쓰는 범위 — 트리거(script.scriptapp)와 Drive(drive)가 있다(결정 65)', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const scopes = JSON.parse(fs.readFileSync(path.join(__dirname, '../../src/appsscript.json'), 'utf8')).oauthScopes;
+  ['https://www.googleapis.com/auth/script.scriptapp', 'https://www.googleapis.com/auth/drive'].forEach((s) => assert.ok(scopes.includes(s), s));
+});

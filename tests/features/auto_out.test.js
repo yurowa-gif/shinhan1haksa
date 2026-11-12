@@ -281,3 +281,41 @@ test('메일이 켜져 있고 받을 사람이 모두 @example.com이면(한도�
   const r = plain(x.env.as(ATT, (c) => { c.MailApp = { sendEmail() {}, getRemainingDailyQuota: () => 0 }; return c.saveException(x.input(x.b.id)); }));   // b의 담당·담임은 @example.com뿐
   assert.deepStrictEqual([r.ok, r.out.created, !!r.out.notifyWarn], [true, 1, false]);
 });
+
+test('followups R5: 좁혔다가 다시 넓힌 뒤, 처음 넓히기 전에 확정된 행만 남으면 OUT이 취소된다(넓힘 이력 widened를 reconcile에 넘김)', () => {
+  const x = makeEnv();
+  const sheet = 'exceptions_' + x.term.id.slice(0, 8);
+  const row = x.env.rows('settings', 'config').find((s) => s.key === 'exception.auto_out_types');
+  const setTypes = (value) => x.env.asOwner((c) => c.updateRecord_('settings', row.id, { value }, ADMIN, 'config'));
+  const live = () => x.vtab().filter((v) => v.student_id === x.a.id && v.status !== '취소');
+  const rowsOf = () => x.env.rows(sheet).filter((e) => e.student_id === x.a.id);
+  // 3/3: 기타 2일 묶음(3/8·3/9)을 확정한다 — 아직 자동 유형이 아니라 OUT 없음
+  x.env.setNow('2027-03-03T20:00:00');
+  assert.strictEqual(save(x, ATT, x.input(x.a.id, { type: '기타', reason: '가짜 사유', from: '2027-03-08', to: '2027-03-09', blocks: '22:00-24:00' })).r.out.created, 0);
+  const [dayA, dayB] = rowsOf().sort((p, q) => (p.date < q.date ? -1 : 1));
+  // 3/4 09:00 처음 넓힘 → 둘째 날 행만 넓힌 뒤에 확정된 것으로 만든다(같은 묶음에 확정 시각이 섞임)
+  x.env.setNow('2027-03-04T09:00:00');
+  setTypes(row.value + ',기타');
+  sync(x);
+  x.env.asOwner((c) => c.updateRecord_(sheet, dayB.id, { confirmed_at: '2027-03-04T09:30:00' }, ADMIN));
+  x.env.setNow('2027-03-04T10:00:00');
+  assert.strictEqual(sync(x).created, 1, '넓힌 뒤 확정된 행이 있어 OUT 1건');
+  assert.strictEqual(live().length, 1);
+  // 좁혔다가 3/5 09:00 다시 넓힘: OUT은 남는다(결정 40)
+  x.env.setNow('2027-03-04T11:00:00');
+  setTypes(row.value);
+  sync(x);
+  x.env.setNow('2027-03-05T09:00:00');
+  setTypes(row.value + ',기타');
+  sync(x);
+  const snap = JSON.parse(x.env.scriptProps.AUTO_OUT_SINCE);
+  assert.deepStrictEqual(snap.widened['기타'], ['2027-03-04T09:00:00', '2027-03-05T09:00:00'], '넓힘 이력이 스냅숏에 남는다');
+  assert.strictEqual(live().length, 1, '좁혔다 넓혀도 기존 OUT은 산다');
+  // 둘째 날(넓힌 뒤 확정) 행을 취소하면 남은 행은 처음 넓히기 전에 확정된 것뿐 → OUT 취소
+  x.env.asOwner((c) => c.updateRecord_(sheet, dayB.id, { status: '취소' }, ADMIN));
+  x.env.setNow('2027-03-05T10:00:00');
+  const r = sync(x);
+  assert.deepStrictEqual([r.canceled, live().length], [1, 0], '넓히기 전 행만 남으면 OUT 취소');
+  assert.ok(x.vtab().some((v) => v.student_id === x.a.id && v.status === '취소' && /\[자동\]/.test(v.cancel_reason || '')));
+  assert.strictEqual(dayA.date, '2027-03-08');
+});

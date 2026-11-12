@@ -7,6 +7,7 @@
  *  - 저장은 락 안에서 다시 파싱·비교한다(화면이 보낸 값을 믿지 않는다). 미리보기 때 숫자와 달라졌으면 거부한다.
  *  - 상태는 그 항목 기록이 없을 때만 초기값으로 만든다(R2). 이미 있고 명단과 다르면 경고만 — 학기 중 변경은 F6·F7.
  *  - 퇴실 후보는 표시만 한다(자동 퇴실 없음).
+ *  - 2OUT 퇴실로 다시 들어올 수 없는 학생(결정 63, move2OutBan_)은 그 학생의 줄만 빼고 올린다(등록·상태·학생 정보 모두). 미리보기·결과에 이름과 풀리는 날을 보인다.
  *  - 학생·학부모 로그인용 users 행을 만든다: 새 계정은 student/parent 역할, 이미 있는 계정은 역할만 더한다.
  *  - 쓰는 순서: 학생 → 등록 → 상태 변경 → 계정. 중간에 멈춰도 다시 올리면 남은 것만 쓰인다(멱등).
  *  - 명단 내용은 audit_log에 남기지 않는다(일괄 1줄 + 행 수).
@@ -19,7 +20,7 @@
 var ROSTER_MAX_CHARS = 300000;
 var ROSTER_MAX_ROWS = 2000;
 var ROSTER_COUNT_KEYS = ['newStudents', 'updatedStudents', 'newEnrollments', 'updatedEnrollments', 'newChanges',
-  'leaving', 'ambiguous', 'newUsers', 'updatedUsers'];
+  'leaving', 'ambiguous', 'newUsers', 'updatedUsers', 'banned'];
 var ROSTER_FIELD_LABELS = { student_no: '학번', name: '이름', gender: '성별', grade: '학년', class_no: '반',
   number: '번호', track: '계열', email: '학생 계정', teacher_email: '담당교사', veritas: '베리타스',
   commute_type: '통학구분', memo: '비고' };
@@ -166,6 +167,7 @@ function rosterPlan_(text, opts, ctx) {
   var table = parseRosterTable_(parsed.rows);
   if (table.errors.length) return fail(table.errors, table.warnings);
   var diff = diffRoster_(table.records, ctx.existing, r.term.id, r.ymd);
+  var banned = rosterApplyBan_(diff, ctx, r.ymd < r.term.start_date ? r.term.start_date : r.ymd);   // 상태 적용일이 기간 시작 전이어도 그 기간 날짜로 판정   // 결정 63: 막힌 학생은 빼고 올린다
   var userPlan = rosterUserPlan_(table.records.map(function (x) { return { email: x.email, name: x.name, line: x.line }; }),
     ctx.existing.users, 'student', '명단 업로드', { students: ctx.existing.students, guardianLinks: ctx.existing.guardianLinks });
   if (userPlan.errors.length) return fail(userPlan.errors, diff.warnings.concat(table.warnings));
@@ -173,7 +175,7 @@ function rosterPlan_(text, opts, ctx) {
     newStudents: diff.createStudents.length, updatedStudents: diff.updateStudents.length,
     newEnrollments: diff.createEnrollments.length, updatedEnrollments: diff.updateEnrollments.length,
     newChanges: diff.createChanges.length, leaving: diff.leavingCandidates.length, ambiguous: diff.ambiguous.length,
-    newUsers: userPlan.create.length, updatedUsers: userPlan.update.length
+    newUsers: userPlan.create.length, updatedUsers: userPlan.update.length, banned: banned.length
   };
   var nameOf = {};
   (ctx.existing.students || []).forEach(function (s) { nameOf[s.id] = s; });
@@ -186,14 +188,76 @@ function rosterPlan_(text, opts, ctx) {
     }),
     leaving: diff.leavingCandidates.map(function (c) { return { student_no: c.student_no, name: c.name }; }),
     ambiguous: diff.ambiguous.map(function (a) { return { line: a.line, student_no: a.student_no, name: a.name, reason: a.reason }; }),
-    roleChanges: userPlan.changes
+    roleChanges: userPlan.changes,
+    banned: banned.map(function (b) { return { student_no: b.student_no, name: b.name, message: b.message }; })
   };
   return {
     ok: true, errors: [], warnings: diff.warnings.concat(table.warnings, userPlan.warnings), ambiguous: diff.ambiguous,
     term: r.term, ymd: r.ymd, counts: counts, lists: lists, diff: diff, userPlan: userPlan,
     blocked: diff.ambiguous.length > 0,
-    nothingToDo: ROSTER_COUNT_KEYS.every(function (k) { return k === 'leaving' || k === 'ambiguous' || counts[k] === 0; })
+    nothingToDo: ROSTER_COUNT_KEYS.every(function (k) { return k === 'leaving' || k === 'ambiguous' || k === 'banned' || counts[k] === 0; })
   };
+}
+
+/** 막는 날을 "3월 4일"(올해가 아니면 "2028년 3월 4일")로 — 기준 날짜(ymd)와 해가 다르면 해를 붙인다 */
+function rosterBanDateKo_(ymd, base) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd));
+  if (!m) return ymd;
+  return (String(base).slice(0, 4) !== m[1] ? m[1] + '년 ' : '') + Number(m[2]) + '월 ' + Number(m[3]) + '일';
+}
+
+/**
+ * 결정 63: 2OUT 퇴실로 다시 들어올 수 없는 학생의 줄을 diff에서 뺀다(제자리에서 고친다). 이 명단 때문에 뭔가 써질 학생(등록·상태·학생 정보)만 센다.
+ * 계정(users)은 이미 있는 학생이라 따로 막지 않는다. → [{student_id, student_no, name, until, message}]
+ */
+function rosterApplyBan_(diff, ctx, ymd) {
+  var enrStudent = {};
+  (ctx.existing.enrollments || []).forEach(function (e) { enrStudent[e.id] = e.student_id; });
+  var byId = {}, byNoName = {};
+  (ctx.existing.students || []).forEach(function (st) { byId[st.id] = st; byNoName[String(st.student_no) + '|' + String(st.name)] = (byNoName[String(st.student_no) + '|' + String(st.name)] || []).concat(st.id); });
+  var banOf = {};   // 학생 id → move2OutBan_ 결과(한 번만 계산)
+  var banFor = function (sid) {
+    if (!Object.prototype.hasOwnProperty.call(banOf, sid)) {
+      banOf[sid] = move2OutBan_((ctx.existing.changes || []).filter(function (c) { return c.student_id === sid; }), sid, ctx.terms, ymd);
+    }
+    return banOf[sid];
+  };
+  var touched = {}, mark = function (id) { if (id && String(id).indexOf('new:') !== 0) touched[id] = true; };
+  diff.createEnrollments.forEach(function (r) { mark(r.student_id); });
+  diff.createChanges.forEach(function (r) { mark(r.student_id); });
+  diff.updateEnrollments.forEach(function (u) { mark(enrStudent[u.id]); });
+  diff.updateStudents.forEach(function (u) { mark(u.id); });
+  var info = {}, list = [];
+  var add = function (sid) {
+    var b = banFor(sid), st = byId[sid] || {};
+    info[sid] = true;
+    list.push({ student_id: sid, student_no: String(st.student_no || ''), name: String(st.name || ''), until: b.until,
+      message: b.until ? '2OUT 퇴실로 ' + rosterBanDateKo_(b.until, ymd) + '까지 입실할 수 없습니다' : '2OUT 퇴실로 다음 학기 끝날까지 입실할 수 없습니다(다음 학기가 아직 등록되지 않았습니다)' });
+  };
+  Object.keys(touched).forEach(function (sid) { if (banFor(sid).banned) add(sid); });
+  // 계정 이메일을 고쳐 올려 diffRoster_가 '새 학생'(new:학번)으로 본 줄도 같은 학번·이름의 막힌 기존 학생이면 막는다(중복 학생·학사 입실이 만들어지지 않게)
+  var dropRefs = {};
+  diff.createStudents.forEach(function (c) {
+    var twins = (byNoName[String(c.student_no) + '|' + String(c.name)] || []).filter(function (id) { return banFor(id).banned; });
+    if (!twins.length) return;
+    dropRefs[c.ref] = true;
+    if (!info[twins[0]]) add(twins[0]);
+  });
+  if (!list.length) return list;
+  var gone = function (id) { return !!info[id] || !!dropRefs[id]; };
+  diff.createStudents = diff.createStudents.filter(function (c) { return !dropRefs[c.ref]; });
+  diff.createEnrollments = diff.createEnrollments.filter(function (r) { return !gone(r.student_id); });
+  diff.createChanges = diff.createChanges.filter(function (r) { return !gone(r.student_id); });
+  diff.updateEnrollments = diff.updateEnrollments.filter(function (u) { return !info[enrStudent[u.id]]; });
+  diff.updateStudents = diff.updateStudents.filter(function (u) { return !info[u.id]; });
+  // "기록과 명단이 다릅니다 … 입퇴실로 처리해 주세요" 안내는 막힌 학생에게는 틀린 길이다(입퇴실도 막힌다) — 그 학생의 줄은 뺀다
+  var names = {};
+  list.forEach(function (b) { names[b.name] = true; });
+  diff.warnings = diff.warnings.filter(function (w) {
+    var m = /줄: (.+?) (학사|기숙사|조식|석식)이\(가\) 기록\(/.exec(String(w));
+    return !(m && names[m[1]]);
+  });
+  return list;
 }
 
 /** 화면에 내보내는 모양: diff·계정 계획 같은 내부 값(이메일 등)은 뺀다 */
@@ -348,7 +412,7 @@ function commitRoster(text, opts, expect) {
     bulkAppend_('status_changes', rosterApplyRefs_(d.createChanges, idByRef), email);
     bulkAppend_('users', plan.userPlan.create, email);
     bulkUpdateRecords_('users', plan.userPlan.update, email);
-    return { ok: true, counts: plan.counts };
+    return { ok: true, counts: plan.counts, banned: plan.lists.banned };
   });
 }
 

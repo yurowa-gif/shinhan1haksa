@@ -3,7 +3,7 @@ const assert = require('assert');
 const { test, loadGs, plain } = require('../helpers/harness');
 
 const FILES = ['src/Schema.gs', 'src/Auth.gs', 'src/rules/DateRules.gs', 'src/rules/StatusRules.gs', 'src/rules/MealRules.gs', 'src/rules/MoveRules.gs', 'src/dev/FakeData.gs',
-  'src/dev/FakeSeats.gs', 'src/dev/FakeStage1.gs', 'src/features/Roster.gs', 'src/features/Seats.gs'];
+  'src/dev/FakeSeats.gs', 'src/dev/FakeStage1.gs', 'src/features/Roster.gs', 'src/rules/SeatRules.gs', 'src/features/SeatDraft.gs', 'src/features/Seats.gs'];
 const pure = loadGs(FILES);
 const fake = plain(pure.buildFakeData_({}));
 const s1 = plain(pure.buildFakeStage1_(fake));

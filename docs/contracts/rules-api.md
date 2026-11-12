@@ -46,6 +46,8 @@ function hmNorm_(v)        // 'H:mm'·'HH:mm:00' → 'HH:mm', 빈칸 '', 시각 
 function dutySlotsFor_(plan)
         // resolveDayPlan_ 결과 → 운영 안 함 [] | 월~목 [{slot:'21:30조',end},{slot:'23:00조',end}] | 금·토·일 [{slot:'단독',end},{slot:'예비',end:''}]
 function dutyOn_(rows, ymd)                   // → {duty:[{slot, email, end, swappedFrom}], standby:[{email, swappedFrom}], warnings}
+function dutyPick_(rows, ymd)                 // → {bySlot:{slot: 그날 쓸 행}, warnings}(취소 제외, updated_at 최신, 같으면 아래 행 — dutyOn_·dutyRecord_가 쓴다)
+function dutyEmail_(v)                        // → 소문자·앞뒤 공백 없는 이메일
 function dutyIsOn_(rows, email, ymd, today, windowDays)   // → boolean(그날 실제 근무자 && ymd ≤ today ≤ ymd + windowDays, 기본 0)
 function dutyRecord_(rows, month, opts)
         // opts = {operatingByDate:{}} → {teachers:[{email, total, bySlot, dates:[{date,slot,end,swappedFrom}]}],
@@ -98,15 +100,32 @@ function movePlan_(changes, studentId, move, opts)
         //    toCancel:[{id, cancel_reason}], toRestore:[{id}], summary:{date, breakfast:{value,from}|null, dinner:{value,from}|null}}
         //   move.meals:{조식, 석식}(학사 입실 때 시작할 급식, R11b)
 function moveUndoPlan_(changes, headId, opts)   // (R11b) opts = {today} → {toCancel:[{id, cancel_reason?}], toRestore:[{id}], warnings}
+function move2OutBan_(changes, studentId, terms, ymd)   // (R13, 결정 63) → {banned, until, leaveDate}
+
+// src/rules/SeatRules.gs (R14, stage3.md 1절)
+function seatDraft_(spaces, seats, students, prev, fixed, avoids, seed)   // → {assignments:[{seat_id, student_id}], unplaced:[studentId], violations, warnings}
+function seatViolations_(spaces, seats, students, assignments, avoids)    // → [{seatId, kind:'같은 학년'|'떨어뜨릴 짝'|'성별', with}]
+function seatBoard_(spaces, seats)                                         // → {seats:{id:{id, space, sa}}, order:[id](공간 이름·공간 id·행·열·칸 id 순), nb:{id:[이웃 id](위·아래·왼·오른쪽)}}
+function seatIsSa_(space)                                                  // → 이름이 'SA<숫자>'로 시작하면 true
+function seatGenderOk_(space, student)                                     // → 남·여 공간은 같은 성별만, 혼성·빈칸은 누구나
+function seatAvoidMap_(avoids, scopes)                                     // → {학생id:{상대id:true}}(살아 있는 짝, scope가 scopes 안)
+function seatRng_(seed)                                                    // → 0~1 난수 함수(같은 seed = 같은 수열)
+
+// src/rules/RoomRules.gs (R15, stage3.md 1절) — StatusRules·SeatRules(seatAvoidMap_·seatRng_)를 부른다
+function roomDraft_(rooms, students, changes, avoids, ymd, seed)           // → {assignments:[{room_id, student_id}], unplaced:[studentId], violations, warnings}
+function roomViolations_(rooms, students, assignments, avoids)            // → [{roomId, kind:'정원 초과'|'성별'|'같은 학년'|'떨어뜨릴 짝', studentId}]
+function roomBoard_(rooms, students, assignments)                         // → {rooms:[{roomId, floor, room_no, gender, capacity, count, vacant}], floors:[{floor, gender, capacity, count, vacant, byGrade}], total:{성별:{…}}}
+function roomList_(rooms)                                                 // → 살아 있는 방 [{id, floor, room_no, gender, capacity(정수), sort}] sort_order·층·호 순
+function roomGenderOk_(room, student)                                     // → 방 성별 = 학생 성별(성별 빈 방은 false)
 
 // src/rules/OutRules.gs
 function reconcileAutoOuts_(exceptions, violations, opts)
         // exceptions·violations는 그 기간의 모든 행(일부만 넘기면 다른 학생의 자동 OUT이 취소된다), violations는 created_at 필수
         // opts = {autoTypes, ruleName:'무단 지각·결석·이탈', ruleId, per:'group'|'row', dutyByDate:{}, studentIds:[](선택),
-        //         autoTypeSince:{유형:'yyyy-MM-ddTHH:mm:ss'}(선택, 설정을 넓혀 새로 자동 대상이 된 유형과 가장 최근에 넓힌 시각)}
+        //         autoTypeSince:{유형:'yyyy-MM-ddTHH:mm:ss' 또는 [넓힌 시각…]}(선택, 설정을 넓혀 새로 자동 대상이 된 유형과 넓힌 시각 — 배열이면 넓힘 이력)}
         // → {toCreate, toCancel:[{violationId, reason}], toUpdate:[{violationId, patch}]}
 function outLevel_(violations, studentId, termId)   // {count, level:0|1|2, label:''|'1OUT'|'퇴실 대상'}
-function outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes)   // (R9) → {snapshot:{types, since}, since, changed}
+function outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes)   // (R9) → {snapshot:{types, since, widened}, since, widened, changed}
 function outDismissalGate_(violations, notes, changes, studentId, termId, ymd)
         // (R9) → {count, level, triggerOutId, meetingNote:{id,date,teacher_email}|null, alreadyLeft, ok, reason:''|'퇴실 대상 아님'|'면담 기록 필요'|'이미 퇴실'}
 
@@ -121,7 +140,7 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts)  
         //   → {kind, date, rule, autoDate(R10), from, blocked, superseded, supersededBy:[id], toCancel:[…], followUps:[…], warnings:[]}
 function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)     // 새 행이 덮어야 할 행(R6 추가)
         // opts = {source:'F7'|'F6', requestedAt, newValue} → [{id, effective_date, value}]
-function mealCountsOn_(students, enrollments, changes, termId, ymd)
+function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId)
         // (R12) → {groups:{'여1':{hall, dorm, nonDorm, breakfast, hallDinner, generalDinner}, …, '여 합계','남 합계','1학년'…'전체'},
         //    afterLeaveHallDinner, unknownGroup:[studentId], warnings}
 ```
@@ -201,10 +220,10 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd)
 - **자격 행:** `확정` + 날짜가 달력에 있음(`ymdIsValid_`) + 유형이 `autoTypes`(괄호 설명을 떼고 비교, 비거나 빈 항목뿐이면 기본 3종) + 그 유형이 `opts.autoTypeSince`에 있으면 `confirmed_at >=` 그 시각.
 - **설정 변경은 앞으로만(총괄 결정):** 설정 `exception.auto_out_types`를 넓혀 새로 자동 대상이 된 유형은 `autoTypeSince[유형]` = 그 유형을 마지막으로 넓힌 시각으로 넘긴다 — **`outAutoSinceNext_`(R9)의 결과 `since`**(설정 행 `updated_at`은 다른 칸을 고쳐도 바뀌므로 쓰지 않는다, followups R5-2) — 그 전에 확정된 특이사항에는 소급해 OUT을 만들지 않는다. **처음부터 자동 대상이던 유형은 넣지 않는다**(그래서 `[자동]` 취소됐다가 다시 확정된 특이사항의 OUT은 돌아온다). 좁힐 때는 아래 "만들 때 유형"으로 이미 있는 OUT이 유지된다. 2단계 F4 처음 연결 때 쌓인 특이사항을 한꺼번에 만들 때는 넘기지 않는다.
 - **새로 만들기:** 살아 있는 자동 OUT이 없는 단위에 자격 행이 있으면. 대표 = 자격 행 중 날짜가 가장 이른 행(같으면 id 순). 초안: `source:'F1자동'`, `status:'유효'`, `source_exception_id` = 대표, `occurred_at` = 대표 날짜 + 첫 블록 시작(`parseBlockSpec_` 기준, `ALL`·잘못된 표기는 `00:00`) + `:00`, `entered_by` = 확정자(없으면 요청자), `detected_by` = `dutyByDate[날짜]`(배열은 쉼표, 없으면 빈칸), **`rule_name` = `ruleName + '(만들 때 유형)'`**, `memo` = `'사전 특이사항 자동: 유형'`(자격 행이 여러 날이면 `' 외 N일'`).
-- **유지 행**(이미 있는 OUT 하나에 대해): 자격 행, 또는 확정·날짜 맞음이고 유형이 그 OUT의 `rule_name` 괄호 유형(만들 때 유형)과 같은 행(그 유형의 `autoTypeSince`가 그 OUT의 `created_at` 이전이면 그 시각 이후 확정만 — OUT이 생긴 뒤 다시 넓힌 since로는 거르지 않는다, `created_at`이 비면 거르지 않는다). 유지 행이 있으면 OUT을 유지하고 두 번 실행해도 0건. **설정을 좁혔다가 다시 넓혀도 기존 OUT은 죽지 않는다(결정 40).** 그래서 `violations` 행은 `created_at`까지 넘긴다(필수). 지름길: 다시 넓히면 처음 넓히기 전에 확정된 같은 유형 행도 유지 행이 되어, 대표가 그쪽으로 옮겨질 수 있다(덜 죽일 뿐 거짓 취소는 없음 — 설정이 넓힌 이력을 남기면 고친다).
+- **유지 행**(이미 있는 OUT 하나에 대해): 자격 행, 또는 확정·날짜 맞음이고 유형이 그 OUT의 `rule_name` 괄호 유형(만들 때 유형)과 같은 행(그 OUT의 `created_at` 이하에서 가장 늦은 넓힘 시각이 있으면 그 시각 이후 확정만 — OUT이 생긴 뒤 다시 넓힌 since로는 거르지 않는다, `created_at`이 비면 거르지 않는다). 유지 행이 있으면 OUT을 유지하고 두 번 실행해도 0건. **설정을 좁혔다가 다시 넓혀도 기존 OUT은 죽지 않는다(결정 40).** 그래서 `violations` 행은 `created_at`까지 넘긴다(필수). `autoTypeSince[유형]`에 넓힘 이력(배열, `outAutoSinceNext_`의 `widened`)을 주면 다시 넓힌 뒤에도 처음 넓히기 전에 확정된 행은 유지 행이 아니다. 한 시각(옛 모양)만 주면 지름길: 다시 넓히면 처음 넓히기 전에 확정된 같은 유형 행도 유지 행이 되어, 대표가 그쪽으로 옮겨질 수 있다(덜 죽일 뿐 거짓 취소는 없음). 새로 만들기(자격 행)는 늘 가장 최근 넓힘 기준.
   - `rule_name`은 vocabulary 형식일 때만 읽는다: 정확히 `ruleName + '(' + 유형 + ')'` — `ruleName` 바로 뒤의 `(`와 짝이 맞는 `)`가 마지막 글자(유형 안의 짝 맞는 괄호 허용). `'… (학부모 통화)'`처럼 덧붙였거나, 유형이 비었거나(`'( )'`), 통째로 괄호에 싸였으면(`'((x))'`) '알 수 없음'. 알 수 없으면 유지 행 = 자격 행만이고, 자격 행이 없어도 확정·날짜 맞는 행이 남아 있으면 **그대로 둔다**(유형으로 취소하지 않고, 대표를 비자동 행으로 옮기지도, 고치지도 않는다).
   - **대표 유지:** 지금 `source_exception_id` 행이 유지 행이면 대표를 옮기지 않는다. 아니면 유지 행 중 가장 이른 행.
-- **취소**(`toCancel`, 사유는 `'[자동] '`으로 시작): 특이사항이 모두 취소됨, 확정 행이 없어짐(요청으로 돌아감), 유형이 자동 대상 밖으로 바뀜(만들 때 유형도 아님), 연결된 특이사항 행이 없음, 특이사항의 학생·기간이 바뀜(**바른 쪽에 다시 만든다 — 이때는 지금 설정·`autoTypeSince`와 상관없이**, 그렇게 다시 만든 OUT은 유지 판정에서도 since로 거르지 않는다 — 같은 단위에 이 사유로 취소된 자동 OUT이 있으면), 같은 단위의 두 번째 살아 있는 OUT.
+- **취소**(`toCancel`, 사유는 `'[자동] '`으로 시작): 특이사항이 모두 취소됨, 확정 행이 없어짐(요청으로 돌아감), 유형이 자동 대상 밖으로 바뀜(만들 때 유형도 아님), 연결된 특이사항 행이 없음, 특이사항의 학생·기간이 바뀜(**바른 쪽에 다시 만든다 — 이때는 지금 설정·`autoTypeSince`와 상관없이**, 그렇게 다시 만든 OUT은 유지 판정에서도 since로 거르지 않는다 — 같은 단위에, 또는 이 사유로 취소된 자동 OUT이 가리키던 행의 묶음(학생 + group_id) 행이 든 단위에 — per를 group→row로 바꿔 대표가 옮겨 간 행의 단위에도 남게), 같은 단위의 두 번째 살아 있는 OUT.
 - **고침**(`toUpdate`, 부르는 쪽은 `updateRecord_`로 저장 → audit_log에 전후 값). 사람이 고친 값은 덮지 않는다:
   - 대표가 바뀌거나 대표 날짜와 OUT 날짜가 다르면 `source_exception_id`·`occurred_at`. **특이사항 날짜가 원본** — 사람이 OUT 날짜를 고치면 날짜·시각 모두 생성값으로 되돌린다. 날짜가 같으면 사람이 고친 시각은 둔다(같은 대표·같은 날짜에서 블록만 바뀐 것도 고치지 않는다).
   - `detected_by`: 빈칸인데 그날 근무교사를 알게 되면 채운다. 날짜가 바뀌었고 지금 값이 옛 날짜의 근무교사(생성값)와 같으면 새 날짜 근무교사로, 모르면 빈칸으로. 그래서 `dutyByDate`에는 특이사항 날짜와 OUT들의 지금 `occurred_at` 날짜를 모두 넣는다.
@@ -250,12 +269,12 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd)
 
 - `dutySlotsFor_`: 끝 시각 = min(조 시각, 그날 종료), 단독 = 그날 종료, 예비 `''`. 방학도 같은 틀(4-2). ASSUMPTION: 특별 요일 유형(exam 등)은 실제 달력 요일의 틀(R3 END와 같은 방식).
 - `dutyOn_`: 취소 제외, (date, slot)마다 `updated_at` 최신 1행(같으면 아래 행) + 경고. 근무자 = `actual_email`(빈칸이면 `original_email` — ASSUMPTION: 교대 전에는 빈칸일 수 있다). 이메일은 소문자·공백 없이. 모르는 칸 이름·근무자 없는 칸은 빼고 경고. 그 요일 틀 밖의 칸(토요일 21:30조, 화요일 단독·예비 등)은 쓰되 경고. 예비 칸은 `standby`로만(`{email, swappedFrom}`).
-- `dutyIsOn_`(근무교사 시간 범위 권한): 그날 실제 근무자만 참. 예비 지정만·교대로 넘긴 원래 근무자는 거짓. `windowDays` 기본 0(Q2 기본: 보기는 당일만, OUT 입력만 1). 잘못된 날짜·음수·소수 `windowDays`는 거짓(넓히지 않는다).
+- `dutyIsOn_`(근무교사 시간 범위 권한): 그날 실제 근무자만 참. 예비 지정만·교대로 넘긴 원래 근무자는 거짓. `windowDays` 기본 0. 호출 쪽은 OUT 입력(`out.save`)에만 1을 쓰고 보기 권한에는 쓰지 않는다(#79 근무 창 정리). 잘못된 날짜·음수·소수 `windowDays`는 거짓(넓히지 않는다).
 - `dutyRecord_`(월말 근무 기록): 교사별 합계 = 실제 근무자(원래 근무자에게는 세지 않음). `swaps` = 칸마다 마지막 교대(원래 → 실제, **예비 칸 포함**, `at`·`by`는 그날 쓴 행의 `swapped_at`·`swapped_by`, `kind`는 실제 근무자(to)가 그날 예비였으면 `'대신 근무'`, 아니면 `'교대'` — 예비 칸 자체의 교대는 `'교대'`). 예비만 있는 교사도 `teachers`에 넣는다(total 0). 예비 지정은 `standby`로 근무 합계와 따로 센다(결정 46). `standby[].dates` = 예비로 센 날(날짜 순, 예비 칸 교대 뒤의 실제 예비 기준, 출력 표의 날짜별 칸용). 그날 대신 근무한 예비는 근무로만 세고 `standby`에서는 뺀다(두 번 세지 않음). `teachers[].dates[].slot`은 저장값(`'21:30조'` 등) 그대로다. ASSUMPTION: 운영 안 하는 날(`operatingByDate[date] === false`)의 행도 세고 경고. 금액은 계산하지 않는다(결정 47 — 두 조의 수당이 같아 합계를 크게, 조별은 참고). 잘못된 달은 Error.
 
 ## 동작 메모(R9, 2026-11-07)
 
-- `outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes)`: 유형별 마지막 넓힘 시각을 스냅숏 `{types, since}`로 들고 다닌다(저장은 F4 몫). `snapshot`이 null(처음·분실)이면 기준 = `defaultTypes`(설정 기본값 `exception.auto_out_types`): 기본 그대로면 `since {}`(처음 연결 때 일괄 생성), 기본에 없는 유형은 `since = nowIso`(스냅숏을 잃어도 넓혔던 유형은 소급하지 않는다). 새로 나타난 유형은 `since = nowIso`(다시 넓혀도 덮어씀), 빠진 유형의 since는 남긴다. 괄호 설명은 떼고 비교. `changed` = 스냅숏을 새로 써야 하는지(null이면 참, 유형 집합이 같으면 거짓). 잘못된 `nowIso`는 Error.
+- `outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes)`: 유형별 마지막 넓힘 시각을 스냅숏 `{types, since}`로 들고 다닌다(저장은 F4 몫). `snapshot`이 null(처음·분실)이면 기준 = `defaultTypes`(설정 기본값 `exception.auto_out_types`): 기본 그대로면 `since {}`(처음 연결 때 일괄 생성), 기본에 없는 유형은 `since = nowIso`(스냅숏을 잃어도 넓혔던 유형은 소급하지 않는다). 새로 나타난 유형은 `since = nowIso`(다시 넓혀도 덮어씀), 빠진 유형의 since는 남긴다. `widened` = 유형별 넓힌 시각 이력(오름차순, 다시 넓힐 때마다 더함, 옛 스냅숏은 since 값 하나로 시작, 마지막은 늘 `since[유형]` — since보다 늦은 값·형식이 틀린 값은 버리고 마지막이 since가 아니면 붙인다) — `reconcileAutoOuts_`의 `autoTypeSince`로 `since` 대신 넘기면 다시 넓힘 지름길이 없어진다(F4 C12 연결은 후속). 괄호 설명은 떼고 비교. `changed` = 스냅숏을 새로 써야 하는지(null이면 참, 유형 집합이 같으면 거짓). 잘못된 `nowIso`는 Error.
 - `outDismissalGate_`(2OUT 퇴실 확정 관문): 이번 기간 살아 있는 OUT을 `occurred_at` → `created_at` → id 순으로 놓은 둘째가 `triggerOutId`. 면담 = status 빈칸·유효, 같은 학생, type `2OUT 학부모 면담`, **이번 기간 살아 있는 OUT에 연결**, 날짜 ≥ triggerOut 발생일. `alreadyLeft` = ymd에 학사 퇴실이거나 앞으로 **2OUT 퇴실**(살아 있는 학사 퇴실, 적용일 > ymd, memo가 `[2OUT]`로 시작하거나 reason `2OUT 퇴실`)이 잡혀 있음(2OUT 퇴실을 두 번 만들지 않게). 보통 미래 퇴실은 막지 않는다(총괄 결정 — 그 뒤 `movePlan_`이 '이후 날짜에 입퇴실 기록'으로 그 퇴실을 가리킨다). 판정 순서: `이미 퇴실` → `퇴실 대상 아님`(2건 미만) → `면담 기록 필요` → ok. `notes`에는 내용(content)을 넘기지 않는다. 결정 51: 연결한 OUT이 나중에 취소되면 그 면담은 세지 않는다(다른 2건이 남아도 다시 면담), 둘째 OUT보다 앞선 날짜의 면담도 세지 않는다. StatusRules(`statusOn_`)를 부른다.
 - O43 회귀 테스트: 같은 묶음의 앞선 자동 OUT이 중복·유형 변경으로 `[자동]` 취소돼 있어도 since 거르기는 그대로다(`moved`는 '학생 또는 기간이 바뀌었습니다' 취소만).
 
@@ -299,3 +318,34 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd)
 ## 동작 메모(R12, 2026-11-07)
 
 - `mealCountsOn_`: termId 기간에 등록된 학생을 그날 상태 그대로 센다(결석·외박은 빼지 않는다, 같은 학생 두 번 등록은 한 번). 학사 = 학사 `입실`, 기숙 = 학사 입실이면서 기숙사 `입실`, 비기숙 = 학사 입실이면서 기숙 아님. **조식·석식은 학사 상태로 거르지 않는다**(결정 35 — 퇴실 학생도 석식 중단일 전까지 학사 석식, `afterLeaveHallDinner`로 따로 센다). 줄은 '여1'…'남3'(학년 3 밖도 있으면 줄을 만든다), '여 합계'·'남 합계', 'N학년', '전체'이고 합계 줄 = 부분 합. ASSUMPTION: 성별(남·여)·학년(숫자)이 비었거나 다른 학생, 학생 행이 없는 등록은 어느 줄에도 넣지 않고 `unknownGroup` + 경고. 잘못된 날짜는 Error.
+
+## 동작 메모(R13, 2026-11-12)
+
+**결정 63(2OUT 퇴실 뒤 다시 들어오기)** — MoveRules.
+
+- `move2OutBan_(changes, studentId, terms, ymd)` → `{banned, until, leaveDate}`. 기준 퇴실 = 살아 있는 학사 퇴실 중 reason `2OUT 퇴실` 또는 memo가 `[2OUT]`로 시작하고 적용일 ≤ ymd인 것 가운데 가장 늦은 것(없으면 `{banned:false, until:'', leaveDate:''}`). 퇴실 취소(결정 59)로 그 행이 취소되면 막힘도 풀린다. 막는 기간(결정 63 보충) = 퇴실일부터 '다음 학기 뒤 처음 오는 학기'의 시작 전날까지(그 학기 남은 날·다음 학기·사이의 방학 포함). 다음 학기 = 퇴실일 뒤에 시작하는 첫 `type '학기'`. 그 뒤 학기가 terms에 없으면 다음 학기 끝날 뒤 처음 시작하는 `방학`의 끝날(ASSUMPTION: 사이에 빈 날이 있어도), 그것도 없으면 다음 학기 끝날. 다음 학기가 terms에 아직 없으면 `until ''`이고 막는다(다음 학기 등록 전까지). terms 순서는 상관없다. `banned` = ymd ≤ until(또는 until이 없음). 잘못된 ymd는 Error. ASSUMPTION(결정 63): '학기'는 terms.type `학기`, 방학은 사이에 끼면 함께 막는다. 방학 중 퇴실이면 그 뒤 첫 학기를 '다음 학기'로 본다.
+- `movePlan_` 학사 입실: `opts.terms`가 있고 막혀 있으면 errors `2OUT 퇴실로 M월 D일까지 다시 들어올 수 없습니다`(해가 다르면 `yyyy년 M월 D일`, until이 없으면 `…다음 학기 끝날까지 다시 들어올 수 없습니다(다음 학기가 아직 등록되지 않았습니다)`). `opts.terms`가 없거나 빈 배열이면 검사하지 않는다(호환 — 빈 terms로 무기한 막지 않게). 명단 업로드의 등록 막힘(결정 63 두 번째)은 R4 명단 쪽이 이 함수를 불러 정한다.
+- **결정 35 보충(mealCountsOn_):** 선택 인자 `prevTermId`(직전 운영 기간 id)를 주면 이번 기간에 등록이 없는 그 기간 등록생 가운데 그날 학사가 `입실`이 아니면서 석식이 `학사 석식`인 학생도 센다(학기 막바지 퇴실 뒤 석식이 다음 기간까지 이어지는 학생 — 학사 0). 이번 기간에 신청하지 않고 상태만 이어진 학생(학사 입실 그대로)·더 옛 기간·term_id 빈 등록은 세지 않는다. 주지 않으면 지금처럼 이번 기간 등록생만. C19(Meals.gs)는 직전 기간 id를 넘긴다(후속).
+
+## 동작 메모(R14, 2026-11-12)
+
+**SeatRules** — 좌석 초안(F5 [초안 만들기], C22)과 빨간 칸. DateRules(`ruleStr_`·`ruleRowLive_`)만 부른다. 입력은 시트 행 그대로(spaces·seats·이번 기간 등록생 `{id, gender, grade, veritas}`·지난 기간 배정·고정 자리·avoid_pairs·seed).
+
+- 좌석 = 살아 있는 공간의 살아 있는 `kind '좌석'` 칸. **이웃** = 같은 공간에서 행 또는 열이 1 차이(다른 하나는 같음)인 좌석 칸 — 기둥·창문·비상문·통로를 사이에 두면 2칸 떨어져 이웃이 아니다. 1층 짝줄(붙은 두 열)은 좌우 이웃이다.
+- **SA실** = 공간 이름이 `SA<숫자>`로 시작(Seats.gs `seatLabelStyle_`과 같은 기준). 공간 성별 `남`·`여`는 같은 성별만, `혼성`·빈칸은 누구나.
+- `seatDraft_` 순서: ① 고정 자리 그대로(좌석이 없거나 겹치면 경고하고 새로) ② 3학년은 지난 기간 자리가 좌석으로 있고 비어 있고 성별이 맞으면 유지 — ASSUMPTION: 베리타스 여부가 바뀌어 구역(SA/1층)이 달라졌으면 유지하지 않는다 ③ 베리타스는 같은 성별 SA실, 자리가 모자라면 1층으로 넘기고 경고 `… SA실 자리가 모자라 1층에 배정했습니다` ④ 나머지는 SA 아닌 공간 — 1층이 모자라면 같은 성별 SA실의 남은 자리에 앉히고 경고 `1층 자리가 모자라 N명을 SA실에 앉혔습니다`(한 줄, 그래도 남으면 unplaced). 비용(이웃 같은 학년 1, 떨어뜨릴 짝 10)이 가장 싼 빈자리를 seed로 섞은 차례로 고른 뒤, 같은 구역 안 맞바꾸기·빈자리 옮기기로 비용을 줄인다(고정·3학년 유지 자리는 움직이지 않음, 최대 30회). ⑤ 못 앉힌 학생은 `unplaced` + 경고. 다 못 지키면 그 결과(가장 덜 어긴 배치 — 탐색은 지역 최적)와 `violations`.
+- 같은 입력 + 같은 seed = 같은 결과(입력 행 순서와 무관: id 순으로 정렬한 뒤 seed로 섞는다. 지난 자리·고정에 같은 좌석이 둘이면 학생 id 순, 같은 이름 공간은 공간 id 순).
+- 알려진 한계: 혼성 공간과 성별 공간이 함께 있으면, 혼성 자리를 먼저 온 다른 성별 학생이 차지해 빈 성별 공간 자리가 있는데도 unplaced가 생길 수 있다(실제 배치 — 1층 혼성·SA 성별 — 에서는 없음). 떨어뜨릴 짝은 scope `좌석`·`둘 다`, 살아 있는 행만.
+- `seatViolations_`: 이웃 같은 학년·떨어뜨릴 짝은 **두 칸 모두에 한 줄씩**(`with` = 상대 칸 id), 성별은 `with ''`. 순서 = 칸은 `seatBoard_` 순(공간 이름 → 행·열), 한 칸 안에서는 성별 먼저, 그다음 이웃 위·아래·왼·오른쪽 순으로 같은 학년·짝. 짝 위반은 kind만 뜻이 있다 — 상대 이름·사유는 서버가 보는 사람 권한에 따라 거른다(결정 64). 좌석 아닌 칸·명단에 없는 학생의 배정은 건너뛴다.
+- 성능: 가짜 1층 146석 + SA 51석(src/dev/FakeSeats.gs)에 180명 — 수십 ms(시험은 3초 기준).
+
+## 동작 메모(R15, 2026-11-12)
+
+**RoomRules** — 기숙사 방 초안(F8 [초안 만들기])·빨간 표시·정원 현황판. 입력은 시트 행 그대로(rooms·이번 기간 등록생 `{id, gender, grade}`·status_changes·avoid_pairs·기준일·seed). 학기마다 전체 재배정이라 지난 배정은 보지 않는다.
+
+- 대상 = 등록생 중 기준일 `statusOn_(…, '기숙사', ymd) === '입실'`. 잘못된 날짜는 Error.
+- 방 성별(층마다 고정, 결정 64 ②)과 같은 학생만. ASSUMPTION: 성별이 빈 방은 아무도 받지 않는다. 정원(capacity, 정수로 내림)을 넘기지 않고, 자리가 없으면 `unplaced` + 경고 `… 학생: 들어갈 방이 없습니다(정원)`.
+- 점수: 같은 학년만 있는 방 1(두 명 이상일 때 — ASSUMPTION: 한 명 방은 위반 아님), 같은 방 떨어뜨릴 짝(scope `방`·`둘 다`, 살아 있는 행) 10. id 순 정렬 뒤 seed로 섞은 차례로 점수가 가장 적게 느는 방(같으면 사람이 적은 방, 그래도 같으면 방 순)에 넣고, 같은 성별 방 사이 맞바꾸기·빈자리 옮기기로 점수를 줄인다(최대 30회, 지역 최적). 피할 수 없으면 `violations`에 남긴다. 같은 입력 + 같은 seed = 같은 결과(행 순서 무관).
+- `roomViolations_`: 정원 초과·같은 학년은 방마다 한 줄, 떨어뜨릴 짝은 짝마다 한 줄(모두 `studentId ''`), 성별은 학생마다(`studentId` = 그 학생). 짝 상대는 서버가 권한에 따라 거른다(결정 64). 없는 방(취소 포함)·명단 밖 학생·겹친 배정 행은 건너뛰거나 한 번만 센다.
+- 정원이 남으면 '같으면 사람이 적은 방' 규칙 때문에 1~2명 방이 많이 생긴다(허용되는 동작 — 방을 가득 채우는 쪽을 원하면 규칙을 바꿔야 한다).
+- `roomBoard_`: 공석 = 방마다 max(0, 정원 − 인원)을 더한 값(정원 초과 방이 있어도 층·성별 합계 공석은 음수가 되지 않는다), 정원 초과는 인원 그대로. 층 줄은 (층, 성별)마다 방 순서대로, `byGrade` = {학년: 인원}. 가득 찬 경우(남 48·여 92, 4인실 35방) 시험 통과.
