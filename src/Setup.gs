@@ -48,6 +48,7 @@ function setup() {
   ensureTermSheets_(report);
   seedDefaultBlocks_(report);
   seedViolationRules_(owner, report);
+  seedRooms_(owner, report);
   seedSettings_(owner, report);
 
   var users = readAll_('users');
@@ -109,6 +110,36 @@ function seedViolationRules_(owner, report) {
     return { name: r[0], description: r[1], active: 'TRUE', sort_order: String(i + 1) };
   }), owner);
   report.push('[위반 항목] 기본 항목 ' + DEFAULT_VIOLATION_RULES.length + '개 추가');
+}
+
+/** 결정 64 기본 35실: 3층 1~4호, 4층 5~12호, 5층 13~19호, 6층 20~27호, 7층 28~35호. 남 1~12호·여 13~35호, 정원 4 */
+var DEFAULT_ROOM_FLOORS = [[3, 1, 4], [4, 5, 12], [5, 13, 19], [6, 20, 27], [7, 28, 35]];
+
+/** rooms 탭에 한 줄이라도 있으면(취소 포함) 그대로 둔다 — 관리자가 고친 호실을 되살리지 않는다 */
+function seedRooms_(owner, report) {
+  if (readAll_('rooms').length) {
+    report.push('[호실] 이미 있어 기본 호실을 넣지 않음');
+    return 0;
+  }
+  var rows = [], n = 0;
+  DEFAULT_ROOM_FLOORS.forEach(function (f) {
+    for (var no = f[1]; no <= f[2]; no++) {
+      n++;
+      rows.push({ floor: String(f[0]), room_no: String(no), gender: no <= 12 ? '남' : '여', capacity: '4', sort_order: String(n), status: '유효', memo: '' });
+    }
+  });
+  bulkAppend_('rooms', rows, owner);
+  report.push('[호실] 기본 호실 ' + rows.length + '개 추가');
+  return rows.length;
+}
+
+/** 편집기에서 한 번: 호실 기본 35실(이미 있으면 건너뜀). 탭이 없으면 setup()을 먼저 */
+function seedDefaultRooms() {
+  var owner = assertOwnerRun_();
+  var report = [];
+  withLock_(function () { seedRooms_(owner, report); });
+  console.log(report.join('\n'));
+  return report;
 }
 
 function ensureSheet_(ss, kind, sheetName) {

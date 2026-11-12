@@ -43,6 +43,14 @@
     "saveMove": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "previewCancelMove": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "cancelMove": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }

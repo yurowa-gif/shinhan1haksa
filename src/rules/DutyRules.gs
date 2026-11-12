@@ -65,7 +65,7 @@ function dutyPick_(rows, ymd) {
 
 /**
  * 근무교사 시간 범위 권한(PRD §12): 그날 실제 근무자이고 ymd ≤ today ≤ ymd + windowDays면 참.
- * 예비 지정만·교대로 넘긴 원래 근무자는 거짓. windowDays 기본 0(당일만, Q2 — 넓히는 쪽은 답 전에는 좁게).
+ * 예비 지정만·교대로 넘긴 원래 근무자는 거짓. windowDays 기본 0(당일만). 호출 쪽은 OUT 입력(out.save)에만 1을 쓴다(#79).
  * 잘못된 날짜·windowDays(음수·소수)는 거짓(권한을 넓히지 않는다).
  */
 function dutyIsOn_(rows, email, ymd, today, windowDays) {
