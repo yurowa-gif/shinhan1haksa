@@ -77,7 +77,7 @@ test('D10 시안(stage3-screens.js)의 화면 이름이 모두 screens.md 5-3 �
   const ids = [...src.matchAll(/^def\('([^']+)'/gm)].map((m) => m[1]);
   assert.ok(ids.length >= 14, '시안 화면 수 ' + ids.length);
   ids.forEach((id) => assert.ok(sec.indexOf('`' + id + '`') >= 0, '5-3 절에 `' + id + '` 가 없다'));
-  ['남 48', '여 92', '사유는 관리자·학사 교사만 봅니다', '저장은 막', '삭제 버튼은 없다'].forEach((t) => assert.ok(sec.indexOf(t) >= 0, t));
+  ['남 48', '여 92', '사유는 관리자·학사 교사만 봅니다', '저장을 막지 않는다', '정원 초과·성별 불일치만 저장을 막고', '삭제 버튼은 없다'].forEach((t) => assert.ok(sec.indexOf(t) >= 0, t));
   const styles = css.readFile('src/ui/Styles.html');
   assert.ok(/\.seat-cell\.bad \.seat-no::before \{ content: "⚠/.test(styles) && /\.chip\.bad::before \{ content: "⚠/.test(styles));
   assert.ok(/\.seat-cell\.bad \{ border: 3px solid/.test(styles));
