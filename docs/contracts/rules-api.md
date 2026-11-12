@@ -111,6 +111,13 @@ function seatGenderOk_(space, student)                                     // �
 function seatAvoidMap_(avoids, scopes)                                     // → {학생id:{상대id:true}}(살아 있는 짝, scope가 scopes 안)
 function seatRng_(seed)                                                    // → 0~1 난수 함수(같은 seed = 같은 수열)
 
+// src/rules/RoomRules.gs (R15, stage3.md 1절) — StatusRules·SeatRules(seatAvoidMap_·seatRng_)를 부른다
+function roomDraft_(rooms, students, changes, avoids, ymd, seed)           // → {assignments:[{room_id, student_id}], unplaced:[studentId], violations, warnings}
+function roomViolations_(rooms, students, assignments, avoids)            // → [{roomId, kind:'정원 초과'|'성별'|'같은 학년'|'떨어뜨릴 짝', studentId}]
+function roomBoard_(rooms, students, assignments)                         // → {rooms:[{roomId, floor, room_no, gender, capacity, count, vacant}], floors:[{floor, gender, capacity, count, vacant, byGrade}], total:{성별:{…}}}
+function roomList_(rooms)                                                 // → 살아 있는 방 [{id, floor, room_no, gender, capacity(정수), sort}] sort_order·층·호 순
+function roomGenderOk_(room, student)                                     // → 방 성별 = 학생 성별(성별 빈 방은 false)
+
 // src/rules/OutRules.gs
 function reconcileAutoOuts_(exceptions, violations, opts)
         // exceptions·violations는 그 기간의 모든 행(일부만 넘기면 다른 학생의 자동 OUT이 취소된다), violations는 created_at 필수
@@ -331,3 +338,14 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId)
 - 알려진 한계: 혼성 공간과 성별 공간이 함께 있으면, 혼성 자리를 먼저 온 다른 성별 학생이 차지해 빈 성별 공간 자리가 있는데도 unplaced가 생길 수 있다(실제 배치 — 1층 혼성·SA 성별 — 에서는 없음). 떨어뜨릴 짝은 scope `좌석`·`둘 다`, 살아 있는 행만.
 - `seatViolations_`: 이웃 같은 학년·떨어뜨릴 짝은 **두 칸 모두에 한 줄씩**(`with` = 상대 칸 id), 성별은 `with ''`. 순서 = 칸은 `seatBoard_` 순(공간 이름 → 행·열), 한 칸 안에서는 성별 먼저, 그다음 이웃 위·아래·왼·오른쪽 순으로 같은 학년·짝. 짝 위반은 kind만 뜻이 있다 — 상대 이름·사유는 서버가 보는 사람 권한에 따라 거른다(결정 64). 좌석 아닌 칸·명단에 없는 학생의 배정은 건너뛴다.
 - 성능: 가짜 1층 146석 + SA 51석(src/dev/FakeSeats.gs)에 180명 — 수십 ms(시험은 3초 기준).
+
+## 동작 메모(R15, 2026-11-12)
+
+**RoomRules** — 기숙사 방 초안(F8 [초안 만들기])·빨간 표시·정원 현황판. 입력은 시트 행 그대로(rooms·이번 기간 등록생 `{id, gender, grade}`·status_changes·avoid_pairs·기준일·seed). 학기마다 전체 재배정이라 지난 배정은 보지 않는다.
+
+- 대상 = 등록생 중 기준일 `statusOn_(…, '기숙사', ymd) === '입실'`. 잘못된 날짜는 Error.
+- 방 성별(층마다 고정, 결정 64 ②)과 같은 학생만. ASSUMPTION: 성별이 빈 방은 아무도 받지 않는다. 정원(capacity, 정수로 내림)을 넘기지 않고, 자리가 없으면 `unplaced` + 경고 `… 학생: 들어갈 방이 없습니다(정원)`.
+- 점수: 같은 학년만 있는 방 1(두 명 이상일 때 — ASSUMPTION: 한 명 방은 위반 아님), 같은 방 떨어뜨릴 짝(scope `방`·`둘 다`, 살아 있는 행) 10. id 순 정렬 뒤 seed로 섞은 차례로 점수가 가장 적게 느는 방(같으면 사람이 적은 방, 그래도 같으면 방 순)에 넣고, 같은 성별 방 사이 맞바꾸기·빈자리 옮기기로 점수를 줄인다(최대 30회, 지역 최적). 피할 수 없으면 `violations`에 남긴다. 같은 입력 + 같은 seed = 같은 결과(행 순서 무관).
+- `roomViolations_`: 정원 초과·같은 학년은 방마다 한 줄, 떨어뜨릴 짝은 짝마다 한 줄(모두 `studentId ''`), 성별은 학생마다(`studentId` = 그 학생). 짝 상대는 서버가 권한에 따라 거른다(결정 64). 없는 방(취소 포함)·명단 밖 학생·겹친 배정 행은 건너뛰거나 한 번만 센다.
+- 정원이 남으면 '같으면 사람이 적은 방' 규칙 때문에 1~2명 방이 많이 생긴다(허용되는 동작 — 방을 가득 채우는 쪽을 원하면 규칙을 바꿔야 한다).
+- `roomBoard_`: 공석 = 방마다 max(0, 정원 − 인원)을 더한 값(정원 초과 방이 있어도 층·성별 합계 공석은 음수가 되지 않는다), 정원 초과는 인원 그대로. 층 줄은 (층, 성별)마다 방 순서대로, `byGrade` = {학년: 인원}. 가득 찬 경우(남 48·여 92, 4인실 35방) 시험 통과.
