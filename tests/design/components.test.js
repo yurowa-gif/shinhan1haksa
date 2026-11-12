@@ -118,7 +118,7 @@ test('컴포넌트가 쓰는 class 는 모두 Styles.html 에 정의되어 있�
   // el(..., {class: ...}) 밖에서 쓰는 이름: className 문자열
   ['chip', 'chips', 'segmented', 'seg', 'sheet', 'sheet-scrim', 'sheet-body', 'sheet-actions', 'toast', 'empty', 'picker',
     'picker-list', 'picker-item', 'picker-chosen', 'picker-name', 'seatgrid', 'seatgrid-wrap', 'seat-cell', 'seat-no', 'seat-text',
-    'seat-fixed', 'seat-gap', 'range', 'range-summary', 'vacant', 'sel', 'on', 'field', 'hint', 'fix', 'invalid'].forEach((c) => used.add(c));
+    'seat-fixed', 'seat-gap', 'range', 'range-summary', 'vacant', 'sel', 'bad', 'on', 'field', 'hint', 'fix', 'invalid'].forEach((c) => used.add(c));
   const missing = [...used].filter((c) => !defined.has(c));
   assert.deepStrictEqual(missing, []);
 });
