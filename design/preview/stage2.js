@@ -8,29 +8,30 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
-const OUT = path.join(__dirname, 'out', 'stage2');
+const OUT2 = path.join(__dirname, 'out', 'stage2');
+const SCREENS_2 = () => fs.readFileSync(path.join(__dirname, 'stage2-screens.js'), 'utf8');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 const inc = (f) => read(f).replace(/<\?!=[^?]*\?>/g, '');
 const SIZES = [{ w: 360, h: 800 }, { w: 1280, h: 800 }];
 
-function build() {
+function build(screens) {
   const note = '<style>.proto-note{border:1.5px dashed var(--accent);background:var(--accent-weak);color:var(--accent-ink);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:12px;font-size:var(--font-sm)}.proto-note::before{content:"시안 · ";font-weight:700}</style>';
   return '<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
     inc('src/ui/Styles.html') + note + '</head><body><div id="app"></div>' + inc('src/ui/Client.html') + inc('src/ui/Components.html') +
-    '<script>' + fs.readFileSync(path.join(__dirname, 'stage2-screens.js'), 'utf8') + '</script></body></html>';
+    '<script>' + (screens || SCREENS_2()) + '</script></body></html>';
 }
 
-async function main() {
+async function main(OUT = OUT2, screens) {
   fs.mkdirSync(OUT, { recursive: true });
   const file = path.join(OUT, 'index.html');
-  fs.writeFileSync(file, build());
+  fs.writeFileSync(file, build(screens));
   const { chromium } = require('playwright');
   const browser = await chromium.launch();
   const probe = await browser.newPage();
   await probe.goto('file://' + file);
   const ids = await probe.evaluate(() => ORDER.map((k) => ({ id: k, sheet: SCREENS[k].sheet, label: SCREENS[k].label })));
   await probe.close();
-  const want = process.argv.slice(2);
+  const want = process.argv.slice(2).filter((a) => !a.startsWith('--'));
   const problems = [];
   for (const s of ids.filter((x) => !want.length || want.includes(x.id))) {
     for (const size of SIZES) {
@@ -68,4 +69,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
-module.exports = { build };
+module.exports = { build, main };

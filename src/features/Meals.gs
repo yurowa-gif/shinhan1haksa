@@ -48,7 +48,8 @@ function foodHomeInfo_(user, role) {
       if (m.term) {
         var all = m.counts.groups['전체'] || {};
         out.counts = { date: today, dateKo: foodDateKo_(today), termName: m.term.name, hall: all.hall, dorm: all.dorm, dormMale: (m.counts.groups['남 합계'] || {}).dorm,
-          dormFemale: (m.counts.groups['여 합계'] || {}).dorm, nonDorm: all.nonDorm, breakfast: all.breakfast, hallDinner: all.hallDinner, generalDinner: all.generalDinner };
+          dormFemale: (m.counts.groups['여 합계'] || {}).dorm, nonDorm: all.nonDorm, breakfast: all.breakfast, hallDinner: all.hallDinner, generalDinner: all.generalDinner,
+          afterLeaveHallDinner: Number(m.counts.afterLeaveHallDinner) || 0 };
         out.vacancy = foodVacancy_(m.term, today);
       }
     }
@@ -546,7 +547,7 @@ function getMealCountsPdf(date) {
   var user = requirePermission_('meal.count');
   var m = foodCountsModel_(foodCountsDate_(date));
   if (!m.term) return { ok: false, error: '운영 기간이 아닌 날은 출력할 수 없습니다.' };
-  var html = printRenderMealCounts_({ date: m.date, termName: m.term.name, operating: m.operating, counts: m.counts, docUnsubmitted: m.docUnsubmitted,
+  var html = printRenderMealCounts_({ date: m.date, termName: m.term.name, operating: m.operating, counts: m.counts, docUnsubmitted: m.docUnsubmitted, docRows: m.docRows,
     preparedBy: user.name, generatedAt: nowIso_().slice(0, 16).replace('T', ' ') });
   var name = '식수집계_' + m.date + '(' + ymdWeekdayKo_(m.date) + ').pdf';
   var bytes = sheetMakePdf_(html, name).getBytes();

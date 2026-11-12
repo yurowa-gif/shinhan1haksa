@@ -45,6 +45,12 @@ function permissions_() {
     'seat.view': { roles: ['admin', 'attendance', 'hall_teacher', 'duty_manager', 'homeroom'] },
     'seat.edit': { roles: ['admin', 'hall_teacher'] },
     'seat.layout': { roles: ['admin'] },
+    // ── 3단계(결정 64). 떨어뜨릴 짝은 관리자·학사 교사만(담임·출결·근무표 담당자에게도 내보내지 않는다). 방은 보기만 넓게 ──
+    'avoid.view': { roles: ['admin', 'hall_teacher'] },
+    'avoid.edit': { roles: ['admin', 'hall_teacher'] },
+    'room.view': { roles: ['admin', 'hall_teacher', 'attendance', 'duty_manager'] },
+    'room.edit': { roles: ['admin', 'hall_teacher'] },
+    'room.layout': { roles: ['admin'] },
     // ── 2단계(docs/plan/stage2.md 2절 "2단계 권한 키"). 학생·학부모는 3단계(F14)에서 연다 ──
     // 근무표(F3): 보기는 1학사 교사(담임만인 계정 제외), 편성은 관리자·근무표 담당자, 교대는 본인 칸(함수 안에서 확인), 기록표 파일은 관리자·근무표 담당자
     'duty.view': { roles: ['admin', 'duty_manager', 'hall_teacher', 'attendance'] },

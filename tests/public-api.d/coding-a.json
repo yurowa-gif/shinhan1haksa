@@ -79,6 +79,10 @@
     "runBackupNow": {
       "use": "편집기",
       "guard": "assertOwnerRun_"
+    },
+    "seedDefaultRooms": {
+      "use": "편집기",
+      "guard": "assertOwnerRun_"
     }
   }
 }

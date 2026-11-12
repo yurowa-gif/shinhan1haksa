@@ -288,7 +288,7 @@ function saveF7(rows, item, to, at, today) {
   if (p.blocked) return { rows, p };
   const out = rows.map((r) => (p.toCancel.some((c) => c.id === r.id) ? Object.assign({}, r, { status: '취소' }) : r));
   if (!p.superseded) out.push(CH(item, to, p.date, { source: 'F7', requested_at: at, created_at: String(++sseq) }));
-  p.followUps.forEach((f) => out.push(CH(f.item, f.value, f.effective_date, { source: 'F6', requested_at: at, created_at: String(++sseq) })));
+  p.followUps.forEach((f) => out.push(CH(f.item, f.value, f.effective_date, { source: f.source, requested_at: at, created_at: String(++sseq) })));
   return { rows: out, p };
 }
 function saveF7m(rows, item, to, at, today, effectiveDate) {
@@ -338,10 +338,10 @@ table('followUps: 퇴실 찾기(같은 날 재입실·퇴실 둘·중단일 전 
   ['same-day-reentry', [CH('학사', '퇴실', '2027-03-10', { source: 'F6', requested_at: '2027-03-08T10:00:00' }),
     CH('학사', '입실', '2027-03-10', { source: 'F6', requested_at: '2027-03-08T11:00:00' }),
     CH('학사', '퇴실', '2027-04-05', { source: 'F6', requested_at: '2027-04-01T10:00:00' })], ['2027-04-12']],
-  // M32 퇴실이 둘이면 가장 이른 퇴실 기준(3/10 → 석식 3/15)
+  // M32 퇴실이 둘이면 가장 이른 퇴실 기준(3/10 → 석식 3/15), 중단일 뒤 3/20 재입실부터 학사 석식을 다시
   ['two-leaves', [CH('학사', '퇴실', '2027-03-10', { source: 'F6', requested_at: '2027-03-08T10:00:00' }),
     CH('학사', '입실', '2027-03-20', { source: 'F6', requested_at: '2027-03-18T10:00:00' }),
-    CH('학사', '퇴실', '2027-04-05', { source: 'F6', requested_at: '2027-04-01T10:00:00' })], ['2027-03-15']],
+    CH('학사', '퇴실', '2027-04-05', { source: 'F6', requested_at: '2027-04-01T10:00:00' })], ['2027-03-15', '2027-03-20', '2027-04-12']],   // 3/20 재입실부터 다시(R11b), 4/5 퇴실(4/1 목 기록)의 중단일 4/12에 다시 끝냄
   // 중단일(3/15) 전에 다시 입실 → 정리 행 없음
   ['reentry-before-stop', [CH('학사', '퇴실', '2027-03-10', { source: 'F6', requested_at: '2027-03-08T10:00:00' }),
     CH('학사', '입실', '2027-03-12', { source: 'F6', requested_at: '2027-03-11T10:00:00' })], []],
@@ -410,6 +410,9 @@ test('수동 적용일: 신청일보다 이르거나 날짜가 아니거나 모�
 test('entry_date: 기숙사 입실 조식은 입실일(rule entry_date), 자동 날짜는 autoDate', () => {
   const p = plan([CH('조식', '미실시', '2027-03-01')], '조식', '실시', '2027-03-03T15:00:00', { today: '2027-03-03', effectiveDate: '2027-03-10', effectiveRule: 'entry_date' });
   assert.deepStrictEqual([p.date, p.rule, p.autoDate, p.kind], ['2027-03-10', 'entry_date', '2027-03-04', 'start']);
+  // 입퇴실을 늦게 입력하면 입실일이 신청일보다 이를 수 있다(entry_date만 허용)
+  const late = plan([CH('조식', '미실시', '2027-03-01')], '조식', '실시', '2027-03-12T15:00:00', { today: '2027-03-12', effectiveDate: '2027-03-10', effectiveRule: 'entry_date' });
+  assert.deepStrictEqual([late.date, late.rule], ['2027-03-10', 'entry_date']);
 });
 
 test('수동 적용일 기준으로 toCancel·followUps·blocked를 계산한다', () => {
@@ -433,7 +436,7 @@ test('autoDate는 늘 들어 있다: 고친 날이 없으면 date와 같고, blo
   const rows = [CH('학사', '입실', '2027-03-01'), CH('조식', '실시', '2027-03-01')];
   const p = plan(rows, '조식', '미실시', '2027-03-03T09:00:00', { today: '2027-03-03' });
   assert.deepStrictEqual([p.date, p.autoDate], ['2027-03-15', '2027-03-15']);
-  const newer = rows.concat([CH('조식', '미실시', '2027-03-08', { requested_at: '2027-03-05T09:00:00' })]);
+  const newer = rows.concat([CH('조식', '실시', '2027-03-08', { requested_at: '2027-03-05T09:00:00' })]);   // 다른 값의 더 새 신청
   const sup = plan(newer, '조식', '미실시', '2027-03-02T09:00:00', { today: '2027-03-06' });
   assert.deepStrictEqual([sup.superseded, sup.autoDate], [true, '2027-03-08']);
   const left = saveLeave(rows, '2027-03-05', '2027-03-03T10:00:00');
