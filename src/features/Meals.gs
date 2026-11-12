@@ -589,7 +589,7 @@ function listStudentStatus(studentId, ymd) {
   var canCancel = function (c) {
     if (c.source !== 'F6' || String(c.linked_change_id || '') || c.value !== '퇴실' || String(c.status || '유효') !== '유효') return false;
     if (isAdmin) return true;
-    if (c.effective_date < today || (String(c.reason || '') === '2OUT 퇴실' && String(c.memo || '').indexOf('[2OUT]') === 0) || user.roles.indexOf('hall_teacher') < 0) return false;
+    if (c.effective_date < today || inoutIsDismissRow_(c) || user.roles.indexOf('hall_teacher') < 0) return false;
     var term = ymdIsValid_(String(c.effective_date)) ? foodTermFor_(studentId, c.effective_date, termsAll, enrAll) : null;
     return !!term && enrAll.some(function (e) { return e.term_id === term.id && e.student_id === studentId && normalizeEmail_(e.teacher_email) === user.email; });
   };

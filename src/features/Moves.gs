@@ -47,8 +47,9 @@ function inoutValidate_(input, ctx) {
   var meals = null;
   if (type === '학사 입실' && input.meals && typeof input.meals === 'object') {
     var bk = String(input.meals['조식'] || ''), dn = String(input.meals['석식'] || '');
-    if (['실시', '미실시'].indexOf(bk) < 0) err('meals', '재입실 조식을 골라 주세요(실시 또는 미실시).');
-    else if (['학사 석식', '일반 석식', '미실시'].indexOf(dn) < 0) err('meals', '재입실 석식을 골라 주세요.');
+    // ''(없음)은 퇴실 전에 그 급식 값이 없던 학생의 기본값이다(inoutCheck_가 기본값과 맞는지 본다)
+    if (['', '실시', '미실시'].indexOf(bk) < 0) err('meals', '재입실 조식을 골라 주세요(실시 또는 미실시).');
+    else if (['', '학사 석식', '일반 석식', '미실시'].indexOf(dn) < 0) err('meals', '재입실 석식을 골라 주세요.');
     else meals = { '조식': bk, '석식': dn };
   }
   var reason = String(input.reason || '').trim();
@@ -79,8 +80,8 @@ function inoutReentryDefaults_(changes, studentId, ymd) {
   if (!leave) return null;
   var before = ymdAddDays_(leave.effective_date, -1), mine = (changes || []).filter(function (c) { return c.student_id === studentId; });
   var bk = statusOn_(mine, studentId, '조식', before), dn = statusOn_(mine, studentId, '석식', before);
-  // 퇴실 전에 값이 없었으면(급식을 안 먹던 학생) 선택지 안의 '미실시'로 채운다 — 화면은 늘 고른 값을 명시해 보낸다
-  return { leaveDate: leave.effective_date, meals: { '조식': bk === '실시' ? '실시' : '미실시', '석식': dn === '학사 석식' || dn === '일반 석식' ? dn : '미실시' } };
+  // 퇴실 전에 그 급식 값이 없던 학생은 ''(없음) 그대로 — '미실시'로 바꾸면 쓸데없는 미실시 행이 생긴다
+  return { leaveDate: leave.effective_date, meals: { '조식': bk || '', '석식': dn || '' } };
 }
 
 /** 확인창용 한 줄들(순수): 날짜를 크게 보이는 lead와 바뀌는 것 목록. 취소·되살림은 개수가 아니라 어느 신청인지 쓴다 */
@@ -130,7 +131,15 @@ function inoutCheck_(input, d, dismiss) {
   var rec = v.rec;
   var term = foodTermFor_(rec.studentId, rec.effectiveDate, d.terms, d.enrollments);   // 급식 신청과 같은 기간 판정(결정 60 보충)
   var errors = foodTermErrors_(rec.studentId, rec.effectiveDate, term, d.terms, d.enrollments, today, '입퇴실');
-  if (!errors.length && rec.type === '학사 입실' && !rec.meals && inoutLastLeave_(d.changes, rec.studentId, rec.effectiveDate)) errors = [{ field: 'meals', message: '재입실 급식(조식·석식)을 확인해 주세요.' }];
+  if (!errors.length && rec.type === '학사 입실') {
+    var re = inoutReentryDefaults_(d.changes, rec.studentId, rec.effectiveDate);   // 퇴실 전 급식 값(없었으면 '')
+    if (re && !rec.meals) errors = [{ field: 'meals', message: '재입실 급식(조식·석식)을 확인해 주세요.' }];
+    else if (re) ['조식', '석식'].forEach(function (it) {
+      // 퇴실 전에 값이 없던(급식을 안 하던) 학생은 '미실시' 행을 새로 쓰지 않는다. 값이 있던 항목을 비워 보내는 것은 거부
+      if (re.meals[it] === '' && rec.meals[it] === '미실시') rec.meals[it] = '';
+      if (rec.meals[it] === '' && re.meals[it] !== '') errors = [{ field: 'meals', message: '재입실 ' + it + '을 골라 주세요.' }];
+    });
+  }
   return { errors: errors, rec: rec, term: term, eff: rec.effectiveDate, permYmd: foodPermYmd_(term, rec.effectiveDate) };
 }
 
@@ -283,6 +292,11 @@ function inoutUndoCheck_(headId) {
   return { head: head, plan: plan, user: user, changes: changes };
 }
 
+/** 취소 경고 속 날짜를 요일 없이 "3월 8일"로(경고가 이미 괄호 안이라 겹괄호가 되지 않게) */
+function inoutKoShort_(text) {
+  return String(text).replace(/\d{4}-(\d{2})-(\d{2})/g, function (all, m, d) { return ymdIsValid_(all) ? Number(m) + '월 ' + Number(d) + '일' : all; });
+}
+
 function inoutUndoSignature_(plan) {
   return JSON.stringify({ c: plan.toCancel.map(function (c) { return c.id; }).sort(), s: plan.toRestore.map(function (c) { return c.id; }).sort(), w: plan.warnings });
 }
@@ -303,7 +317,7 @@ function previewCancelMove(headId) {
   if (c.already) return { ok: false, errors: [{ field: '', message: '이미 취소된 기록입니다.' }] };
   if (c.error) return { ok: false, errors: [{ field: '', message: c.error }] };
   var lead = foodDateKo_(c.head.effective_date) + ' ' + foodChangeLabel_(c.head) + ' 신청을 취소합니다';
-  return { ok: true, errors: [], lead: lead, lines: inoutUndoLines_(c.head, c.plan, c.changes), warnings: c.plan.warnings.map(inoutKo_), expect: inoutUndoSignature_(c.plan) };
+  return { ok: true, errors: [], lead: lead, lines: inoutUndoLines_(c.head, c.plan, c.changes), warnings: c.plan.warnings.map(inoutKoShort_), expect: inoutUndoSignature_(c.plan) };
 }
 
 /**
@@ -326,6 +340,6 @@ function cancelMove(headId, reason, expect) {
     c.plan.toCancel.forEach(function (x) { if (x.id !== c.head.id) patches.push({ id: x.id, patch: { status: '취소', cancel_reason: tag(x) } }); });
     c.plan.toRestore.forEach(function (x) { patches.push({ id: x.id, patch: { status: '유효', cancel_reason: '' } }); });
     bulkUpdateRecords_('status_changes', patches, c.user.email);
-    return { ok: true, cancelCount: c.plan.toCancel.length, restoreCount: c.plan.toRestore.length, warnings: c.plan.warnings.map(inoutKo_) };
+    return { ok: true, cancelCount: c.plan.toCancel.length, restoreCount: c.plan.toRestore.length, warnings: c.plan.warnings.map(inoutKoShort_) };
   });
 }

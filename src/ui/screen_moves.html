@@ -339,8 +339,9 @@
         } else if (type === '학사 입실' && mctx && mctx.reentry) {
           // 재입실 급식: 기본값은 퇴실 전 값. 고른 값은 늘 서버로 명시해서 보낸다(확인 시트에도 보인다)
           if (!meals) meals = { '조식': mctx.reentry.meals['조식'], '석식': mctx.reentry.meals['석식'] };
-          var bkSeg = UI.segmented({ label: '조식', value: meals['조식'], options: [{ value: '실시', label: '실시' }, { value: '미실시', label: '미실시' }], onchange: function (v) { meals['조식'] = v; refresh(); } });
-          var dnSeg = UI.segmented({ label: '석식', value: meals['석식'], options: [{ value: '학사 석식', label: '학사 석식' }, { value: '일반 석식', label: '일반 석식' }, { value: '미실시', label: '미실시' }], onchange: function (v) { meals['석식'] = v; refresh(); } });
+          var none = function (k) { return mctx.reentry.meals[k] === '' ? [{ value: '', label: '없음' }] : []; };   // 퇴실 전에 값이 없던 급식은 '없음'이 기본(쓰지 않는다)
+          var bkSeg = UI.segmented({ label: '조식', value: meals['조식'], options: none('조식').concat([{ value: '실시', label: '실시' }, { value: '미실시', label: '미실시' }]), onchange: function (v) { meals['조식'] = v; refresh(); } });
+          var dnSeg = UI.segmented({ label: '석식', value: meals['석식'], options: none('석식').concat([{ value: '학사 석식', label: '학사 석식' }, { value: '일반 석식', label: '일반 석식' }, { value: '미실시', label: '미실시' }]), onchange: function (v) { meals['석식'] = v; refresh(); } });
           extra.appendChild(el('div', { class: 'card' }, [el('h2', { text: '재입실 급식' }),
             el('div', { class: 'muted', style: 'margin-bottom:8px;word-break:keep-all', text: '기본값은 ' + mctx.reentry.leaveKo + ' 퇴실 전날의 값입니다. 재입실일부터 적용됩니다.' }),
             UI.field('조식', bkSeg), UI.field('석식', dnSeg),

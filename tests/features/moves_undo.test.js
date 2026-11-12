@@ -137,7 +137,7 @@ test('재입실이 있는 퇴실을 취소하면 재입실·기숙사 입실 기
   const ctx = env.call(ADMIN, 'getMoveContext', dorm, '2027-03-08');
   saveOk(env, ADMIN, input(dorm, '학사 입실', '2027-03-03T15:30:00', '2027-03-08', { meals: ctx.reentry.meals }));
   const c = cancel(env, ADMIN, leave.id, '퇴실 자체가 잘못');
-  assert.ok(c.p.warnings.some((w) => /재입실 기록\(.*\)도 함께 취소됩니다/.test(w)), JSON.stringify(c.p.warnings));
+  assert.ok(c.p.warnings.some((w) => /재입실 기록\(\d+월 \d+일\)도 함께 취소됩니다/.test(w)), JSON.stringify(c.p.warnings));
   assert.ok(c.p.warnings.every((w) => !/\d{4}-\d{2}-\d{2}/.test(w)), '경고 속 날짜는 월·일로');
   assert.strictEqual(c.r.ok, true, JSON.stringify(c.r));
   assert.strictEqual(snap(env, dorm), before);
@@ -191,4 +191,31 @@ test('학생 기록의 canCancelMove(버튼 표시): 적용일 전엔 담당교�
   assert.deepStrictEqual(can(HALL), []); assert.deepStrictEqual(can(ADMIN), [r.id]);
   assert.strictEqual(cancel(env, ADMIN, r.id).r.ok, true);
   assert.deepStrictEqual(can(ADMIN), [], '취소된 행에는 버튼이 없다');
+});
+
+test('퇴실 전 조식 값이 없던 학생의 재입실: 기본값은 조식 없음(\'\'), 조식 미실시 행을 쓰지 않고 확인에도 조식 줄이 없다. 서버도 \'미실시\'가 와도 뺀다', () => {
+  const env = makeEnv();
+  const own = env.rows('enrollments').filter((e) => e.term_id === term2(env).id && e.teacher_email === HALL).map((e) => e.student_id);
+  const sid = own.find((s) => !isDorm(env, s) && valueOn(env, s, '조식', '2027-03-04') === '');
+  assert.ok(sid, '시드에 조식 값이 없는 비기숙 학생이 있어야 한다');
+  const bk = (id) => rowsOf(env, id).filter((r) => r.item === '조식').length;
+  saveOk(env, HALL, input(sid, '학사 퇴실', '2027-03-03T15:00:00', '2027-03-05'));
+  const ctx = env.call(HALL, 'getMoveContext', sid, '2027-03-08');
+  assert.strictEqual(ctx.reentry.meals['조식'], '', '기본값은 없음');
+  const n0 = bk(sid);
+  const base = input(sid, '학사 입실', '2027-03-03T15:30:00', '2027-03-08');
+  const p = prev(env, HALL, Object.assign({ meals: ctx.reentry.meals }, base));
+  assert.strictEqual(p.ok, true, JSON.stringify(p));
+  assert.ok(!p.lines.some((l) => /조식/.test(l)), '조식 줄이 없다: ' + JSON.stringify(p.lines));
+  // 화면이 '미실시'를 보내도 서버가 기본값(없음)과 같게 뺀다
+  const p2 = prev(env, HALL, Object.assign({ meals: { '조식': '미실시', '석식': ctx.reentry.meals['석식'] } }, base));
+  assert.ok(!p2.lines.some((l) => /조식/.test(l)), '서버가 미실시를 뺀다');
+  saveOk(env, HALL, Object.assign({ meals: ctx.reentry.meals }, base));
+  assert.strictEqual(bk(sid), n0, '조식 행이 새로 쓰이지 않는다');
+  assert.strictEqual(valueOn(env, sid, '조식', '2027-03-09'), '');
+  // 값이 있던 항목을 비워 보내는 것은 거부
+  const env2 = makeEnv(); const d2 = pick(env2).dorm;
+  saveOk(env2, HALL, input(d2, '학사 및 기숙사 퇴실', '2027-03-03T15:00:00', '2027-03-05'));
+  const bad = prev(env2, HALL, input(d2, '학사 입실', '2027-03-03T15:30:00', '2027-03-08', { meals: { '조식': '', '석식': '학사 석식' } }));
+  assert.strictEqual(bad.ok, false); assert.ok(bad.errors.some((e) => e.field === 'meals'));
 });
