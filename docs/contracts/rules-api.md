@@ -136,7 +136,7 @@ function mealEffectiveDate_(kind, requestedAt, opts)
 function mealChangeKind_(item, fromValue, toValue)
         // → 'none'|'initial'|'start'|'to_general'|'stop'. fromValue = 새 행 적용일에 실제로 적용되는 값(R6)
 function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts)   // F7 신청 하나의 계획(R6 추가)
-        // opts = {cutoff, leaveDate, today(필수), effectiveDate, effectiveRule:'manual'|'entry_date'(R10)}
+        // opts = {cutoff, leaveDate, today(필수), effectiveDate, effectiveRule:'manual'|'entry_date'(R10), entry(재입실일 경계, Y)}
         //   → {kind, date, rule, autoDate(R10), from, blocked, superseded, supersededBy:[id], toCancel:[…], followUps:[…], warnings:[]}
 function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)     // 새 행이 덮어야 할 행(R6 추가)
         // opts = {source:'F7'|'F6', requestedAt, newValue} → [{id, effective_date, value}]
@@ -303,7 +303,8 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId)
 - 되살림의 덮임(`moveRestorable_`·`moveUndoPlan_`)에서도 재입실 급식 행은 그 퇴실 기록 전에 낸, 재입실일 뒤에 적용되는 신청을 덮지 않는다(superseded 예외와 같은 `mealReentryKeeps_`).
 - 되살림의 덮임·순서는 신청 일시가 같으면 나중에 저장된 행(`created_at`)을 더 새 신청으로 본다(`moveNewer_`, `statusOn_` 동점 규칙과 같다).
 - **알려진 지름길(총괄, followups):** 퇴실 기록과 재입실 기록 사이에 신청한 신청이 퇴실 전 대기 신청을 취소·가린 효과는 입력 순서에 따라 남거나 사라질 수 있다(재입실 화면에서 대기 신청을 확인). 최소 재현은 `move.test.js` '(알려진 지름길)' 시험(지금 다름을 단언 — 고치면 같다로 바꾼다). 오라클 seed 1..6000 중 9개(884·1560·1698·3383·3459·3537·4583·4850·5246)가 이 경우다(기본 400은 통과).
-- **알려진 지름길 Y(총괄 결정 (A) 미반영, followups):** 재입실 기록 뒤·퇴실일 전에 적용되는 신청이 있으면 재입실 뒤 값이 입력 순서에 따라 다르다(재입실 급식 행이 superseded되면 퇴실의 F6 중단 행만 남는다). (A) '재입실 뒤는 재입실 값'을 행 하나로 맞추려면 퇴실·재입실을 걸치는 신청을 재입실일에서 나눠 써야 해서 이번 PR에 넣지 않았다. `move.test.js` '(알려진 지름길 Y)' 시험이 지금 값을 단언한다.
+- **재입실일 경계(지름길 Y 고침, 결정 56 보충, 총괄 (A)):** (재)입실 급식 행 = F6 학사·기숙사 입실 대표에 연결된 조식·석식 행(`mealEntryRow_`). 재입실일 E보다 **먼저 적용되는** 신청은 신청 일시·입력 순서와 상관없이 이 행을 ① 가리지 않고(`movePlan_` 학사 입실 급식·기숙사 입실 조식이 `mealPlanChange_`에 `opts.entry: true` — 적용일 < E인 더 새 신청은 superseded 판정에서 뺀다) ② 취소하지 않고(`mealPendingToCancel_`이 이 행은 대기 신청으로 보지 않는다) ③ E 뒤로 이어 쓰지 않는다(`followUps`의 재입실일 이어 쓰기는 그 날 살아 있는 (재)입실 급식 행이 있으면 멈춘다 — 명단 업로드 입실처럼 급식 행이 없는 입실에는 지금처럼 이어 쓴다). 적용일 ≥ E인 신청은 지금 그대로(신청 일시가 늦으면 이긴다). 퇴실 기간 중 적용 신청도 같다(Q2). 기본값·명시값을 구분하지 않는다 — **전제: C18b가 재입실 저장 때 늘 `move.meals`를 명시한다**(Q4). 퇴실 취소(결정 59)는 재입실 행을 함께 취소하므로 걸치는 신청이 그대로 끝없이 적용된다.
+- **알려진 지름길 Y2(총괄 (A), followups):** 걸치는 신청(적용일 < E)도 학생 자신의 더 옛 대기 신청(적용일 ≥ E)은 지금처럼 '새 신청으로 대체'로 취소하거나 가린다(재입실 급식 행만 보호). 그래서 재입실 기록 뒤에 학생 신청 셋 이상이 대체·가림으로 얽히면 재입실 뒤 값이 입력 순서를 따를 수 있다 — 대체한 신청이 늦게 입력돼 superseded면 옛 신청이 살아남고(seed 2339), 먼저 입력돼 옛 신청을 취소한 뒤 그 자신이 취소되면 옛 신청은 돌아오지 않는다(seed 353 꼴). 오라클 seed 1..6000 실패 13개 = 지름길 Q 9개(884·1560·1698·3383·3459·3537·4583·4850·5246) + Y2 4개(2339·2588·4161·5374), 두 시간대 같음.
 - **알려진 한계:** 따로 입력한 '기숙사 퇴실'과 같은 날 따로 입력한 학사 퇴실이 있을 때 기숙사 퇴실만 취소하면, 학사 퇴실은 남고 기숙사는 입실로 돌아온다(경고 없음 — 학사 퇴실도 취소하거나 고쳐 입력한다). '학사 및 기숙사 퇴실'을 취소했는데 그 뒤에 따로 입력한 학사 퇴실이 있으면(재입실 없이) 기숙사만 입실로 돌아오는 구간(학사 퇴실·기숙사 입실)이 생길 수 있다 — 그 학사 퇴실도 취소하거나 고쳐 입력한다.
 - 재입실 기본 급식(`move.meals` 없음)은 직전 퇴실 전날 값 — 입력된 신청서만 반영한다(종이로만 있는 신청은 모른다). C18b는 늘 `meals`를 명시해 보낸다.
 - `mealReentryKeeps_`(superseded·되살림 덮임 예외)는 학사 재입실 급식 행과 기숙사 입실 조식 행 모두에 쓴다 — 그 입실 직전 **같은 항목** 퇴실의 기록 전에 낸 신청을 가리지 않는다(결정 W 보충).

@@ -82,12 +82,15 @@ function simulate(seed, steps) {
     const newest = (list) => list.reduce((t, i) => (!t || i.req > t.req || (i.req === t.req && i.seq > t.seq) ? i : t), null);
     const R = newest(live.filter((i) => i.reentry));
     if (!R) return newest(live);
-    const after = newest(live.filter((i) => !i.reentry && i.req > R.req));
-    if (after) return after;
     // 퇴실 정리가 끊은 학사생 값(결정 56: 재입실이 되살리지 않는다). 재입실을 입력한 뒤에 넣은 재입실일 이후 신청은 끊기지 않았다
     const cut = (i) => isHall(i.item, i.value) && i.eff >= (i.item === '조식' ? R.reentry.L : R.reentry.cutD()) && (i.eff < R.eff || i.seq < R.seq);
     // 퇴실 기록 전에 낸 신청 중 아직 살아 있는 것(다른 값의 더 새 의도가 그 전에 적용되지 않음, 퇴실 정리가 끊지 않음) — 그날까지 적용된 가장 새것
     const alive = (i) => !intents.some((j) => j !== i && j.item === i.item && j.value !== i.value && !j.reentry && !cut(j) && j.req > i.req && j.eff <= i.eff);
+    // 재입실일 경계(지름길 Y, 결정 56 보충): 재입실일보다 먼저 적용되는 의도는 신청 일시가 늦어도 재입실 뒤에 R을 이기지 못한다.
+    // 그런 의도도 학생 자신의 더 옛 대기 의도는 거둔다(alive — 더 새 신청이 대기 신청을 대체, 재입실일 뒤에 적용되는 것이어도)
+    // 알려진 지름길(Y2): 거둔 의도가 나중에 가려지거나 취소돼도 거둔 효과가 남는지는 입력 순서를 따른다(seed 2339·2588·4161·5374)
+    const after = newest(live.filter((i) => !i.reentry && i.req > R.req && i.eff >= R.eff && alive(i)));
+    if (after) return after;
     // 살아 있는 것끼리는 시트와 같이 적용일이 늦은 것(같으면 신청 일시) — 같은 값 행은 서로 취소하지 않아 신청 순서와 적용일 순서가 다를 수 있다
     // 퇴실 기록 뒤·재입실 전 신청도 재입실 값과 같으면 재입실이 취소하지 않아 남는다(같은 값은 덮을 필요가 없다)
     const pre = live.filter((i) => !i.reentry && (i.req < R.reentry.t || (i.req < R.req && i.value === R.value)) && !cut(i) && alive(i))
