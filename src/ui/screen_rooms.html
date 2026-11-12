@@ -1,0 +1,238 @@
+<script>
+  /**
+   * F8 방 배정(C23). 서버(Rooms.gs)가 센 숫자·위반만 보인다. 두 탭: [방 배정](관리자·학사 교사) · [정원 현황](room.view 모두).
+   * 고친 배정은 이 화면이 들고 있다가 매번 previewRoomPlan으로 다시 계산하고, [저장]에서 한 번에 saveRoomAssignments로 보낸다(정원 초과·성별은 서버가 막는다).
+   */
+  function renderScreen(root) {
+    var tab = window.SCREEN_TAB === 'stats' ? 'stats' : 'board';
+    var body = el('div'), tabsBox = el('div'), dispose = null, canEdit = false;
+    root.appendChild(tabsBox); root.appendChild(body);
+    function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
+    function draw() {
+      if (dispose) { dispose(); dispose = null; }
+      clear(body); clear(tabsBox);
+      if (canEdit) tabsBox.appendChild(el('div', { class: 'card' }, [UI.segmented({ label: '화면', value: tab, options: [{ value: 'board', label: '방 배정' }, { value: 'stats', label: '정원 현황' }],
+        onchange: function (v) { tab = v; draw(); } })]));
+      else tab = 'stats';
+      dispose = tab === 'stats' ? renderStats(body) : renderBoard(body);
+    }
+    // 이름 없이 정원 숫자만 받는 가벼운 호출로 보는 사람이 방을 고칠 수 있는지 먼저 안다
+    call('getRoomStats', '').then(function (s) { canEdit = !!s.canEdit; draw(); }).catch(function (err) { clear(body); showError(body, err); });
+  }
+
+  /** [정원 현황] 탭: 층·성별 줄 + 남·여 합계 + 전체, 열은 정원·입실·빈 자리·학년별 입실 */
+  function renderStats(root) {
+    var alive = true, seq = 0, box = el('div');
+    root.appendChild(box);
+    function load() {
+      var mine = ++seq;
+      clear(box); box.appendChild(el('div', { class: 'muted', text: '불러오는 중…' }));
+      call('getRoomStats', '').then(function (s) {
+        if (!alive || mine !== seq) return;
+        clear(box);
+        var all = { capacity: s.male.capacity + s.female.capacity, count: s.male.count + s.female.count, vacant: s.male.vacant + s.female.vacant };
+        box.appendChild(el('div', { class: 'muted', style: 'margin-bottom:4px', text: s.term.name + ' · 기숙 ' + s.dormCount + '명' }));
+        box.appendChild(el('div', { class: 'stats', style: 'margin:4px 0 12px' }, [statBox(all.capacity, '정원'), statBox(all.count, '입실'), statBox(all.vacant, '빈 자리')]));
+        var g = function (o, k) { return (o.byGrade && o.byGrade[k]) || 0; };
+        var row = function (name, o, cls) {
+          return el('tr', { class: cls || '' }, [el('th', { scope: 'row', text: name })].concat([o.capacity, o.count, o.vacant, g(o, 1), g(o, 2), g(o, 3)].map(function (v) { return el('td', { text: String(v) }); })));
+        };
+        var tb = el('tbody', {}, s.floors.map(function (f) { return row(f.floor + '층 ' + f.gender, f); }));
+        tb.appendChild(row('남 합계', s.male, 'total')); tb.appendChild(row('여 합계', s.female, 'total'));
+        var allBy = {}; [1, 2, 3].forEach(function (k) { allBy[k] = g(s.male, k) + g(s.female, k); });
+        tb.appendChild(row('전체', { capacity: all.capacity, count: all.count, vacant: all.vacant, byGrade: allBy }, 'total'));
+        var th = el('thead', {}, [el('tr', {}, ['층', '정원', '입실', '빈 자리', '1학년', '2학년', '3학년'].map(function (h) { return el('th', { scope: 'col', text: h }); }))]);
+        box.appendChild(el('div', { class: 'tablewrap' }, [el('table', { class: 'data compact' }, [th, tb])]));
+        box.appendChild(el('div', { class: 'muted', style: 'margin:-4px 0 12px', text: '표는 옆으로 밀 수 있습니다(첫 열은 고정).' }));
+        box.appendChild(el('div', { class: 'notice info', style: 'word-break:keep-all', text: '입실은 기숙사 상태가 "입실"이고 방이 배정된 학생입니다. 기숙사 퇴실 적용일부터 그 자리는 빈 자리로 셉니다.' }
+          ));
+        if (s.unassignedCount) box.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: '방이 배정되지 않은 기숙사생이 ' + s.unassignedCount + '명 있습니다.' }));
+      }).catch(function (err) { if (!alive || mine !== seq) return; clear(box); showError(box, err); box.appendChild(el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:8px', text: '다시 불러오기', onclick: load })); });
+    }
+    load();
+    return function () { alive = false; seq++; };
+  }
+
+  /** [방 배정] 탭 */
+  function renderBoard(root) {
+    var alive = true, seq = 0, busy = false;
+    var data = null, work = null, view = null, base = '', floor = '', selected = [], draftInfo = null, dirty = false, bar = null;
+    var head = el('div'), main = el('div');
+    root.appendChild(head); root.appendChild(main);
+    function removeBar() { if (bar) { bar.remove(); bar = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); } }
+    function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
+    var byId = function (id) { return (view.rooms || []).filter(function (r) { return r.id === id; })[0]; };
+    var roomLabel = function (r) { return r.floor + '층 ' + r.roomNo + '호'; };
+    var findMember = function (sid) {
+      var out = null;
+      view.rooms.forEach(function (r) { r.members.forEach(function (m) { if (m.id === sid) out = { room: r, member: m }; }); });
+      if (!out) (view.unassigned || []).forEach(function (u) { if (u.id === sid) out = { room: null, member: u }; });
+      return out;
+    };
+
+    function load() {
+      var mine = ++seq; busy = false;
+      call('getRoomData', '').then(function (d) {
+        if (!alive || mine !== seq) return;
+        data = d; base = d.token; view = d; work = flat(d); selected = []; draftInfo = null; dirty = false;
+        if (!floor || !d.rooms.some(function (r) { return r.floor + '|' + r.gender === floor; })) { var f0 = d.rooms[0]; floor = f0 ? f0.floor + '|' + f0.gender : ''; }
+        draw();
+      }).catch(function (err) { if (!alive || mine !== seq) return; clear(main); showError(main, err); main.appendChild(el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:8px', text: '다시 불러오기', onclick: load })); });
+    }
+    function flat(v) { var out = []; v.rooms.forEach(function (r) { r.members.forEach(function (m) { out.push({ room_id: r.id, student_id: m.id }); }); }); return out; }
+
+    /** 고친 배정을 서버로 다시 계산 — 늦게 온 응답은 버린다 */
+    function recalc() {
+      var mine = ++seq; busy = true; drawBar();
+      call('previewRoomPlan', data.term.id, work).then(function (p) {
+        if (!alive || mine !== seq) return;
+        busy = false;
+        if (!p.ok) { fail(new Error((p.errors && p.errors[0] && p.errors[0].message) || '계산하지 못했습니다.')); draw(); return; }
+        view = Object.assign({}, data, { rooms: p.rooms, violations: p.violations, unassigned: p.unassigned, board: p.board, changed: p.changed, blocked: p.blocked });
+        draw();
+      }).catch(function (err) { if (!alive || mine !== seq) return; busy = false; fail(err); draw(); });
+    }
+
+    function draw() {
+      clear(head); clear(main); removeBar();
+      if (!data.canEdit) { head.appendChild(el('div', { class: 'notice info', text: '이 기간의 방 배정은 볼 수만 있습니다.' })); }
+      head.appendChild(el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px' }, [
+        el('span', { class: 'muted', style: 'word-break:keep-all', text: data.term.name + ' · 기숙 ' + data.dormCount + '명(남 ' + view.board.male.count + ' · 여 ' + view.board.female.count + '명 배정)' }),
+        dirty ? (function () { var a = { type: 'button', class: 'btn secondary', style: 'flex:0 0 auto;white-space:nowrap', text: '되돌리기', onclick: load }; if (busy) a.disabled = 'disabled'; return el('button', a); })() : null]));
+      if (draftInfo) {
+        head.appendChild(el('div', { class: 'stats', style: 'margin-bottom:8px' }, [statBox(draftInfo.changed, '바뀌는 학생'), statBox(view.violations.length, '규칙 위반')]));
+        if (!view.violations.length) head.appendChild(el('div', { class: 'notice ok', text: '규칙 위반이 없습니다. 저장하면 지금 배정은 "취소"로 남고 새 배정이 생깁니다.' }));
+        if (draftInfo.unplaced && draftInfo.unplaced.length) head.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: '들어갈 방이 없는 학생 ' + draftInfo.unplaced.length + '명: ' + draftInfo.unplaced.join(', ') }));
+      } else if (dirty) head.appendChild(el('div', { class: 'stats', style: 'margin-bottom:8px' }, [statBox(view.changed || 0, '바뀌는 학생'), statBox(view.violations.length, '규칙 위반')]));
+      // 층 칩(층 + 성별)
+      var floors = [];
+      view.rooms.forEach(function (r) { var k = r.floor + '|' + r.gender; if (floors.indexOf(k) < 0) floors.push(k); });
+      head.appendChild(el('div', { class: 'chips' }, floors.map(function (k) {
+        var p = k.split('|');
+        return el('button', { type: 'button', class: 'chip' + (k === floor ? ' on' : ''), text: p[0] + '층 ' + p[1], onclick: function () { floor = k; draw(); } });
+      })));
+      var bad = {};
+      view.violations.forEach(function (v) { (bad[v.roomId] = bad[v.roomId] || []).push(v); });
+      var cards = view.rooms.filter(function (r) { return r.floor + '|' + r.gender === floor; }).map(function (r) { return roomCard(r, bad[r.id] || []); });
+      main.appendChild(el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:12px' }, cards));
+      if (view.unassigned && view.unassigned.length) {
+        var un = el('div', { class: 'card' }, [el('h2', { text: '방 배정 안 된 기숙사생 ' + view.unassigned.length + '명' }),
+          el('div', { class: 'chips', style: 'margin:0' }, view.unassigned.map(function (u) { return chip(u, false); }))]);
+        main.appendChild(un);
+      }
+      if (view.violations.length) {
+        main.appendChild(el('div', { class: 'card' }, [el('h2', { text: '규칙 위반 ' + view.violations.length + '개' }), el('ul', { class: 'list' }, view.violations.map(function (v) {
+          return el('li', {}, [el('button', { type: 'button', class: 'chip bad', style: 'width:100%;border-radius:var(--radius-sm);text-align:left;word-break:keep-all', text: v.text + (v.blocking ? ' — 저장할 수 없습니다' : ''),
+            onclick: function () { var r = byId(v.roomId); if (r) { floor = r.floor + '|' + r.gender; draw(); } } })]);
+        }))]));
+      }
+      if (view.blocked) main.appendChild(el('div', { class: 'error', style: 'word-break:keep-all', text: '정원 초과나 성별이 다른 방이 있으면 저장할 수 없습니다. 학생을 옮겨 주세요.' }));
+      drawBar();
+    }
+
+    function chip(m, isBad) {
+      var on = selected.indexOf(m.id) >= 0;
+      var attrs = { type: 'button', class: 'chip' + (isBad ? ' bad' : '') + (on ? ' on' : ''), style: 'word-break:keep-all', text: m.display, onclick: function () { pick(m.id); } };
+      if (!data.canEdit) attrs.disabled = 'disabled';   // el()는 null도 속성으로 넣으므로 필요할 때만 단다
+      return el('button', attrs);
+    }
+    function roomCard(r, issues) {
+      var over = r.count > r.capacity;
+      var headRow = el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px' }, [el('b', { text: roomLabel(r) }),
+        el('span', { class: 'muted', text: r.gender + ' · ' + r.count + '/' + r.capacity + '명' }), over ? UI.statusPill('out2', '정원 초과') : null]);
+      var chips = el('div', { class: 'chips', style: 'margin:0' }, r.members.map(function (m) { return chip(m, m.bad); }));
+      for (var i = r.count; i < r.capacity; i++) chips.appendChild(el('button', { type: 'button', class: 'chip', disabled: 'disabled', text: '빈 자리' }));
+      var c = el('div', { class: 'card', style: 'margin:0' }, [headRow, chips]);
+      issues.forEach(function (v) { c.appendChild(el('div', { class: 'error', style: 'margin-top:8px;word-break:keep-all', text: v.text.replace(roomLabel(r) + ' · ', '') })); });
+      if (issues.length) c.style.border = '3px solid var(--warn)';
+      return c;
+    }
+
+    function pick(sid) {
+      if (!data.canEdit || busy) return;
+      var i = selected.indexOf(sid);
+      if (i >= 0) { selected.splice(i, 1); draw(); return; }
+      selected.push(sid);
+      if (selected.length < 2) { draw(); return; }
+      var a = findMember(selected[0]), b = findMember(selected[1]);
+      selected = [];
+      if (!a || !b) { draw(); return; }
+      if (!a.room || !b.room) { UI.toast('방이 없는 학생과는 맞바꿀 수 없습니다. 한 명씩 [방으로 옮기기]를 써 주세요.', { kind: 'warn', ms: 4000 }); draw(); return; }
+      if (a.room.id === b.room.id) { UI.toast('같은 방의 두 학생입니다.', { kind: 'warn' }); draw(); return; }
+      if (a.room.gender !== b.room.gender) { UI.toast('성별이 다른 방과는 맞바꿀 수 없습니다.', { kind: 'warn', ms: 4000 }); draw(); return; }
+      draw();
+      UI.confirmSheet({ title: '두 학생의 방을 맞바꿀까요?', lead: roomLabel(a.room) + ' ' + a.member.display + ' ⇄ ' + roomLabel(b.room) + ' ' + b.member.display,
+        lines: ['두 방의 인원은 그대로입니다.', '다시 계산한 규칙 위반은 저장 전에 보여 드립니다.'], confirmText: '맞바꾸기', onconfirm: function () {
+          work = work.map(function (x) { return x.student_id === a.member.id ? { room_id: b.room.id, student_id: x.student_id } : x.student_id === b.member.id ? { room_id: a.room.id, student_id: x.student_id } : x; });
+          dirty = true; draftInfo = null; recalc();
+        } });
+    }
+
+    function moveSheet() {
+      if (selected.length !== 1) return;
+      var m = findMember(selected[0]);
+      if (!m) return;
+      var gender = m.room ? m.room.gender : m.member.gender;
+      var list = el('ul', { class: 'picker-list' });
+      var sheet;
+      view.rooms.filter(function (r) { return r.gender === gender && (!m.room || r.id !== m.room.id); }).forEach(function (r) {
+        var full = r.count >= r.capacity;
+        list.appendChild(el('li', {}, [el('button', { type: 'button', class: 'picker-item', onclick: function () {
+          sheet.close();
+          work = work.filter(function (x) { return x.student_id !== m.member.id; }).concat([{ room_id: r.id, student_id: m.member.id }]);
+          selected = []; dirty = true; draftInfo = null; floor = r.floor + '|' + r.gender; recalc();
+        } }, [el('span', { style: 'word-break:keep-all', text: roomLabel(r) + ' · ' + r.count + '/' + r.capacity + '명' }),
+          full ? el('b', { style: 'color:var(--warn);white-space:nowrap', text: '⚠ 정원 초과' }) : UI.statusPill('confirmed', (r.capacity - r.count) + '자리 남음')])]));
+      });
+      sheet = UI.bottomSheet({ title: m.member.display + '을(를) 어느 방으로 옮길까요?', content: el('div', {}, [el('div', { class: 'muted', style: 'margin-bottom:8px', text: m.room ? '지금 ' + roomLabel(m.room) + ' (' + gender + ')' : '지금 방 없음 (' + gender + ')' }), list]),
+        actions: [{ text: '취소', kind: 'secondary', onclick: function () { sheet.close(); } }] });
+      sheet.open();
+    }
+
+    function makeDraft() {
+      if (busy) return;
+      var go = function () {
+        busy = true; drawBar();
+        var mine = ++seq;
+        call('previewRoomDraft', data.term.id, Math.floor(Math.random() * 1000000000)).then(function (p) {
+          if (!alive || mine !== seq) return;
+          busy = false;
+          if (!p.ok) { fail(new Error((p.errors && p.errors[0] && p.errors[0].message) || '초안을 만들지 못했습니다.')); draw(); return; }
+          work = p.assignments; selected = []; dirty = true;
+          view = Object.assign({}, data, { rooms: p.rooms, violations: p.violations, unassigned: p.unassigned, board: p.board, changed: p.changed, blocked: p.violations.some(function (v) { return v.blocking; }) });
+          draftInfo = { changed: p.changed, unplaced: p.unplaced };
+          draw();
+        }).catch(function (err) { if (!alive || mine !== seq) return; busy = false; fail(err); draw(); });
+      };
+      if (dirty) UI.confirmSheet({ title: '손으로 고친 것을 버리고 초안을 만들까요?', lead: '지금 고친 배정은 사라집니다', lines: ['초안은 저장 전에는 어디에도 쓰이지 않습니다.'], confirmText: '초안 만들기', onconfirm: go });
+      else go();
+    }
+
+    function onSave() {
+      if (busy || !dirty || (view && view.blocked)) return;
+      UI.confirmSheet({ title: '방 배정을 저장합니다', lead: '바뀌는 학생 ' + (view.changed || 0) + '명 · 규칙 위반 ' + view.violations.length + '개',
+        lines: ['바뀐 학생의 지금 배정은 취소로 남고 새 배정이 생깁니다(기록은 지우지 않음).'].concat(view.violations.length ? ['같은 학년·떨어뜨릴 짝 위반은 저장할 수 있습니다.'] : []), confirmText: '저장', onconfirm: function () {
+          busy = true; drawBar();
+          call('saveRoomAssignments', data.term.id, work, base).then(function (r) {
+            if (!alive) return;
+            if (r.ok) { UI.toast(r.unchanged ? '바뀐 것이 없습니다.' : '방 배정을 저장했습니다.'); load(); return; }
+            busy = false;
+            if (r.stale) { UI.toast(r.error, { kind: 'warn', ms: 6000 }); load(); return; }
+            UI.toast((r.errors && r.errors[0] && r.errors[0].message) || '저장하지 못했습니다.', { kind: 'warn', ms: 6000 }); draw();
+          }).catch(function (err) { if (!alive) return; busy = false; fail(err); draw(); });
+        } });
+    }
+
+    function drawBar() {
+      removeBar();
+      if (!data || !data.canEdit) return;
+      var buttons = [{ text: '초안 만들기', kind: 'secondary', disabled: busy, onclick: makeDraft },
+        { text: '방으로 옮기기', kind: 'secondary', disabled: busy || selected.length !== 1, onclick: moveSheet },
+        { text: '저장', disabled: busy || !dirty || !!(view && view.blocked), onclick: onSave }];
+      bar = UI.actionBar(buttons, { mount: true });
+      bar.querySelectorAll('button').forEach(function (b) { b.style.flex = '1 1 auto'; b.style.whiteSpace = 'nowrap'; });
+    }
+    load();
+    return function () { alive = false; seq++; removeBar(); };
+  }
+</script>

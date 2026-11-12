@@ -51,6 +51,26 @@
     "cancelMove": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getRoomData": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getRoomStats": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "previewRoomDraft": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "previewRoomPlan": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveRoomAssignments": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }
