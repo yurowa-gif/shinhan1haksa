@@ -99,6 +99,15 @@ function movePlan_(changes, studentId, move, opts)
         //   move.meals:{조식, 석식}(학사 입실 때 시작할 급식, R11b)
 function moveUndoPlan_(changes, headId, opts)   // (R11b) opts = {today} → {toCancel:[{id, cancel_reason?}], toRestore:[{id}], warnings}
 
+// src/rules/SeatRules.gs (R14, stage3.md 1절)
+function seatDraft_(spaces, seats, students, prev, fixed, avoids, seed)   // → {assignments:[{seat_id, student_id}], unplaced:[studentId], violations, warnings}
+function seatViolations_(spaces, seats, students, assignments, avoids)    // → [{seatId, kind:'같은 학년'|'떨어뜨릴 짝'|'성별', with}]
+function seatBoard_(spaces, seats)                                         // → {seats:{id:{id, space, sa}}, order:[id], nb:{id:[이웃 id]}}
+function seatIsSa_(space)                                                  // → 이름이 'SA<숫자>'로 시작하면 true
+function seatGenderOk_(space, student)                                     // → 남·여 공간은 같은 성별만, 혼성·빈칸은 누구나
+function seatAvoidMap_(avoids, scopes)                                     // → {학생id:{상대id:true}}(살아 있는 짝, scope가 scopes 안)
+function seatRng_(seed)                                                    // → 0~1 난수 함수(같은 seed = 같은 수열)
+
 // src/rules/OutRules.gs
 function reconcileAutoOuts_(exceptions, violations, opts)
         // exceptions·violations는 그 기간의 모든 행(일부만 넘기면 다른 학생의 자동 OUT이 취소된다), violations는 created_at 필수
@@ -299,3 +308,14 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd)
 ## 동작 메모(R12, 2026-11-07)
 
 - `mealCountsOn_`: termId 기간에 등록된 학생을 그날 상태 그대로 센다(결석·외박은 빼지 않는다, 같은 학생 두 번 등록은 한 번). 학사 = 학사 `입실`, 기숙 = 학사 입실이면서 기숙사 `입실`, 비기숙 = 학사 입실이면서 기숙 아님. **조식·석식은 학사 상태로 거르지 않는다**(결정 35 — 퇴실 학생도 석식 중단일 전까지 학사 석식, `afterLeaveHallDinner`로 따로 센다). 줄은 '여1'…'남3'(학년 3 밖도 있으면 줄을 만든다), '여 합계'·'남 합계', 'N학년', '전체'이고 합계 줄 = 부분 합. ASSUMPTION: 성별(남·여)·학년(숫자)이 비었거나 다른 학생, 학생 행이 없는 등록은 어느 줄에도 넣지 않고 `unknownGroup` + 경고. 잘못된 날짜는 Error.
+
+## 동작 메모(R14, 2026-11-12)
+
+**SeatRules** — 좌석 초안(F5 [초안 만들기], C22)과 빨간 칸. DateRules(`ruleStr_`·`ruleRowLive_`)만 부른다. 입력은 시트 행 그대로(spaces·seats·이번 기간 등록생 `{id, gender, grade, veritas}`·지난 기간 배정·고정 자리·avoid_pairs·seed).
+
+- 좌석 = 살아 있는 공간의 살아 있는 `kind '좌석'` 칸. **이웃** = 같은 공간에서 행 또는 열이 1 차이(다른 하나는 같음)인 좌석 칸 — 기둥·창문·비상문·통로를 사이에 두면 2칸 떨어져 이웃이 아니다. 1층 짝줄(붙은 두 열)은 좌우 이웃이다.
+- **SA실** = 공간 이름이 `SA<숫자>`로 시작(Seats.gs `seatLabelStyle_`과 같은 기준). 공간 성별 `남`·`여`는 같은 성별만, `혼성`·빈칸은 누구나.
+- `seatDraft_` 순서: ① 고정 자리 그대로(좌석이 없거나 겹치면 경고하고 새로) ② 3학년은 지난 기간 자리가 좌석으로 있고 비어 있고 성별이 맞으면 유지 — ASSUMPTION: 베리타스 여부가 바뀌어 구역(SA/1층)이 달라졌으면 유지하지 않는다 ③ 베리타스는 같은 성별 SA실, 자리가 모자라면 1층으로 넘기고 경고 `… SA실 자리가 모자라 1층에 배정했습니다` ④ 나머지는 SA 아닌 공간. 비용(이웃 같은 학년 1, 떨어뜨릴 짝 10)이 가장 싼 빈자리를 seed로 섞은 차례로 고른 뒤, 같은 구역 안 맞바꾸기·빈자리 옮기기로 비용을 줄인다(고정·3학년 유지 자리는 움직이지 않음, 최대 30회). ⑤ 못 앉힌 학생은 `unplaced` + 경고. 다 못 지키면 그 결과(가장 덜 어긴 배치 — 탐색은 지역 최적)와 `violations`.
+- 같은 입력 + 같은 seed = 같은 결과(입력 행 순서와 무관: id 순으로 정렬한 뒤 seed로 섞는다). 떨어뜨릴 짝은 scope `좌석`·`둘 다`, 살아 있는 행만.
+- `seatViolations_`: 이웃 같은 학년·떨어뜨릴 짝은 **두 칸 모두에 한 줄씩**(`with` = 상대 칸 id), 성별은 `with ''`. 짝 위반은 kind만 뜻이 있다 — 상대 이름·사유는 서버가 보는 사람 권한에 따라 거른다(결정 64). 좌석 아닌 칸·명단에 없는 학생의 배정은 건너뛴다.
+- 성능: 가짜 1층 146석 + SA 51석(src/dev/FakeSeats.gs)에 180명 — 수십 ms(시험은 3초 기준).
