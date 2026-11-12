@@ -108,6 +108,23 @@ test('rules.md 가 글꼴을 내려받지 않는다는 결정과 UI 용어집 �
   assert.ok(!/@font-face|fonts\.googleapis|cdn\.jsdelivr/.test(styles), '글꼴을 내려받는 코드가 들어갔다');
 });
 
+test('D11 상담 신청 예시: UI 프롬프트 틀 칸이 모두 채워져 있고, 시안 이름·사진·미정 표시가 문서에 있다', () => {
+  const doc = css.readFile('docs/design/stage6-counsel-request-example.md');
+  ['[화면]', '[목적]', '[머리줄]', '[위 안내]', '[본문 카드]', '[탭]', '[아래 바]', '[확인 시트]', '[상태]', '[권한]', '[참고]', '[받을 것]'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
+  assert.ok(doc.indexOf('틀 쓰는 법 예시') >= 0 && doc.indexOf('미정') >= 0 && /Q7/.test(doc) && /Q8/.test(doc));
+  const src = css.readFile('design/preview/stage6-screens.js');
+  const ids = [...src.matchAll(/^def\('([^']+)'/gm)].map((m) => m[1]);
+  assert.ok(ids.length >= 4, '시안 수 ' + ids.length);
+  ids.forEach((id) => assert.ok(doc.indexOf('`' + id + '`') >= 0, '`' + id + '` 가 문서에 없다'));
+  const fs = require('fs');
+  const path = require('path');
+  const imgs = [...doc.matchAll(/!\[[^\]]*\]\((stage6-counsel-example-photos\/[^)]+)\)/g)].map((m) => m[1]);
+  assert.strictEqual(imgs.length, ids.length);
+  imgs.forEach((f) => assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'docs', 'design', f)), f));
+  const tpl = css.readFile('docs/design/ui-vocabulary.md');
+  ['[화면]', '[목적]', '[머리줄]', '[위 안내]', '[본문 카드]', '[탭]', '[아래 바]', '[확인 시트]', '[상태]', '[권한]', '[참고]', '[받을 것]'].forEach((t) => assert.ok(tpl.indexOf(t) >= 0, '용어집 틀에 ' + t + ' 가 없다'));
+});
+
 test('2단계 선생님 확인 체크리스트: 단계 번호(A1~E4)가 겹치지 않고 모든 줄이 7칸(번호·누가·누르는 것·통과 모습·사진·결과)이며, print-check 9·10절 번호(44~66)가 이어진다', () => {
   const doc = css.readFile('docs/design/stage2-teacher-checks.md');
   const rows = doc.split('\n').filter((l) => /^\| [A-E]\d+ \|/.test(l));
