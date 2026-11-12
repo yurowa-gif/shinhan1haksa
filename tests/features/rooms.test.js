@@ -211,3 +211,40 @@ test('방 구성이 없으면 홈 카드는 null이고 화면 데이터는 빈 �
   const g = call(env, ADMIN, 'getRoomData', '');
   assert.strictEqual(g.rooms.length, 0);
 });
+
+test('기준일부터 바뀐다(C22와 같은 방식): 옛 행은 valid_to = 기준일 전날로 끝나 지난 날짜의 배정이 그대로 남고, 새 행은 valid_from = 기준일. 그날 시작한 행은 취소', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  draftSave(env);
+  assert.ok(live(env).every((a) => a.valid_from === '2027-03-03' && a.valid_to === ''), '3/3 저장: 시작일(3/2) 뒤라 valid_from = 기준일');
+  env.setNow('2027-03-10T12:00:00');
+  const g = call(env, ADMIN, 'getRoomData', '');
+  const male = g.rooms.filter((r) => r.gender === '남' && r.members.length);
+  const a = male[0], b = male[1], sa = a.members[0].id, sb = b.members[0].id;
+  const cur = g.rooms.flatMap((r) => r.members.map((m) => ({ room_id: r.id, student_id: m.id })));
+  const swapped = cur.map((x) => (x.student_id === sa ? { room_id: b.id, student_id: sa } : x.student_id === sb ? { room_id: a.id, student_id: sb } : x));
+  const r = call(env, ADMIN, 'saveRoomAssignments', g.term.id, swapped, g.token);
+  assert.deepStrictEqual([r.ok, r.endedCount, r.cancelCount, r.createCount], [true, 2, 0, 2], JSON.stringify(r));
+  const rows = env.rows('room_assignments');
+  const old = rows.filter((x) => (x.student_id === sa || x.student_id === sb) && x.valid_from === '2027-03-03');
+  assert.ok(old.length === 2 && old.every((x) => x.valid_to === '2027-03-09' && x.status === '배정'), '옛 행은 3/9까지');
+  const fresh = rows.filter((x) => (x.student_id === sa || x.student_id === sb) && x.valid_from === '2027-03-10');
+  assert.ok(fresh.length === 2 && fresh.every((x) => x.valid_to === '' && x.status === '배정'));
+  assert.ok(rows.filter((x) => x.student_id !== sa && x.student_id !== sb).every((x) => x.valid_to === '' && x.status === '배정'), '그대로인 배정은 건드리지 않는다');
+  // 지난 날짜(3/5)의 방 배정은 그때 그대로, 오늘은 맞바꾼 뒤
+  const at = (ymd) => rows.filter((x) => x.status !== '취소' && (!x.valid_from || x.valid_from <= ymd) && (!x.valid_to || x.valid_to >= ymd)).map((x) => x.room_id + '|' + x.student_id);
+  assert.ok(at('2027-03-05').includes(a.id + '|' + sa) && at('2027-03-05').includes(b.id + '|' + sb));
+  assert.ok(at('2027-03-10').includes(b.id + '|' + sa) && at('2027-03-10').includes(a.id + '|' + sb));
+  const g2 = call(env, ADMIN, 'getRoomData', '');
+  assert.ok(g2.rooms.find((x) => x.id === b.id).members.some((m) => m.id === sa));
+  // 끝난 행은 다른 배정을 막지 않고 두 번 저장해도 한 벌
+  assert.deepStrictEqual([call(env, ADMIN, 'saveRoomAssignments', g2.term.id, swapped, g.token).unchanged], [true]);
+});
+
+test('기준일이 기간 시작일 이하이면 새 행의 valid_from은 빈칸(기간 전체)', () => {
+  const env = makeEnv('2027-03-01T12:00:00');   // 1학기(3/2 시작) 전날: 현재 기간은 아직 지난 기간이라 기간을 직접 고른다
+  const g = call(env, ADMIN, 'getRoomData', term2(env).id);
+  assert.strictEqual(g.term.ymd, '2027-03-02');
+  const p = call(env, ADMIN, 'previewRoomDraft', g.term.id, 5);
+  assert.strictEqual(call(env, ADMIN, 'saveRoomAssignments', g.term.id, p.assignments, g.token).ok, true);
+  assert.ok(live(env).length > 0 && live(env).every((a) => a.valid_from === '' && a.valid_to === ''));
+});

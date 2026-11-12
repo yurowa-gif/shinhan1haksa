@@ -8,9 +8,11 @@
  * - 짝 정보(어느 학생이 짝인지, 짝 위반 줄)는 avoid.view가 있는 사람에게만 보낸다(결정 64). room.view만 있는 사람(출결·근무표 담당)은
  *   학생 이름·위반 줄 없이 숫자(정원 현황판)만 받는다.
  * - 기숙사생 = 그날 기숙사 '입실'인 이번 기간 등록생. 기숙사 퇴실 적용일부터 그 학생의 방 자리는 공석으로 센다(배정 행은 지우지 않는다).
- * - 배정은 학기마다 한 벌(valid_from·valid_to 비움). 기록은 지우지 않는다: 바뀐 배정은 status '취소', 새 배정은 '배정'.
+ * - 배정은 학기마다 한 벌. 기록은 지우지 않는다. 저장은 좌석 초안(C22)과 같은 방식이다: 기준일 D(오늘이 기간 안이면 오늘)부터 바뀌므로
+ *   바뀐 학생의 옛 행은 valid_to = D - 1로 끝내고(지난 날짜의 현황은 그때 배정 그대로), D 이후에야 효력이 생기는 행(valid_from, 없으면 기간 시작일이 D 이상)은
+ *   지난 기록이 없으므로 status '취소'로 둔다. 새 행은 valid_from = D(D가 기간 시작일 이하이면 빈칸 = 기간 전체), status '배정'.
  * ASSUMPTION: 방 성별과 학생 성별이 다른 배정도 정원 초과처럼 저장을 막는다(층마다 성별 고정, 결정 64 ②).
- * ASSUMPTION: 저장은 바뀐 학생의 배정만 취소·새로 쓴다(같은 방에 그대로인 배정 행은 건드리지 않는다). 결과 상태는 전체 취소 후 새로 쓰는 것과 같다.
+ * ASSUMPTION: 저장은 바뀐 학생의 배정만 끝내고 새로 쓴다(같은 방에 그대로인 배정 행은 건드리지 않는다). 결과 상태는 전체를 끝내고 새로 쓰는 것과 같다.
  */
 
 var ROOM_BLOCKING = ['정원 초과', '성별'];
@@ -35,9 +37,20 @@ function roomLoad_(termId) {
   var dorm = members.filter(function (s) { return statusOn_(changes, s.id, '기숙사', ymd) === '입실'; });
   var byId = {};
   members.forEach(function (s) { byId[s.id] = s; });
-  var live = readAll_('room_assignments').filter(function (a) { return a.term_id === term.id && String(a.status || '').trim() !== '취소'; });
+  var live = roomLiveRows_(readAll_('room_assignments'), term.id, ymd);
   return { term: term, today: today, ymd: ymd, rooms: readAll_('rooms'), members: members, dorm: dorm, byId: byId, changes: changes,
     avoids: readAll_('avoid_pairs'), live: live };
+}
+
+/** 그 기간의 취소되지 않은 배정 행 중 기준일 전에 끝나지 않은 것(지난 기록은 다른 배정을 막지 않는다) */
+function roomLiveRows_(rows, termId, ymd) {
+  return rows.filter(function (a) { return a.term_id === termId && String(a.status || '').trim() !== '취소' && !(a.valid_to && a.valid_to < ymd); });
+}
+
+/** 기준일 D부터 이 행의 배정을 끝내는 쓰기(좌석 seatEndOp_와 같다): 지난 기록이 없는 행(D 이후에야 시작)은 취소, 아니면 valid_to = D - 1 */
+function roomEndPatch_(row, ymd, termStart) {
+  var from = row.valid_from || termStart || '';
+  return from && from >= ymd ? { status: '취소', memo: '재배정' } : { valid_to: ymdAddDays_(ymd, -1) };
 }
 
 function roomDisplay_(s) { return (Number(s.grade) || s.grade) + '. ' + s.name; }
@@ -208,7 +221,7 @@ function previewRoomPlan(termId, assignments) {
 
 /**
  * 방 배정 저장. 첫 줄 권한(room.edit) → 락 안에서 다시 읽고 다시 검사 → expect(token)와 지금 배정이 다르면 {stale} → 정원 초과·성별은 거부 →
- * 바뀐 배정만 취소하고 새로 쓴다(한 번의 갱신 + 한 번의 추가). 바뀐 것이 없으면 {ok:true, unchanged:true}(두 번 눌러도 한 벌).
+ * 바뀐 배정만 기준일 전날로 끝내고(또는 취소) 새로 쓴다(한 번의 갱신 + 한 번의 추가). 바뀐 것이 없으면 {ok:true, unchanged:true}(두 번 눌러도 한 벌).
  */
 function saveRoomAssignments(termId, assignments, expect) {
   var user = requirePermission_('room.edit');
@@ -223,20 +236,23 @@ function saveRoomAssignments(termId, assignments, expect) {
     n.pairs.forEach(function (a) { want[key(a)] = a; });
     var have = {};
     d.live.forEach(function (a) { have[key(a)] = a; });
-    var cancels = d.live.filter(function (a) { return !want[key(a)]; });
+    var ended = d.live.filter(function (a) { return !want[key(a)]; });
     var creates = n.pairs.filter(function (a) { return !have[key(a)]; });
-    if (!cancels.length && !creates.length) return { ok: true, unchanged: true, token: roomToken_(d.live) };
+    if (!ended.length && !creates.length) return { ok: true, unchanged: true, token: roomToken_(d.live) };
     if (String(expect || '') !== roomToken_(d.live)) return { ok: false, stale: true, error: '확인한 뒤 방 배정이 바뀌었습니다. 다시 불러와 주세요.' };
     var v = roomView_(d, n.pairs, { names: false, avoid: roomCan_(user, 'avoid.view') });
     var blocking = v.violations.filter(function (x) { return x.blocking; });
     if (blocking.length) return { ok: false, errors: blocking.map(function (x) { return { field: '', message: x.text }; }) };
-    bulkUpdateRecords_('room_assignments', cancels.map(function (a) { return { id: a.id, patch: { status: '취소', memo: '재배정' } }; }), user.email);
+    var from = d.ymd <= d.term.start_date ? '' : d.ymd;   // 기준일이 기간 시작일 이하면 기간 전체(나중에 시작일을 앞당겨도 잠기지 않는다)
+    var patches = ended.map(function (a) { return { id: a.id, patch: roomEndPatch_(a, d.ymd, d.term.start_date) }; });
+    bulkUpdateRecords_('room_assignments', patches, user.email);   // 수정을 먼저 쓰고 추가를 나중에 써서, 중간에 멈춰도 한 학생이 두 방에 있지는 않다
     bulkAppend_('room_assignments', creates.map(function (a) {
-      return { term_id: d.term.id, room_id: a.room_id, student_id: a.student_id, valid_from: '', valid_to: '', status: '배정', memo: '' };
+      return { term_id: d.term.id, room_id: a.room_id, student_id: a.student_id, valid_from: from, valid_to: '', status: '배정', memo: '' };
     }), user.email);
     roomFresh_();
-    var after = readAll_('room_assignments').filter(function (a) { return a.term_id === d.term.id && String(a.status || '').trim() !== '취소'; });
-    return { ok: true, cancelCount: cancels.length, createCount: creates.length, violationCount: v.violations.length, token: roomToken_(after) };
+    var after = roomLiveRows_(readAll_('room_assignments'), d.term.id, d.ymd);
+    return { ok: true, cancelCount: patches.filter(function (x) { return x.patch.status === '취소'; }).length, endedCount: patches.filter(function (x) { return x.patch.valid_to; }).length,
+      createCount: creates.length, violationCount: v.violations.length, token: roomToken_(after) };
   });
 }
 

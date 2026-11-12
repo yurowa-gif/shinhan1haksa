@@ -101,7 +101,7 @@
         dirty ? (function () { var a = { type: 'button', class: 'btn secondary', style: 'flex:0 0 auto;white-space:nowrap', text: '되돌리기', onclick: load }; if (busy) a.disabled = 'disabled'; return el('button', a); })() : null]));
       if (draftInfo) {
         head.appendChild(el('div', { class: 'stats', style: 'margin-bottom:8px' }, [statBox(draftInfo.changed, '바뀌는 학생'), statBox(view.violations.length, '규칙 위반')]));
-        if (!view.violations.length) head.appendChild(el('div', { class: 'notice ok', text: '규칙 위반이 없습니다. 저장하면 지금 배정은 "취소"로 남고 새 배정이 생깁니다.' }));
+        if (!view.violations.length) head.appendChild(el('div', { class: 'notice ok', text: '규칙 위반이 없습니다. 저장하면 지금 배정은 기준일 전날까지로 끝나고, 지난 날짜 기록은 그대로 남습니다.' }));
         if (draftInfo.unplaced && draftInfo.unplaced.length) head.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: '들어갈 방이 없는 학생 ' + draftInfo.unplaced.length + '명: ' + draftInfo.unplaced.join(', ') }));
       } else if (dirty) head.appendChild(el('div', { class: 'stats', style: 'margin-bottom:8px' }, [statBox(view.changed || 0, '바뀌는 학생'), statBox(view.violations.length, '규칙 위반')]));
       // 층 칩(층 + 성별)
@@ -211,7 +211,7 @@
     function onSave() {
       if (busy || !dirty || (view && view.blocked)) return;
       UI.confirmSheet({ title: '방 배정을 저장합니다', lead: '바뀌는 학생 ' + (view.changed || 0) + '명 · 규칙 위반 ' + view.violations.length + '개',
-        lines: ['바뀐 학생의 지금 배정은 취소로 남고 새 배정이 생깁니다(기록은 지우지 않음).'].concat(view.violations.length ? ['같은 학년·떨어뜨릴 짝 위반은 저장할 수 있습니다.'] : []), confirmText: '저장', onconfirm: function () {
+        lines: ['지금 배정은 기준일 전날까지로 끝나고, 지난 날짜 기록은 그대로 남습니다.'].concat(view.violations.length ? ['같은 학년·떨어뜨릴 짝 위반은 저장할 수 있습니다.'] : []), confirmText: '저장', onconfirm: function () {
           busy = true; drawBar();
           call('saveRoomAssignments', data.term.id, work, base).then(function (r) {
             if (!alive) return;
