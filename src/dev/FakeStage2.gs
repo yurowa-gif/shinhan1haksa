@@ -5,7 +5,7 @@
  *                              운영 안 함 1일(day_schedules)을 만든다. 같은 입력이면 같은 결과(id도 고정).
  * buildFakeStage2Life_(fake, ruleRows) : 순수 함수. 2027-03(2027 1학기) 생활 기록 — 직접 OUT 2건인 학생 1명(퇴실 대상)·
  *                              1건인 학생 1명(violations), 서류 미제출 F7 급식 신청 2건 + 적용 전 대기 신청 1건(status_changes).
- *                              면담 기록은 넣지 않는다(시험이 직접 넣는다).
+ *                              면담 기록은 넣지 않는다(시험이 직접 넣는다). 퇴실 취소 1명·재입실 1명(R11b, movePlan_·moveUndoPlan_ 결과).
  *                              ruleRows = violation_rules 행(setup이 만든 id를 rule_id로 쓴다).
  * seedFakeStage2()           : 편집기에서 실행. seedFakeStage1() 뒤에 실행하면 생활 기록까지, 없으면 근무표만. 두 번 실행해도 중복 없음(id가 이미 있으면 건너뜀).
  *
@@ -58,7 +58,7 @@ function buildFakeStage2Duty_(fake) {
 }
 
 /* 생활 기록 학생: 1단계가 쓰지 않는 번호(특이사항 0~8, 고정 일정 10~17, 퇴실 28, 입실 29). 25번은 시험 학사 교사 담당(서류 미제출 카드 확인용) */
-var FAKE2_OUT2 = 19, FAKE2_OUT1 = 20, FAKE2_NODOC = [21, 25], FAKE2_PENDING = 23;
+var FAKE2_OUT2 = 19, FAKE2_OUT1 = 20, FAKE2_NODOC = [21, 25], FAKE2_PENDING = 23, FAKE2_UNDO = 26, FAKE2_REENTRY = 27;   // 26·27: 통학생(퇴실 취소·재입실 예시)
 
 function buildFakeStage2Life_(fake, ruleRows) {
   var stage1 = buildFakeStage1_(fake);
@@ -93,8 +93,39 @@ function buildFakeStage2Life_(fake, ruleRows) {
   addMeal(FAKE2_NODOC[1], '석식', '일반 석식', '2027-03-09T14:00:00', 'FALSE');   // 11:30 뒤 → 다음 날
   addMeal(FAKE2_PENDING, '석식', '미실시', '2027-03-10T09:00:00', 'TRUE');        // 대기 행: 수요일 신청 → 다다음 주 월요일(3/22)
 
+
+  /* 퇴실 취소·재입실 예시(통학생, R11b). F6 화면과 같은 규칙 결과(movePlan_·moveUndoPlan_)를 그대로 쓴다. 서류는 제출함 */
+  var allOf = function (sid) { return stage1.statusChanges.concat(statusChanges).filter(function (c) { return c.student_id === sid; }); };
+  var writeMove = function (i, move, today) {
+    var p = movePlan_(allOf(st[i].id), st[i].id, move, { today: today });
+    if (p.errors.length || p.toCancel.length || p.toRestore.length) throw new Error('가짜 입퇴실 계획이 단순하지 않습니다: ' + p.errors.join(', '));
+    var headId = '';
+    p.rows.forEach(function (r) {
+      var id = fakeId_('f8300000', statusChanges.length + 1);
+      statusChanges.push({ id: id, student_id: st[i].id, item: r.item, value: r.value, requested_at: r.requested_at,
+        effective_date: r.effective_date, effective_date_auto: r.effective_date_auto, reason: r.head ? '가짜 ' + move.type : r.reason,
+        doc_submitted: r.head ? 'TRUE' : '', linked_change_id: r.head ? '' : headId, source: r.source, status: '유효', memo: FAKE2_MEMO, cancel_reason: '' });
+      if (r.head) headId = id;
+    });
+    return headId;
+  };
+  // 재입실: 3/5 학사 퇴실(3/3 수 15:00 신청 → 석식 3/15 중단) → 3/19 학사 입실(퇴실 전 급식으로 다시 시작)
+  writeMove(FAKE2_REENTRY, { type: '학사 퇴실', effectiveDate: '2027-03-05', requestedAt: '2027-03-03T15:00:00', dinner: '중단' }, '2027-03-03');
+  writeMove(FAKE2_REENTRY, { type: '학사 입실', effectiveDate: '2027-03-19', requestedAt: '2027-03-17T10:00:00' }, '2027-03-17');
+  // 퇴실 취소: 3/16 학사 퇴실(3/12 15:00 신청) → 3/13 잘못 넣었다며 취소(cancelMove와 같은 꼬리표)
+  var undoHead = writeMove(FAKE2_UNDO, { type: '학사 퇴실', effectiveDate: '2027-03-16', requestedAt: '2027-03-12T15:00:00', dinner: '중단' }, '2027-03-12');
+  var u = moveUndoPlan_(allOf(st[FAKE2_UNDO].id), undoHead, { today: '2027-03-13' });
+  if (u.toRestore.length) throw new Error('가짜 퇴실 취소 계획이 단순하지 않습니다');
+  u.toCancel.forEach(function (x) {
+    var row = statusChanges.filter(function (c) { return c.id === x.id; })[0];
+    if (!row) throw new Error('가짜 퇴실 취소가 시드 밖의 행을 취소하려 합니다: ' + x.id);
+    row.status = '취소';
+    row.cancel_reason = x.id === undoHead ? '가짜: 다른 학생으로 잘못 입력' : (/^\[자동\] /.test(x.cancel_reason || '') ? x.cancel_reason : '[자동] ' + undoHead + ' ' + (x.cancel_reason || '퇴실 취소로 함께 취소'));
+  });
+
   return { term: term, violations: violations, statusChanges: statusChanges,
-    out2Id: st[FAKE2_OUT2].id, out1Id: st[FAKE2_OUT1].id, noDocIds: FAKE2_NODOC.map(function (i) { return st[i].id; }), pendingId: st[FAKE2_PENDING].id };
+    out2Id: st[FAKE2_OUT2].id, out1Id: st[FAKE2_OUT1].id, noDocIds: FAKE2_NODOC.map(function (i) { return st[i].id; }), pendingId: st[FAKE2_PENDING].id,
+    undoId: st[FAKE2_UNDO].id, reentryId: st[FAKE2_REENTRY].id, undoHeadId: undoHead };
 }
 
 /** 편집기에서 실행. seedFakeData() 뒤에(생활 기록은 seedFakeStage1()도 뒤에), 가짜 학생만 있는 DB에서만 동작한다. 두 번 실행해도 중복 없음. */
