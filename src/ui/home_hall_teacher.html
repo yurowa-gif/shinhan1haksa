@@ -64,7 +64,8 @@
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '좌석표' }),
       el('div', { class: 'muted', text: '학생을 빈 자리에 앉히고 두 자리를 맞바꿉니다.' }),
-      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=seats', text: '좌석표 열기' })
+      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=seats', text: '좌석표 열기' }),
+      el('a', { class: 'btn secondary', style: 'margin:12px 0 0 8px', href: d.appUrl + '?page=avoid', text: '떨어뜨릴 짝' })
     ]));
     try { renderStage2A(d, root); } catch (e) { showError(root, e); }   // 2단계 카드가 실패해도 나머지 카드는 그린다
     try { renderStage2B(d, root); } catch (e) { showError(root, e); }

@@ -63,7 +63,7 @@
 ## 좌석
 
 ### UI.seatGrid
-`UI.seatGrid({rows, cols, cells:[{row,col,kind:'seat'|'pillar'|'door'|'window', seatLabel, text, vacant}], mode?:'single'|'swap', onselect(picked:[{row,col}], done)})` → 격자 상자. `cells`는 `docs/contracts/sheet-model.md`의 `cells[]`와 같은 모양에 `text`(칸에 보일 글자, 예 "1. 김가온")를 더한 것이다. 좌석 칸만 누를 수 있고, `cells`에 없는 칸은 통로다. `single`은 한 칸, `swap`은 두 칸을 차례로 누르면 `done=true`(같은 칸을 다시 누르면 해제). 격자가 넓으면 상자 안에서만 가로로 밀린다(화면 전체는 안 밀림). 노드: `getSelection()`, `clearSelection()`. 맞바꾸기 확인은 화면이 `confirmSheet`로 받는다.
+`UI.seatGrid({rows, cols, cells:[{row,col,kind:'seat'|'pillar'|'door'|'window', seatLabel, text, vacant, bad?}], mode?:'single'|'swap', onselect(picked:[{row,col}], done)})` → 격자 상자. `cells`는 `docs/contracts/sheet-model.md`의 `cells[]`와 같은 모양에 `text`(칸에 보일 글자, 예 "1. 김가온")를 더한 것이다. `bad: true`인 칸은 규칙 위반(3단계): 굵은 빨간 테두리 + ⚠ + 읽어 주는 말 "(규칙 위반)"(색만으로 알리지 않음). 좌석 칸만 누를 수 있고, `cells`에 없는 칸은 통로다. `single`은 한 칸, `swap`은 두 칸을 차례로 누르면 `done=true`(같은 칸을 다시 누르면 해제). 격자가 넓으면 상자 안에서만 가로로 밀린다(화면 전체는 안 밀림). 노드: `getSelection()`, `clearSelection()`. 맞바꾸기 확인은 화면이 `confirmSheet`로 받는다.
 
 ## 순수 함수
 

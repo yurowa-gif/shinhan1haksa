@@ -70,6 +70,19 @@ test('D6 시안(stage2-screens.js)의 화면 이름이 모두 screens.md 5-2 절
   assert.ok(css.readFile('src/ui/Components.html').indexOf("opts.lead") > 0);
 });
 
+test('D10 시안(stage3-screens.js)의 화면 이름이 모두 screens.md 5-3 절에 백틱으로 적혀 있고, 규칙 위반 칸은 색만으로 알리지 않는다(⚠ 글자·굵은 테두리)', () => {
+  const src = css.readFile('design/preview/stage3-screens.js');
+  const doc = css.readFile('docs/design/screens.md');
+  const sec = doc.slice(doc.indexOf('## 5-3. 3단계 화면'), doc.indexOf('## 6. 권한별'));
+  const ids = [...src.matchAll(/^def\('([^']+)'/gm)].map((m) => m[1]);
+  assert.ok(ids.length >= 14, '시안 화면 수 ' + ids.length);
+  ids.forEach((id) => assert.ok(sec.indexOf('`' + id + '`') >= 0, '5-3 절에 `' + id + '` 가 없다'));
+  ['남 48', '여 92', '사유는 관리자·학사 교사만 봅니다', '저장은 막', '삭제 버튼은 없다'].forEach((t) => assert.ok(sec.indexOf(t) >= 0, t));
+  const styles = css.readFile('src/ui/Styles.html');
+  assert.ok(/\.seat-cell\.bad \.seat-no::before \{ content: "⚠/.test(styles) && /\.chip\.bad::before \{ content: "⚠/.test(styles));
+  assert.ok(/\.seat-cell\.bad \{ border: 3px solid/.test(styles));
+});
+
 test('2단계 선생님 확인 체크리스트: 단계 번호(A1~E4)가 겹치지 않고 모든 줄이 7칸(번호·누가·누르는 것·통과 모습·사진·결과)이며, print-check 9·10절 번호(44~66)가 이어진다', () => {
   const doc = css.readFile('docs/design/stage2-teacher-checks.md');
   const rows = doc.split('\n').filter((l) => /^\| [A-E]\d+ \|/.test(l));
