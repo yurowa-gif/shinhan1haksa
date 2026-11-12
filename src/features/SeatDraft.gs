@@ -10,6 +10,7 @@
  *   자리표로 짝을 알아낼 수 있다). avoid.view가 없으면 짝 시트는 읽지도 않는다.
  */
 var SDR_MAX_FIXED = 400;
+var SDR_BOUNDED_MSG = '이 기간에는 날짜를 좁혀 배정한 자리(방학 날짜별 좌석표 등)가 있어 초안으로 한꺼번에 바꿀 수 없습니다. 초안은 날짜를 좁힌 배정이 없는 기간에서만 만들 수 있으니, 이 기간은 자리를 하나씩 직접 맞바꿔 주세요.';
 
 function sdrErr_(message, extra) {
   var r = { ok: false, error: message };
@@ -176,7 +177,7 @@ function previewSeatDraft(termId, fixedSeatIds, seed) {
   var user = requirePermission_('seat.edit');
   var c = sdrContext_(termId);
   if (c.error) return sdrErr_(c.error);
-  if (c.bounded) return sdrErr_('날짜를 좁힌 배정이 있는 기간은 초안을 만들 수 없습니다(방학 날짜별 좌석표).');
+  if (c.bounded) return sdrErr_(SDR_BOUNDED_MSG);
   if (seed === undefined || seed === null) seed = Math.floor(Math.random() * 2147483646) + 1;
   if (!sdrSeedOk_(seed)) return sdrErr_('초안 번호가 올바르지 않습니다.');
   var cur = sdrCurrent_(c), pairs = [];
@@ -218,7 +219,7 @@ function saveSeatDraft(termId, draft) {
   return withLock_(function () {
     var c = sdrContext_(termId);
     if (c.error) return sdrErr_(c.error);
-    if (c.bounded) return sdrErr_('날짜를 좁힌 배정이 있는 기간은 초안을 만들 수 없습니다(방학 날짜별 좌석표).');
+    if (c.bounded) return sdrErr_(SDR_BOUNDED_MSG);
     var fx = sdrFixedIn_(c, draft.fixed);
     if (!fx.ok) return sdrErr_(fx.error);
     var r = sdrCompute_(c, fx.fixed, draft.seed);

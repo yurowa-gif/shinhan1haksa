@@ -250,3 +250,19 @@ test('방어 두 겹: 짝 시트는 avoid.view가 없으면 읽지도 않고, �
     [{ seatId: 's1', kind: '떨어뜨릴 짝', with: 's2' }, { seatId: 's1', kind: '같은 학년', with: 's2' }], {}, false)));
   assert.deepStrictEqual(out.map((v) => v.kind), ['같은 학년']);
 });
+
+test('날짜를 좁힌 배정(방학 날짜별 좌석표 등)이 있는 기간은 초안·저장 모두 거부하고 이유와 할 일을 알려 준다(쓰기 없음)', () => {
+  const env = makeEnv();
+  const d = get(env);
+  const seat = cellsOf(d).find((c) => c.kind === 'seat' && c.vacant);
+  const stu = Object.values(holderMap(d))[0];
+  env.asOwner((c) => c.appendRecord_('seat_assignments', { term_id: d.term.id, seat_id: seat.id, student_id: stu, valid_from: '2027-03-25', valid_to: '2027-03-31', status: '배정', memo: '' }, ADMIN));
+  const before = JSON.stringify(rows(env));
+  const p = plain(env.call(HALL, 'previewSeatDraft', d.term.id, [], 7));
+  assert.strictEqual(p.ok, false);
+  assert.ok(/날짜를 좁혀 배정한 자리/.test(p.error) && /직접 맞바꿔/.test(p.error), p.error);
+  const r = plain(env.call(HALL, 'saveSeatDraft', d.term.id, { seed: 7, sig: 'a', base: 'b', fixed: [] }));
+  assert.strictEqual(r.ok, false);
+  assert.ok(/날짜를 좁혀 배정한 자리/.test(r.error));
+  assert.strictEqual(JSON.stringify(rows(env)), before);
+});
