@@ -103,7 +103,7 @@ function dtyMonthView_(m, user) {
       var w = who(email);
       // canSwap: 이 사람에게 [교대]/[대신 근무] 버튼을 보일지(예비 감독 줄은 보이지 않는다). 판정은 swapDuty가 다시 한다
       var canSwap = !!r && f.slot !== '예비' && dtySwapCheck_({ email: user.email, canEdit: canEditSwap, today: today_(), started: dtySlotStarted_(r, p, nowIso_()) }, r, 'x').ok;
-      return { slot: f.slot, label: DTY_SLOT_LABEL[f.slot], end: f.end, userId: w.id, name: w.name, slotId: r ? r.id : '', canSwap: canSwap,
+      return { slot: f.slot, label: DTY_SLOT_LABEL[f.slot], end: f.end, userId: w.id, name: w.name, slotId: r ? r.id : '', token: dtySlotToken_(r), canSwap: canSwap,
         swappedFrom: from ? who(from).name : '', swapped: !!from, mine: !!email && email === user.email };
     });
     var open = slots.some(function (x) { return !x.name; });   // 빈 예비 감독 칸도 빈 날(시안·screens.md)
@@ -136,6 +136,12 @@ function saveDutyDay(input) {
     var teachers = dtyTeachers_(), byId = Object.create(null);
     teachers.forEach(function (t) { byId[t.id] = t; });
     var rows = readAll_('duty_slots'), picked = dutyPick_(rows, date).bySlot;
+    // 화면이 본 칸 상태와 지금이 같아야 한다(바꾸려는 칸마다). 다르면 다른 담당자가 먼저 바꾼 것 — 덮지 않고 다시 불러오게 한다
+    var seen0 = input.expect && typeof input.expect === 'object' ? input.expect : null;
+    if (!seen0) return dtyStale_();
+    for (var q = 0, names0 = Object.keys(want); q < names0.length; q++) {
+      if (frameBy[names0[q]] && (typeof seen0[names0[q]] !== 'string' || seen0[names0[q]] !== dtySlotToken_(picked[names0[q]]))) return dtyStale_();
+    }
     var errors = [], final = {}, plan2 = [];
     Object.keys(want).forEach(function (slot) {
       if (!frameBy[slot]) { errors.push({ field: slot, message: '그날 근무 칸이 아닙니다: ' + slot }); return; }
@@ -338,6 +344,37 @@ function getDutyRecordFile(month, format) {
   return { ok: true, name: name, base64: Utilities.base64Encode(bytes), bytes: bytes.length, warnings: model.warnings };
 }
 
+var DTY_STALE_MSG = '근무표가 바뀌었습니다. 새로 불러와 주세요.';
+
+/**
+ * 근무 칸 한 줄의 '화면이 최신인가' 표: 칸 행 id + 지금 실제 근무자 + updated_at. 빈 칸은 ''.
+ * 화면이 getDutyMonth로 받은 값을 편성(saveDutyDay.expect)·교대(swapDuty opts.expect)에 그대로 보내면, 락 안에서 지금 값과 달라진 경우
+ * {stale:true}로 거부한다(다른 담당자가 먼저 바꾼 칸을 옛 화면이 경고 없이 덮지 않게).
+ */
+function dtySlotToken_(row) {
+  // 이메일이 응답에 그대로 나가지 않게 해시로 보낸다(getDutyMonth 응답에는 이메일이 없다)
+  return row ? dtyHash_([row.id, dutyEmail_(row.actual_email) || dutyEmail_(row.original_email), row.updated_at || ''].join('|')) : '';
+}
+
+/** 짧은 문자열 해시(같은가 확인용, 보안 아님) */
+function dtyHash_(text) {
+  var h = 5381, h2 = 52711, i;
+  text = String(text);
+  for (i = 0; i < text.length; i++) h = (Math.imul(h, 33) + text.charCodeAt(i)) | 0;
+  for (i = text.length - 1; i >= 0; i--) h2 = (Math.imul(h2, 31) + text.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(16) + (h2 >>> 0).toString(16);
+}
+
+/** 그날 칸 틀의 칸마다 지금 표 {슬롯: token}(읽기만, 시험·점검용) */
+function dtyDayTokens_(date) {
+  invalidate_('db', 'duty_slots');
+  var plan = dtyPlan_(date, calLoadCtx_()), picked = dutyPick_(readAll_('duty_slots'), date).bySlot, out = {};
+  dutySlotsFor_(plan).forEach(function (f) { out[f.slot] = dtySlotToken_(picked[f.slot]); });
+  return out;
+}
+
+function dtyStale_() { return { ok: false, stale: true, message: DTY_STALE_MSG, errors: [{ field: 'slot', message: DTY_STALE_MSG }] }; }
+
 var DTY_STARTED_MSG = '이미 시작한 근무는 근무표 담당자에게 대신 근무로 기록해 달라고 하세요.';
 
 /**
@@ -375,7 +412,7 @@ function dtySwapCheck_(ctx, row, toEmail) {
 
 /**
  * 근무 교대(학사 교사 본인 칸) / 대신 근무 기록(근무표 담당자·관리자). 승인 절차 없음(PRD F3).
- * swapDuty(slotId, toUserId, {acknowledge, reason}) → {ok, changed, notified} | {ok:false, needsConfirm, warnings} | {ok:false, errors}
+ * swapDuty(slotId, toUserId, {acknowledge, reason, expect(그 칸의 token)}) → {ok, changed, notified} | {ok:false, needsConfirm, warnings} | {ok:false, errors}
  * 락 안에서 칸을 다시 읽고 다시 검사한 뒤 actual_email·swapped_at·swapped_by만 바꾼다(원래 근무자는 그대로, 중간 단계는 audit_log).
  * 메일은 저장을 끝내고 락을 푼 뒤에 보낸다: 이전·새 근무자와 활성 근무표 담당자(없으면 관리자)에게, 누른 사람은 빼고.
  * 메일이 안 가도(notified:false) 교대는 저장되어 있다 — 화면이 "상대 선생님께 직접 알려 주세요"를 보인다.
@@ -403,6 +440,8 @@ function swapDuty(slotId, toUserId, opts) {
     var plan = dtyPlan_(String(row.date).trim(), calLoadCtx_());
     var swapCtx = { email: user.email, canEdit: canEdit, today: today_(), started: dtySlotStarted_(row, plan, nowIso_()) };
     denyIf(dtySwapCheck_(swapCtx, row, ''));
+    // 화면이 본 칸 상태(opts.expect)와 지금이 다르면(그 사이 같은 칸의 근무자가 바뀜) 낡은 화면 — 한 칸을 두 번 바꾸거나 메일을 두 번 보내지 않는다
+    if (typeof opts.expect !== 'string' || opts.expect !== dtySlotToken_(current)) return dtyStale_();
     var teachers = dtyTeachers_(), to = teachers.filter(function (t) { return t.id === String(toUserId || ''); })[0];
     if (!to) return { ok: false, errors: [{ field: 'to', message: '근무를 설 수 있는 학사 교사를 목록에서 골라 주세요.' }] };
     var chk = dtySwapCheck_(swapCtx, row, to.email);
