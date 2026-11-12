@@ -167,7 +167,7 @@ function rosterPlan_(text, opts, ctx) {
   var table = parseRosterTable_(parsed.rows);
   if (table.errors.length) return fail(table.errors, table.warnings);
   var diff = diffRoster_(table.records, ctx.existing, r.term.id, r.ymd);
-  var banned = rosterApplyBan_(diff, ctx, r.ymd);   // 결정 63: 막힌 학생은 빼고 올린다
+  var banned = rosterApplyBan_(diff, ctx, r.ymd < r.term.start_date ? r.term.start_date : r.ymd);   // 상태 적용일이 기간 시작 전이어도 그 기간 날짜로 판정   // 결정 63: 막힌 학생은 빼고 올린다
   var userPlan = rosterUserPlan_(table.records.map(function (x) { return { email: x.email, name: x.name, line: x.line }; }),
     ctx.existing.users, 'student', '명단 업로드', { students: ctx.existing.students, guardianLinks: ctx.existing.guardianLinks });
   if (userPlan.errors.length) return fail(userPlan.errors, diff.warnings.concat(table.warnings));
@@ -213,28 +213,50 @@ function rosterBanDateKo_(ymd, base) {
 function rosterApplyBan_(diff, ctx, ymd) {
   var enrStudent = {};
   (ctx.existing.enrollments || []).forEach(function (e) { enrStudent[e.id] = e.student_id; });
+  var byId = {}, byNoName = {};
+  (ctx.existing.students || []).forEach(function (st) { byId[st.id] = st; byNoName[String(st.student_no) + '|' + String(st.name)] = (byNoName[String(st.student_no) + '|' + String(st.name)] || []).concat(st.id); });
+  var banOf = {};   // 학생 id → move2OutBan_ 결과(한 번만 계산)
+  var banFor = function (sid) {
+    if (!Object.prototype.hasOwnProperty.call(banOf, sid)) {
+      banOf[sid] = move2OutBan_((ctx.existing.changes || []).filter(function (c) { return c.student_id === sid; }), sid, ctx.terms, ymd);
+    }
+    return banOf[sid];
+  };
   var touched = {}, mark = function (id) { if (id && String(id).indexOf('new:') !== 0) touched[id] = true; };
   diff.createEnrollments.forEach(function (r) { mark(r.student_id); });
   diff.createChanges.forEach(function (r) { mark(r.student_id); });
   diff.updateEnrollments.forEach(function (u) { mark(enrStudent[u.id]); });
   diff.updateStudents.forEach(function (u) { mark(u.id); });
   var info = {}, list = [];
-  var byId = {};
-  (ctx.existing.students || []).forEach(function (st) { byId[st.id] = st; });
-  Object.keys(touched).forEach(function (sid) {
-    var mine = (ctx.existing.changes || []).filter(function (c) { return c.student_id === sid; });
-    var b = move2OutBan_(mine, sid, ctx.terms, ymd);
-    if (!b.banned) return;
-    var st = byId[sid] || {};
+  var add = function (sid) {
+    var b = banFor(sid), st = byId[sid] || {};
     info[sid] = true;
     list.push({ student_id: sid, student_no: String(st.student_no || ''), name: String(st.name || ''), until: b.until,
       message: b.until ? '2OUT 퇴실로 ' + rosterBanDateKo_(b.until, ymd) + '까지 입실할 수 없습니다' : '2OUT 퇴실로 다음 학기 끝날까지 입실할 수 없습니다(다음 학기가 아직 등록되지 않았습니다)' });
+  };
+  Object.keys(touched).forEach(function (sid) { if (banFor(sid).banned) add(sid); });
+  // 계정 이메일을 고쳐 올려 diffRoster_가 '새 학생'(new:학번)으로 본 줄도 같은 학번·이름의 막힌 기존 학생이면 막는다(중복 학생·학사 입실이 만들어지지 않게)
+  var dropRefs = {};
+  diff.createStudents.forEach(function (c) {
+    var twins = (byNoName[String(c.student_no) + '|' + String(c.name)] || []).filter(function (id) { return banFor(id).banned; });
+    if (!twins.length) return;
+    dropRefs[c.ref] = true;
+    if (!info[twins[0]]) add(twins[0]);
   });
   if (!list.length) return list;
-  diff.createEnrollments = diff.createEnrollments.filter(function (r) { return !info[r.student_id]; });
-  diff.createChanges = diff.createChanges.filter(function (r) { return !info[r.student_id]; });
+  var gone = function (id) { return !!info[id] || !!dropRefs[id]; };
+  diff.createStudents = diff.createStudents.filter(function (c) { return !dropRefs[c.ref]; });
+  diff.createEnrollments = diff.createEnrollments.filter(function (r) { return !gone(r.student_id); });
+  diff.createChanges = diff.createChanges.filter(function (r) { return !gone(r.student_id); });
   diff.updateEnrollments = diff.updateEnrollments.filter(function (u) { return !info[enrStudent[u.id]]; });
   diff.updateStudents = diff.updateStudents.filter(function (u) { return !info[u.id]; });
+  // "기록과 명단이 다릅니다 … 입퇴실로 처리해 주세요" 안내는 막힌 학생에게는 틀린 길이다(입퇴실도 막힌다) — 그 학생의 줄은 뺀다
+  var names = {};
+  list.forEach(function (b) { names[b.name] = true; });
+  diff.warnings = diff.warnings.filter(function (w) {
+    var m = /줄: (.+?) (학사|기숙사|조식|석식)이\(가\) 기록\(/.exec(String(w));
+    return !(m && names[m[1]]);
+  });
   return list;
 }
 

@@ -120,3 +120,47 @@ test('식수 집계(결정 35 보충): 7월 퇴실 학생의 석식이 방학 �
   const later = env.call(ADMIN, 'getMealCounts', '2027-07-26');
   assert.strictEqual(later.afterLeaveHallDinner, 0, '석식 중단일 뒤에는 빠진다');
 });
+
+test('막힌 학생의 "기록과 명단이 다릅니다 … 입퇴실로 처리해 주세요" 경고는 미리보기에서 빠진다(그 안내를 따라가도 막히므로). 막히지 않은 학생의 같은 경고는 남는다', () => {
+  const o20 = (env) => ({ termId: term(env, '2027 1학기').id, ymd: '2027-03-20' });
+  const warnOf = (env, sid, text) => env.as(ADMIN, (c) => c.rosterPlan_(text, o20(env), { terms: c.readAll_('terms'), today: c.today_(), existing: c.rosterLoadExisting_() })).warnings.filter((w) => /이\(가\) 기록\(/.test(w) && w.indexOf(env.rows('students').find((x) => x.id === sid).name) >= 0);
+  const env = makeEnv();
+  const { s } = pick2(env);
+  const text = rosterText(env, term(env, '2027 1학기').id);
+  addLeave2out(env, s, '2027-03-10');
+  const banned = warnOf(env, s, text);
+  assert.strictEqual(banned.length, 0, '막힌 학생 경고가 없다: ' + banned.join(' | '));
+  const env2 = makeEnv();   // 같은 상태지만 2OUT이 아닌 일반 퇴실이면 경고가 남는다
+  env2.asOwner((c) => c.appendRecord_('status_changes', { student_id: s, item: '학사', value: '퇴실', effective_date: '2027-03-10', effective_date_auto: '2027-03-10', requested_at: '2027-03-08T08:00:00',
+    reason: '가정 사정', memo: '', source: 'F6', status: '유효', doc_submitted: 'TRUE', linked_change_id: '', cancel_reason: '' }, ADMIN));
+  assert.ok(warnOf(env2, s, text).length >= 1, '일반 퇴실이면 경고가 남는다');
+});
+
+test('명단 줄의 학생 구글 계정이 저장된 것과 달라 새 학생(new:)으로 읽혀도 같은 학번·이름의 막힌 학생이면 막는다(중복 학생·학사 입실이 만들어지지 않는다)', () => {
+  const run = (ban) => {
+    const env = makeEnv();
+    const { s } = pick2(env);
+    if (ban) addLeave2out(env, s, '2026-12-10');
+    const stu = env.rows('students').find((x) => x.id === s);
+    const lines = rosterText(env, term(env, '2027 1학기').id).split('\n').map((l) => (l.split(',')[0] === String(stu.student_no) ? l.replace(stu.email, 'changed.' + stu.email) : l));
+    const text = lines.join('\n');
+    const p = env.call(ADMIN, 'previewRoster', text, opts(env));
+    return { env, p, text, stu };
+  };
+  const control = run(false);
+  assert.strictEqual(control.p.ok, true, JSON.stringify(control.p)); assert.strictEqual(control.p.counts.newStudents, 1, '대조: 막힘이 없으면 새 학생으로 읽힌다');
+  const x = run(true);
+  assert.strictEqual(x.p.ok, true, JSON.stringify(x.p)); assert.strictEqual(x.p.counts.newStudents, 0); assert.strictEqual(x.p.counts.banned, 1);
+  const n0 = x.env.rows('students').length;
+  const r = x.env.call(ADMIN, 'commitRoster', x.text, opts(x.env), { counts: x.p.counts, termId: x.p.term.id, ymd: x.p.ymd });
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.strictEqual(x.env.rows('students').length, n0, '중복 학생이 만들어지지 않는다');
+});
+
+test('막힘 판정 날짜는 max(적용일, 기간 시작일): 적용일이 기간 시작 전이어도 퇴실이 시작일 전에 있으면 막는다', () => {
+  const env = makeEnv();
+  const { s } = pick2(env);
+  addLeave2out(env, s, '2027-02-15');   // 적용일(2/1)보다 늦고 기간 시작(3/2)보다 이른 퇴실
+  const p = env.call(ADMIN, 'previewRoster', rosterText(env, term(env, '2027 1학기').id, { [s]: T2 }), { termId: term(env, '2027 1학기').id, ymd: '2027-02-01' });
+  assert.strictEqual(p.ok, true, JSON.stringify(p)); assert.strictEqual(p.counts.banned, 1);
+});

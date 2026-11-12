@@ -148,7 +148,7 @@
           ['퇴실 후보', k.leaving + '명'], ['2OUT 퇴실로 막힘', (k.banned || 0) + '명']]));
         if (p.lists.banned && p.lists.banned.length) {   // 결정 63: 다시 들어올 수 없는 학생은 빼고 올린다
           var bn = el('div', { class: 'card' }, [el('h2', { text: '등록에서 뺀 학생 ' + p.lists.banned.length + '명' }),
-            el('div', { class: 'notice warn', style: 'word-break:keep-all', text: '2OUT 퇴실한 학생은 막히는 기간 동안 다시 등록할 수 없어 이 학생들의 줄만 빼고 저장합니다.' })]);
+            el('div', { class: 'notice warn', style: 'word-break:keep-all', text: '2OUT 퇴실한 학생은 막히는 기간 동안 다시 등록할 수 없어 이 학생들의 줄만 빼고 저장합니다. 학부모 연결 명단에서도 이 학생들의 줄을 빼 주세요(등록이 없는 학생은 연결할 수 없습니다).' })]);
           p.lists.banned.forEach(function (b) { bn.appendChild(el('div', { style: 'padding:6px 0;border-bottom:1px solid var(--line);word-break:keep-all', text: b.student_no + ' ' + b.name + ' — ' + b.message })); });
           resultBox.appendChild(bn);
         }
@@ -203,7 +203,7 @@
           UI.toast(r.nothingToDo ? '변경 없음' : '저장했습니다.', { kind: 'ok' });
           textarea.value = ''; setPreview(null);
           resultBox.appendChild(el('div', { class: 'notice ok', text: '저장했습니다. ' + (students ? '이어서 학부모 연결을 올려 주세요.' : '') }));
-          if (students && r.banned && r.banned.length) resultBox.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: '2OUT 퇴실로 막혀 저장하지 않은 학생: ' + r.banned.map(function (b) { return b.name + '(' + b.message + ')'; }).join(', ') }));
+          if (students && r.banned && r.banned.length) resultBox.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: '2OUT 퇴실로 막혀 저장하지 않은 학생(학부모 연결 명단에서도 줄을 빼 주세요): ' + r.banned.map(function (b) { return b.name + '(' + b.message + ')'; }).join(', ') }));
         }).catch(function (err) { state.busy = false; clear(resultBox); showError(resultBox, err); });
       } });
     }
