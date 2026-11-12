@@ -91,7 +91,8 @@ function printRenderMealCounts_(model, opts) {
     '학사 = 기숙 + 비기숙. 석식 계 = 석식 학사 + 석식 일반. 퇴실한 학생도 석식 중단일 전까지는 학사 석식에 포함됩니다.'];
   var after = printMealNum_(counts.afterLeaveHallDinner);
   notes.push('퇴실 후 석식 유지 ' + (after === null ? '?' : after) + '명(학사 퇴실했지만 석식 중단일 전이라 학사 석식에 포함).');
-  if (model.docUnsubmitted !== undefined && model.docUnsubmitted !== null) notes.push('서류 미제출 ' + (printMealNum_(model.docUnsubmitted) === null ? '?' : printMealNum_(model.docUnsubmitted)) + '명(집계에는 이미 포함, 이름은 담당교사 화면에서 봅니다).');
+  if (model.docRows !== undefined && model.docRows !== null) notes.push('아직 서류가 없는 신청 ' + (printMealNum_(model.docRows) === null ? '?' : printMealNum_(model.docRows)) + '건(전체 기준, 집계에는 이미 포함, 이름은 담당교사 화면에서 봅니다).');   // 화면과 같은 '건' 기준
+  else if (model.docUnsubmitted !== undefined && model.docUnsubmitted !== null) notes.push('서류 미제출 ' + (printMealNum_(model.docUnsubmitted) === null ? '?' : printMealNum_(model.docUnsubmitted)) + '명(집계에는 이미 포함, 이름은 담당교사 화면에서 봅니다).');
   var unknown = printArr_(counts.unknownGroup);
   // 학생마다 반복되는 R12 경고("<학생 id> 학생의 성별·학년을 알 수 없어 …")는 급식실에 내는 종이에 싣지 않는다(이름은 교사 화면 몫). 요약 한 줄만 남긴다
   var warnings = printArr_(counts.warnings).filter(function (w) {

@@ -423,9 +423,9 @@ var UI = {};
   /* ───────── 좌석 격자 ───────── */
 
   /**
-   * UI.seatGrid({rows, cols, cells:[{row,col,kind:'seat'|'pillar'|'door'|'window', seatLabel, text, vacant}],
+   * UI.seatGrid({rows, cols, cells:[{row,col,kind:'seat'|'pillar'|'door'|'window', seatLabel, text, vacant, bad}],
    *              mode:'single'|'swap', onselect(picked:[{row,col}], done)}) → 노드. getSelection()·clearSelection()
-   * 좌석 칸만 누를 수 있다. 'swap'은 두 칸을 차례로 누르면 done=true. 칸 48px 이상, 격자가 넓으면 이 상자 안에서만 가로로 민다.
+   * `bad`(규칙 위반)인 칸은 굵은 빨간 테두리 + ⚠로 표시한다(색만으로 알리지 않음). 좌석 칸만 누를 수 있다. 'swap'은 두 칸을 차례로 누르면 done=true. 칸 48px 이상, 격자가 넓으면 이 상자 안에서만 가로로 민다.
    */
   UI.seatGrid = function (opts) {
     opts = opts || {};
@@ -442,8 +442,8 @@ var UI = {};
         var key = r + ',' + c, cell = byPos[key], td = el('td');
         if (cell && cell.kind === 'seat') {
           var btn = el('button', {
-            type: 'button', class: cell.vacant ? 'seat-cell vacant' : 'seat-cell', 'aria-pressed': 'false',
-            'aria-label': (cell.seatLabel ? cell.seatLabel + '번 ' : '') + (cell.text || '공석')
+            type: 'button', class: 'seat-cell' + (cell.vacant ? ' vacant' : '') + (cell.bad ? ' bad' : ''), 'aria-pressed': 'false',
+            'aria-label': (cell.seatLabel ? cell.seatLabel + '번 ' : '') + (cell.text || '공석') + (cell.bad ? ' (규칙 위반)' : '')
           }, [el('span', { class: 'seat-no', text: cell.seatLabel || '' }), el('span', { class: 'seat-text', text: cell.text || (cell.vacant ? '공석' : '') })]);
           buttons[key] = btn;
           btn.addEventListener('click', function (k) { return function () { pick(k); }; }(key));

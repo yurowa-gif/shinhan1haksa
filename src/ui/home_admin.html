@@ -82,7 +82,8 @@
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '좌석표' }),
       el('div', { class: 'muted', text: '공간·좌석 격자를 그리고 학생을 자리에 앉힙니다.' }),
-      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=seats', text: '좌석표 열기' })
+      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=seats', text: '좌석표 열기' }),
+      el('a', { class: 'btn secondary', style: 'margin:12px 0 0 8px', href: d.appUrl + '?page=avoid', text: '떨어뜨릴 짝' })
     ]));
     root.appendChild(soonCard('계정, 설정', '1단계부터 차례로 추가합니다.'));
   }
@@ -100,7 +101,7 @@
         el('h2', { text: '오늘 급식·인원' }),
         el('div', { class: 'muted', style: 'margin-bottom:8px', text: c.dateKo + ' · ' + c.termName }),
         el('div', { class: 'stats', style: 'margin:4px 0 12px' }, [statBox(c.hall, '학사'), statBox(c.dorm, '기숙'), statBox(c.breakfast, '조식'), statBox(c.hallDinner + c.generalDinner, '석식')]),
-        el('div', { class: 'muted', style: 'word-break:keep-all', text: '기숙 남 ' + c.dormMale + ' · 여 ' + c.dormFemale + ' / 석식 학사 ' + c.hallDinner + ' · 일반 ' + c.generalDinner }),
+        el('div', { class: 'muted', style: 'word-break:keep-all', text: '기숙 남 ' + c.dormMale + ' · 여 ' + c.dormFemale + ' / 석식 학사 ' + c.hallDinner + (c.afterLeaveHallDinner > 0 ? '(퇴실 후 석식 유지 ' + c.afterLeaveHallDinner + ' 포함)' : '') + ' · 일반 ' + c.generalDinner }),
         el('div', { style: 'margin-top:8px;word-break:keep-all', text: (f.vacancy || []).map(function (v) { return v.label + ' 빈자리 ' + v.vacant + ' (전체 ' + v.total + '석)'; }).join(' · ') }),
         el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=mealcount', text: '식수 집계 열기' })
       ]));
@@ -114,6 +115,8 @@
     if (f.docMore) kids.push(el('div', { class: 'muted', style: 'margin-top:8px', text: '그 밖에 ' + f.docMore + '건이 더 있습니다.' }));
     kids.push(el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=moves&tab=meal', text: '급식 변경 신청' }));
     kids.push(el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=moves', text: '입퇴실 신청' }));
-    root.appendChild(el('div', { class: 'card' }, kids));
+    root.appendChild(el('div', { class: 'card', id: 'docs' }, kids));
+    // 식수 집계 화면의 '서류 미제출' 링크(#docs)로 들어오면 서류 카드까지 내린다. Apps Script는 앱이 iframe 안이라 바깥 hash를 getLocation으로 읽는다(없으면 건너뜀)
+    try { if (window.google && google.script && google.script.url && google.script.url.getLocation) google.script.url.getLocation(function (l) { if (l && l.hash === 'docs') { var t = document.getElementById('docs'); if (t) t.scrollIntoView(); } }); } catch (e) { /* 스크롤만 못 할 뿐 */ }
   }
 </script>
