@@ -219,3 +219,33 @@ test('퇴실 전 조식 값이 없던 학생의 재입실: 기본값은 조식 �
   const bad = prev(env2, HALL, input(d2, '학사 입실', '2027-03-03T15:30:00', '2027-03-08', { meals: { '조식': '', '석식': '학사 석식' } }));
   assert.strictEqual(bad.ok, false); assert.ok(bad.errors.some((e) => e.field === 'meals'));
 });
+
+test('followups 36: 퇴실 전력이 있는 재입실은 저장(saveMove)도 급식(meals)이 없으면 거부하고 행을 쓰지 않는다. 서버가 기본값을 대신 채우지 않는다', () => {
+  const env = makeEnv();
+  const { dorm } = pick(env);
+  saveOk(env, HALL, input(dorm, '학사 및 기숙사 퇴실', '2027-03-03T15:00:00', '2027-03-05'));
+  const n = env.rows('status_changes').length;
+  const base = input(dorm, '학사 입실', '2027-03-03T15:30:00', '2027-03-08');
+  const r = env.call(HALL, 'saveMove', base, '');
+  assert.strictEqual(r.ok, false); assert.ok(r.errors.some((e) => e.field === 'meals'), JSON.stringify(r.errors));
+  [{ meals: {} }, { meals: { '조식': '실시' } }, { meals: 'x' }, { meals: null }].forEach((x) => {
+    const q = env.call(HALL, 'saveMove', Object.assign({}, base, x), '');
+    assert.strictEqual(q.ok, false, JSON.stringify(x)); assert.ok(q.errors.some((e) => e.field === 'meals'), JSON.stringify(q.errors));
+  });
+  assert.strictEqual(env.rows('status_changes').length, n, '거부된 저장은 아무것도 쓰지 않는다');
+});
+
+test('followups 15: 퇴실 신청의 신청 일시는 날짜+시각 전체여야 한다(F6 저장 — 날짜만·빈칸·시각 없음은 쓰기 0건)', () => {
+  const env = makeEnv();
+  const { non } = pick(env);
+  const n = env.rows('status_changes').length;
+  ['', '2027-03-03', '2027-03-03T', '2027-03-03 15', '2027-03-03T25:00:00'].forEach((at) => {
+    const i = input(non, '학사 퇴실', at, '2027-03-10');
+    assert.strictEqual(env.call(HALL, 'previewMove', i).ok, false, at);
+    const r = env.call(HALL, 'saveMove', i, '');
+    assert.strictEqual(r.ok, false, at); assert.ok(r.errors.some((e) => e.field === 'requestedAt'), at + JSON.stringify(r.errors));
+  });
+  assert.strictEqual(env.rows('status_changes').length, n);
+  const r = saveOk(env, HALL, input(non, '학사 퇴실', '2027-03-03T15:00', '2027-03-10'));
+  assert.ok(/^2027-03-03T15:00:00$/.test(env.rows('status_changes').find((x) => x.id === r.id).requested_at), '저장된 값은 날짜+시각 전체');
+});
