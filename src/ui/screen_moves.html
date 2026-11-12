@@ -206,6 +206,8 @@
         var body = [el('p', { class: 'sheet-lead', text: p.lead }), el('div', { class: 'muted', text: name })];
         if (p.lines.length) body.push(el('ul', { class: 'list' }, p.lines.map(function (t) { return el('li', { text: t }); })));
         (p.warnings || []).forEach(function (w) { body.push(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: w })); });
+        // 퇴실 중이라 막혔던(저장되지 않은) 급식 신청서는 행이 없어 되살아나지 않는다 — 필요하면 다시 입력한다(followups 33)
+        body.push(el('div', { class: 'notice info', style: 'word-break:keep-all', text: '퇴실 중이라 막혔던 급식 신청서는 되살아나지 않습니다. 필요하면 다시 입력해 주세요.' }));
         body.push(field);
         var sheet = UI.bottomSheet({ title: '퇴실을 취소합니다', content: el('div', {}, body), actions: [
           { text: '닫기', kind: 'secondary', onclick: function () { sheet.close(); } },
