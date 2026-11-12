@@ -42,8 +42,10 @@
         var allBy = {}; [1, 2, 3].forEach(function (k) { allBy[k] = g(s.male, k) + g(s.female, k); });
         tb.appendChild(row('전체', { capacity: all.capacity, count: all.count, vacant: all.vacant, byGrade: allBy }, 'total'));
         var th = el('thead', {}, [el('tr', {}, ['층', '정원', '입실', '빈 자리', '1학년', '2학년', '3학년'].map(function (h) { return el('th', { scope: 'col', text: h }); }))]);
-        box.appendChild(el('div', { class: 'tablewrap' }, [el('table', { class: 'data compact' }, [th, tb])]));
-        box.appendChild(el('div', { class: 'muted', style: 'margin:-4px 0 12px', text: '표는 옆으로 밀 수 있습니다(첫 열은 고정).' }));
+        var wrap = el('div', { class: 'tablewrap' }, [el('table', { class: 'data compact' }, [th, tb])]);
+        var slide = el('div', { class: 'muted', style: 'margin:-4px 0 12px;display:none', text: '표는 옆으로 밀 수 있습니다(첫 열은 고정).' });
+        box.appendChild(wrap); box.appendChild(slide);
+        setTimeout(function () { if (wrap.scrollWidth > wrap.clientWidth + 1) slide.style.display = ''; }, 0);   // 표가 다 들어가면 안내를 숨긴다
         box.appendChild(el('div', { class: 'notice info', style: 'word-break:keep-all', text: '입실은 기숙사 상태가 "입실"이고 방이 배정된 학생입니다. 기숙사 퇴실 적용일부터 그 자리는 빈 자리로 셉니다.' }
           ));
         if (s.unassignedCount) box.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: '방이 배정되지 않은 기숙사생이 ' + s.unassignedCount + '명 있습니다.' }));
@@ -114,7 +116,7 @@
       var bad = {};
       view.violations.forEach(function (v) { (bad[v.roomId] = bad[v.roomId] || []).push(v); });
       var cards = view.rooms.filter(function (r) { return r.floor + '|' + r.gender === floor; }).map(function (r) { return roomCard(r, bad[r.id] || []); });
-      main.appendChild(el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:12px' }, cards));
+      main.appendChild(el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(max(280px,calc((100% - 24px) / 3)),1fr));gap:12px;margin-bottom:12px' }, cards));
       if (view.unassigned && view.unassigned.length) {
         var un = el('div', { class: 'card' }, [el('h2', { text: '방 배정 안 된 기숙사생 ' + view.unassigned.length + '명' }),
           el('div', { class: 'chips', style: 'margin:0' }, view.unassigned.map(function (u) { return chip(u, false); }))]);

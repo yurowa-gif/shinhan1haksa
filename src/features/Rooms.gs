@@ -160,7 +160,6 @@ function roomBoardOut_(board) {
  */
 function getRoomData(termId) {
   var user = requirePermission_('room.view');
-  roomFresh_();
   var d = roomLoad_(termId);
   var canEdit = roomCan_(user, 'room.edit') && d.today <= d.term.end_date;
   var detail = roomCan_(user, 'room.edit');
@@ -172,7 +171,6 @@ function getRoomData(termId) {
 /** 정원 현황판(층·성별·학년): 숫자만. room.view 모두. */
 function getRoomStats(termId) {
   var user = requirePermission_('room.view');
-  roomFresh_();
   var d = roomLoad_(termId);
   var v = roomView_(d, roomCurrent_(d), { names: false, avoid: false });
   return { term: roomTermOut_(d), canEdit: roomCan_(user, 'room.edit'), floors: v.board.floors, male: roomBoardOut_(v.board).male, female: roomBoardOut_(v.board).female,
@@ -191,7 +189,6 @@ function roomSeedOf_(seed) {
 /** 방 초안 미리보기(저장하지 않는다). → {ok, assignments, changed, violations, board, unplaced, warnings, seed} */
 function previewRoomDraft(termId, seed) {
   var user = requirePermission_('room.edit');
-  roomFresh_();
   var d = roomLoad_(termId);
   if (d.today > d.term.end_date) return { ok: false, errors: [{ field: '', message: '끝난 기간의 방 배정은 바꿀 수 없습니다.' }] };
   var sd = roomSeedOf_(seed);
@@ -208,7 +205,6 @@ function previewRoomDraft(termId, seed) {
 /** 고친 배정(맞바꾸기·옮기기 뒤)을 다시 계산한다(저장하지 않는다). 정원 초과·성별은 blocking 위반으로 나온다. */
 function previewRoomPlan(termId, assignments) {
   var user = requirePermission_('room.edit');
-  roomFresh_();
   var d = roomLoad_(termId);
   var n = roomNormalize_(d, assignments);
   if (n.errors.length) return { ok: false, errors: n.errors };
@@ -231,16 +227,18 @@ function saveRoomAssignments(termId, assignments, expect) {
     if (d.today > d.term.end_date) return { ok: false, errors: [{ field: '', message: '끝난 기간의 방 배정은 바꿀 수 없습니다.' }] };
     var n = roomNormalize_(d, assignments);
     if (n.errors.length) return { ok: false, errors: n.errors };
-    var key = function (a) { return a.room_id + '|' + a.student_id; };
-    var want = {};
-    n.pairs.forEach(function (a) { want[key(a)] = a; });
-    var have = {};
-    d.live.forEach(function (a) { have[key(a)] = a; });
-    var ended = d.live.filter(function (a) { return !want[key(a)]; });
-    var creates = n.pairs.filter(function (a) { return !have[key(a)]; });
+    // 바뀌는 학생 = 지금 효력이 있는 방(기숙사생 기준)과 계획의 방이 다른 학생. 끝내거나 취소하는 행은 그 학생들의 행뿐이다.
+    // 그날 기숙사에 없는 학생(입실 예정자·퇴실자)의 행은 계획에 없어도 건드리지 않는다(그날 자리를 차지하지 않는 것은 화면·규칙이 이미 처리한다).
+    var curRoom = {}, newRoom = {};
+    roomCurrent_(d).forEach(function (a) { curRoom[a.student_id] = a.room_id; });
+    n.pairs.forEach(function (a) { newRoom[a.student_id] = a.room_id; });
+    var changed = {};
+    Object.keys(curRoom).concat(Object.keys(newRoom)).forEach(function (sid) { if (curRoom[sid] !== newRoom[sid]) changed[sid] = true; });
+    var ended = d.live.filter(function (a) { return changed[a.student_id] && a.room_id !== newRoom[a.student_id]; });
+    var creates = n.pairs.filter(function (a) { return changed[a.student_id]; });
     if (!ended.length && !creates.length) return { ok: true, unchanged: true, token: roomToken_(d.live) };
     if (String(expect || '') !== roomToken_(d.live)) return { ok: false, stale: true, error: '확인한 뒤 방 배정이 바뀌었습니다. 다시 불러와 주세요.' };
-    var v = roomView_(d, n.pairs, { names: false, avoid: roomCan_(user, 'avoid.view') });
+    var v = roomView_(d, n.pairs, { names: true, avoid: roomCan_(user, 'avoid.view') });   // 방을 고칠 수 있는 사람이라 오류 문구에 학생 이름을 넣는다
     var blocking = v.violations.filter(function (x) { return x.blocking; });
     if (blocking.length) return { ok: false, errors: blocking.map(function (x) { return { field: '', message: x.text }; }) };
     var from = d.ymd <= d.term.start_date ? '' : d.ymd;   // 기준일이 기간 시작일 이하면 기간 전체(나중에 시작일을 앞당겨도 잠기지 않는다)
@@ -259,7 +257,6 @@ function saveRoomAssignments(termId, assignments, expect) {
 /** 관리자·학사 교사 홈 카드: 기숙사 빈 자리(남·여). 방 구성이 없거나 기간이 없으면 null. 학생 이름은 없다. */
 function roomHomeInfo_() {
   try {
-    roomFresh_();
     var d = roomLoad_('');
     if (!roomList_(d.rooms).length) return null;
     var v = roomView_(d, roomCurrent_(d), { names: false, avoid: false });

@@ -248,3 +248,51 @@ test('기준일이 기간 시작일 이하이면 새 행의 valid_from은 빈칸
   assert.strictEqual(call(env, ADMIN, 'saveRoomAssignments', g.term.id, p.assignments, g.token).ok, true);
   assert.ok(live(env).length > 0 && live(env).every((a) => a.valid_from === '' && a.valid_to === ''));
 });
+
+test('상관없는 저장이 그날 기숙사에 없는 학생(입실 예정자·퇴실자)의 행을 건드리지 않는다: 끝내거나 취소하는 것은 방이 실제로 바뀐 학생의 행뿐', () => {
+  const env = makeEnv('2027-03-03T12:00:00');
+  const dorm = dormOf(env).filter((s) => s.gender === '남');
+  assert.ok(dorm.length >= 4, '남 기숙사생 4명 이상');
+  const [mover, other, waiting, leaver] = dorm;
+  const setDorm = (sid, value, eff) => env.asOwner((c) => {
+    const row = c.readAll_('status_changes').find((x) => x.student_id === sid && x.item === '기숙사' && x.value === '입실');
+    if (value === '입실') c.updateRecord_('status_changes', row.id, { effective_date: eff, effective_date_auto: eff }, env.owner);
+    else c.appendRecord_('status_changes', { student_id: sid, item: '기숙사', value: '퇴실', effective_date: eff, effective_date_auto: eff, requested_at: '2027-03-03T10:00:00', reason: '', memo: '', source: 'F6', status: '유효', doc_submitted: 'TRUE', linked_change_id: '', cancel_reason: '' }, env.owner);
+  });
+  const g0 = call(env, ADMIN, 'getRoomData', '');
+  const r1 = roomByNo(env, 1).id, r2 = roomByNo(env, 2).id, r3 = roomByNo(env, 3).id;
+  // 입실 예정자(3/15 입실) 행과 퇴실 예정자(3/22 퇴실) 행을 미리 만들어 둔다
+  setDorm(waiting.id, '입실', '2027-03-15');
+  env.asOwner((c) => c.appendRecord_('room_assignments', { term_id: g0.term.id, room_id: r2, student_id: waiting.id, valid_from: '2027-03-15', valid_to: '', status: '배정', memo: '' }, env.owner));
+  const first = [{ room_id: r1, student_id: mover.id }, { room_id: r1, student_id: other.id }, { room_id: r3, student_id: leaver.id }];
+  const g1 = call(env, ADMIN, 'getRoomData', '');
+  assert.strictEqual(call(env, ADMIN, 'saveRoomAssignments', g1.term.id, first, g1.token).ok, true);
+  const rowOf = (sid) => env.rows('room_assignments').filter((a) => a.student_id === sid);
+  // 재현 1: 입실 예정자는 계획에 없고 기준일(3/3)에 기숙사에 없다 → 다른 두 학생만 맞바꿔도 그 행은 그대로
+  const g2 = call(env, ADMIN, 'getRoomData', '');
+  const swapped = [{ room_id: r1, student_id: other.id }, { room_id: r2, student_id: mover.id }, { room_id: r3, student_id: leaver.id }];
+  const r = call(env, ADMIN, 'saveRoomAssignments', g2.term.id, swapped, g2.token);
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.deepStrictEqual([r.endedCount + r.cancelCount, r.createCount], [1, 1], '바뀐 학생(mover) 한 명만: ' + JSON.stringify(r));
+  const w = rowOf(waiting.id);
+  assert.ok(w.length === 1 && w[0].status === '배정' && w[0].valid_to === '' && w[0].valid_from === '2027-03-15', '입실 예정자 행은 그대로: ' + JSON.stringify(w));
+  // 재현 2: 퇴실자(3/22 퇴실)는 3/23에 다른 학생 한 명만 옮겨도 행이 바뀌지 않는다
+  setDorm(leaver.id, '퇴실', '2027-03-22');
+  env.setNow('2027-03-23T12:00:00');
+  const g3 = call(env, ADMIN, 'getRoomData', '');
+  assert.ok(!g3.rooms.flatMap((x) => x.members).some((m) => m.id === leaver.id), '퇴실자는 화면 방에서 빠졌다');
+  const plan3 = g3.rooms.flatMap((x) => x.members.map((m) => ({ room_id: x.id, student_id: m.id }))).map((x) => (x.student_id === other.id ? { room_id: r3, student_id: other.id } : x));
+  const r3res = call(env, ADMIN, 'saveRoomAssignments', g3.term.id, plan3, g3.token);
+  assert.strictEqual(r3res.ok, true, JSON.stringify(r3res));
+  assert.strictEqual(r3res.endedCount + r3res.cancelCount, 1, '바뀐 학생 한 명의 행만: ' + JSON.stringify(r3res));
+  const lv = rowOf(leaver.id);
+  assert.ok(lv.length === 1 && lv[0].valid_to === '' && lv[0].status === '배정', '퇴실자 행은 그대로: ' + JSON.stringify(lv));
+});
+
+test('정원 초과·성별 저장 거부 문구에 학생 이름이 들어간다(편집자만 본다)', () => {
+  const env = makeEnv();
+  const g = call(env, ADMIN, 'getRoomData', '');
+  const male = dormOf(env).find((s) => s.gender === '남'), femaleRoom = roomByNo(env, 20);
+  const r = call(env, ADMIN, 'saveRoomAssignments', g.term.id, [{ room_id: femaleRoom.id, student_id: male.id }], g.token);
+  assert.strictEqual(r.ok, false); assert.ok(r.errors[0].message.includes(male.name), r.errors[0].message);
+});
