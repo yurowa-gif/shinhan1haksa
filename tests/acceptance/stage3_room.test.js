@@ -110,6 +110,23 @@ test('끝까지 방 배정: 초안 → 저장(성별 층·정원), 막는 위반
   assert.deepStrictEqual([again.ok, again.unchanged], [true, true]);
   assert.strictEqual(raRows().length, after.length);
 
+  // 짝 정보: 방 짝 두 학생을 같은 방에 넣어 저장(짝 위반은 표시만, 저장은 된다) → 학사 교사에게는 '떨어뜨릴 짝'이 보이고,
+  // 출결·근무표 담당 응답에는 짝 위반·사유·id가 없다(avoid.view 가드를 빼면 여기서 잡힌다)
+  const rp = env.rows('avoid_pairs').find((x) => x.scope !== '좌석' && roomOf[x.student_a] && roomOf[x.student_b]);
+  assert.ok(rp, '두 학생 모두 기숙사생인 방 짝');
+  const together = p.assignments.map((x) => x.student_id === rp.student_b ? Object.assign({}, x, { room_id: roomOf[rp.student_a] }) : x);
+  const tp = call(HALL, 'previewRoomPlan', term.id, together);
+  assert.deepStrictEqual([tp.ok, tp.blocked], [true, false], JSON.stringify(tp));
+  assert.ok(JSON.stringify(tp.violations).includes('떨어뜨릴 짝'), '학사 교사 미리보기에 짝 위반');
+  const ts = call(HALL, 'saveRoomAssignments', term.id, together, call(HALL, 'getRoomData', term.id).token);
+  assert.strictEqual(ts.ok, true, '짝 위반은 저장을 막지 않는다 ' + JSON.stringify(ts));
+  assert.ok(JSON.stringify(call(HALL, 'getRoomData', term.id)).includes('떨어뜨릴 짝'), '학사 교사 방 화면에 짝 위반');
+  for (const who of [ATT, DUTYM]) {
+    const view = JSON.stringify(call(who, 'getRoomData', term.id)) + JSON.stringify(call(who, 'getRoomStats', term.id));
+    assert.ok(!view.includes('떨어뜨릴 짝'), who + ' 응답에 짝 위반 없음');
+    assert.ok(!env.rows('avoid_pairs').some((x) => view.includes(x.reason) || view.includes(x.id) || view.includes(x.student_a)), who + ' 응답에 짝 사유·id·학생 없음');
+  }
+
   // 홈 카드 = 현황판, 그리고 기숙사 퇴실 뒤 공석(3/12 기숙사 퇴실 → 그날부터 인원 −1, 행은 지우지 않음)
   const cardVsBoard = () => {
     const st = call(ADMIN, 'getRoomStats', term.id), card = call(ADMIN, 'getHomeData', 'admin').food.dorm;

@@ -87,16 +87,6 @@ test('끝까지 좌석 초안: 성별·SA·3학년 유지, 짝 정보는 권한 
   assert.ok(moved, '자리가 바뀐 학생이 있다');
   assert.ok(JSON.stringify(today).includes(stu[moved].name));
 
-  // 짝 정보: 학사 교사는 짝 위반을 볼 수 있고(있다면), 담임·출결 응답에는 짝 위반·사유·짝 학생 묶음이 없다
-  for (const who of [HOMEROOM, ATT]) {
-    const view = JSON.stringify(plain(env.call(who, 'getSeatData', term.id)));
-    assert.ok(!view.includes('떨어뜨릴 짝'), who + ' 응답에 짝 위반 없음');
-    pairs.forEach((x) => assert.ok(!view.includes(x.reason) && !view.includes(x.id), who + ' 응답에 짝 사유·id 없음'));
-    env.expectDenied(who, 'seat.edit', 'previewSeatDraft', term.id, [], 20270309);
-  }
-  const hallView = JSON.stringify(plain(env.call(HALL, 'getSeatData', term.id)));
-  pairs.forEach((x) => assert.ok(!hallView.includes(x.reason), '좌석 화면에는 짝 사유를 싣지 않는다(짝 관리 화면에서만)'));
-
   // 두 번 저장해도 한 벌
   const n = env.rows('seat_assignments').length;
   const p2 = plain(env.call(HALL, 'previewSeatDraft', term.id, [], 20270309));
@@ -106,4 +96,31 @@ test('끝까지 좌석 초안: 성별·SA·3학년 유지, 짝 정보는 권한 
   assert.strictEqual(env.rows('seat_assignments').length, n);
   const live = env.rows('seat_assignments').filter((r) => r.term_id === term.id && r.status === '배정' && !r.valid_to);
   assert.strictEqual(new Set(live.map((r) => r.student_id)).size, live.length, '학생마다 살아 있는 배정 한 줄');
+
+  // 짝 정보: 좌석 짝 두 학생을 이웃 자리에 놓고(맞바꾸기) '이 자리 고정'으로 미리보기 → 학사 교사에게는 '떨어뜨릴 짝'이 보이고,
+  // 담임·출결 응답에는 짝 위반·사유·id가 없다(avoid.view 가드를 빼면 여기서 잡힌다)
+  const pair = pairs.find((x) => x.scope === '좌석');
+  let cur = plain(env.call(HALL, 'getSeatData', term.id));
+  const cellOf = (sid) => cells(cur).find((c) => c.studentId === sid);
+  const ca = cellOf(pair.student_a), cb = cellOf(pair.student_b);
+  const spaceOfCell = (c) => cur.spaces.find((sp) => sp.cells.includes(c));
+  const near = spaceOfCell(ca).cells.find((c) => c.kind === 'seat' && c.studentId !== late && Math.abs(c.row - ca.row) + Math.abs(c.col - ca.col) === 1);
+  assert.ok(near, '짝 학생 옆 자리');
+  if (near.id !== cb.id) {
+    const sw = plain(env.call(HALL, 'swapSeats', term.id, near.id, cb.id, { [near.id]: near.token, [cb.id]: cb.token }));   // 빈 자리면 옮기기
+    assert.strictEqual(sw.ok, true, JSON.stringify(sw));
+    cur = plain(env.call(HALL, 'getSeatData', term.id));
+  }
+  assert.ok(JSON.stringify(cur).includes('떨어뜨릴 짝'), '학사 교사 좌석표에 짝 위반(빨간 칸)이 보인다');
+  const pf = plain(env.call(HALL, 'previewSeatDraft', term.id, [ca.id, near.id], 20270310));
+  assert.strictEqual(pf.ok, true, JSON.stringify(pf));
+  assert.ok(JSON.stringify(pf.violations).includes('떨어뜨릴 짝'), '학사 교사 미리보기에 짝 위반 ' + JSON.stringify(pf.violations));
+  for (const who of [HOMEROOM, ATT]) {
+    const view = JSON.stringify(plain(env.call(who, 'getSeatData', term.id)));
+    assert.ok(!view.includes('떨어뜨릴 짝'), who + ' 응답에 짝 위반 없음');
+    pairs.forEach((x) => assert.ok(!view.includes(x.reason) && !view.includes(x.id), who + ' 응답에 짝 사유·id 없음'));
+    env.expectDenied(who, 'seat.edit', 'previewSeatDraft', term.id, [], 20270309);
+  }
+  const hallView = JSON.stringify(cur);
+  pairs.forEach((x) => assert.ok(!hallView.includes(x.reason), '좌석 화면에는 짝 사유를 싣지 않는다(짝 관리 화면에서만)'));
 });
