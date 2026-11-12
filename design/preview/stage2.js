@@ -25,8 +25,7 @@ async function main(OUT = OUT2, screens) {
   fs.mkdirSync(OUT, { recursive: true });
   const file = path.join(OUT, 'index.html');
   fs.writeFileSync(file, build(screens));
-  const { chromium } = require('playwright');
-  const browser = await chromium.launch();
+  const browser = await require('./browser.js').launchKo();
   const probe = await browser.newPage();
   await probe.goto('file://' + file);
   const ids = await probe.evaluate(() => ORDER.map((k) => ({ id: k, sheet: SCREENS[k].sheet, label: SCREENS[k].label })));

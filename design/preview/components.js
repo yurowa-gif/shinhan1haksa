@@ -72,9 +72,8 @@ async function main() {
   fs.mkdirSync(OUT, { recursive: true });
   const file = path.join(OUT, 'components.html');
   fs.writeFileSync(file, build());
-  const { chromium } = require('playwright');
-  const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 360, height: 800 }, deviceScaleFactor: 2 });
+  const browser = await require('./browser.js').launchKo();
+  const page = await browser.newPage({ viewport: { width: 360, height: 800 }, deviceScaleFactor: 2, locale: 'ko-KR' });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('file://' + file);
