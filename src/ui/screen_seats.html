@@ -19,9 +19,9 @@
   .seat-row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 </style>
 <script>
-  /** 좌석표 화면(C6): 배정(미배정 학생 → 자리, 두 자리 맞바꾸기, 배정 풀기) + 격자 편집(관리자). */
+  /** 좌석표 화면(C6): 배정(미배정 학생 → 자리, 두 자리 맞바꾸기, 배정 풀기) + 초안 만들기(C22) + 격자 편집(관리자). */
   function renderScreen(root) {
-    var state = { data: null, termId: '', spaceId: '', mode: 'assign', student: null, filter: { gender: '', grade: '', veritas: '' }, layout: null };
+    var state = { data: null, termId: '', spaceId: '', mode: 'assign', student: null, filter: { gender: '', grade: '', veritas: '' }, layout: null, pins: {}, preview: null, busy: false };
     var head = el('div', { class: 'card' });
     var body = el('div');
     root.appendChild(head); root.appendChild(body);
@@ -32,10 +32,11 @@
         state.data = d; state.termId = d.term.id;
         if (!d.spaces.some(function (s) { return s.id === state.spaceId; })) state.spaceId = d.spaces.length ? d.spaces[0].id : '';
         if (state.student && !d.unseated.some(function (s) { return s.id === state.student.id; })) state.student = null;
+        Object.keys(state.pins).forEach(function (sid) { if (!d.spaces.some(function (sp) { return sp.cells.some(function (c) { return c.id === sid && c.studentId === state.pins[sid]; }); })) delete state.pins[sid]; });
         drawHead(); drawBody(note);
       }).catch(function (err) { clear(head); showError(head, err); });
     }
-    function space() { return state.data.spaces.filter(function (s) { return s.id === state.spaceId; })[0] || null; }
+    function space() { return (state.preview ? state.preview.spaces : state.data.spaces).filter(function (s) { return s.id === state.spaceId; })[0] || null; }
     function posMap(sp) { var m = {}; sp.cells.forEach(function (c) { m[c.row + ',' + c.col] = c; }); return m; }
 
     function drawHead() {
@@ -43,7 +44,7 @@
       head.appendChild(el('h2', { text: '좌석표' }));
       var term = el('select', {}, state.data.terms.map(function (t) { return el('option', { value: t.id, text: t.name }); }));
       term.value = state.termId;
-      term.addEventListener('change', function () { state.termId = term.value; state.student = null; load(); });
+      term.addEventListener('change', function () { state.termId = term.value; state.student = null; state.pins = {}; state.preview = null; load(); });
       head.appendChild(UI.field('운영 기간', term, { name: 'term' }));
       head.appendChild(el('div', { class: 'muted', text: '기준일 ' + state.data.ymd + '(오늘이 기간 밖이면 가까운 날)' }));
       if (state.data.spaces.length) {
@@ -55,7 +56,7 @@
       if (state.data.canLayout) {
         head.appendChild(UI.segmented({ label: '하려는 일', value: state.mode,
           options: [{ value: 'assign', label: '학생 배정' }, { value: 'layout', label: '격자 편집' }],
-          onchange: function (v) { state.mode = v; state.student = null; state.layout = null; drawBody(); } }));
+          onchange: function (v) { state.mode = v; state.student = null; state.layout = null; state.preview = null; drawBody(); } }));
       }
       if (state.data.ended) head.appendChild(el('div', { class: 'notice info', text: '끝난 운영 기간입니다. 좌석표는 볼 수만 있습니다.' }));
       state.data.warnings.forEach(function (w) { head.appendChild(el('div', { class: 'notice warn', text: w })); });
@@ -73,7 +74,7 @@
           state.data.canLayout ? { text: '격자 편집 열기', onclick: function () { state.mode = 'layout'; drawHead(); drawBody(); } } : null));
         if (!state.data.canLayout) return;
       }
-      if (state.mode === 'layout' && state.data.canLayout) drawLayout(); else drawAssign();
+      if (state.mode === 'layout' && state.data.canLayout) drawLayout(); else if (state.preview) drawPreview(); else drawAssign();
     }
 
     /* ───────── 학생 배정 ───────── */
@@ -117,7 +118,7 @@
       var gridCard = el('div', { class: 'card' }, [el('h2', { text: sp.name })]);
       var pm = posMap(sp);
       var grid = UI.seatGrid({ rows: sp.rows, cols: sp.cols, mode: 'swap', cells: sp.cells.map(function (c) {
-        return { row: c.row, col: c.col, kind: c.kind, seatLabel: c.seatLabel, text: c.text, vacant: c.vacant };
+        return { row: c.row, col: c.col, kind: c.kind, seatLabel: c.seatLabel, text: state.pins[c.id] && c.text ? '📌 ' + c.text : c.text, vacant: c.vacant, bad: c.bad };
       }), onselect: function (picked, done) {
         if (!canEdit) { grid.clearSelection(); return; }
         clear(info);
@@ -130,6 +131,7 @@
           el('b', { text: (c.seatLabel ? c.seatLabel + '번 · ' : '') + (c.text || '공석') + (c.hold ? ' (' + c.hold + ' — ' + c.reason + ')' : '') }),
           el('div', { class: 'seat-row-actions' }, [
             (c.studentId || c.hold) ? el('button', { type: 'button', class: 'btn secondary', text: '배정 풀기', onclick: function () { confirmUnassign(c); } }) : null,
+            c.studentId ? el('button', { type: 'button', class: 'btn secondary', text: state.pins[c.id] ? '고정 풀기' : '이 자리 고정', onclick: function () { if (state.pins[c.id]) delete state.pins[c.id]; else state.pins[c.id] = c.studentId; drawBody(); } }) : null,
             el('button', { type: 'button', class: 'btn secondary', text: '선택 취소', onclick: function () { grid.clearSelection(); clear(info); } })
           ]),
           el('div', { class: 'muted', style: 'margin-top:8px', text: '다른 자리를 하나 더 누르면 맞바꿉니다(빈 자리면 이동).' })
@@ -140,6 +142,100 @@
       if (!canEdit) gridCard.appendChild(el('div', { class: 'muted', text: state.data.ended ? '끝난 기간이라 볼 수만 있습니다.' : '좌석 배정은 관리자와 학사 교사만 할 수 있습니다.' }));
       if (!canEdit && state.data.unseatedCount) gridCard.appendChild(el('div', { class: 'muted', text: '미배정 학생 ' + state.data.unseatedCount + '명' }));
       body.appendChild(gridCard);
+      var vl = violationCard(state.data.violations, grid);
+      if (vl) body.appendChild(vl);
+      if (canEdit) {
+        var pinned = Object.keys(state.pins).length;
+        if (pinned) body.appendChild(el('div', { class: 'muted', text: '고정한 자리 ' + pinned + '개 — [초안 만들기]에서 이 자리의 학생은 그대로 둡니다.' }));
+        layoutBar = UI.actionBar([{ text: '초안 만들기', kind: 'primary', onclick: function (e, btn) { makeDraft(btn); } }], { mount: true });
+      }
+    }
+
+    /* ───────── 규칙 위반 목록(빨간 칸) · 초안 미리보기(C22) ───────── */
+    function vioText(v) {
+      if (v.kind === '같은 학년') return '옆 ' + (v.withText || '같은 학년 학생');
+      if (v.kind === '떨어뜨릴 짝') return '짝: ' + (v.withText || '');
+      return '성별 구역이 다릅니다';
+    }
+    /** 위반 줄을 누르면 그 칸이 골라진 모양으로 보이고 격자가 그 칸으로 스크롤한다(목록 → 칸 한 방향). 다른 공간의 칸이면 그 공간으로 바꾼다 */
+    function jumpTo(v, gridNode) {
+      var list = state.preview ? state.preview.spaces : state.data.spaces;
+      var sp = list.filter(function (x) { return x.cells.some(function (c) { return c.id === v.seatId; }); })[0];
+      if (!sp) return;
+      if (sp.id !== state.spaceId) { state.spaceId = sp.id; state.student = null; drawHead(); drawBody(); gridNode = document.querySelector('.seatgrid-wrap'); }
+      var cell = sp.cells.filter(function (c) { return c.id === v.seatId; })[0];
+      var rowEl = gridNode && gridNode.querySelectorAll('tr')[cell.row - 1], btn = rowEl && rowEl.querySelectorAll('td')[cell.col - 1] && rowEl.querySelectorAll('td')[cell.col - 1].querySelector('button');
+      if (!btn) return;
+      Array.prototype.forEach.call(gridNode.querySelectorAll('button.seat-cell.sel'), function (b) { b.classList.remove('sel'); });
+      btn.classList.add('sel');
+      if (btn.scrollIntoView) btn.scrollIntoView({ block: 'center', inline: 'center' });
+    }
+    function violationCard(list, gridNode) {
+      if (!list || !list.length) return null;
+      var card = el('div', { class: 'card' }, [el('h2', { text: '규칙 위반 ' + list.length + '개' }),
+        el('div', { class: 'muted', style: 'margin-bottom:8px', text: '줄을 누르면 그 자리로 이동합니다. 위반이 있어도 저장은 막히지 않습니다.' })]);
+      var ul = el('ul', { class: 'list' });
+      list.forEach(function (v) {
+        ul.appendChild(el('li', {}, [el('button', { type: 'button', class: 'chip bad', style: 'text-align:left;white-space:normal',
+          text: (v.seatLabel ? v.seatLabel + '번' : '자리') + ' · ' + v.kind + ' · ' + vioText(v), onclick: function () { jumpTo(v, gridNode); } })]));
+      });
+      card.appendChild(ul);
+      return card;
+    }
+
+    function makeDraft(btn) {
+      if (state.busy) return;
+      state.busy = true; if (btn) btn.disabled = true;
+      call('previewSeatDraft', state.termId, Object.keys(state.pins), null).then(function (p) {
+        state.busy = false;
+        if (!p.ok) { if (btn) btn.disabled = false; UI.toast(p.error || '초안을 만들지 못했습니다.', { kind: 'warn', ms: 5000 }); return; }
+        state.preview = p;
+        if (!p.spaces.some(function (s) { return s.id === state.spaceId; })) state.spaceId = p.spaces.length ? p.spaces[0].id : '';
+        drawHead(); drawBody();
+      }).catch(function (err) { state.busy = false; if (btn) btn.disabled = false; fail(err); });
+    }
+
+    function drawPreview() {
+      var p = state.preview, sp = space();
+      body.appendChild(el('h2', { text: '좌석 배치 · 초안 미리보기' }));
+      body.appendChild(el('div', { class: 'stats', style: 'margin-bottom:12px' }, [statBox(p.changed, '바뀌는 자리'), statBox(p.violationCount, '규칙 위반')]));
+      body.appendChild(el('div', { class: 'muted', style: 'margin-bottom:8px', text: '아직 저장 전입니다. [취소]를 누르면 아무것도 바뀌지 않습니다.' }));
+      p.warnings.forEach(function (w) { body.appendChild(el('div', { class: 'notice warn', text: w })); });
+      if (p.unplaced.length) body.appendChild(el('div', { class: 'notice warn', text: '앉힐 자리가 없는 학생 ' + p.unplaced.length + '명: ' + p.unplaced.join(', ') }));
+      var gridNode = null;
+      if (sp) {
+        var gridCard = el('div', { class: 'card' }, [el('h2', { text: sp.name })]);
+        gridNode = UI.seatGrid({ rows: sp.rows, cols: sp.cols, mode: 'single', cells: sp.cells.map(function (c) {
+          return { row: c.row, col: c.col, kind: c.kind, seatLabel: c.seatLabel, text: c.pinned && c.text ? '📌 ' + c.text : c.text, vacant: c.vacant, bad: c.bad };
+        }), onselect: function () {} });
+        gridCard.appendChild(gridNode);
+        body.appendChild(gridCard);
+      }
+      var vl = violationCard(p.violations, gridNode);
+      if (vl) body.appendChild(vl);
+      layoutBar = UI.actionBar([
+        { text: '취소', kind: 'secondary', onclick: function () { if (state.busy) return; state.preview = null; drawHead(); drawBody(); } },
+        { text: '새 초안', kind: 'secondary', onclick: function (e, btn) { makeDraft(btn); } },
+        { text: '저장', kind: 'primary', onclick: function () { confirmSave(); } }
+      ], { mount: true });
+    }
+
+    function confirmSave() {
+      var p = state.preview;
+      if (state.busy || !p) return;
+      UI.confirmSheet({ title: '이 초안으로 저장할까요?', lead: '바뀌는 자리 ' + p.changed + '개 · 규칙 위반 ' + p.violationCount + '개',
+        lines: ['규칙 위반이 있어도 저장할 수 있습니다.', '지금 배정은 ' + p.ymd + '부터 끝나고 새 배정이 생깁니다(지난 날짜의 좌석표와 기록은 그대로 남습니다).'],
+        confirmText: '저장', cancelText: '취소',
+        onconfirm: function () {
+          if (state.busy) return;
+          state.busy = true;
+          call('saveSeatDraft', state.termId, { seed: p.seed, sig: p.sig, base: p.base, fixed: p.fixed }).then(function (r) {
+            state.busy = false;
+            if (!r.ok) { UI.toast(r.error || '저장하지 못했습니다.', { kind: 'warn', ms: 6000 }); if (r.stale) { state.preview = null; load(); } return; }
+            state.preview = null; state.pins = {};
+            load(r.noop ? '이미 이 배정으로 저장되어 있습니다.' : '초안을 저장했습니다.');
+          }).catch(function (err) { state.busy = false; fail(err); });
+        } });
     }
 
     function done(r, okText) {
