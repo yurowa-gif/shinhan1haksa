@@ -102,6 +102,22 @@ function movePlan_(changes, studentId, move, opts)
 function moveUndoPlan_(changes, headId, opts)   // (R11b) opts = {today} → {toCancel:[{id, cancel_reason?}], toRestore:[{id}], warnings}
 function move2OutBan_(changes, studentId, terms, ymd)   // (R13, 결정 63) → {banned, until, leaveDate}
 
+// src/rules/SeatRules.gs (R14, stage3.md 1절)
+function seatDraft_(spaces, seats, students, prev, fixed, avoids, seed)   // → {assignments:[{seat_id, student_id}], unplaced:[studentId], violations, warnings}
+function seatViolations_(spaces, seats, students, assignments, avoids)    // → [{seatId, kind:'같은 학년'|'떨어뜨릴 짝'|'성별', with}]
+function seatBoard_(spaces, seats)                                         // → {seats:{id:{id, space, sa}}, order:[id](공간 이름·공간 id·행·열·칸 id 순), nb:{id:[이웃 id](위·아래·왼·오른쪽)}}
+function seatIsSa_(space)                                                  // → 이름이 'SA<숫자>'로 시작하면 true
+function seatGenderOk_(space, student)                                     // → 남·여 공간은 같은 성별만, 혼성·빈칸은 누구나
+function seatAvoidMap_(avoids, scopes)                                     // → {학생id:{상대id:true}}(살아 있는 짝, scope가 scopes 안)
+function seatRng_(seed)                                                    // → 0~1 난수 함수(같은 seed = 같은 수열)
+
+// src/rules/RoomRules.gs (R15, stage3.md 1절) — StatusRules·SeatRules(seatAvoidMap_·seatRng_)를 부른다
+function roomDraft_(rooms, students, changes, avoids, ymd, seed)           // → {assignments:[{room_id, student_id}], unplaced:[studentId], violations, warnings}
+function roomViolations_(rooms, students, assignments, avoids)            // → [{roomId, kind:'정원 초과'|'성별'|'같은 학년'|'떨어뜨릴 짝', studentId}]
+function roomBoard_(rooms, students, assignments)                         // → {rooms:[{roomId, floor, room_no, gender, capacity, count, vacant}], floors:[{floor, gender, capacity, count, vacant, byGrade}], total:{성별:{…}}}
+function roomList_(rooms)                                                 // → 살아 있는 방 [{id, floor, room_no, gender, capacity(정수), sort}] sort_order·층·호 순
+function roomGenderOk_(room, student)                                     // → 방 성별 = 학생 성별(성별 빈 방은 false)
+
 // src/rules/OutRules.gs
 function reconcileAutoOuts_(exceptions, violations, opts)
         // exceptions·violations는 그 기간의 모든 행(일부만 넘기면 다른 학생의 자동 OUT이 취소된다), violations는 created_at 필수
@@ -310,3 +326,26 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId)
 - `move2OutBan_(changes, studentId, terms, ymd)` → `{banned, until, leaveDate}`. 기준 퇴실 = 살아 있는 학사 퇴실 중 reason `2OUT 퇴실` 또는 memo가 `[2OUT]`로 시작하고 적용일 ≤ ymd인 것 가운데 가장 늦은 것(없으면 `{banned:false, until:'', leaveDate:''}`). 퇴실 취소(결정 59)로 그 행이 취소되면 막힘도 풀린다. 막는 기간(결정 63 보충) = 퇴실일부터 '다음 학기 뒤 처음 오는 학기'의 시작 전날까지(그 학기 남은 날·다음 학기·사이의 방학 포함). 다음 학기 = 퇴실일 뒤에 시작하는 첫 `type '학기'`. 그 뒤 학기가 terms에 없으면 다음 학기 끝날 뒤 처음 시작하는 `방학`의 끝날(ASSUMPTION: 사이에 빈 날이 있어도), 그것도 없으면 다음 학기 끝날. 다음 학기가 terms에 아직 없으면 `until ''`이고 막는다(다음 학기 등록 전까지). terms 순서는 상관없다. `banned` = ymd ≤ until(또는 until이 없음). 잘못된 ymd는 Error. ASSUMPTION(결정 63): '학기'는 terms.type `학기`, 방학은 사이에 끼면 함께 막는다. 방학 중 퇴실이면 그 뒤 첫 학기를 '다음 학기'로 본다.
 - `movePlan_` 학사 입실: `opts.terms`가 있고 막혀 있으면 errors `2OUT 퇴실로 M월 D일까지 다시 들어올 수 없습니다`(해가 다르면 `yyyy년 M월 D일`, until이 없으면 `…다음 학기 끝날까지 다시 들어올 수 없습니다(다음 학기가 아직 등록되지 않았습니다)`). `opts.terms`가 없거나 빈 배열이면 검사하지 않는다(호환 — 빈 terms로 무기한 막지 않게). 명단 업로드의 등록 막힘(결정 63 두 번째)은 R4 명단 쪽이 이 함수를 불러 정한다.
 - **결정 35 보충(mealCountsOn_):** 선택 인자 `prevTermId`(직전 운영 기간 id)를 주면 이번 기간에 등록이 없는 그 기간 등록생 가운데 그날 학사가 `입실`이 아니면서 석식이 `학사 석식`인 학생도 센다(학기 막바지 퇴실 뒤 석식이 다음 기간까지 이어지는 학생 — 학사 0). 이번 기간에 신청하지 않고 상태만 이어진 학생(학사 입실 그대로)·더 옛 기간·term_id 빈 등록은 세지 않는다. 주지 않으면 지금처럼 이번 기간 등록생만. C19(Meals.gs)는 직전 기간 id를 넘긴다(후속).
+
+## 동작 메모(R14, 2026-11-12)
+
+**SeatRules** — 좌석 초안(F5 [초안 만들기], C22)과 빨간 칸. DateRules(`ruleStr_`·`ruleRowLive_`)만 부른다. 입력은 시트 행 그대로(spaces·seats·이번 기간 등록생 `{id, gender, grade, veritas}`·지난 기간 배정·고정 자리·avoid_pairs·seed).
+
+- 좌석 = 살아 있는 공간의 살아 있는 `kind '좌석'` 칸. **이웃** = 같은 공간에서 행 또는 열이 1 차이(다른 하나는 같음)인 좌석 칸 — 기둥·창문·비상문·통로를 사이에 두면 2칸 떨어져 이웃이 아니다. 1층 짝줄(붙은 두 열)은 좌우 이웃이다.
+- **SA실** = 공간 이름이 `SA<숫자>`로 시작(Seats.gs `seatLabelStyle_`과 같은 기준). 공간 성별 `남`·`여`는 같은 성별만, `혼성`·빈칸은 누구나.
+- `seatDraft_` 순서: ① 고정 자리 그대로(좌석이 없거나 겹치면 경고하고 새로) ② 3학년은 지난 기간 자리가 좌석으로 있고 비어 있고 성별이 맞으면 유지 — ASSUMPTION: 베리타스 여부가 바뀌어 구역(SA/1층)이 달라졌으면 유지하지 않는다 ③ 베리타스는 같은 성별 SA실, 자리가 모자라면 1층으로 넘기고 경고 `… SA실 자리가 모자라 1층에 배정했습니다` ④ 나머지는 SA 아닌 공간 — 1층이 모자라면 같은 성별 SA실의 남은 자리에 앉히고 경고 `1층 자리가 모자라 N명을 SA실에 앉혔습니다`(한 줄, 그래도 남으면 unplaced). 비용(이웃 같은 학년 1, 떨어뜨릴 짝 10)이 가장 싼 빈자리를 seed로 섞은 차례로 고른 뒤, 같은 구역 안 맞바꾸기·빈자리 옮기기로 비용을 줄인다(고정·3학년 유지 자리는 움직이지 않음, 최대 30회). ⑤ 못 앉힌 학생은 `unplaced` + 경고. 다 못 지키면 그 결과(가장 덜 어긴 배치 — 탐색은 지역 최적)와 `violations`.
+- 같은 입력 + 같은 seed = 같은 결과(입력 행 순서와 무관: id 순으로 정렬한 뒤 seed로 섞는다. 지난 자리·고정에 같은 좌석이 둘이면 학생 id 순, 같은 이름 공간은 공간 id 순).
+- 알려진 한계: 혼성 공간과 성별 공간이 함께 있으면, 혼성 자리를 먼저 온 다른 성별 학생이 차지해 빈 성별 공간 자리가 있는데도 unplaced가 생길 수 있다(실제 배치 — 1층 혼성·SA 성별 — 에서는 없음). 떨어뜨릴 짝은 scope `좌석`·`둘 다`, 살아 있는 행만.
+- `seatViolations_`: 이웃 같은 학년·떨어뜨릴 짝은 **두 칸 모두에 한 줄씩**(`with` = 상대 칸 id), 성별은 `with ''`. 순서 = 칸은 `seatBoard_` 순(공간 이름 → 행·열), 한 칸 안에서는 성별 먼저, 그다음 이웃 위·아래·왼·오른쪽 순으로 같은 학년·짝. 짝 위반은 kind만 뜻이 있다 — 상대 이름·사유는 서버가 보는 사람 권한에 따라 거른다(결정 64). 좌석 아닌 칸·명단에 없는 학생의 배정은 건너뛴다.
+- 성능: 가짜 1층 146석 + SA 51석(src/dev/FakeSeats.gs)에 180명 — 수십 ms(시험은 3초 기준).
+
+## 동작 메모(R15, 2026-11-12)
+
+**RoomRules** — 기숙사 방 초안(F8 [초안 만들기])·빨간 표시·정원 현황판. 입력은 시트 행 그대로(rooms·이번 기간 등록생 `{id, gender, grade}`·status_changes·avoid_pairs·기준일·seed). 학기마다 전체 재배정이라 지난 배정은 보지 않는다.
+
+- 대상 = 등록생 중 기준일 `statusOn_(…, '기숙사', ymd) === '입실'`. 잘못된 날짜는 Error.
+- 방 성별(층마다 고정, 결정 64 ②)과 같은 학생만. ASSUMPTION: 성별이 빈 방은 아무도 받지 않는다. 정원(capacity, 정수로 내림)을 넘기지 않고, 자리가 없으면 `unplaced` + 경고 `… 학생: 들어갈 방이 없습니다(정원)`.
+- 점수: 같은 학년만 있는 방 1(두 명 이상일 때 — ASSUMPTION: 한 명 방은 위반 아님), 같은 방 떨어뜨릴 짝(scope `방`·`둘 다`, 살아 있는 행) 10. id 순 정렬 뒤 seed로 섞은 차례로 점수가 가장 적게 느는 방(같으면 사람이 적은 방, 그래도 같으면 방 순)에 넣고, 같은 성별 방 사이 맞바꾸기·빈자리 옮기기로 점수를 줄인다(최대 30회, 지역 최적). 피할 수 없으면 `violations`에 남긴다. 같은 입력 + 같은 seed = 같은 결과(행 순서 무관).
+- `roomViolations_`: 정원 초과·같은 학년은 방마다 한 줄, 떨어뜨릴 짝은 짝마다 한 줄(모두 `studentId ''`), 성별은 학생마다(`studentId` = 그 학생). 짝 상대는 서버가 권한에 따라 거른다(결정 64). 없는 방(취소 포함)·명단 밖 학생·겹친 배정 행은 건너뛰거나 한 번만 센다.
+- 정원이 남으면 '같으면 사람이 적은 방' 규칙 때문에 1~2명 방이 많이 생긴다(허용되는 동작 — 방을 가득 채우는 쪽을 원하면 규칙을 바꿔야 한다).
+- `roomBoard_`: 공석 = 방마다 max(0, 정원 − 인원)을 더한 값(정원 초과 방이 있어도 층·성별 합계 공석은 음수가 되지 않는다), 정원 초과는 인원 그대로. 층 줄은 (층, 성별)마다 방 순서대로, `byGrade` = {학년: 인원}. 가득 찬 경우(남 48·여 92, 4인실 35방) 시험 통과.
