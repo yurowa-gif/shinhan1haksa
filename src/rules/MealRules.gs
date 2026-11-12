@@ -102,7 +102,8 @@ function mealIsHallOnly_(item, value) {
 /**
  * F7 급식 변경 신청 하나를 계획한다(아무것도 쓰지 않음). tests/rules/meal_oracle.test.js가 단순한 오라클과 비교한다.
  * changes = 그 학생의 status_changes 행(학사·조식·석식, 취소 포함 그대로), requestedAt = 신청 일시(KST, 교사가 넣는 신청서 일시),
- * opts = {cutoff, leaveDate, today:'yyyy-MM-dd'(필수, 입력하는 날), effectiveDate, effectiveRule:'manual'(기본)|'entry_date'}
+ * opts = {cutoff, leaveDate, today:'yyyy-MM-dd'(필수, 입력하는 날), effectiveDate, effectiveRule:'manual'(기본)|'entry_date',
+ *         entry(true면 이 신청은 (재)입실 급식 행 — movePlan_ 학사·기숙사 입실, 재입실일 경계 규칙)}
  * → {kind, date, rule, autoDate, from, blocked:''|사유, superseded:boolean, supersededBy:[id], toCancel:[{id, effective_date, value}],
  *    followUps:[{item, value, effective_date, source}], warnings:[]}   source: 미실시 중단 행 'F6', 재입실일 값 행 'F7'(R11b) — 저장 쪽은 그대로 쓴다
  *
@@ -190,9 +191,10 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
   // 같은 값의 더 새 신청은 이 신청을 뜻 없게 만들지 않는다(재입실이 그 신청을 덮어도 이 대기 신청은 남아야 한다 — 결정 56)
   // 재입실 급식 행은 퇴실 기록 전에 낸, 재입실일보다 늦게 적용되는 신청을 가리지 않는다(재입실은 그런 대기 신청을 취소하지 않으므로 —
   // 늦게 입력돼도 같게, 결정 56)
+  // 재입실일 경계(지름길 Y, 결정 56 보충): (재)입실 급식 행은 그 날보다 먼저 적용되는 신청에 가려지지 않는다(신청 일시와 상관없이)
   var newer = mine.filter(function (c) {   // 퇴실 정리(F6) 행은 신청이 아니다
     return ruleStr_(c.source) !== 'F6' && ruleStr_(c.value) !== to && ruleIso_(c.requested_at) > req && ruleStr_(c.effective_date) <= cand.date &&
-      !(ruleStr_(c.effective_date) < cand.date && mealReentryKeeps_(rows, c, req));   // 재입실일 당일은 재입실이 정한다
+      !(ruleStr_(c.effective_date) < cand.date && (opts.entry || mealReentryKeeps_(rows, c, req)));   // 재입실일 당일은 재입실이 정한다
   });
   if (newer.length) {
     out.kind = 'none'; out.date = ''; out.rule = ''; out.superseded = true;
@@ -246,6 +248,8 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
       return ruleStr_(c.item) === '학사' && ruleStr_(c.value) === '입실' && e > stop && statusOn_(rows, sid, '학사', e) === '입실';
     }).map(function (c) { return ruleStr_(c.effective_date); }).sort()[0];
     if (!back) break;
+    // 재입실일 경계: 그 날 살아 있는 (재)입실 급식 행이 있으면 그 뒤는 재입실 신청서가 정한다(이 신청은 거기서 끊긴다)
+    if (mine.some(function (c) { return !cancelled[ruleStr_(c.id)] && ruleStr_(c.effective_date) === back && mealEntryRow_(rows, c); })) break;
     // 재입실일에 이미 더 새 신청이 적용되면 되살리지 않는다(그 뒤는 그 신청의 일이다)
     if (mine.some(function (c) {
       return !cancelled[ruleStr_(c.id)] && ruleStr_(c.source) !== 'F6' && ruleIso_(c.requested_at) > req && ruleStr_(c.effective_date) <= back;
@@ -267,6 +271,16 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
 function mealReentryKeeps_(rows, c, req) {
   var leave = mealReentryLeave_(rows, c);
   return !!leave && req < ruleIso_(leave.requested_at);
+}
+
+/** 행 c가 (재)입실 대표(F6 학사·기숙사 입실)에 연결된 급식 행인지 — 재입실일 경계(지름길 Y): 그 날보다 먼저 적용되는 신청은 이 행을
+ *  가리거나(superseded) 취소하지 않고, 그 날 뒤로 이어 쓰지 않는다. 학생 자신의 대기 신청은 지금처럼 더 새 신청이 거둔다(취소·가림). */
+function mealEntryRow_(rows, c) {
+  var hid = ruleStr_(c && c.linked_change_id);
+  if (!hid) return false;
+  return (rows || []).some(function (x) {
+    return x && ruleStr_(x.id) === hid && /^(학사|기숙사)$/.test(ruleStr_(x.item)) && ruleStr_(x.value) === '입실';
+  });
 }
 
 /** 행 c가 (재)입실 대표(학사·기숙사 입실)에 연결된 급식 행이면 그 입실 직전 같은 항목 퇴실 행, 아니면 null. */
@@ -328,6 +342,7 @@ function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts) {
     var isF6 = ruleStr_(c.source) === 'F6';
     if (fromF6) return !isF6 && e >= eff && mealIsHallOnly_(it, ruleStr_(c.value));
     if (e <= eff || isF6 || (nv && ruleStr_(c.value) === nv)) return false;   // F6 행은 mealPlanChange_가 따로 본다. 같은 값은 덮을 필요 없음
+    if (mealEntryRow_(changes, c)) return false;   // 재입실일 경계: 더 먼저 적용되는 신청은 (재)입실 급식 행을 취소하지 않는다
     return !req || ruleIso_(c.requested_at) <= req;
   }).map(function (c) {
     return { id: ruleStr_(c.id), effective_date: ruleStr_(c.effective_date), value: ruleStr_(c.value) };

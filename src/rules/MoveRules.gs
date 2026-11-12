@@ -207,7 +207,7 @@ function movePlan_(changes, studentId, move, opts) {
     revive(back);
     ['조식', '석식'].forEach(function (item) {
       var v = ruleStr_((move.meals || {})[item]) || (lastLeave ? statusOn_(live, sid, item, ymdAddDays_(ruleStr_(lastLeave.effective_date), -1)) : '');
-      if (v) meal(item, v, { effectiveDate: E, effectiveRule: 'entry_date' }, '학사 입실 급식', true,   // 재입실일부터의 의도(늦게 입력된 옛 신청서가 덮지 못하게)
+      if (v) meal(item, v, { effectiveDate: E, effectiveRule: 'entry_date', entry: true }, '학사 입실 급식', true,   // 재입실일부터의 의도(늦게 입력된 옛 신청서가 덮지 못하게)
         lastLeave ? ruleIso_(lastLeave.requested_at) : '');   // 퇴실 기록 전에 학생이 낸 대기 신청은 취소하지 않는다(총괄 결정)
     });
   }
@@ -216,7 +216,7 @@ function movePlan_(changes, studentId, move, opts) {
     // 취소하지 않는다(결정 56)
     var dormOut = live.filter(function (c) { return ruleStr_(c.item) === '기숙사' && ruleStr_(c.value) === '퇴실' && ruleStr_(c.effective_date) <= E; })
       .sort(function (a, b) { return ruleStr_(a.effective_date) < ruleStr_(b.effective_date) ? -1 : 1; }).pop();
-    meal('조식', '실시', { effectiveDate: E, effectiveRule: 'entry_date' }, '기숙사 입실 조식', true, dormOut ? ruleIso_(dormOut.requested_at) : '');
+    meal('조식', '실시', { effectiveDate: E, effectiveRule: 'entry_date', entry: true }, '기숙사 입실 조식', true, dormOut ? ruleIso_(dormOut.requested_at) : '');
   }
   if (type === '기숙사 퇴실' && move.breakfastStopWithDorm !== false) meal('조식', '미실시', { leaveDate: E }, '기숙사 퇴실 조식 미실시');
   return out;
