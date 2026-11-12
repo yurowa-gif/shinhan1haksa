@@ -96,10 +96,11 @@
         clear(msg);
         Array.prototype.forEach.call(formBox.querySelectorAll('.fix'), function (n) { n.textContent = ''; });
         call('saveTerm', {
-          id: t ? t.id : '', name: name.value, type: type.value,
+          id: t ? t.id : '', token: t ? t.token : '', name: name.value, type: type.value,
           start_date: start.value, end_date: end.value, memo: memo.value
         }).then(function (r) {
           save.disabled = false;
+          if (r.stale) { UI.toast(r.error, { kind: 'warn', ms: 6000 }); state.editing = null; load(); return; }   // 다른 관리자가 먼저 바꿨다: 새로 불러온다
           if (!r.ok) {
             r.errors.forEach(function (e) {
               var slot = formBox.querySelector('.fix[data-for="' + e.field + '"]');
