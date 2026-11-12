@@ -183,10 +183,13 @@ function seedFakeStage1() {
     ['fixed_schedules', data.fixedSchedules], [tab, data.exceptions]
   ];
   var lines = [];
-  plan.forEach(function (pair) {
-    var fresh = fake1OnlyNew_(pair[1], readAll_(pair[0]));
-    bulkAppend_(pair[0], fresh, owner);
-    lines.push(pair[0] + ' +' + fresh.length);
+  withLock_(function () {   // 이미 있는 id를 읽고 새 행만 쓰기를 한 덩어리로(두 번 동시에 실행해도 중복 없음)
+    plan.forEach(function (pair) {
+      invalidate_('db', pair[0]);
+      var fresh = fake1OnlyNew_(pair[1], readAll_(pair[0]));
+      bulkAppend_(pair[0], fresh, owner);
+      lines.push(pair[0] + ' +' + fresh.length);
+    });
   });
   var msg = '가짜 1단계 데이터: ' + lines.join(', ');
   console.log(msg);
