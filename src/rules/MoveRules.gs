@@ -54,7 +54,7 @@ function movePlan_(changes, studentId, move, opts) {
   var live = (changes || []).filter(function (c) { return c && ruleRowLive_(c) && ruleStr_(c.student_id) === sid; });
   var hall = statusOn_(live, sid, '학사', E), dorm = statusOn_(live, sid, '기숙사', E);
   if (type === '학사 입실' && hall === '입실') out.errors.push(E + '에 이미 학사 입실 상태입니다');
-  if (type === '학사 입실' && opts.terms) {   // 결정 63: 2OUT 퇴실 뒤 그 학기·다음 학기에는 다시 들어올 수 없다(terms를 주지 않으면 검사하지 않는다)
+  if (type === '학사 입실' && opts.terms && opts.terms.length) {   // 결정 63: 2OUT 퇴실 뒤 그 학기·다음 학기에는 다시 들어올 수 없다(terms를 주지 않으면 검사하지 않는다)
     var ban = move2OutBan_(live, sid, opts.terms, E);
     if (ban.banned) out.errors.push(ban.until ? '2OUT 퇴실로 ' + moveMonthDay_(ban.until, E) + '까지 다시 들어올 수 없습니다'
       : '2OUT 퇴실로 다음 학기 끝날까지 다시 들어올 수 없습니다(다음 학기가 아직 등록되지 않았습니다)');
@@ -355,9 +355,11 @@ function moveRestorable_(changes, live, tagId, skip) {
  * terms = terms 행(type '학기'·'방학', start_date, end_date), ymd = 들어오려는 날 → {banned, until, leaveDate}
  * - 기준 퇴실 = 살아 있는 학사 퇴실 중 reason '2OUT 퇴실' 또는 memo가 '[2OUT]'로 시작하고 적용일 ≤ ymd인 것 가운데 가장 늦은 것(없으면 막지
  *   않는다 — 퇴실 취소(결정 59)로 그 행이 취소되면 막힘도 풀린다).
- * - 막는 기간 = 퇴실일부터 다음 '학기'(퇴실일 뒤에 시작하는 첫 학기)의 끝날까지(그 학기 남은 날·사이의 방학 포함). until = 다음 학기
- *   end_date, 다음 학기가 terms에 아직 없으면 ''(정해지지 않음 — 다음 학기가 등록될 때까지 막는다).
- * ASSUMPTION(결정 63): '학기'는 terms.type '학기', 방학은 사이에 끼면 함께 막는다. 방학 중 퇴실이면 그 뒤 첫 학기 끝날까지 막는다.
+ * - 막는 기간(결정 63 보충) = 퇴실일부터 '다음 학기 뒤 처음 오는 학기'의 시작 전날까지(그 학기 남은 날·다음 학기·사이의 방학 포함).
+ *   다음 학기 = 퇴실일 뒤에 시작하는 첫 학기. 그 뒤 학기가 terms에 아직 없으면 다음 학기 뒤에 오는 첫 방학의 끝날, 그것도 없으면 다음 학기
+ *   끝날. 다음 학기도 없으면 until ''(정해지지 않음 — 다음 학기가 등록될 때까지 막는다).
+ *   ASSUMPTION: '다음 학기 바로 뒤에 이어지는 방학' = 다음 학기 끝날 뒤에 시작하는 첫 방학(사이에 빈 날이 있어도).
+ * ASSUMPTION(결정 63): '학기'는 terms.type '학기', 방학은 사이에 끼면 함께 막는다. 방학 중 퇴실이면 그 뒤 첫 학기를 '다음 학기'로 본다.
  */
 function move2OutBan_(changes, studentId, terms, ymd) {
   var sid = ruleStr_(studentId), day = ruleStr_(ymd);
@@ -372,7 +374,13 @@ function move2OutBan_(changes, studentId, terms, ymd) {
   var sem = (terms || []).filter(function (t) { return t && ruleStr_(t.type) === '학기' && ymdIsValid_(ruleStr_(t.start_date)) && ymdIsValid_(ruleStr_(t.end_date)); })
     .sort(function (a, b) { return ruleStr_(a.start_date) < ruleStr_(b.start_date) ? -1 : 1; });
   var next = sem.filter(function (t) { return ruleStr_(t.start_date) > L; })[0];   // 다음 학기 = 퇴실일 뒤에 시작하는 첫 학기
-  var until = next ? ruleStr_(next.end_date) : '';
+  var until = '';
+  if (next) {
+    var ne = ruleStr_(next.end_date), after = sem.filter(function (t) { return ruleStr_(t.start_date) > ne; })[0];
+    var vac = (terms || []).filter(function (t) { return t && ruleStr_(t.type) === '방학' && ruleStr_(t.start_date) > ne && ymdIsValid_(ruleStr_(t.end_date)); })
+      .sort(function (a, b) { return ruleStr_(a.start_date) < ruleStr_(b.start_date) ? -1 : 1; })[0];
+    until = after ? ymdAddDays_(ruleStr_(after.start_date), -1) : vac ? ruleStr_(vac.end_date) : ne;
+  }
   return { banned: !until || day <= until, until: until, leaveDate: L };
 }
 

@@ -131,3 +131,17 @@ test('결정 35 보충: prevTermId를 주면 직전 기간에만 등록된 학�
   assert.deepStrictEqual(plain(ctx.mealCountsOn_(st, en, ch, 'T1', '2027-03-15')).groups['전체'].hallDinner, 1);   // 주지 않으면 지금처럼
   assert.strictEqual(plain(ctx.mealCountsOn_(st, en, ch, 'T1', '2027-03-22', 'T0')).groups['전체'].hallDinner, 1);   // 중단일 뒤엔 안 셈
 });
+
+test('결정 35 보충: 직전 기간에서 학사 입실 상태만 이어진 학생(이번 기간 신청 안 함)·더 옛 기간·term_id 빈 등록은 세지 않는다(#111 재현)', () => {
+  const st = [ST('a', '여', '1'), ST('b', '여', '1'), ST('c', '남', '2'), ST('d', '남', '1'), ST('e', '남', '3')];
+  // a: T1에만 등록, 퇴실 안 함 / b: T1, 7/14 퇴실, 7/26부터 석식 미실시 / c: T1·V 둘 다 / d: 더 옛 T0, 7/14 퇴실 / e: term_id 빈 등록, 7/14 퇴실
+  const ch = [].concat(STUDENT('a', '입실', '퇴실', '실시', '학사 석식'),
+    STUDENT('b', '입실', '퇴실', '실시', '학사 석식'), [CH('b', '학사', '퇴실', '2027-07-14'), CH('b', '조식', '미실시', '2027-07-14'), CH('b', '석식', '미실시', '2027-07-26')],
+    STUDENT('c', '입실', '퇴실', '실시', '학사 석식'),
+    STUDENT('d', '입실', '퇴실', '실시', '학사 석식'), [CH('d', '학사', '퇴실', '2027-07-14')],
+    STUDENT('e', '입실', '퇴실', '실시', '학사 석식'), [CH('e', '학사', '퇴실', '2027-07-14')]);
+  const en = [EN('a', 'T1'), EN('b', 'T1'), EN('c', 'T1'), EN('c', 'V'), EN('d', 'T0'), { id: 'ee', term_id: '', student_id: 'e' }];
+  const r = plain(ctx.mealCountsOn_(st, en, ch, 'V', '2027-07-20', 'T1'));
+  assert.deepStrictEqual(r.groups['전체'], { hall: 1, dorm: 0, nonDorm: 1, breakfast: 1, hallDinner: 2, generalDinner: 0 });
+  assert.strictEqual(r.afterLeaveHallDinner, 1);
+});

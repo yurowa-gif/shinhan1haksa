@@ -339,8 +339,9 @@ function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts) {
  * students = students 행(id, gender 남·여, grade), enrollments = 등록 행(term_id, student_id), changes = status_changes 전부.
  * → {groups:{'여1':{hall, dorm, nonDorm, breakfast, hallDinner, generalDinner}, …, '여 합계', '남 합계', '1학년'…, '전체'},
  *    afterLeaveHallDinner, unknownGroup:[studentId], warnings}
- * - prevTermId(선택, 결정 35 보충): 직전 운영 기간 id. 이번 기간에 등록이 없는 그 기간 등록생도 그날 석식이 '학사 석식'이면 센다(학기
- *   막바지 퇴실 뒤 석식이 다음 기간까지 이어지는 학생 — 다른 칸도 그날 상태대로, 대개 학사·조식 0). 주지 않으면 이번 기간 등록생만.
+ * - prevTermId(선택, 결정 35 보충): 직전 운영 기간 id. 이번 기간에 등록이 없는 그 기간 등록생 가운데 그날 학사가 '입실'이 아니면서
+ *   석식이 '학사 석식'인 학생도 센다(학기 막바지 퇴실 뒤 석식이 다음 기간까지 이어지는 학생 — 다른 칸도 그날 상태대로라 학사 0).
+ *   이번 기간에 신청하지 않고 상태만 이어진 학생(학사 입실 그대로)은 세지 않는다. 주지 않으면 이번 기간 등록생만.
  * - 대상: termId 기간에 등록된 학생(그날 상태 그대로, 결석·외박은 빼지 않는다). 등록 안 된 학생은 세지 않는다.
  * - 학사(hall) = 학사 '입실', 기숙(dorm) = 학사 입실이면서 기숙사 '입실', 비기숙 = 학사 입실이면서 기숙 아님.
  * - 조식·석식은 학사 상태로 거르지 않는다(결정 35: 퇴실한 학생도 석식 중단일 전까지 학사 석식). afterLeaveHallDinner = 학사 석식인데 학사 입실 아님.
@@ -359,8 +360,8 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId) 
   (enrollments || []).forEach(function (e) {
     var sid = ruleStr_(e && e.student_id), et = ruleStr_(e && e.term_id);
     if (!e || !sid || seen[sid]) return;
-    // 결정 35 보충: 이번 기간에 등록이 없어도 직전 기간(prevTermId) 등록생이 그날 학사 석식이면(학기 막바지 퇴실 뒤 석식이 이어짐) 센다
-    if (et !== tid && !(pid && et === pid && statusOn_(changes, sid, '석식', day) === '학사 석식')) return;
+    // 결정 35 보충: 이번 기간에 등록이 없어도 직전 기간(prevTermId) 등록생이 그날 퇴실 상태로 학사 석식이면(학기 막바지 퇴실 뒤 석식이 이어짐) 센다
+    if (et !== tid && !(pid && et === pid && statusOn_(changes, sid, '학사', day) !== '입실' && statusOn_(changes, sid, '석식', day) === '학사 석식')) return;
     seen[sid] = true;
     var s = byId[sid], g = ruleStr_(s && s.gender), gr = ruleStr_(s && s.grade);
     if (!s || (g !== '남' && g !== '여') || !/^\d+$/.test(gr)) {

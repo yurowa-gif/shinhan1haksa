@@ -854,10 +854,28 @@ const TERMS = [
 const OUT2 = (e, extra) => CH('학사', '퇴실', e, Object.assign({ id: 'o2', source: 'F6', requested_at: e + 'T09:00:00', reason: '2OUT 퇴실', memo: '[2OUT] out:v2 note:n1' }, extra || {}));
 const ban = (rows, ymd, terms) => plain(ctx.move2OutBan_(rows, 's1', terms || TERMS, ymd));
 
-table('move2OutBan_: 1학기 4/10 2OUT 퇴실 → 같은 학기·여름방학·2학기는 막고(2학기 끝날 12/24까지), 다음 해 1학기는 허용', [
-  ['2027-05-01', true], ['2027-07-30', true], ['2027-09-01', true], ['2027-12-24', true], ['2027-12-25', false], ['2028-03-02', false]
+table('move2OutBan_: 1학기 4/10 2OUT 퇴실 → 같은 학기·여름방학·2학기·겨울방학은 막고(다음 해 1학기 시작 전날 3/1까지), 다음 해 1학기는 허용(결정 63 보충)', [
+  ['2027-05-01', true], ['2027-07-30', true], ['2027-09-01', true], ['2027-12-24', true], ['2027-12-25', true], ['2028-03-01', true], ['2028-03-02', false]
 ], ([ymd, banned]) => {
-  assert.deepStrictEqual(ban(HALL().concat([OUT2('2027-04-10')]), ymd), { banned, until: '2027-12-24', leaveDate: '2027-04-10' });
+  assert.deepStrictEqual(ban(HALL().concat([OUT2('2027-04-10')]), ymd), { banned, until: '2028-03-01', leaveDate: '2027-04-10' });
+});
+
+test('move2OutBan_: 다음 학기 뒤 학기가 terms에 없으면 그 뒤 첫 방학 끝날, 방학도 없으면 다음 학기 끝날(결정 63 보충)', () => {
+  const rows = HALL().concat([OUT2('2027-04-10')]);
+  assert.strictEqual(ban(rows, '2027-05-01', TERMS.slice(0, 4)).until, '2028-02-28');
+  assert.strictEqual(ban(rows, '2027-05-01', TERMS.slice(0, 3)).until, '2027-12-24');
+  assert.strictEqual(ban(rows, '2027-05-01', TERMS.slice().reverse()).until, '2028-03-01');   // terms 순서 무관
+  const vacs = [TERMS[3], { type: '방학', start_date: '2028-07-15', end_date: '2028-08-20' }];
+  assert.strictEqual(ban(rows, '2027-05-01', vacs.reverse().concat(TERMS.slice(0, 3))).until, '2028-02-28');   // 다음 학기 뒤 첫 방학(terms 순서 무관)
+});
+
+test('move2OutBan_: 퇴실 당일도 막음, reason만 있고 memo 빈 행도 2OUT, 2OUT 퇴실이 둘이면 늦은 것 기준, 학기 시작일 퇴실은 그 학기가 아닌 다음 학기 기준', () => {
+  assert.strictEqual(ban(HALL().concat([OUT2('2027-04-10')]), '2027-04-10').banned, true);
+  assert.strictEqual(ban(HALL().concat([OUT2('2027-04-10', { memo: '' })]), '2027-05-01').banned, true);
+  const two = HALL().concat([OUT2('2027-04-10', { id: 'o1' }), OUT2('2027-10-01')]);
+  assert.deepStrictEqual(ban(two, '2027-11-01'), { banned: true, until: '2028-07-14', leaveDate: '2027-10-01' });
+  assert.deepStrictEqual(ban(two.slice().reverse(), '2027-11-01').leaveDate, '2027-10-01');
+  assert.strictEqual(ban(HALL().concat([OUT2('2027-08-16')]), '2027-09-01').until, '2028-07-14');   // 2학기 시작일 퇴실 → 다음 학기 = 2028 1학기
 });
 
 test('move2OutBan_: 2학기 10/1 퇴실 → 겨울방학·다음 해 1학기 막음(2028-07-14까지), 다음 학기가 terms에 없으면 until 미정으로 막음', () => {
@@ -873,16 +891,17 @@ test('move2OutBan_: 2OUT 아닌 퇴실·퇴실 전 날·취소된 2OUT 퇴실은
   assert.strictEqual(ban(HALL().concat([OUT2('2027-04-10')]), '2027-04-09').banned, false);
   assert.strictEqual(ban(HALL().concat([OUT2('2027-04-10', { status: '취소' })]), '2027-05-01').banned, false);
   assert.strictEqual(ban(HALL().concat([OUT2('2027-04-10', { reason: '' })]), '2027-05-01').banned, true);
-  assert.deepStrictEqual(ban(HALL().concat([OUT2('2027-07-30')]), '2027-09-01'), { banned: true, until: '2027-12-24', leaveDate: '2027-07-30' });
+  assert.deepStrictEqual(ban(HALL().concat([OUT2('2027-07-30')]), '2027-09-01'), { banned: true, until: '2028-03-01', leaveDate: '2027-07-30' });
   assert.throws(() => ban(HALL(), '2027-02-30'), /yyyy-MM-dd/);
 });
 
-test('movePlan_ 학사 입실: terms를 주면 2OUT 막힘 오류(날짜 표시), 주지 않으면 지금처럼, 2OUT 퇴실을 취소하면 허용', () => {
+test('movePlan_ 학사 입실: terms를 주면 2OUT 막힘 오류(날짜 표시), 주지 않거나 빈 배열이면 지금처럼, 2OUT 퇴실을 취소하면 허용', () => {
   const rows = HALL().concat([OUT2('2027-04-10')]);
   const move = { type: '학사 입실', effectiveDate: '2027-05-03', requestedAt: '2027-05-01T09:00:00' };
   const p = plain(ctx.movePlan_(rows, 's1', move, { today: '2027-05-01', terms: TERMS }));
-  assert.deepStrictEqual([p.errors, p.rows], [['2OUT 퇴실로 12월 24일까지 다시 들어올 수 없습니다'], []]);
+  assert.deepStrictEqual([p.errors, p.rows], [['2OUT 퇴실로 2028년 3월 1일까지 다시 들어올 수 없습니다'], []]);
   assert.deepStrictEqual(plan(rows, move, '2027-05-01').errors, []);   // terms 없음 = 기존 동작
+  assert.deepStrictEqual(plain(ctx.movePlan_(rows, 's1', move, { today: '2027-05-01', terms: [] })).errors, []);   // 빈 terms로 무기한 막지 않음
   const nextYear = plain(ctx.movePlan_(HALL().concat([OUT2('2027-10-01')]), 's1', { type: '학사 입실', effectiveDate: '2028-01-10', requestedAt: '2028-01-05T09:00:00' }, { today: '2028-01-05', terms: TERMS }));
   assert.deepStrictEqual(nextYear.errors, ['2OUT 퇴실로 7월 14일까지 다시 들어올 수 없습니다']);
   const s = applyUndo(rows, undo(rows, 'o2', '2027-05-01'));
