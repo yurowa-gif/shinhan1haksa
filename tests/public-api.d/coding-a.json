@@ -75,6 +75,22 @@
     "seedDefaultRooms": {
       "use": "편집기",
       "guard": "assertOwnerRun_"
+    },
+    "getAvoidPairs": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveAvoidPair": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "updateAvoidPair": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "cancelAvoidPair": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }
