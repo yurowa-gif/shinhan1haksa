@@ -26,13 +26,15 @@ function avdLoad_() {
   students.forEach(function (s) { byId[s.id] = s; });
   var enrolled = {};
   if (term) readAll_('enrollments').forEach(function (e) { if (e.term_id === term.id) enrolled[e.student_id] = true; });
-  return { term: term, byId: byId, enrolled: enrolled, pairs: readAll_('avoid_pairs') };
+  var names = {};
+  readAll_('users').forEach(function (u) { if (String(u.name || '').trim()) names[normalizeEmail_(u.email)] = String(u.name).trim(); });
+  return { term: term, byId: byId, enrolled: enrolled, pairs: readAll_('avoid_pairs'), names: names };
 }
 
 function avdPairOut_(row, d) {
   var a = d.byId[row.student_a], b = d.byId[row.student_b];
   return {
-    id: row.id, live: avdLive_(row), scope: row.scope, reason: row.reason || '', updatedAt: row.updated_at || '', updatedBy: row.updated_by || '',
+    id: row.id, live: avdLive_(row), scope: row.scope, reason: row.reason || '', updatedAt: row.updated_at || '', updatedBy: d.names[normalizeEmail_(row.updated_by)] || (row.updated_by ? '(등록 안 된 교사)' : ''),   // 메일 주소 대신 이름
     a: a ? avdStudent_(a, !!d.enrolled[a.id]) : { id: row.student_a, display: '(알 수 없는 학생)', inTerm: false },
     b: b ? avdStudent_(b, !!d.enrolled[b.id]) : { id: row.student_b, display: '(알 수 없는 학생)', inTerm: false }
   };
