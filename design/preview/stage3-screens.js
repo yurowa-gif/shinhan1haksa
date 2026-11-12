@@ -121,7 +121,7 @@ def('seat-draft-preview', 'F5 좌석', 'F5 초안 미리보기 (바뀌는 자리
 
 def('seat-draft-save', 'F5 좌석', 'F5 초안 저장 확인 (위반이 있어도 저장 가능)', { sheet: true }, function (root) {
   seatPreview(root, 'hall');
-  UI.confirmSheet({ title: '이 초안으로 저장할까요?', lead: '바뀌는 자리 21개 · 규칙 위반 ' + seatViolations(buildSeats()).length + '개', lines: ['규칙 위반이 있어도 저장할 수 있습니다.', '지금 배정은 "취소"로 남고 새 배정이 생깁니다(기록은 지우지 않음).'], confirmText: '저장', onconfirm: function () {} });
+  UI.confirmSheet({ title: '이 초안으로 저장할까요?', lead: '바뀌는 자리 21개 · 규칙 위반 ' + seatViolations(buildSeats()).length + '개', lines: ['규칙 위반이 있어도 저장할 수 있습니다.', '지금 배정은 기준일 전날까지로 끝나고, 지난 날짜 출석부·좌석표는 그대로 남습니다.'], confirmText: '저장', onconfirm: function () {} });
 });
 
 def('seat-homeroom', 'F5 좌석', 'F5 담임 좌석 보기 (떨어뜨릴 짝 표시 없음)', {}, function (root) {
