@@ -122,10 +122,10 @@ function roomGenderOk_(room, student)                                     // →
 function reconcileAutoOuts_(exceptions, violations, opts)
         // exceptions·violations는 그 기간의 모든 행(일부만 넘기면 다른 학생의 자동 OUT이 취소된다), violations는 created_at 필수
         // opts = {autoTypes, ruleName:'무단 지각·결석·이탈', ruleId, per:'group'|'row', dutyByDate:{}, studentIds:[](선택),
-        //         autoTypeSince:{유형:'yyyy-MM-ddTHH:mm:ss'}(선택, 설정을 넓혀 새로 자동 대상이 된 유형과 가장 최근에 넓힌 시각)}
+        //         autoTypeSince:{유형:'yyyy-MM-ddTHH:mm:ss' 또는 [넓힌 시각…]}(선택, 설정을 넓혀 새로 자동 대상이 된 유형과 넓힌 시각 — 배열이면 넓힘 이력)}
         // → {toCreate, toCancel:[{violationId, reason}], toUpdate:[{violationId, patch}]}
 function outLevel_(violations, studentId, termId)   // {count, level:0|1|2, label:''|'1OUT'|'퇴실 대상'}
-function outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes)   // (R9) → {snapshot:{types, since}, since, changed}
+function outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes)   // (R9) → {snapshot:{types, since, widened}, since, widened, changed}
 function outDismissalGate_(violations, notes, changes, studentId, termId, ymd)
         // (R9) → {count, level, triggerOutId, meetingNote:{id,date,teacher_email}|null, alreadyLeft, ok, reason:''|'퇴실 대상 아님'|'면담 기록 필요'|'이미 퇴실'}
 
@@ -220,10 +220,10 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId)
 - **자격 행:** `확정` + 날짜가 달력에 있음(`ymdIsValid_`) + 유형이 `autoTypes`(괄호 설명을 떼고 비교, 비거나 빈 항목뿐이면 기본 3종) + 그 유형이 `opts.autoTypeSince`에 있으면 `confirmed_at >=` 그 시각.
 - **설정 변경은 앞으로만(총괄 결정):** 설정 `exception.auto_out_types`를 넓혀 새로 자동 대상이 된 유형은 `autoTypeSince[유형]` = 그 유형을 마지막으로 넓힌 시각으로 넘긴다 — **`outAutoSinceNext_`(R9)의 결과 `since`**(설정 행 `updated_at`은 다른 칸을 고쳐도 바뀌므로 쓰지 않는다, followups R5-2) — 그 전에 확정된 특이사항에는 소급해 OUT을 만들지 않는다. **처음부터 자동 대상이던 유형은 넣지 않는다**(그래서 `[자동]` 취소됐다가 다시 확정된 특이사항의 OUT은 돌아온다). 좁힐 때는 아래 "만들 때 유형"으로 이미 있는 OUT이 유지된다. 2단계 F4 처음 연결 때 쌓인 특이사항을 한꺼번에 만들 때는 넘기지 않는다.
 - **새로 만들기:** 살아 있는 자동 OUT이 없는 단위에 자격 행이 있으면. 대표 = 자격 행 중 날짜가 가장 이른 행(같으면 id 순). 초안: `source:'F1자동'`, `status:'유효'`, `source_exception_id` = 대표, `occurred_at` = 대표 날짜 + 첫 블록 시작(`parseBlockSpec_` 기준, `ALL`·잘못된 표기는 `00:00`) + `:00`, `entered_by` = 확정자(없으면 요청자), `detected_by` = `dutyByDate[날짜]`(배열은 쉼표, 없으면 빈칸), **`rule_name` = `ruleName + '(만들 때 유형)'`**, `memo` = `'사전 특이사항 자동: 유형'`(자격 행이 여러 날이면 `' 외 N일'`).
-- **유지 행**(이미 있는 OUT 하나에 대해): 자격 행, 또는 확정·날짜 맞음이고 유형이 그 OUT의 `rule_name` 괄호 유형(만들 때 유형)과 같은 행(그 유형의 `autoTypeSince`가 그 OUT의 `created_at` 이전이면 그 시각 이후 확정만 — OUT이 생긴 뒤 다시 넓힌 since로는 거르지 않는다, `created_at`이 비면 거르지 않는다). 유지 행이 있으면 OUT을 유지하고 두 번 실행해도 0건. **설정을 좁혔다가 다시 넓혀도 기존 OUT은 죽지 않는다(결정 40).** 그래서 `violations` 행은 `created_at`까지 넘긴다(필수). 지름길: 다시 넓히면 처음 넓히기 전에 확정된 같은 유형 행도 유지 행이 되어, 대표가 그쪽으로 옮겨질 수 있다(덜 죽일 뿐 거짓 취소는 없음 — 설정이 넓힌 이력을 남기면 고친다).
+- **유지 행**(이미 있는 OUT 하나에 대해): 자격 행, 또는 확정·날짜 맞음이고 유형이 그 OUT의 `rule_name` 괄호 유형(만들 때 유형)과 같은 행(그 OUT의 `created_at` 이하에서 가장 늦은 넓힘 시각이 있으면 그 시각 이후 확정만 — OUT이 생긴 뒤 다시 넓힌 since로는 거르지 않는다, `created_at`이 비면 거르지 않는다). 유지 행이 있으면 OUT을 유지하고 두 번 실행해도 0건. **설정을 좁혔다가 다시 넓혀도 기존 OUT은 죽지 않는다(결정 40).** 그래서 `violations` 행은 `created_at`까지 넘긴다(필수). `autoTypeSince[유형]`에 넓힘 이력(배열, `outAutoSinceNext_`의 `widened`)을 주면 다시 넓힌 뒤에도 처음 넓히기 전에 확정된 행은 유지 행이 아니다. 한 시각(옛 모양)만 주면 지름길: 다시 넓히면 처음 넓히기 전에 확정된 같은 유형 행도 유지 행이 되어, 대표가 그쪽으로 옮겨질 수 있다(덜 죽일 뿐 거짓 취소는 없음). 새로 만들기(자격 행)는 늘 가장 최근 넓힘 기준.
   - `rule_name`은 vocabulary 형식일 때만 읽는다: 정확히 `ruleName + '(' + 유형 + ')'` — `ruleName` 바로 뒤의 `(`와 짝이 맞는 `)`가 마지막 글자(유형 안의 짝 맞는 괄호 허용). `'… (학부모 통화)'`처럼 덧붙였거나, 유형이 비었거나(`'( )'`), 통째로 괄호에 싸였으면(`'((x))'`) '알 수 없음'. 알 수 없으면 유지 행 = 자격 행만이고, 자격 행이 없어도 확정·날짜 맞는 행이 남아 있으면 **그대로 둔다**(유형으로 취소하지 않고, 대표를 비자동 행으로 옮기지도, 고치지도 않는다).
   - **대표 유지:** 지금 `source_exception_id` 행이 유지 행이면 대표를 옮기지 않는다. 아니면 유지 행 중 가장 이른 행.
-- **취소**(`toCancel`, 사유는 `'[자동] '`으로 시작): 특이사항이 모두 취소됨, 확정 행이 없어짐(요청으로 돌아감), 유형이 자동 대상 밖으로 바뀜(만들 때 유형도 아님), 연결된 특이사항 행이 없음, 특이사항의 학생·기간이 바뀜(**바른 쪽에 다시 만든다 — 이때는 지금 설정·`autoTypeSince`와 상관없이**, 그렇게 다시 만든 OUT은 유지 판정에서도 since로 거르지 않는다 — 같은 단위에 이 사유로 취소된 자동 OUT이 있으면), 같은 단위의 두 번째 살아 있는 OUT.
+- **취소**(`toCancel`, 사유는 `'[자동] '`으로 시작): 특이사항이 모두 취소됨, 확정 행이 없어짐(요청으로 돌아감), 유형이 자동 대상 밖으로 바뀜(만들 때 유형도 아님), 연결된 특이사항 행이 없음, 특이사항의 학생·기간이 바뀜(**바른 쪽에 다시 만든다 — 이때는 지금 설정·`autoTypeSince`와 상관없이**, 그렇게 다시 만든 OUT은 유지 판정에서도 since로 거르지 않는다 — 같은 단위에, 또는 이 사유로 취소된 자동 OUT이 가리키던 행의 묶음(학생 + group_id) 행이 든 단위에 — per를 group→row로 바꿔 대표가 옮겨 간 행의 단위에도 남게), 같은 단위의 두 번째 살아 있는 OUT.
 - **고침**(`toUpdate`, 부르는 쪽은 `updateRecord_`로 저장 → audit_log에 전후 값). 사람이 고친 값은 덮지 않는다:
   - 대표가 바뀌거나 대표 날짜와 OUT 날짜가 다르면 `source_exception_id`·`occurred_at`. **특이사항 날짜가 원본** — 사람이 OUT 날짜를 고치면 날짜·시각 모두 생성값으로 되돌린다. 날짜가 같으면 사람이 고친 시각은 둔다(같은 대표·같은 날짜에서 블록만 바뀐 것도 고치지 않는다).
   - `detected_by`: 빈칸인데 그날 근무교사를 알게 되면 채운다. 날짜가 바뀌었고 지금 값이 옛 날짜의 근무교사(생성값)와 같으면 새 날짜 근무교사로, 모르면 빈칸으로. 그래서 `dutyByDate`에는 특이사항 날짜와 OUT들의 지금 `occurred_at` 날짜를 모두 넣는다.
@@ -274,7 +274,7 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId)
 
 ## 동작 메모(R9, 2026-11-07)
 
-- `outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes)`: 유형별 마지막 넓힘 시각을 스냅숏 `{types, since}`로 들고 다닌다(저장은 F4 몫). `snapshot`이 null(처음·분실)이면 기준 = `defaultTypes`(설정 기본값 `exception.auto_out_types`): 기본 그대로면 `since {}`(처음 연결 때 일괄 생성), 기본에 없는 유형은 `since = nowIso`(스냅숏을 잃어도 넓혔던 유형은 소급하지 않는다). 새로 나타난 유형은 `since = nowIso`(다시 넓혀도 덮어씀), 빠진 유형의 since는 남긴다. 괄호 설명은 떼고 비교. `changed` = 스냅숏을 새로 써야 하는지(null이면 참, 유형 집합이 같으면 거짓). 잘못된 `nowIso`는 Error.
+- `outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes)`: 유형별 마지막 넓힘 시각을 스냅숏 `{types, since}`로 들고 다닌다(저장은 F4 몫). `snapshot`이 null(처음·분실)이면 기준 = `defaultTypes`(설정 기본값 `exception.auto_out_types`): 기본 그대로면 `since {}`(처음 연결 때 일괄 생성), 기본에 없는 유형은 `since = nowIso`(스냅숏을 잃어도 넓혔던 유형은 소급하지 않는다). 새로 나타난 유형은 `since = nowIso`(다시 넓혀도 덮어씀), 빠진 유형의 since는 남긴다. `widened` = 유형별 넓힌 시각 이력(오름차순, 다시 넓힐 때마다 더함, 옛 스냅숏은 since 값 하나로 시작) — `reconcileAutoOuts_`의 `autoTypeSince`로 `since` 대신 넘기면 다시 넓힘 지름길이 없어진다(F4 C12 연결은 후속). 괄호 설명은 떼고 비교. `changed` = 스냅숏을 새로 써야 하는지(null이면 참, 유형 집합이 같으면 거짓). 잘못된 `nowIso`는 Error.
 - `outDismissalGate_`(2OUT 퇴실 확정 관문): 이번 기간 살아 있는 OUT을 `occurred_at` → `created_at` → id 순으로 놓은 둘째가 `triggerOutId`. 면담 = status 빈칸·유효, 같은 학생, type `2OUT 학부모 면담`, **이번 기간 살아 있는 OUT에 연결**, 날짜 ≥ triggerOut 발생일. `alreadyLeft` = ymd에 학사 퇴실이거나 앞으로 **2OUT 퇴실**(살아 있는 학사 퇴실, 적용일 > ymd, memo가 `[2OUT]`로 시작하거나 reason `2OUT 퇴실`)이 잡혀 있음(2OUT 퇴실을 두 번 만들지 않게). 보통 미래 퇴실은 막지 않는다(총괄 결정 — 그 뒤 `movePlan_`이 '이후 날짜에 입퇴실 기록'으로 그 퇴실을 가리킨다). 판정 순서: `이미 퇴실` → `퇴실 대상 아님`(2건 미만) → `면담 기록 필요` → ok. `notes`에는 내용(content)을 넘기지 않는다. 결정 51: 연결한 OUT이 나중에 취소되면 그 면담은 세지 않는다(다른 2건이 남아도 다시 면담), 둘째 OUT보다 앞선 날짜의 면담도 세지 않는다. StatusRules(`statusOn_`)를 부른다.
 - O43 회귀 테스트: 같은 묶음의 앞선 자동 OUT이 중복·유형 변경으로 `[자동]` 취소돼 있어도 since 거르기는 그대로다(`moved`는 '학생 또는 기간이 바뀌었습니다' 취소만).
 

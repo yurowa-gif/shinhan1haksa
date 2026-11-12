@@ -76,7 +76,8 @@ var SCREENS = {
   duty: { file: 'ui/screen_duty', title: '근무표', view: 'duty.view' },
   outs: { file: 'ui/screen_outs', title: 'OUT', view: 'out.view' },
   moves: { file: 'ui/screen_moves', title: '입퇴실·급식', view: 'status.list' },
-  mealcount: { file: 'ui/screen_mealcount', title: '식수 집계', view: 'meal.count' }
+  mealcount: { file: 'ui/screen_mealcount', title: '식수 집계', view: 'meal.count' },
+  rooms: { file: 'ui/screen_rooms', title: '방 배정', view: 'room.view' }
 };
 
 /**
@@ -85,7 +86,7 @@ var SCREENS = {
  */
 function screenParams_(p) {
   var out = {};
-  var tabs = ['requests', 'list', 'mine', 'week', 'month', 'record', 'entry', 'term', 'today', 'dismiss', 'rules', 'meal', 'move', 'history'];
+  var tabs = ['requests', 'list', 'mine', 'week', 'month', 'record', 'entry', 'term', 'today', 'dismiss', 'rules', 'meal', 'move', 'history', 'stats'];
   if (tabs.indexOf(String(p.tab)) >= 0) out.tab = String(p.tab);
   if (/^\d{4}-\d{2}-\d{2}$/.test(String(p.date || ''))) out.date = String(p.date);
   if (/^\d{4}-\d{2}$/.test(String(p.month || ''))) out.month = String(p.month);

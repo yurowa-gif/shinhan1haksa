@@ -42,6 +42,7 @@ function foodHomeInfo_(user, role) {
     list.slice(0, 10).forEach(function (x) { shown[x.studentId + '|' + x.kind] = true; });
     var hidden = miss.filter(function (m) { return !shown[m.studentId + '|' + (m.row.source === 'F6' ? '입퇴실' : '급식 변경')]; }).length;   // 가려진 줄에 속한 행 수(제목의 건수와 맞춘다)
     var out = { docMissing: miss.length, docList: list.slice(0, 10), docMore: hidden };
+    out.dorm = roomHomeInfo_();   // 기숙사 빈 자리(남·여) 카드(C23). 방 구성이 없으면 null
     if (role === 'admin') {   // 관리자 홈: 오늘 인원과 자습실·SA 공석(C19, 식수 집계 화면과 같은 모델). 기숙사 정원 대비 공석은 넣지 않는다(F8)
       var today = today_(), m = foodCountsModel_(today, { terms: terms, students: students, enrollments: enrollments, changes: changes });
       out.counts = null; out.noTerm = !m.term;

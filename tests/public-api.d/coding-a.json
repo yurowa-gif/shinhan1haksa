@@ -103,6 +103,14 @@
     "cancelAvoidPair": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "previewSeatDraft": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveSeatDraft": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }
