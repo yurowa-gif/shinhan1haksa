@@ -323,7 +323,8 @@ function excGroupView_(g, term, d, namesByEmail, studentById, user, range, outId
     type: g.type, short: chip ? chip.short : g.type, auto: !!chip && chip.auto,
     hasOut: g.ids.some(function (id) { return !!(outIds && outIds[id]); }),   // 이 묶음에 살아 있는 자동 1OUT이 있는가(설정만 보고 1OUT이라 하지 않는다)
     reason: g.reason, status: g.status,
-    requestedByName: namesByEmail[g.requestedBy] || g.requestedBy, mine: mine, cancelReason: g.cancelReason,
+    requestedByName: namesByEmail[normalizeEmail_(g.requestedBy)] || '(등록 안 된 교사)', mine: mine,   // users에 없으면 메일 주소를 내보내지 않는다(Duty와 같은 말)
+    cancelReason: g.cancelReason,
     // 끝난 기간은 보기만 — 눌러도 늘 거부되는 버튼은 보이지 않게 한다
     canConfirm: !ended && g.status === '요청' && excCanConfirm_(user),
     canCancel: !ended && g.status !== '취소' && (excCanConfirm_(user) || (mine && g.status === '요청'))
