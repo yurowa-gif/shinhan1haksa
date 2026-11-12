@@ -154,3 +154,36 @@ test('근무교사 목록엔 있고 요청 고르기엔 없다: 실제 근무 �
   const ctxStudents = x.env.call(T1, 'getExceptionContext').students.map((s) => s.id);
   assert.ok(!ctxStudents.includes(x.notMine.id) && ctxStudents.length > 0, '요청 고르기에는 담당 학생만');
 });
+
+test('미래 날짜는 날짜 때문에 거부된다(엉뚱한 이유가 아니다): 같은 칸이 그 날이 되면 허용, 어제가 되면 창 1 안이라 허용, 이틀 뒤에는 거부', () => {
+  const x = makeEnv();
+  x.duty('2027-03-04', '21:30조', T2);
+  denied(x, T2, 'out.save', { studentId: x.notMine.id, ymd: '2027-03-04' }, '3/3에는 아직 미래');
+  x.env.setNow('2027-03-04T10:00:00');
+  allowed(x, T2, 'out.save', { studentId: x.notMine.id, ymd: '2027-03-04' }, '그 날이 되면 같은 칸·같은 학생이 허용(거부 이유는 날짜뿐)');
+  x.env.setNow('2027-03-05T10:00:00');
+  allowed(x, T2, 'out.save', { studentId: x.notMine.id, ymd: '2027-03-04' }, '다음 날 아침까지(창 1)');
+  x.env.setNow('2027-03-06T10:00:00');
+  denied(x, T2, 'out.save', { studentId: x.notMine.id, ymd: '2027-03-04' }, '이틀 뒤는 창 밖');
+});
+
+test('근무표 읽기 오류(탭 없음이 아닌 것)는 거부하되 console.warn으로 남고, 탭 없음은 조용하다', () => {
+  const x = makeEnv();
+  x.duty(TODAY, '21:30조', T2);
+  const run = (message) => {
+    const warns = [];
+    const e = x.env.errorOf(T2, (c) => {
+      const read = c.readAll_, warn = c.console && c.console.warn;
+      c.console = { warn: (m) => warns.push(String(m)), error() {}, log() {} };
+      c.readAll_ = (name, kind) => { if (name === 'duty_slots') throw new Error(message); return read(name, kind); };
+      try { return c.requirePermission_('out.save', { studentId: x.notMine.id, ymd: TODAY }); } finally { void warn; }
+    });
+    return { e, warns };
+  };
+  const odd = run('스프레드시트 오류(가짜)');
+  assert.ok(odd.e && /권한이 없습니다/.test(odd.e.message));
+  assert.ok(odd.warns.some((w) => w.includes('근무표를 읽지 못해')), JSON.stringify(odd.warns));
+  const missing = run('탭이 없습니다: duty_slots (setup()을 다시 실행하세요)');
+  assert.ok(missing.e && /권한이 없습니다/.test(missing.e.message));
+  assert.ok(!missing.warns.some((w) => w.includes('근무표를 읽지 못해')), '탭 없음은 조용히 거짓');
+});

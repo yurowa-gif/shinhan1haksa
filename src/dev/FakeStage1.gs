@@ -70,8 +70,8 @@ function buildFakeStage1_(fake) {
   var statusChanges = [];
   var addChange = function (st, item, value, effective, source, reason) {
     statusChanges.push({ id: fake1Id_('f4000000', statusChanges.length + 1), student_id: st.id, item: item, value: value,
-      requested_at: effective + 'T09:00:00', effective_date: effective, effective_date_auto: effective,
-      reason: reason || '', doc_submitted: 'FALSE', linked_change_id: '', source: source, status: '유효', memo: FAKE1_MEMO, cancel_reason: '' });
+      requested_at: '', effective_date: effective, effective_date_auto: effective,   // 명단업로드: 신청 일시·서류 없음(vocabulary.md)
+      reason: reason || '', doc_submitted: '', linked_change_id: '', source: source, status: '유효', memo: FAKE1_MEMO, cancel_reason: '' });
   };
   students.forEach(function (st) {
     var en = enrollByStudent[st.id];
@@ -84,7 +84,21 @@ function buildFakeStage1_(fake) {
     }
     addChange(st, '석식', '학사 석식', start, '명단업로드');
   });
-  addChange(leaver, '학사', '퇴실', '2027-03-10', 'F6', '가짜 중도 퇴실');
+  /* 29번 중도 퇴실: F6 화면이 쓰는 것과 같은 movePlan_ 결과(대표 행 서류 미제출 + 급식 정리 연결 행) */
+  var mine = statusChanges.filter(function (c) { return c.student_id === leaver.id; });
+  var move = movePlan_(mine, leaver.id, {
+    type: enrollByStudent[leaver.id].commute_type === '일반' ? '학사 퇴실' : '학사 및 기숙사 퇴실',
+    effectiveDate: '2027-03-10', requestedAt: '2027-03-08T15:00:00' }, { today: '2027-03-08' });
+  if (move.errors.length || move.toCancel.length) throw new Error('가짜 퇴실 계획 오류: ' + move.errors.join(', '));
+  var headId = '';
+  move.rows.forEach(function (r) {
+    var id = fake1Id_('f4000000', statusChanges.length + 1);
+    statusChanges.push({ id: id, student_id: leaver.id, item: r.item, value: r.value, requested_at: r.requested_at,
+      effective_date: r.effective_date, effective_date_auto: r.effective_date_auto, reason: r.head ? '가짜 중도 퇴실' : r.reason,
+      doc_submitted: r.head ? 'FALSE' : '', linked_change_id: r.head ? '' : headId, source: r.source, status: '유효',
+      memo: FAKE1_MEMO, cancel_reason: '' });
+    if (r.head) headId = id;
+  });
 
   /* 날짜별 일정 2건: 운영 안 함 1, 종료 22:00 1 */
   var daySchedules = [
