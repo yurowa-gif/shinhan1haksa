@@ -75,7 +75,7 @@ function buildFakeData_(opts) {
     // 1·2번은 형제(같은 성, 같은 학부모)
     if (i === 1) surname = students[0].name.charAt(0);
     var gender = rand() < 0.6 ? '여' : '남';
-    var email = 'fake.student' + ('0' + (i + 1)).slice(-2) + '@example.com';
+    var email = 'fake.student' + (i < 9 ? '0' : '') + (i + 1) + '@example.com';
     if (i === 0 && opts.studentEmail) email = opts.studentEmail;
 
     var s = {
@@ -107,7 +107,7 @@ function buildFakeData_(opts) {
     });
 
     var parentEmail = (i <= 1 && opts.parentEmail) ? opts.parentEmail
-      : 'fake.parent' + ('0' + (i === 1 ? 1 : i + 1)).slice(-2) + '@example.com';
+      : 'fake.parent' + (i < 9 ? '0' : '') + (i === 1 ? 1 : i + 1) + '@example.com';
     guardianLinks.push({
       id: fakeId_('eeeeeeee', i + 1),
       parent_email: parentEmail,

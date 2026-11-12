@@ -114,10 +114,18 @@ test('끝까지 방 배정: 초안 → 저장(성별 층·정원), 막는 위반
   // 출결·근무표 담당 응답에는 짝 위반·사유·id가 없다(avoid.view 가드를 빼면 여기서 잡힌다)
   const rp = env.rows('avoid_pairs').find((x) => x.scope !== '좌석' && roomOf[x.student_a] && roomOf[x.student_b]);
   assert.ok(rp, '두 학생 모두 기숙사생인 방 짝');
-  const together = p.assignments.map((x) => x.student_id === rp.student_b ? Object.assign({}, x, { room_id: roomOf[rp.student_a] }) : x);
+  let together = p.assignments.map((x) => x.student_id === rp.student_b ? Object.assign({}, x, { room_id: roomOf[rp.student_a] }) : x);
+  // 같은 학년만 있는 방도 하나 만든다(같은 학년 위반 줄 — 출결·근무표 담당에게는 이 줄도 없어야 한다)
+  const pairIds = [rp.student_a, rp.student_b];
+  const twins = together.filter((x) => !pairIds.includes(x.student_id)).find((x, i, arr) => arr.some((y) => y !== x && stu[y.student_id].gender === stu[x.student_id].gender && stu[y.student_id].grade === stu[x.student_id].grade));
+  const twin2 = together.find((y) => y !== twins && !pairIds.includes(y.student_id) && stu[y.student_id].gender === stu[twins.student_id].gender && stu[y.student_id].grade === stu[twins.student_id].grade);
+  const usedRooms = new Set(together.map((x) => x.room_id));
+  const emptyRoom = Object.values(rooms).find((r) => r.gender === stu[twins.student_id].gender && !usedRooms.has(r.id));
+  together = together.map((x) => (x === twins || x === twin2) ? Object.assign({}, x, { room_id: emptyRoom.id }) : x);
   const tp = call(HALL, 'previewRoomPlan', term.id, together);
   assert.deepStrictEqual([tp.ok, tp.blocked], [true, false], JSON.stringify(tp));
   assert.ok(JSON.stringify(tp.violations).includes('떨어뜨릴 짝'), '학사 교사 미리보기에 짝 위반');
+  assert.ok(JSON.stringify(tp.violations).includes('같은 학년'), '학사 교사 미리보기에 같은 학년 위반 ' + JSON.stringify(tp.violations));
   const ts = call(HALL, 'saveRoomAssignments', term.id, together, call(HALL, 'getRoomData', term.id).token);
   assert.strictEqual(ts.ok, true, '짝 위반은 저장을 막지 않는다 ' + JSON.stringify(ts));
   assert.ok(JSON.stringify(call(HALL, 'getRoomData', term.id)).includes('떨어뜨릴 짝'), '학사 교사 방 화면에 짝 위반');
@@ -125,6 +133,7 @@ test('끝까지 방 배정: 초안 → 저장(성별 층·정원), 막는 위반
     const view = JSON.stringify(call(who, 'getRoomData', term.id)) + JSON.stringify(call(who, 'getRoomStats', term.id));
     assert.ok(!view.includes('떨어뜨릴 짝'), who + ' 응답에 짝 위반 없음');
     assert.ok(!env.rows('avoid_pairs').some((x) => view.includes(x.reason) || view.includes(x.id) || view.includes(x.student_a)), who + ' 응답에 짝 사유·id·학생 없음');
+    assert.deepStrictEqual(call(who, 'getRoomData', term.id).violations, [], who + ' 응답에 위반 줄 없음(같은 학년 포함)');
   }
 
   // 홈 카드 = 현황판, 그리고 기숙사 퇴실 뒤 공석(3/12 기숙사 퇴실 → 그날부터 인원 −1, 행은 지우지 않음)
