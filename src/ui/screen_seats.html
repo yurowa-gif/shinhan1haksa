@@ -226,11 +226,18 @@
       ], { mount: true });
     }
 
+    /** 저장 확인창 설명: 지금 배정은 기준일 전날까지로 끝나고 기준일부터 새 배정(서버 seatEndOp_와 같다) */
+    function saveNote(ymd) {
+      var p = UI.util.ymdParse(ymd), d = p ? new Date(Date.UTC(p.y, p.m - 1, p.d - 1)) : null;
+      var prev = d ? UI.util.formatDateKo(d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0'), false) : '';
+      return '지금 배정은 ' + prev + '까지로 끝나고 ' + UI.util.formatDateKo(ymd, false) + '부터 새 배정이 적용됩니다(지난 날짜의 좌석표와 기록은 그대로 남습니다).';
+    }
+
     function confirmSave() {
       var p = state.preview;
       if (state.busy || !p) return;
       UI.confirmSheet({ title: '이 초안으로 저장할까요?', lead: '바뀌는 자리 ' + p.changed + '개 · 규칙 위반 ' + p.violationCount + '개',
-        lines: ['규칙 위반이 있어도 저장할 수 있습니다.', '지금 배정은 ' + p.ymd + '부터 끝나고 새 배정이 생깁니다(지난 날짜의 좌석표와 기록은 그대로 남습니다).'],
+        lines: ['규칙 위반이 있어도 저장할 수 있습니다.', saveNote(p.ymd)],
         confirmText: '저장', cancelText: '취소',
         onconfirm: function () {
           if (state.busy) return;

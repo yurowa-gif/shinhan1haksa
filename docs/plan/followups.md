@@ -23,9 +23,9 @@
 - [x] nit(R 다음 작업): 미래 2OUT 절 변이 M6·M7·M9·M10 표 줄, `ymdIsValid_` 검사. — **된 것(R13 #111):** 미래 2OUT 표 줄(`[2OUT]` 접두 아님·기숙사 항목·입실 값·달력에 없는 날짜 등)과 `ymdIsValid_` 검사. 시험 `out.test.js` 'outDismissalGate_: 앞으로 잡힌 퇴실은 2OUT 퇴실…' 표.
 
 ## 근무 — C8s #77 · R8 #51 (C9·C11a에서)
-- [ ] **C9 교대(보안):** `actual_email`이 이제 `out.save` 범위를 준다. 바꿀 수 있는 사람 = 그 칸의 지금 실제 근무자(넘겨줄 때, 오늘 이후 본인 칸)·duty_manager·admin(지난 날짜 포함 교대·대신 근무 기록 가능 — 결정 57은 편성·운영 여부만 막는다). 같은 id 중복 행 교대는 막는다(#81). 설계 메모: 오늘 칸을 근무가 끝난 뒤 넘기면 받은 교사가 오늘·내일 `out.save`를 얻는다(접근 이동, 메일로 알림). 칸 대상은 active hall_teacher만. 시험: 학사 교사가 남의 어제 칸에 자기를 넣으면 거부, 그 교사의 어제 `out.save`는 계속 거부.
-- [ ] **C11a:** 권한 ymd와 저장 `occurred_at`은 `vioYmd_(input)` 하나에서(stage2.md C11a 줄).
-- [ ] auth_duty.test.js 보강(미래 날짜 단언이 엉뚱한 이유로 통과, 주말 단독/예비, 자정 경계, counsel.view noDuty, 한 실행 안 창 0·1 섞기), `isOnDutyFor_` 읽기 오류 console.warn — 코딩A 다음 PR.
+- [x] **C9 교대(보안):** `actual_email`이 이제 `out.save` 범위를 준다. 바꿀 수 있는 사람 = 그 칸의 지금 실제 근무자(넘겨줄 때, 오늘 이후 본인 칸)·duty_manager·admin(지난 날짜 포함 교대·대신 근무 기록 가능 — 결정 57은 편성·운영 여부만 막는다). 같은 id 중복 행 교대는 막는다(#81). 설계 메모: 오늘 칸을 근무가 끝난 뒤 넘기면 받은 교사가 오늘·내일 `out.save`를 얻는다(접근 이동, 메일로 알림). 칸 대상은 active hall_teacher만. 시험: 학사 교사가 남의 어제 칸에 자기를 넣으면 거부, 그 교사의 어제 `out.save`는 계속 거부. → 된 것: `tests/features/duty_swap.test.js` '학사 교사가 남의 칸(특히 어제)에 자기를 넣는 길은 없다' — 남의 어제·내일 칸에 자기를 넣기 거부 + 그 교사의 어제 `out.save` 거부(#81).
+- [x] **C11a:** 권한 ymd와 저장 `occurred_at`은 `vioYmd_(input)` 하나에서(stage2.md C11a 줄). → 된 것: `src/features/Outs.gs`의 권한(`out.save`의 `ymd`)과 저장 `occurred_at`(`c.vio.at`)이 모두 `vioYmd_(input)` 하나에서 나온다(#89·#94, `outs.test.js`).
+- [x] auth_duty.test.js 보강(미래 날짜 단언이 엉뚱한 이유로 통과, 주말 단독/예비, 자정 경계, counsel.view noDuty, 한 실행 안 창 0·1 섞기), `isOnDutyFor_` 읽기 오류 console.warn — 코딩A 다음 PR. → 된 것: 주말 단독/예비·자정 경계·`counsel.view` noDuty·창 0·1 섞기는 #81, 미래 날짜가 날짜 때문에 거부되는지·읽기 오류 `console.warn`(탭 없음은 조용)은 #102(`tests/core/auth_duty.test.js`).
 - [x] R8 nit: windowDays 문구, `dutyPick_`·`dutyEmail_` 계약에 없음, 주말 틀 경고 시험 — 규칙 다음 작업. — **된 것(R8 검토 반영 — 지금 main에서 확인):** 계약 R8 서명에 `dutyPick_`·`dutyEmail_`, `dutyIsOn_` windowDays 문구(기본 0, 잘못된 값은 거짓). 시험 `duty.test.js` '그 요일 틀 밖의 칸은 쓰되 경고(토요일 21:30조, …)'.
 
 ## 급식·입퇴실 저장 — C17a #75 · C17b #78 · C18a #80 · R11a #55
@@ -40,7 +40,7 @@
 - [x] R 다음 작업(#55 nit): 계획이 자기 '일반 석식으로' 행을 빼면 그 신청의 '…덮습니다(F7)' 경고도 뺀다. — **된 것(R13 #111):** 시험 `move.test.js` "계획이 자기 '일반 석식으로' 행을 빼면 그 신청의 '덮습니다' 경고도 뺀다(#55 nit)".
 
 ## 공용 Db — #81 · #93
-- [ ] 같은 id 중복 행·빈 id: #93이 `findById_`·`updateRecord_`·`bulkUpdateRecords_`에서 막는다. 시트를 손으로 고쳐 생긴 중복 행을 찾아 새 UUID를 주는 시트 소유자용 편집기 함수 후보. `saveDutyDay`·`dtyCancelSlots_`처럼 id로 고치는 곳은 이제 오류로 멈추고 안내한다.
+- [x] 같은 id 중복 행·빈 id: #93이 `findById_`·`updateRecord_`·`bulkUpdateRecords_`에서 막는다. 시트를 손으로 고쳐 생긴 중복 행을 찾아 새 UUID를 주는 시트 소유자용 편집기 함수 후보. `saveDutyDay`·`dtyCancelSlots_`처럼 id로 고치는 곳은 이제 오류로 멈추고 안내한다. → 된 것: 편집기 함수 `repairDuplicateIds()`(`src/dev/RepairIds.gs`, 소유자 전용) — 인자 없이 부르면 미리보기(아무것도 쓰지 않음), `repairDuplicateIds(true)`만 실행(락 안, 위 줄이 id를 지키고 아래 중복·빈 id 줄에 새 UUID, 행·구조 그대로, audit `repair_id`). 시험 `tests/core/repair_ids.test.js`.
 
 ## 출석부 — C7 #33 · D4.1 #27
 - [ ] Apps Script PDF 변환(C0)에서 모양·글꼴·`rowspan`·줄바꿈이 미리보기와 같은지 — 선생님 `spikeRunAll` 결과로 확인.
@@ -49,5 +49,9 @@
 - [ ] 글자 폭은 실제 글꼴이 아니라 넉넉한 어림값(`shortcut:`). 어림이 틀리면 글자는 남고 PDF 쪽 수가 계획보다 늘 수 있다 — C0에서 확인.
 
 ## 운영 대비 — stage2.md 찾은 것 21 (3·4단계 계획 후보, 2027-03-02 실사용 전 필요)
-- [ ] **매일 백업(30일 보관).** PRD.md:376·§9에 있지만 PRD §11 어느 단계에도 없다. 2단계부터 실제 기록 탭(OUT·급식·근무)이 생긴다. Script Property(`AUTO_OUT_SINCE`)는 데이터 파일 백업에 들어가지 않으므로 따로 챙긴다.
-- [ ] **18시 전 출석부 미리 만들기.** 같은 이유로 단계가 정해져 있지 않다. 3·4단계 계획에서 자리를 정한다.
+- [x] **매일 백업(30일 보관):** O1 #103(`nightlyBackup`·`installNightlyBackup`·`runBackupNow`, 결정 65). 선생님 확인 A5.
+- [ ] **18시 전 출석부 미리 만들기:** stage3.md O2 — C0 `spikeRunAll` 결과 뒤.
+- [ ] **시범 운영 안내(점검 2026-11-12 #8):** 데이터 탭은 손으로 고치지 않는다. `bulkUpdateRecords_`가 바뀌지 않은 행까지 텍스트 서식으로 다시 써서, 손으로 넣은 날짜·수식 칸이 글자로 바뀔 수 있다(감사 기록 없음). 고쳐야 하면 화면이나 편집기 함수로 고친다. 실제 피해가 보이면 바뀐 행만 쓰도록 Db를 고친다.
+- [ ] **배포 방식 확인(점검 #7):** 웹앱은 '나(소유자)로 실행'으로 배포한다. '접속한 사용자로 실행'이면 `assertOwnerRun_`(active === effective)가 누구에게나 통과한다. 0단계 진단에서 다른 방식을 고르면 `OWNER_EMAIL` 속성과 비교하도록 강화한다.
+- [ ] **시범 운영 전:** Script Property `DIAG_ENABLED`를 false(또는 지움)로 두어 `diagPing`을 막는다.
+- 점검 #4(넓은 보기의 ymd 범위)는 결정 53의 뜻 안이라 그대로 둔다(쓰기 없음).

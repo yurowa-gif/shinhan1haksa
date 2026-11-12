@@ -83,6 +83,31 @@ test('D10 시안(stage3-screens.js)의 화면 이름이 모두 screens.md 5-3 �
   assert.ok(/\.seat-cell\.bad \{ border: 3px solid/.test(styles));
 });
 
+test('3단계 선생님 확인 체크리스트: 번호(A1~E8)가 겹치지 않고 모든 줄이 7칸이며, 꼭 넣을 단계와 시안 사진 파일이 있다', () => {
+  const doc = css.readFile('docs/design/stage3-teacher-checks.md');
+  const rows = doc.split('\n').filter((l) => /^\| [A-E]\d+ \|/.test(l));
+  assert.ok(rows.length >= 40, '단계 수 ' + rows.length);
+  const ids = rows.map((l) => l.split('|')[1].trim());
+  assert.strictEqual(new Set(ids).size, ids.length, '번호 중복');
+  rows.forEach((l) => assert.strictEqual(l.split('|').length, 8, l.slice(0, 40)));
+  ['결정 64', '어제 출석부', '입실 전 학생', 'seedFakeStage3', 'seedDefaultRooms', 'duty_manager', 'homeroom', 'attendance', '삭제 버튼은 어디에도 없다', '[저장]이 꺼져 있고'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
+  const fs = require('fs');
+  const path = require('path');
+  const imgs = [...doc.matchAll(/!\[[^\]]*\]\((stage3-check-photos\/[^)]+)\)/g)].map((m) => m[1]);
+  assert.ok(imgs.length >= 14, '사진 수 ' + imgs.length);
+  imgs.forEach((f) => assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'docs', 'design', f)), f + ' 파일이 없다'));
+  const src = css.readFile('design/preview/stage3-screens.js');
+  [...src.matchAll(/^def\('([^']+)'/gm)].map((m) => m[1]).forEach((id) => assert.ok(doc.indexOf('`' + id + '`') >= 0, '`' + id + '` 시안 사진이 없다'));
+});
+
+test('rules.md 가 글꼴을 내려받지 않는다는 결정과 UI 용어집 링크를 적고, Styles 에 글꼴 내려받는 코드가 없다', () => {
+  const rules = css.readFile('docs/design/rules.md');
+  assert.ok(rules.indexOf('글꼴 파일을 내려받지 않는다') >= 0 && rules.indexOf('OFL') >= 0 && rules.indexOf('로딩 시간') >= 0);
+  assert.ok(rules.indexOf('docs/design/ui-vocabulary.md') >= 0);
+  const styles = css.readFile('src/ui/Styles.html');
+  assert.ok(!/@font-face|fonts\.googleapis|cdn\.jsdelivr/.test(styles), '글꼴을 내려받는 코드가 들어갔다');
+});
+
 test('2단계 선생님 확인 체크리스트: 단계 번호(A1~E4)가 겹치지 않고 모든 줄이 7칸(번호·누가·누르는 것·통과 모습·사진·결과)이며, print-check 9·10절 번호(44~66)가 이어진다', () => {
   const doc = css.readFile('docs/design/stage2-teacher-checks.md');
   const rows = doc.split('\n').filter((l) => /^\| [A-E]\d+ \|/.test(l));
