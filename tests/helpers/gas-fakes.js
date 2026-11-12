@@ -34,7 +34,8 @@
  * - Session: env.as(email)의 접속자 = email, 실행 계정 = 소유자("나로 실행"). email ''은 접속자 이메일을 못 받은 경우(PRD 6.1).
  * - DriveApp(O1 백업용 최소): getFileById·getFolderById·createFolder, 폴더 getFiles/createFile/getId/getName, 파일 makeCopy·setTrashed·isTrashed·
  *   getName·getId·getSharingAccess·setSharing·getEditors·getViewers, Access.PRIVATE/ANYONE_WITH_LINK, Permission.NONE/VIEW. 데이터는 env.drive({files, folders}).
- *   시험이 env.drive.addFile(name, {parent, sharing})로 파일을 만든다. 복사본이 공유로 생기는 상황은 env.drive.copySharing = 'ANYONE_WITH_LINK'.
+ *   시험이 env.drive.addFile(name, {parent, sharing})로 파일을 만든다. 새 사본·파일이 공유된 채 생기는 상황: env.drive.copySharing = 'ANYONE_WITH_LINK'(링크),
+ *   env.drive.copyViewers = ['x@…'](이름으로 추가된 사람, 폴더 공유 상속 흉내), 그 사람을 못 지우게: env.drive.stuckViewers = true. setSharing은 링크만 바꾼다.
  *   ScriptApp 트리거(O1): getProjectTriggers·newTrigger(fn).timeBased().everyDays(1).atHour(h).create()·deleteTrigger. 기록은 env.triggers.
  * - 흉내 내지 않는 서비스(그 밖의 DriveApp 기능, UrlFetchApp, Utilities.newBlob, ScriptApp.getOAuthToken 등)는 '[gas-fakes] …' 오류.
  * - vm 안에서 만든 Date·배열은 Node 쪽과 다른 realm이다. assert.deepStrictEqual 전에 JSON 복사(plain)하거나 call()을 쓴다.
@@ -304,7 +305,7 @@ function createGasEnv(opts) {
   const ctxTime = () => env._nowMs;
 
   /* ───────── DriveApp(최소) ───────── */
-  const drive = env.drive = { files: {}, folders: {}, seq: 0, copySharing: 'PRIVATE', failCopy: null };
+  const drive = env.drive = { files: {}, folders: {}, seq: 0, copySharing: 'PRIVATE', copyViewers: [], stuckViewers: false, failCopy: null };
   const iter = (arr) => { let i = 0; return { hasNext: () => i < arr.length, next: () => arr[i++] }; };
   function makeFile(name, o) {
     const id = 'fake-file-' + pad(++drive.seq, 3);
@@ -318,7 +319,9 @@ function createGasEnv(opts) {
       getId: () => f.id, getName: () => f.name, setName(n) { f.name = String(n); return this; },
       isTrashed: () => f.trashed, setTrashed(t) { f.trashed = !!t; return this; },
       getSharingAccess: () => f.sharing, getSharingPermission: () => 'NONE',
-      setSharing(a) { f.sharing = a; if (a === 'PRIVATE') { f.viewers = []; f.editors = []; } return this; },
+      setSharing(a) { f.sharing = a; return this; },   // 실제 Drive처럼 링크 공유만 바꾼다(이름으로 추가한 사람은 그대로)
+      removeEditor(e) { const em = typeof e === 'string' ? e : e.getEmail(); if (!drive.stuckViewers) f.editors = f.editors.filter((x) => x !== em); return this; },
+      removeViewer(e) { const em = typeof e === 'string' ? e : e.getEmail(); if (!drive.stuckViewers) f.viewers = f.viewers.filter((x) => x !== em); return this; },
       getEditors: () => f.editors.map((e) => ({ getEmail: () => e })), getViewers: () => f.viewers.map((e) => ({ getEmail: () => e })),
       getBlob: notFaked('File.getBlob'),
       getBlobText: () => f.content,
@@ -326,7 +329,7 @@ function createGasEnv(opts) {
       makeCopy(name, folder) {
         if (drive.failCopy && f.name.indexOf(drive.failCopy) >= 0) throw new Error('복사 실패(시험): ' + f.name);
         const c = makeFile(name, { parent: folder ? folder.getId() : null, sharing: drive.copySharing, content: f.content, mime: f.mime });
-        if (drive.copySharing !== 'PRIVATE') c._f.viewers = ['someone@fakeschool.invalid'];
+        c._f.viewers = drive.copyViewers.slice();   // 폴더 공유 상속 흉내: 이름으로 추가된 사람
         return c;
       }
     };
@@ -341,8 +344,9 @@ function createGasEnv(opts) {
     return {
       getId: () => d.id, getName: () => d.name, isTrashed: () => d.trashed,
       getSharingAccess: () => d.sharing,
+      getEditors: () => (d.editors || []).map((e) => ({ getEmail: () => e })), getViewers: () => (d.viewers || []).map((e) => ({ getEmail: () => e })),
       getFiles: () => iter(Object.keys(drive.files).map((k) => drive.files[k]).filter((f) => f.parent === d.id && !f.trashed).map(wrapFile)),
-      createFile: (name, content, mime) => makeFile(name, { parent: d.id, content: String(content), mime: mime || '' })
+      createFile: (name, content, mime) => { const nf = makeFile(name, { parent: d.id, content: String(content), mime: mime || '', sharing: drive.copySharing }); nf._f.viewers = drive.copyViewers.slice(); return nf; }
     };
   }
   drive.addFile = (name, o) => makeFile(name, o || {});

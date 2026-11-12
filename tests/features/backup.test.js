@@ -60,35 +60,35 @@ test('31일 된 우리 백업만 휴지통, 30일·다른 이름·폴더 밖 파
   const oldState = env.drive.addFile('백업 2027-01-31 #2 앱상태.json', { parent: fid });
   const edge = env.drive.addFile('백업 2027-02-01 신한1학사_운영DB', { parent: fid });   // 30일 전
   const other = env.drive.addFile('내 메모 2020-01-01', { parent: fid });
+  const memo = env.drive.addFile('백업 2020-01-01 수동 메모', { parent: fid });   // 날짜 규칙은 맞지만 우리 파일 제목이 아님
   const outside = env.drive.addFile('백업 2020-01-01 바깥 파일', {});
   const r = run(env);
   assert.strictEqual(r.trashed, 2);
   assert.strictEqual(env.drive.files[old.getId()].trashed, true);
   assert.strictEqual(env.drive.files[oldState.getId()].trashed, true);
-  [edge, other, outside].forEach((f) => assert.strictEqual(env.drive.files[f.getId()].trashed, false, f.getName()));
-  assert.strictEqual(env.drive.filesIn(fid).filter((f) => !f.trashed && NAME_RE.test(f.name) && f.name < '백업 2027-02-01').length, 0);
+  [edge, other, memo, outside].forEach((f) => assert.strictEqual(env.drive.files[f.getId()].trashed, false, f.getName()));
 });
 
-test('installNightlyBackup: 두 번 불러도 트리거는 하나(02시, 매일, nightlyBackup_)', () => {
+test('installNightlyBackup: 두 번 불러도 트리거는 하나(02시, 매일, nightlyBackup)', () => {
   const env = makeEnv();
   const a = plain(env.asOwner((c) => c.installNightlyBackup()));
   const b = plain(env.asOwner((c) => c.installNightlyBackup()));
   assert.strictEqual(a.installed, true);
   assert.strictEqual(b.installed, false);
   assert.strictEqual(env.triggers.length, 1);
-  assert.deepStrictEqual({ fn: env.triggers[0].fn, hour: env.triggers[0].hour, every: env.triggers[0].everyDays }, { fn: 'nightlyBackup_', hour: 2, every: 1 });
+  assert.deepStrictEqual({ fn: env.triggers[0].fn, hour: env.triggers[0].hour, every: env.triggers[0].everyDays }, { fn: 'nightlyBackup', hour: 2, every: 1 });
 });
 
-test('트리거가 부르는 nightlyBackup_도 같은 일을 한다', () => {
+test('트리거가 부르는 nightlyBackup도 같은 일을 한다(소유자 실행), 소유자가 아니면 거부', () => {
   const env = makeEnv();
-  env.asOwner((c) => c.nightlyBackup_());
+  env.asOwner((c) => c.nightlyBackup());
   assert.strictEqual(names(env).length, 4);
   assert.deepStrictEqual(env.auditActions('backup:'), ['backup:ok']);
 });
 
 test('소유자가 아니면 거부: 두 함수 모두, 복사·트리거·audit 변화 없음. 화면 호출 경로(call)도 거부', () => {
   const env = makeEnv();
-  ['runBackupNow', 'installNightlyBackup'].forEach((fn) => {
+  ['runBackupNow', 'installNightlyBackup', 'nightlyBackup'].forEach((fn) => {
     const e = env.errorOf('test.admin@example.com', (c) => c[fn]());
     assert.ok(e && /소유자/.test(e.message), fn);
     assert.throws(() => env.call('test.admin@example.com', fn), /소유자/);
@@ -127,21 +127,75 @@ test('실패 메일은 락 밖에서 나가고 메일에 데이터 파일 ID가 
   assert.ok(env.mail[0][2].indexOf(env.scriptProps.DB_ID) < 0);
 });
 
-test('복사본이 공유로 생기면 닫고 통과, 닫지 못하면 실패', () => {
+test('링크 공유로 생긴 사본·상태 파일은 닫고 통과(상태 JSON도 확인 대상)', () => {
   const env = makeEnv();
   env.drive.copySharing = 'ANYONE_WITH_LINK';
   run(env);
-  env.drive.filesIn(folderId(env)).forEach((f) => assert.strictEqual(f.sharing, 'PRIVATE'));
-  // 닫기가 듣지 않는 경우: 실패로 본다
-  const env2 = makeEnv();
-  env2.drive.copySharing = 'ANYONE_WITH_LINK';
-  const e = env2.errorOf(OWNER, (c) => {
-    const orig = c.DriveApp.getFileById;
-    c.DriveApp.getFileById = (id) => { const f = orig(id); const mc = f.makeCopy; f.makeCopy = (n, fo) => { const cp = mc(n, fo); cp.setSharing = () => cp; return cp; }; return f; };
+  const fs = env.drive.filesIn(folderId(env));
+  assert.strictEqual(fs.length, 4);
+  fs.forEach((f) => assert.strictEqual(f.sharing, 'PRIVATE', f.name));
+});
+
+test('이름으로 공유된 사람은 setSharing이 못 지운다 → 사람마다 빼서 통과(사본 3개·상태 JSON 모두)', () => {
+  const env = makeEnv();
+  env.drive.copyViewers = ['someone@fakeschool.invalid'];   // 링크는 비공개, 사람만 열려 있음
+  run(env);
+  env.drive.filesIn(folderId(env)).forEach((f) => assert.deepStrictEqual(f.viewers.concat(f.editors), [], f.name));
+  assert.strictEqual(names(env).length, 4);
+});
+
+test('사람을 못 지우면 그 사본을 휴지통으로 보내고 실패(audit·메일), 열린 사본이 남지 않는다', () => {
+  const env = makeEnv();
+  env.drive.copyViewers = ['someone@fakeschool.invalid'];
+  env.drive.stuckViewers = true;
+  const e = env.errorOf(OWNER, (c) => c.runBackupNow());
+  assert.ok(e && /닫지 못해 휴지통/.test(e.message));
+  assert.deepStrictEqual(env.auditActions('backup:'), ['backup:failed']);
+  assert.strictEqual(env.mail.length, 1);
+  env.drive.filesIn(folderId(env)).filter((f) => f.viewers.length).forEach((f) => assert.strictEqual(f.trashed, true, f.name));
+});
+
+test('상태 JSON만 열려 있어도(사본 3개는 닫힘) 공유 확인이 상태 파일에도 걸린다', () => {
+  const env = makeEnv();
+  env.drive.copySharing = 'PRIVATE';
+  env.drive.copyViewers = [];
+  run(env);   // 폴더를 먼저 만든다
+  // 상태 파일을 만들 때만 공유되게: createFile을 바꿔 끼운다
+  const e = env.errorOf(OWNER, (c) => {
+    const orig = c.DriveApp.getFolderById;
+    c.DriveApp.getFolderById = (id) => { const fo = orig(id); const cf = fo.createFile; fo.createFile = (n, t, m) => { const f = cf(n, t, m); f._f.viewers = ['x@fakeschool.invalid']; env.drive.stuckViewers = true; return f; }; return fo; };
     return c.runBackupNow();
   });
+  assert.ok(e && /닫지 못해/.test(e.message));
+  const st = env.drive.filesIn(folderId(env)).filter((f) => /#2 앱상태\.json$/.test(f.name));
+  assert.strictEqual(st.length, 1);
+  assert.strictEqual(st[0].trashed, true);
+});
+
+test('같은 때 두 번 돌지 않는다: 실행 표시가 있으면 거부(audit 없음), 30분 지난 표시는 무시, 끝나면 표시가 지워진다', () => {
+  const env = makeEnv();
+  env.scriptProps.BACKUP_RUNNING = String(env._nowMs - 60000);   // 1분 전에 시작된 것으로 보이는 표시
+  const e = env.errorOf(OWNER, (c) => c.runBackupNow());
+  assert.ok(e && /다른 백업이 실행 중/.test(e.message));
+  assert.deepStrictEqual(env.auditActions('backup:'), []);
+  assert.strictEqual(Object.keys(env.drive.folders).length, 0);
+  env.scriptProps.BACKUP_RUNNING = String(env._nowMs - 31 * 60000);
+  run(env);
+  assert.strictEqual(env.scriptProps.BACKUP_RUNNING, undefined);
+  // 실패해도 표시를 지운다
+  env.drive.failCopy = '설정';
+  env.errorOf(OWNER, (c) => c.runBackupNow());
+  assert.strictEqual(env.scriptProps.BACKUP_RUNNING, undefined);
+});
+
+test('백업 폴더에 이름으로 공유된 사람이 있으면 복사하기 전에 멈춘다(사본이 만들어지지 않음)', () => {
+  const env = makeEnv();
+  run(env);
+  const n = env.drive.filesIn(folderId(env)).length;
+  env.drive.folders[folderId(env)].viewers = ['someone@fakeschool.invalid'];
+  const e = env.errorOf(OWNER, (c) => c.runBackupNow());
   assert.ok(e && /공유/.test(e.message));
-  assert.deepStrictEqual(env2.auditActions('backup:'), ['backup:failed']);
+  assert.strictEqual(env.drive.filesIn(folderId(env)).length, n);
 });
 
 test('백업 폴더가 공유·휴지통·없음이면 새로 만들지 않고 실패', () => {

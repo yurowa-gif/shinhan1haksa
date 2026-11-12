@@ -83,6 +83,10 @@
     "seedDefaultRooms": {
       "use": "편집기",
       "guard": "assertOwnerRun_"
+    },
+    "nightlyBackup": {
+      "use": "편집기",
+      "guard": "assertOwnerRun_"
     }
   }
 }
