@@ -439,9 +439,9 @@ test('O43: 같은 묶음의 앞선 자동 OUT이 중복·유형 변경으로 [�
 const snap = (s, cur, now) => plain(ctx.outAutoSinceNext_(s, cur, now, ['미인정지각', '미인정조퇴', '미인정결석']));
 const DEF = ['미인정지각', '미인정조퇴', '미인정결석'];
 test('outAutoSinceNext_: 처음(null) + 기본 3종 → since {}(일괄 생성), 스냅숏 분실(null) + 기타가 이미 설정됨 → 기타 since = now', () => {
-  assert.deepStrictEqual(snap(null, DEF, '2027-03-01T09:00:00'), { snapshot: { types: DEF, since: {} }, since: {}, changed: true });
+  assert.deepStrictEqual(snap(null, DEF, '2027-03-01T09:00:00'), { snapshot: { types: DEF, since: {}, widened: {} }, since: {}, widened: {}, changed: true });
   const r = snap(null, DEF.concat(['기타']), '2027-03-01T09:00:00');
-  assert.deepStrictEqual([r.since, r.changed], [{ '기타': '2027-03-01T09:00:00' }, true]);
+  assert.deepStrictEqual([r.since, r.widened, r.changed], [{ '기타': '2027-03-01T09:00:00' }, { '기타': ['2027-03-01T09:00:00'] }, true]);
 });
 
 test('outAutoSinceNext_: 기타 넓힘 T1 → 좁혀도 T1 유지 → 다시 넓히면 T2로 덮음, 그대로면 changed false, 괄호 설명은 떼고 비교', () => {
@@ -451,9 +451,47 @@ test('outAutoSinceNext_: 기타 넓힘 T1 → 좁혀도 T1 유지 → 다시 넓
   r = snap(r.snapshot, DEF, '2027-03-07T09:00:00');
   assert.deepStrictEqual([r.since, r.changed, r.snapshot.types], [{ '기타': '2027-03-05T09:00:00' }, true, DEF]);
   r = snap(r.snapshot, DEF.concat(['기타']), '2027-03-09 09:00:00');
-  assert.deepStrictEqual(r.since, { '기타': '2027-03-09T09:00:00' });
+  assert.deepStrictEqual([r.since, r.widened], [{ '기타': '2027-03-09T09:00:00' }, { '기타': ['2027-03-05T09:00:00', '2027-03-09T09:00:00'] }]);   // 넓힘 이력은 쌓인다
+  const again = snap(snap(r.snapshot, DEF, '2027-03-10T09:00:00').snapshot, DEF.concat(['기타']), '2027-03-12T09:00:00');
+  assert.deepStrictEqual(again.widened, { '기타': ['2027-03-05T09:00:00', '2027-03-09T09:00:00', '2027-03-12T09:00:00'] });
   const same = snap(r.snapshot, ['미인정결석(무단)', '미인정지각', '미인정조퇴', '기타'], '2027-03-10T09:00:00');
   assert.deepStrictEqual([same.changed, same.since], [false, { '기타': '2027-03-09T09:00:00' }]);
+});
+
+test('outAutoSinceNext_: 옛 스냅숏(widened 없음)은 since 값 하나로 이력을 시작한다', () => {
+  const r = snap({ types: DEF, since: { '기타': '2027-03-05T09:00:00' } }, DEF.concat(['기타']), '2027-03-09T09:00:00');
+  assert.deepStrictEqual(r.widened, { '기타': ['2027-03-05T09:00:00', '2027-03-09T09:00:00'] });
+});
+
+test('넓힘 이력(R5 지름길): 넓힘 3/5 → OUT(3/6) → 좁힘 → 다시 넓힘 3/8 뒤 since 뒤 행을 취소하면, 처음 넓히기 전 행만 남은 OUT은 취소(한 시각만 주면 지름길대로 유지)', () => {
+  const G = (st1) => [EX('e0', { group_id: 'G', type: '기타', confirmed_at: '2027-03-01T09:00:00' }),
+    EX('e1', { group_id: 'G', type: '기타', date: '2027-03-04', confirmed_at: '2027-03-06T09:00:00', status: st1 })];
+  const wide1 = { autoTypes: ['미인정결석', '기타'], autoTypeSince: { '기타': '2027-03-05T00:00:00' } };
+  const v = settle(G('확정'), [], wide1).map((x) => Object.assign({ created_at: '2027-03-06T10:00:00' }, x));
+  assert.deepStrictEqual(v.map((x) => x.source_exception_id), ['e1']);
+  const hist = { autoTypes: wide1.autoTypes, autoTypeSince: { '기타': ['2027-03-08T00:00:00', '2027-03-05T00:00:00'] } };   // 순서 무관
+  assert.deepStrictEqual(run(G('취소'), v, hist).toCancel.map((c) => c.violationId), [v[0].id]);
+  const one = { autoTypes: wide1.autoTypes, autoTypeSince: { '기타': '2027-03-08T00:00:00' } };   // 옛 모양: 대표가 e0로 옮겨 유지(덜 죽임)
+  const kept = run(G('취소'), v, one);
+  assert.deepStrictEqual([kept.toCancel, kept.toUpdate.map((u) => u.patch.source_exception_id)], [[], ['e0']]);
+  // 이력이 있어도 OUT 뒤 넓힘으로는 거르지 않는다: 3/5 전 OUT(created 3/4)은 그대로
+  const early = v.map((x) => Object.assign({}, x, { created_at: '2027-03-04T10:00:00' }));
+  assert.deepStrictEqual(run(G('취소'), early, hist).toCancel, []);
+  assert.deepStrictEqual(run([EX('n1', { type: '기타', confirmed_at: '2027-03-06T09:00:00' })], [], hist).toCreate, []);   // 새로 만들기는 가장 최근 넓힘(3/8) 기준
+  const same = v.map((x) => Object.assign({}, x, { created_at: '2027-03-05T00:00:00' }));   // 넓힌 바로 그 시각에 만든 OUT은 그 넓힘 기준
+  assert.deepStrictEqual(run(G('취소'), same, hist).toCancel.map((c) => c.violationId), [v[0].id]);
+});
+
+test('학생을 바로잡아 다시 만든 OUT은 per를 group→row로 바꾼 뒤 대표가 옮겨 간 행의 단위에서도 since로 거르지 않는다(R5)', () => {
+  const o = { autoTypes: ['미인정결석', '기타'], autoTypeSince: { '기타': '2027-03-08T00:00:00' }, per: 'row' };
+  const exc = [EX('e1', { group_id: 'G', student_id: 's2', type: '기타', confirmed_at: '2027-03-01T09:00:00', status: '취소' }),
+    EX('e2', { group_id: 'G', student_id: 's2', type: '기타', date: '2027-03-04', confirmed_at: '2027-03-01T09:00:00' })];
+  const vio = [{ id: 'v0', term_id: 'T1', student_id: 's1', source: 'F1자동', status: '취소', cancel_reason: '[자동] 특이사항의 학생 또는 기간이 바뀌었습니다',
+    source_exception_id: 'e1', rule_name: '무단 지각·결석·이탈(기타)' },
+  { id: 'v1', term_id: 'T1', student_id: 's2', source: 'F1자동', status: '유효', source_exception_id: 'e2', rule_name: '무단 지각·결석·이탈(기타)',
+    occurred_at: '2027-03-04T00:00:00', created_at: '2027-03-09T10:00:00', entered_by: 'att@example.com', detected_by: '' }];
+  assert.deepStrictEqual(run(exc, vio, o).toCancel, []);
+  assert.deepStrictEqual(run(exc, vio, Object.assign({}, o, { per: 'group' })).toCancel, []);
 });
 
 test('outAutoSinceNext_: 잘못된 시각은 Error', () => {

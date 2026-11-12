@@ -65,7 +65,7 @@ function outDutyText_(dutyByDate, date) {
  *   '연결된 특이사항이 없습니다'로 취소된다). 한 학생만 맞추려면 그래도 기간 전체 행을 넘기고 opts.studentIds로 좁힌다.
  * opts = {autoTypes:['미인정지각','미인정조퇴','미인정결석'](비면 이 기본값), ruleName:'무단 지각·결석·이탈', ruleId:'',
  *         per:'group'|'row', dutyByDate:{'yyyy-MM-dd': 이메일 또는 [이메일]}, studentIds:[…](선택),
- *         autoTypeSince:{유형: 그 유형을 가장 최근에 넓힌 시각 'yyyy-MM-ddTHH:mm:ss'}(선택)}
+ *         autoTypeSince:{유형: 그 유형을 넓힌 시각 'yyyy-MM-ddTHH:mm:ss' 또는 넓힌 시각들 [iso…](넓힘 이력)}(선택)}
  * → {toCreate:[violations 행 초안(id·공통 열 없음)], toCancel:[{violationId, reason}], toUpdate:[{violationId, patch}]}
  *
  * 용어(행 = 특이사항 행)
@@ -82,8 +82,10 @@ function outDutyText_(dutyByDate, date) {
  *   (없으면 요청자), detected_by = dutyByDate[날짜](없으면 빈칸), rule_name = ruleName + '(만들 때 유형)',
  *   memo = '사전 특이사항 자동: 유형'(자격 행이 여러 날이면 ' 외 N일').
  * - 유지 행(이미 있는 OUT 하나에 대해): 자격 행, 또는 확정·날짜 맞음이고 유형이 그 OUT의 rule_name 괄호 유형(만들 때 유형)과
- *   같은 행(그 유형의 autoTypeSince가 OUT의 created_at 이전이면 그 시각 이후 확정만 — OUT이 생긴 뒤 다시 넓힌 since로는
+ *   같은 행(그 OUT의 created_at 이하에서 가장 늦은 넓힘 시각이 있으면 그 시각 이후 확정만 — OUT이 생긴 뒤 다시 넓힌 since로는
  *   거르지 않는다). → 설정을 좁혔다가 다시 넓혀도 이미 있는 OUT은 유지된다(결정 40). created_at이 비면 거르지 않는다.
+ *   넓힘 이력(배열)을 주면 다시 넓힌 뒤에도 처음 넓히기 전에 확정된 행은 유지 행이 아니다. 한 시각만 주면(옛 모양) 그 시각이
+ *   OUT보다 늦을 때 거르지 않는다(지름길 — 처음 넓히기 전 행도 유지 행이 될 수 있다).
  *   rule_name을 읽지 못하면(알 수 없음) 유지 행 = 자격 행만이고, 자격 행이 없어도 확정·날짜 맞는 행이 남아 있으면
  *   **그대로 둔다**(유형으로는 취소하지 않고 대표도 옮기지 않는다 — 거짓 사유 취소·비자동 행으로 대표 이동 방지).
  * - 대표 유지: 지금 source_exception_id 행이 유지 행이면 대표를 옮기지 않는다(두 번째 실행 0건). 아니면 유지 행 중 가장 이른 것.
@@ -107,8 +109,18 @@ function reconcileAutoOuts_(exceptions, violations, opts) {
   opts = opts || {};
   var autoTypes = (opts.autoTypes || []).map(attTypeBase_).filter(function (t) { return t !== ''; });
   if (!autoTypes.length) autoTypes = ['미인정지각', '미인정조퇴', '미인정결석'];
-  var sinceMap = {};
-  Object.keys(opts.autoTypeSince || {}).forEach(function (t) { sinceMap[attTypeBase_(t)] = ruleIso_(opts.autoTypeSince[t]); });
+  var sinceMap = {}, sinceHist = {};   // sinceMap = 유형별 가장 최근 넓힘, sinceHist = 넓힌 시각들(오름차순)
+  Object.keys(opts.autoTypeSince || {}).forEach(function (t) {
+    var b = attTypeBase_(t);
+    sinceHist[b] = (sinceHist[b] || []).concat([].concat(opts.autoTypeSince[t]).map(ruleIso_)).sort();
+    sinceMap[b] = sinceHist[b][sinceHist[b].length - 1];
+  });
+  // OUT이 만들어질 때 그 유형에 적용되던 넓힘 시각(created_at 이하의 가장 늦은 넓힘). 없으면 ''(그때는 처음부터 자동 대상 — 거르지 않음)
+  var sinceAt = function (type, createdIso) {
+    var h = sinceHist[type] || [], w = '';
+    h.forEach(function (x) { if (x <= createdIso) w = x; });
+    return w;
+  };
   var per = opts.per === 'row' ? 'row' : 'group';
   var prefix = outAutoCancelPrefix_();
   var only = null;
@@ -149,11 +161,19 @@ function reconcileAutoOuts_(exceptions, violations, opts) {
 
   // 관리자가 직접 취소한 자동 OUT: 가리키던 특이사항 행·묶음(취소된 OUT의 학생 기준) + 그 OUT의 학생·기간
   // 학생·기간을 바로잡아 다시 만든 OUT의 단위: since로 거르지 않는다(다시 만들 때도 since와 상관없이 만들었으므로)
+  // (그 OUT이 가리키던 행의 묶음(학생 + group_id) 전체 — per를 group→row로 바꿔도 대표가 옮겨 간 행의 단위에 남게)
   var moved = {};
   var movedReason = prefix + '특이사항의 학생 또는 기간이 바뀌었습니다';
   var manual = [];
   (violations || []).forEach(function (v) {
-    if (v && outIsAuto_(v) && ruleStr_(v.cancel_reason) === movedReason) moved[unitOfException[ruleStr_(v.source_exception_id)]] = true;
+    if (v && outIsAuto_(v) && ruleStr_(v.cancel_reason) === movedReason) {
+      var mx = exById[ruleStr_(v.source_exception_id)], mg = mx && ruleStr_(mx.group_id) ? ruleStr_(mx.student_id) + '|' + ruleStr_(mx.group_id) : '';
+      moved[unitOfException[ruleStr_(v.source_exception_id)]] = true;
+      if (mg) Object.keys(exById).forEach(function (id) {
+        var e = exById[id];
+        if (ruleStr_(e.group_id) && ruleStr_(e.student_id) + '|' + ruleStr_(e.group_id) === mg) moved[unitOfException[id]] = true;
+      });
+    }
     if (!v || !outIsAuto_(v) || ruleRowLive_(v) || ruleStr_(v.cancel_reason).indexOf(prefix) === 0) return;
     var ex = exById[ruleStr_(v.source_exception_id)];
     manual.push({ exId: ruleStr_(v.source_exception_id), group: ex && ruleStr_(ex.group_id) ? ruleStr_(v.student_id) + '|' + ruleStr_(ex.group_id) : '',
@@ -177,11 +197,11 @@ function reconcileAutoOuts_(exceptions, violations, opts) {
     if (!key) { toCancel.push({ violationId: vid, reason: prefix + '연결된 특이사항이 없습니다' }); return; }
     var u = units[key];
     var recorded = outRecordedType_(v.rule_name, opts.ruleName);
+    var at = recorded === null ? '' : sinceAt(recorded, ruleIso_(v.created_at));
     var keepers = u.confirmed.filter(function (e) {
-      // since가 이 OUT보다 늦으면 OUT이 있은 뒤의 설정 변경이다 → 그 since로 거르지 않는다(결정 40)
-      // shortcut: 다시 넓히면 처음 넓히기 전에 확정된 같은 유형 행도 유지 행이 되어 대표가 그쪽으로 옮겨질 수 있다(덜 죽일 뿐 거짓 취소는 없음), 설정이 넓힌 이력을 남기면 고친다
+      // 그 OUT이 생길 때 적용되던 넓힘 시각 이후 확정만(뒤에 좁혔다가 다시 넓힌 since로는 거르지 않는다 — 결정 40)
       return eligible(e) || (recorded !== null && attTypeBase_(e.type) === recorded &&
-        (sinceOk(e, recorded) || ruleIso_(v.created_at) < sinceMap[recorded] || moved[key]));
+        (!at || ruleIso_(e.confirmed_at) >= at || moved[key]));
     });
     if (!keepers.length) {
       if (recorded === null && u.confirmed.length) {   // 알 수 없음: 유형으로는 취소하지 않고 그대로 둔다
@@ -292,11 +312,13 @@ function outLevel_(violations, studentId, termId) {
 /**
  * 자동 1OUT 유형 설정의 since 다음 값(결정 40: 설정을 넓힌 시각부터만 자동 OUT, followups R5-2).
  * 설정 행의 updated_at이 아니라 이 스냅숏으로 유형별 마지막 넓힘 시각을 들고 다닌다(다른 칸을 고쳐도 updated_at이 바뀌므로).
- * snapshot = {types:[], since:{유형:iso}} | null, currentTypes = 지금 설정 유형, nowIso = 지금, defaultTypes = 설정 기본값.
- * → {snapshot:{types, since}, since, changed}
+ * snapshot = {types:[], since:{유형:iso}, widened:{유형:[iso…]}(없어도 됨)} | null, currentTypes = 지금 설정 유형, nowIso = 지금,
+ * defaultTypes = 설정 기본값. → {snapshot:{types, since, widened}, since, widened, changed}
  * - null(처음·분실)이면 기준 유형 = defaultTypes: 기본 그대로면 since {}(처음 연결 때 쌓인 특이사항 일괄 생성),
  *   기본에 없는 유형은 since = nowIso(스냅숏을 잃어도 넓혔던 유형은 소급하지 않는다).
  * - 새로 나타난 유형 → since = nowIso(다시 넓혀도 덮어쓴다). 빠진 유형의 since는 남긴다. 괄호 설명은 떼고 비교.
+ * - widened = 유형별 넓힌 시각 이력(오름차순, 다시 넓힐 때마다 nowIso를 더함). 옛 스냅숏(widened 없음)은 since 값 하나로 시작한다.
+ *   reconcileAutoOuts_의 autoTypeSince로 since 대신 widened를 넘기면 '다시 넓힌 뒤 처음 넓히기 전 행' 지름길이 없어진다.
  * 잘못된 nowIso는 Error.
  */
 function outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes) {
@@ -308,10 +330,11 @@ function outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes) {
     return out;
   };
   var base = norm(snapshot ? snapshot.types : defaultTypes), cur = norm(currentTypes);
-  var since = Object.assign({}, snapshot && snapshot.since);
-  cur.forEach(function (t) { if (base.indexOf(t) < 0) since[t] = now; });
+  var since = Object.assign({}, snapshot && snapshot.since), widened = {}, old = (snapshot && snapshot.widened) || {};
+  Object.keys(since).forEach(function (t) { widened[t] = (Array.isArray(old[t]) ? old[t] : [since[t]]).map(ruleIso_).filter(Boolean).sort(); });
+  cur.forEach(function (t) { if (base.indexOf(t) < 0) { since[t] = now; widened[t] = (widened[t] || []).concat([now]); } });
   var changed = !snapshot || base.length !== cur.length || cur.some(function (t) { return base.indexOf(t) < 0; });
-  return { snapshot: { types: cur, since: since }, since: since, changed: changed };
+  return { snapshot: { types: cur, since: since, widened: widened }, since: since, widened: widened, changed: changed };
 }
 
 /**
