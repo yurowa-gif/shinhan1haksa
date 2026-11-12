@@ -48,7 +48,7 @@ function getAvoidPairs() {
   });
   var students = Object.keys(d.enrolled).map(function (id) { return d.byId[id]; }).filter(Boolean)
     .sort(function (x, y) { return (Number(x.grade) - Number(y.grade)) || (Number(x.class_no) - Number(y.class_no)) || (Number(x.number) - Number(y.number)) || (x.name < y.name ? -1 : 1); })
-    .map(function (s) { return avdStudent_(s, true); });
+    .map(function (s) { var o = avdStudent_(s, true); o.number = Number(s.number) || 0; o.studentNo = s.student_no || ''; return o; });   // 학생 찾기(UI.studentPicker)용 — 이 응답은 avoid.view만 받는다
   return { pairs: pairs, students: students, canEdit: hasAnyAllowedRole_(user.roles, permissions_()['avoid.edit'].roles), termName: d.term ? d.term.name : '', scopes: AVD_SCOPES };
 }
 
