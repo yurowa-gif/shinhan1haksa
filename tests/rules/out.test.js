@@ -516,6 +516,11 @@ table('outDismissalGate_: 앞으로 잡힌 퇴실은 2OUT 퇴실(memo [2OUT] 또
   ['2OUT reason', [LEAVE('c3', '2027-03-20', { reason: '2OUT 퇴실' })], [true, false, '이미 퇴실']],
   ['보통 미래 퇴실 7/16(신청 3/2, 개인 사정)', [LEAVE('c3', '2027-07-16', { requested_at: '2027-03-02T10:00:00', reason: '개인 사정' })], [false, true, '']],
   ['취소된 2OUT 퇴실', [LEAVE('c3', '2027-03-20', { memo: '[2OUT] out:o2 note:n1', status: '취소' })], [false, true, '']],
+  ['다른 학생의 미래 2OUT 퇴실', [LEAVE('c3', '2027-03-20', { student_id: 's2', memo: '[2OUT] out:o2 note:n1' })], [false, true, '']],
+  ['기숙사 항목 [2OUT]', [LEAVE('c3', '2027-03-20', { item: '기숙사', memo: '[2OUT] out:o2 note:n1' })], [false, true, '']],
+  ['입실 값 [2OUT]', [LEAVE('c3', '2027-03-20', { value: '입실', memo: '[2OUT] out:o2 note:n1' })], [false, true, '']],
+  ["memo 'x [2OUT]'(접두 아님)", [LEAVE('c3', '2027-03-20', { memo: 'x [2OUT] out:o2' })], [false, true, '']],
+  ['달력에 없는 날짜 9999-99-99', [LEAVE('c3', '9999-99-99', { memo: '[2OUT] out:o2 note:n1' })], [false, true, '']],
   ['지난 2OUT 퇴실 3/5 뒤 재입실 3/8(관문 3/12, 앞으로 잡힌 것만 본다)', [LEAVE('c3', '2027-03-05', { memo: '[2OUT] out:o0 note:n0', requested_at: '2027-03-04T10:00:00' }),
     { id: 'c4', student_id: 's1', item: '학사', value: '입실', effective_date: '2027-03-08', status: '유효', requested_at: '2027-03-07T10:00:00' }], [false, true, '']]
 ], ([, rows, want]) => {

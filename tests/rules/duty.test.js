@@ -171,8 +171,8 @@ test('예비 칸 교대: dutyOn_ standby에 swappedFrom, dutyRecord_ swaps에 �
   assert.deepStrictEqual(r.swaps, [{ date: '2027-03-05', slot: '예비', from: 'b@example.com', to: 'd@example.com', at: '2027-03-04T12:00:00', by: 'mgr@example.com', kind: '교대' }]);   // 예비 칸 자체 교대는 교대
 });
 
-table('그 요일 틀 밖의 칸은 쓰되 경고(토요일 21:30조, 화요일 단독·예비)', [
-  ['2027-03-06', '21:30조'], ['2027-03-02', '단독'], ['2027-03-02', '예비']
+table('그 요일 틀 밖의 칸은 쓰되 경고(토요일 21:30조, 일요일 23:00조, 금요일 21:30조, 화요일 단독·예비)', [
+  ['2027-03-06', '21:30조'], ['2027-03-07', '23:00조'], ['2027-03-05', '21:30조'], ['2027-03-02', '단독'], ['2027-03-02', '예비']
 ], ([date, slot]) => {
   const r = on([ROW(date, slot, 'a@example.com')], date);
   assert.ok(r.warnings.some((w) => /그 요일에 없는 근무 칸/.test(w)), JSON.stringify(r.warnings));
