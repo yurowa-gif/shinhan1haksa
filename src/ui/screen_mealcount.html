@@ -8,7 +8,8 @@
     var pdfBtn = null;
     function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
     var reqDate = date, loading = true, bar = null, pdfBtn = null;
-    function shift(n) { var d = new Date(reqDate + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); load(d.toISOString().slice(0, 10)); }
+    function shift(n) { if (!reqDate) return;   // 첫 불러오기 전(날짜 모름)에는 이동하지 않는다
+      var d = new Date(reqDate + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); load(d.toISOString().slice(0, 10)); }
     function b64Blob(b64) {
       var bin = atob(b64); var arr = new Uint8Array(bin.length);
       for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
@@ -20,7 +21,7 @@
       if (d) reqDate = d;
       loading = true; draw();
       call('getMealCounts', reqDate || '').then(function (r) { if (mine !== seq) return; data = r; reqDate = r.date; date = r.date; loading = false; draw(); })
-        .catch(function (err) { if (mine !== seq) return; loading = false; data = null; draw(); showError(tableBox, err); tableBox.appendChild(el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:8px', text: '다시 불러오기', onclick: function () { load(reqDate); } })); });
+        .catch(function (err) { if (mine !== seq) return; loading = false; data = null; draw(); showError(tableBox, err); if (!/권한/.test((err && err.message) || '')) tableBox.appendChild(el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:8px', text: '다시 불러오기', onclick: function () { load(reqDate); } })); });
     }
 
     function syncBar() { if (pdfBtn) { pdfBtn.disabled = busy || loading || !data || !data.term; pdfBtn.textContent = busy ? 'PDF 만드는 중…' : '급식실 양식으로 출력'; } }
@@ -28,7 +29,7 @@
     function draw() {
       clear(head); clear(tableBox); clear(notes);
       var arrow = function (text, n) { return el('button', { type: 'button', class: 'btn secondary', style: 'flex:0 0 auto', 'aria-label': n < 0 ? '전날' : '다음 날', text: text, onclick: function () { shift(n); } }); };
-      var title = loading || !data ? (UI.util.formatDateKo(reqDate, false) || reqDate) : data.dateKo;
+      var title = loading || !data ? (UI.util.formatDateKo(reqDate, false) || (reqDate ? reqDate : '오늘')) : data.dateKo;
       head.appendChild(el('div', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:4px' }, [arrow('‹', -1),
         el('b', { style: 'flex:1;text-align:center', text: title }), arrow('›', 1)]));
       if (!bar) { bar = UI.actionBar([{ text: '급식실 양식으로 출력', onclick: onPdf }], { mount: true }); pdfBtn = bar.querySelector('button'); }
@@ -70,7 +71,7 @@
         el('div', { style: 'display:flex;justify-content:space-between;gap:12px' }, [el('span', { text: '아직 서류가 없는 신청' }), el('b', { style: 'flex:0 0 auto', text: n + '건' })]),
         el('div', { class: 'muted', text: '전체 기준이며 날짜와 무관합니다. 인원에는 이미 포함되어 있습니다. 이름은 처음 화면의 서류 카드에서 봅니다.' })
       ]);
-      if (back && n) box.appendChild(el('a', { href: back.href.split('#')[0] + '#docs', target: '_top', style: 'display:inline-block;margin-top:8px', text: '서류 미제출 ' + n + '건 ▸' }));
+      if (back && n) box.appendChild(el('a', { href: back.href.split('#')[0] + '#docs', style: 'display:inline-flex;align-items:center;min-height:44px;margin-top:4px;color:var(--accent)', text: '서류 미제출 ' + n + '건 ▸' }));
       notes.appendChild(box);
     }
 
