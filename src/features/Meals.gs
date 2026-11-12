@@ -509,7 +509,9 @@ function foodCountsModel_(ymd, src) {
   rows.forEach(function (m) { miss[m.studentId] = true; });   // 홈과 같은 집계: 기간이 바뀌어도 표시할 때까지 남는다
   var out = { date: ymd, term: term, counts: null, operating: false, docRows: rows.length, docUnsubmitted: Object.keys(miss).length, name: name };
   if (!term) return out;
-  out.counts = mealCountsOn_(students, enr, changes, term.id, ymd);
+  // 결정 35 보충: 직전 운영 기간 id를 넘긴다(학기 막바지 퇴실 뒤 석식이 방학·다음 기간까지 이어지는 학생을 센다)
+  var prev = terms.filter(function (t) { return t.end_date && t.end_date < term.start_date; }).sort(function (a, b) { return a.start_date < b.start_date ? 1 : -1; })[0];
+  out.counts = mealCountsOn_(students, enr, changes, term.id, ymd, prev ? prev.id : '');
   out.operating = resolveDayPlan_(ymd, { termType: calTermTypeOn_(terms, ymd), daySchedule: pickDaySchedule_(readAll_('day_schedules'), ymd),
     blocks: readAll_('blocks'), defaults: calDefaults_(readAll_('settings', 'config')) }).operating;
   return out;
