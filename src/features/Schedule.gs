@@ -164,6 +164,27 @@ function calKnownDayTypes_(blocks) {
   return Object.keys(seen);
 }
 
+/* ───────────── 화면이 최신인가 확인(token) ───────────── */
+
+var CAL_STALE_MSG = '다른 관리자가 먼저 바꿨습니다. 새로 불러온 뒤 다시 해 주세요.';
+
+/** 살아 있는 행들의 표: 각 행 id|updated_at을 정렬해 이은 글(없으면 ''). 행이 취소·추가·수정되면 바뀐다 */
+function calRowsToken_(rows) {
+  return rows.map(function (r) { return r.id + '|' + (r.updated_at || ''); }).sort().join(';');
+}
+
+/** (기간 유형, 요일 유형)의 살아 있는 블록 행 */
+function calBlockGroupRows_(blocks, tt, dt) {
+  return blocks.filter(function (b) {
+    return String(b.status || '').trim() !== '취소' && String(b.term_type).trim() === tt && String(b.day_type).trim() === dt;
+  });
+}
+
+/** 그 날짜의 살아 있는 날짜별 일정 행 */
+function calDayRows_(rows, date) {
+  return rows.filter(function (r) { return String(r.status || '').trim() !== '취소' && String(r.date).trim() === date; });
+}
+
 /* ───────────── 화면에서 부르는 서버 함수 ───────────── */
 
 /**
@@ -181,8 +202,12 @@ function getScheduleData(month) {
     (groups[key] = groups[key] || []).push({ seq: b.seq, start: schedNormHm_(b.start) || b.start, end: schedNormHm_(b.end) || b.end, label: b.label || '' });
   });
   Object.keys(groups).forEach(function (k) { groups[k].sort(function (a, b) { return +a.seq - +b.seq; }); });
+  // 화면이 본 값의 표: 저장할 때 보내면 서버가 락 안에서 지금과 비교한다(다른 관리자가 먼저 바꿨으면 {stale:true})
+  var blockTokens = {}, dayTokens = {};
+  Object.keys(groups).forEach(function (k) { var p = k.split('|'); blockTokens[k] = calRowsToken_(calBlockGroupRows_(ctx.blocks, p[0], p[1])); });
+  calMonthPlans_(m, ctx).forEach(function (d) { dayTokens[d.date] = calRowsToken_(calDayRows_(ctx.daySchedules, d.date)); });
   return {
-    month: m, today: today_(),
+    month: m, today: today_(), blockTokens: blockTokens, dayTokens: dayTokens,
     canEdit: hasAnyAllowedRole_(user.roles, permissions_()['schedule.edit'].roles),
     days: calMonthPlans_(m, ctx),
     blockGroups: groups,
@@ -194,8 +219,9 @@ function getScheduleData(month) {
 /**
  * (기간 유형, 요일 유형)의 블록을 통째로 바꾼다. 관리자만.
  * @param {Object[]} blocks [{start, end}]
+ * @param {string} token getScheduleData의 blockTokens[기간유형|요일유형]. 락 안에서 지금과 다르면 {ok:false, stale:true}(다른 관리자가 먼저 바꿈).
  */
-function saveBlocks(termType, dayType, blocks) {
+function saveBlocks(termType, dayType, blocks, token) {
   var user = requirePermission_('schedule.edit');
   var tt = String(termType || '').trim();
   var dt = String(dayType || '').trim();
@@ -206,6 +232,7 @@ function saveBlocks(termType, dayType, blocks) {
     var existing = readAll_('blocks').filter(function (b) {
       return String(b.status || '').trim() !== '취소' && String(b.term_type).trim() === tt && String(b.day_type).trim() === dt;
     });
+    if (typeof token !== 'string' || token !== calRowsToken_(existing)) return { ok: false, stale: true, error: CAL_STALE_MSG };
     var plan = calBlocksDiff_(tt, dt, blocks, existing);
     if (!plan.ok) return { ok: false, errors: plan.errors };
     plan.cancel.forEach(function (r) { updateRecord_('blocks', r.id, { status: '취소' }, user.email); });
@@ -228,6 +255,8 @@ function saveDaySchedule(input) {
     invalidate_('db', 'users');
     var check = calValidateDay_(input, calKnownDayTypes_(readAll_('blocks')));
     if (!check.ok) return { ok: false, errors: check.errors };
+    // 화면이 본 그 날짜의 일정(input.token = getScheduleData의 dayTokens[날짜])이 지금과 같아야 한다
+    if (typeof (input && input.token) !== 'string' || input.token !== calRowsToken_(calDayRows_(readAll_('day_schedules'), check.record.date))) return { ok: false, stale: true, error: CAL_STALE_MSG };
     var chk = check.record.operating === 'FALSE' ? dtyCancelCheck_(check.record.date, input) : { rows: [], resp: null };
     if (chk.resp) return chk.resp;
     calCancelDay_(check.record.date, user.email);

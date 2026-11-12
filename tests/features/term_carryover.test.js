@@ -133,8 +133,28 @@ test('saveTerm: 새 기간을 만들면 그 기간의 기간별 탭(exceptions_�
   const r = plain(s.c.saveTerm({ name: '2027 2학기', type: '학기', start_date: '2027-08-23', end_date: '2028-02-28' }));
   assert.strictEqual(r.ok, true);
   assert.deepStrictEqual(s.tabs, ['exceptions:' + r.id, 'violations:' + r.id]);
-  s.c.saveTerm({ id: r.id, name: '2027 2학기(수정)', type: '학기', start_date: '2027-08-23', end_date: '2028-02-28' });
+  s.c.saveTerm({ id: r.id, token: s.c.termToken_(s.db.terms.find((t) => t.id === r.id)), name: '2027 2학기(수정)', type: '학기', start_date: '2027-08-23', end_date: '2028-02-28' });
   assert.strictEqual(s.tabs.length, 2);
   const bad = plain(s.c.saveTerm({ name: '', type: '학기' }));
   assert.strictEqual(bad.ok, false); assert.strictEqual(s.tabs.length, 2);
+});
+
+test('낡은 화면 방지(saveTerm 수정): A가 읽고 B가 먼저 저장하면 A의 옛 화면 저장은 {stale:true}·쓰기 0, 새 기간 만들기는 표가 필요 없고, 새 표로는 된다', () => {
+  const s = admin();
+  const mk = plain(s.c.saveTerm({ name: '2027 2학기', type: '학기', start_date: '2027-08-23', end_date: '2028-02-28' }));   // 새 기간: 표 없이
+  assert.strictEqual(mk.ok, true);
+  const seen = plain(s.c.listTerms()).terms.find((t) => t.id === mk.id).token;   // 관리자 A가 목록을 연다
+  assert.ok(seen.startsWith(mk.id + '|'));
+  const edit = (token, name) => plain(s.c.saveTerm({ id: mk.id, token, name, type: '학기', start_date: '2027-08-23', end_date: '2028-02-28' }));
+  assert.strictEqual(edit(seen, '2027 2학기(B)').ok, true);   // B가 먼저 저장
+  const w = s.writes.length, terms = JSON.stringify(s.db.terms);
+  const old = edit(seen, '2027 2학기(A 옛 화면)');
+  assert.deepStrictEqual([old.ok, old.stale, /새로 불러온 뒤/.test(old.error)], [false, true, true]);
+  [undefined, '', 5, null].forEach((t) => assert.strictEqual(edit(t, 'x').stale, true, String(t)));
+  assert.strictEqual(s.writes.length, w, '쓰기 0건');
+  assert.strictEqual(JSON.stringify(s.db.terms), terms);
+  assert.strictEqual(s.db.terms.find((t) => t.id === mk.id).name, '2027 2학기(B)');
+  const fresh = plain(s.c.listTerms()).terms.find((t) => t.id === mk.id).token;
+  assert.notStrictEqual(fresh, seen);
+  assert.strictEqual(edit(fresh, '2027 2학기(A 새 화면)').ok, true);
 });

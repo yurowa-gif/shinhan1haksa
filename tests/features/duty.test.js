@@ -19,6 +19,8 @@ function makeEnv() {
 const nameOf = (x, id) => x.env.rows('users').find((u) => u.id === id).name;
 /** 그날 칸의 지금 '화면이 최신인가' 표(화면이 getDutyMonth로 받는 token). 날짜가 틀리면 {} */
 const tokens = (x, date) => { try { return x.env.asOwner((c) => plain(c.dtyDayTokens_(date))); } catch (e) { return {}; } };
+/** 자습 일정 화면이 getScheduleData로 받는 그 날짜 표(dayTokens[날짜])를 지금 상태에서 계산 */
+const dayTok = (x, date) => x.env.asOwner((c) => c.calRowsToken_(c.calDayRows_(c.readAll_('day_schedules'), date)));
 /** 화면처럼 지금 칸 표를 expect로 보낸다(input.expect로 덮어쓸 수 있다) */
 const save = (x, who, input) => x.env.call(who, 'saveDutyDay', Object.assign({ expect: tokens(x, input.date) }, input));
 const day = (x, who, date) => x.env.call(who, 'getDutyMonth', date.slice(0, 7)).days.find((d) => d.date === date);
@@ -133,7 +135,7 @@ test('setDutyOperating: 담당자가 끄고 켠다 — day_schedules의 운영 �
 
 test('setDutyOperating: 이미 정한 시각·요일 유형은 그대로 두고, 편성이 있는 날을 끄면 취소될 칸을 보여 주며 먼저 확인을 묻는다', () => {
   const x = makeEnv();
-  x.env.call(ADMIN, 'saveDaySchedule', { date: WED, operating: true, start: '18:30', end: '21:00', day_type: '', memo: '' });
+  x.env.call(ADMIN, 'saveDaySchedule', { date: WED, operating: true, start: '18:30', end: '21:00', day_type: '', memo: '', token: dayTok(x, WED) });
   save(x, DUTY, { date: WED, slots: { '21:30조': x.t1 } });
   const r = x.env.call(DUTY, 'setDutyOperating', { date: WED, operating: false });
   assert.strictEqual(r.ok, false); assert.strictEqual(r.needsConfirm, true);
@@ -204,12 +206,12 @@ test('관리자가 자습 일정(saveDaySchedule)에서 운영 안 함으로 바
   save(x, DUTY, { date: WED, slots: { '21:30조': x.t1, '23:00조': x.t2 } });
   save(x, DUTY, { date: FRI, slots: { '단독': x.t1 } });
   const off = { date: WED, operating: false, memo: '행사' };
-  const first = x.env.call(ADMIN, 'saveDaySchedule', off);
+  const first = x.env.call(ADMIN, 'saveDaySchedule', Object.assign({ token: dayTok(x, off.date) }, off));
   assert.strictEqual(first.ok, false); assert.strictEqual(first.needsConfirm, true);
   assert.ok(first.warnings[0].includes('21:30조 ' + nameOf(x, x.t1)) && first.warnings[0].includes('23:00조'), first.warnings[0]);
   assert.strictEqual(x.env.rows('day_schedules').filter((q) => q.date === WED && q.status !== '취소').length, 0, '확인 전에는 쓰지 않는다');
   assert.strictEqual(x.slots().filter((q) => q.status === '유효').length, 3);
-  const r = x.env.call(ADMIN, 'saveDaySchedule', Object.assign({ confirmIds: first.confirmIds }, off));
+  const r = x.env.call(ADMIN, 'saveDaySchedule', Object.assign({ confirmIds: first.confirmIds, token: dayTok(x, off.date) }, off));
   assert.deepStrictEqual([r.ok, r.canceledSlots], [true, 2]);
   assert.deepStrictEqual(x.slots().filter((q) => q.status === '유효').map((q) => q.date), [FRI], '수요일 칸만 취소, 금요일은 그대로');
   const home = x.env.call(T1, 'getHomeData', 'hall_teacher').duty;
@@ -249,7 +251,7 @@ test('수요일을 끄면 금요일 칸은 그대로 유효하다, 이미 운영
 
 test('cancelDaySchedule: 기본으로 되돌려도 근무 칸은 그대로(기본은 늘 운영)', () => {
   const x = makeEnv();
-  x.env.call(ADMIN, 'saveDaySchedule', { date: WED, operating: true, start: '18:30', end: '21:00', day_type: '', memo: '' });
+  x.env.call(ADMIN, 'saveDaySchedule', { date: WED, operating: true, start: '18:30', end: '21:00', day_type: '', memo: '', token: dayTok(x, WED) });
   save(x, DUTY, { date: WED, slots: { '21:30조': x.t1 } });
   const r = x.env.call(ADMIN, 'cancelDaySchedule', WED);
   assert.deepStrictEqual(plain(r), { ok: true, cancelled: 1 });
@@ -314,7 +316,7 @@ test('acknowledge:true만으로는 근무 칸을 취소하지 않는다(확인�
   assert.strictEqual(x.slots().filter((q) => q.status === '유효').length, 2);
   // 옛 상태 재현: 운영 안 함인데 칸이 남아 있다 → 홈의 오늘·다음 근무에서 빠진다
   save(x, DUTY, { date: WED, slots: { '21:30조': x.t1 } });
-  x.env.call(ADMIN, 'saveDaySchedule', { date: FRI, operating: false, confirmIds: r.confirmIds });
+  x.env.call(ADMIN, 'saveDaySchedule', { date: FRI, operating: false, confirmIds: r.confirmIds, token: dayTok(x, FRI) });
   const row = x.slots().find((q) => q.date === FRI);
   x.env.asOwner((c) => c.updateRecord_('duty_slots', row.id, { status: '유효' }, ADMIN));
   assert.deepStrictEqual(plain(x.env.call(T1, 'getHomeData', 'hall_teacher').duty), { today: { label: '21:30조', end: '21:30' }, next: null }, '운영 안 하는 날은 다음 근무에서 빠진다');
