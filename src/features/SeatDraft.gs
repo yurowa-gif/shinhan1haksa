@@ -108,7 +108,7 @@ function sdrCurrent_(c) {
   return cur;
 }
 
-/** 고정 자리 입력 검사 → {ok, fixed:[{seat_id, student_id}]} (화면은 seatId·studentId로 보낸다) */
+/** 고정 자리 입력 검사 → {ok, fixed:[{seat_id, student_id}]} 또는 {ok:false, error, stale?} (화면은 seatId·studentId로 보낸다. 지금 배정과 다른 쌍은 거부) */
 function sdrFixedIn_(c, list) {
   if (list === undefined || list === null) return { ok: true, fixed: [] };
   if (!Array.isArray(list) || list.length > SDR_MAX_FIXED) return { ok: false, error: '고정할 자리 목록이 올바르지 않습니다.' };
@@ -116,6 +116,7 @@ function sdrFixedIn_(c, list) {
   for (var i = 0; i < list.length; i++) {
     var f = list[i], sid = f && typeof f.seatId === 'string' ? f.seatId : '', pid = f && typeof f.studentId === 'string' ? f.studentId : '';
     if (!sid || !pid) return { ok: false, error: '고정할 자리 목록이 올바르지 않습니다.' };
+    if (cur[sid] !== pid) return { ok: false, stale: true, error: SEAT_STALE_MSG };   // 고정은 지금 그 자리에 앉은 학생만(미리보기 뒤 자리가 바뀌었으면 낡은 화면)
     if (seenSeat[sid] || seenStu[pid]) continue;
     seenSeat[sid] = true; seenStu[pid] = true;
     out.push({ seat_id: sid, student_id: pid });
@@ -199,7 +200,7 @@ function previewSeatDraft(termId, fixedSeatIds, seed) {
     fixedSeatIds.forEach(function (sid) { if (typeof sid === 'string' && cur[sid]) pairs.push({ seatId: sid, studentId: cur[sid] }); });
   }
   var fx = sdrFixedIn_(c, pairs);
-  if (!fx.ok) return sdrErr_(fx.error);
+  if (!fx.ok) return sdrErr_(fx.error, { stale: !!fx.stale });
   var r = sdrCompute_(c, fx.fixed, seed);
   var holder = {}, canAvoid = sdrCanAvoid_(user);
   r.draft.assignments.forEach(function (a) { holder[a.seat_id] = a.student_id; });
@@ -236,7 +237,7 @@ function saveSeatDraft(termId, draft) {
     if (c.error) return sdrErr_(c.error);
     if (c.bounded) return sdrErr_(SDR_BOUNDED_MSG);
     var fx = sdrFixedIn_(c, draft.fixed);
-    if (!fx.ok) return sdrErr_(fx.error);
+    if (!fx.ok) return sdrErr_(fx.error, { stale: !!fx.stale });
     var r = sdrCompute_(c, fx.fixed, draft.seed);
     if (r.sig !== draft.sig) return sdrErr_('미리보기 뒤에 명단이나 떨어뜨릴 짝이 바뀌었습니다. 초안을 다시 만들어 주세요.', { stale: true });
     var want = {};

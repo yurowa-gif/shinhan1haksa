@@ -102,7 +102,7 @@ function dtyMonthView_(m, user) {
       if (from) swapCount++;
       var w = who(email);
       // canSwap: 이 사람에게 [교대]/[대신 근무] 버튼을 보일지(예비 감독 줄은 보이지 않는다). 판정은 swapDuty가 다시 한다
-      var canSwap = !!r && f.slot !== '예비' && dtySwapCheck_({ email: user.email, canEdit: canEditSwap, today: today_() }, r, 'x').ok;
+      var canSwap = !!r && f.slot !== '예비' && dtySwapCheck_({ email: user.email, canEdit: canEditSwap, today: today_(), started: dtySlotStarted_(r, p, nowIso_()) }, r, 'x').ok;
       return { slot: f.slot, label: DTY_SLOT_LABEL[f.slot], end: f.end, userId: w.id, name: w.name, slotId: r ? r.id : '', canSwap: canSwap,
         swappedFrom: from ? who(from).name : '', swapped: !!from, mine: !!email && email === user.email };
     });
@@ -338,11 +338,27 @@ function getDutyRecordFile(month, format) {
   return { ok: true, name: name, base64: Utilities.base64Encode(bytes), bytes: bytes.length, warnings: model.warnings };
 }
 
+var DTY_STARTED_MSG = '이미 시작한 근무는 근무표 담당자에게 대신 근무로 기록해 달라고 하세요.';
+
 /**
- * 교대·대신 근무 판정(순수). ctx = {email(누른 사람), canEdit(duty.edit 보유), today}, row = duty_slots 행, toEmail = 새 근무자.
+ * 그 칸의 근무가 이미 시작했는가(순수). now = 'yyyy-MM-ddTHH:mm:ss'(KST). 오늘 이전 날짜 칸은 시작한 것으로 본다.
+ * 시작 시각: 월~목 23:00조 = 21:30(21:30조가 끝나는 때), 그 밖의 칸(21:30조·단독·예비) = 그날 자습 시작(plan.start, 없으면 00:00).
+ * 근무가 끝난 칸을 학사 교사가 넘겨 `out.save` 권한이 거꾸로 옮겨 가는 길을 막는 데 쓴다(총괄 결정 66).
+ */
+function dtySlotStarted_(row, plan, now) {
+  var date = String(row.date).trim(), today = String(now).slice(0, 10);
+  if (today < date) return false;
+  if (today > date) return true;
+  var start = String(row.slot).trim() === '23:00조' ? '21:30' : ((plan && hmNorm_(plan.start)) || '00:00');
+  return String(now).slice(11, 16) >= start;
+}
+
+/**
+ * 교대·대신 근무 판정(순수). ctx = {email(누른 사람), canEdit(duty.edit 보유), today, started(그 칸 근무가 이미 시작했는가, 선택)}, row = duty_slots 행, toEmail = 새 근무자.
  * → {ok:true} | {ok:false, denied:true, why}(권한 없음, 거부 기록 대상) | {ok:false, error}(입력 오류).
  * - 담당자·관리자(duty.edit): 어느 칸이든, 지난 날짜도(사실 기록, 결정 57·4-2).
  * - 학사 교사: 오늘 이후, 지금 실제 근무자가 본인인 근무 칸을 넘겨주기만. 예비 감독 칸은 열지 않는다(4-2). 남의 칸·이미 넘긴 칸·지난 날짜는 거부.
+ *   이미 시작한 근무(ctx.started)는 넘길 수 없다 — 입력 오류로 안내한다(담당자가 대신 근무로 기록, 결정 66).
  */
 function dtySwapCheck_(ctx, row, toEmail) {
   if (!row || !ruleRowLive_(row)) return { ok: false, denied: true, why: '없거나 취소된 칸' };
@@ -351,6 +367,7 @@ function dtySwapCheck_(ctx, row, toEmail) {
     if (String(row.slot).trim() === '예비') return { ok: false, denied: true, why: '예비 감독 칸은 담당자가 기록' };
     if (!ctx.email || cur !== dutyEmail_(ctx.email)) return { ok: false, denied: true, why: '본인 칸 아님' };
     if (String(row.date).trim() < ctx.today) return { ok: false, denied: true, why: '지난 날짜' };
+    if (ctx.started) return { ok: false, started: true, error: DTY_STARTED_MSG };
   }
   if (dutyEmail_(toEmail) === cur) return { ok: false, error: '지금 근무하는 선생님과 같습니다. 다른 선생님을 골라 주세요.' };
   return { ok: true };
@@ -383,14 +400,16 @@ function swapDuty(slotId, toUserId, opts) {
       logDenied_(user.email, 'duty.swap', c.why + ' ' + JSON.stringify({ slotId: String(slotId || ''), toUserId: String(toUserId || '') }));
       throw new Error('권한이 없습니다.');
     };
-    denyIf(dtySwapCheck_({ email: user.email, canEdit: canEdit, today: today_() }, row, ''));
+    var plan = dtyPlan_(String(row.date).trim(), calLoadCtx_());
+    var swapCtx = { email: user.email, canEdit: canEdit, today: today_(), started: dtySlotStarted_(row, plan, nowIso_()) };
+    denyIf(dtySwapCheck_(swapCtx, row, ''));
     var teachers = dtyTeachers_(), to = teachers.filter(function (t) { return t.id === String(toUserId || ''); })[0];
     if (!to) return { ok: false, errors: [{ field: 'to', message: '근무를 설 수 있는 학사 교사를 목록에서 골라 주세요.' }] };
-    var chk = dtySwapCheck_({ email: user.email, canEdit: canEdit, today: today_() }, row, to.email);
+    var chk = dtySwapCheck_(swapCtx, row, to.email);
     denyIf(chk);
-    if (!chk.ok) return { ok: false, errors: [{ field: 'to', message: chk.error }] };
+    if (!chk.ok) return { ok: false, errors: [{ field: chk.started ? 'slot' : 'to', message: chk.error }] };
     var date = String(row.date).trim();
-    if (!dtyPlan_(date, calLoadCtx_()).operating) return { ok: false, errors: [{ field: 'slot', message: '운영하지 않는 날의 근무는 바꿀 수 없습니다.' }] };
+    if (!plan.operating) return { ok: false, errors: [{ field: 'slot', message: '운영하지 않는 날의 근무는 바꿀 수 없습니다.' }] };
     // 새 근무자가 그날 다른 칸에도 있으면 경고 후 확인. 예비 감독이 대신 근무하는 것은 정상이라 경고하지 않는다
     var others = readAll_('duty_slots').filter(function (r) {
       return r.id !== row.id && ruleRowLive_(r) && String(r.date).trim() === date && (dutyEmail_(r.actual_email) || dutyEmail_(r.original_email)) === to.email &&

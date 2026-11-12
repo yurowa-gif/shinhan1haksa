@@ -309,8 +309,9 @@
       function send(confirmRelabel) {
         save.disabled = true;
         Object.keys(fields).forEach(function (k) { fields[k].setError(''); });
-        call('saveSpace', { id: sp ? sp.id : '', name: name.value, gender: gender.value, rows: rows.value, cols: cols.value, confirmRelabel: !!confirmRelabel }).then(function (r) {
+        call('saveSpace', { id: sp ? sp.id : '', token: sp ? sp.layoutToken : '', name: name.value, gender: gender.value, rows: rows.value, cols: cols.value, confirmRelabel: !!confirmRelabel }).then(function (r) {
           save.disabled = false;
+          if (r.stale) { UI.toast(r.error, { kind: 'warn', ms: 6000 }); load(); return; }   // 다른 관리자가 먼저 바꿨다: 새로 불러온다
           if (r.needsConfirm) {   // 이름을 바꿔 번호 방식이 바뀐다: 저장 전에 "라벨이 바뀌는 배정 좌석 N개"를 보여 준다
             UI.confirmSheet({ title: '좌석 번호 방식이 바뀝니다',
               message: '이름을 바꾸면 번호 방식(SA실은 방 안 순번, 그 밖은 줄-순번)이 바뀌어 좌석 ' + r.relabelCount + '개의 번호가 달라집니다. 라벨이 바뀌는 배정 좌석 ' + r.relabelAssigned + '개(배정은 그대로 이어집니다).',
@@ -377,8 +378,9 @@
     function reallySave(btn, cells) {
       var L = state.layout; if (!L) return;
       if (btn) btn.disabled = true;
-      call('saveSpaceGrid', L.sp.id, cells).then(function (r) {
+      call('saveSpaceGrid', L.sp.id, cells, L.sp.layoutToken).then(function (r) {
         if (btn) btn.disabled = false;
+        if (r.stale) { UI.toast(r.error, { kind: 'warn', ms: 6000 }); load(); return; }   // 다른 관리자가 먼저 바꿨다: 새로 불러온다
         if (!r.ok) { r.errors.forEach(function (m) { L.msg.appendChild(el('div', { class: 'notice warn', text: m })); }); return; }
         load('격자를 저장했습니다. (추가 ' + r.created + ', 변경 ' + r.updated + ', 삭제 ' + r.cancelled + ')');
       }).catch(function (err) { if (btn) btn.disabled = false; fail(err); });

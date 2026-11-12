@@ -291,6 +291,7 @@ function makeServer(email, roles, today) {
 }
 const admin = (today) => makeServer('admin@example.com', ['admin'], today);
 const data = (s) => plain(s.c.getSeatData(TERM.id));
+const lt = (s, id) => s.c.seatLayoutToken_(id);   // 격자·공간 저장의 '화면이 최신인가' 표(없는 공간은 '')
 const toKo = { seat: '좌석', pillar: '기둥', door: '비상문', window: '창문' };
 const gridOf = (sp) => sp.cells.map((c) => ({ row: c.row, col: c.col, kind: toKo[c.kind] }));
 const allCells = (d) => d.spaces.flatMap((sp) => sp.cells);
@@ -520,7 +521,7 @@ test('격자 저장: 이번 기간에 어제까지 쓰인 자리(valid_to로 끝
   const pv = plain(s.c.previewSpaceGrid(sp.id, gridOf(sp).filter((x) => !(x.row === c.row && x.col === c.col))));
   assert.strictEqual(pv.ok, false);
   assert.ok(pv.errors[0].includes(TRUE_MSG) && !pv.errors[0].includes('지난 기간') && !pv.errors[0].includes('배정을 풀어'), pv.errors[0]);
-  assert.strictEqual(plain(s.c.saveSpaceGrid(sp.id, gridOf(sp).filter((x) => !(x.row === c.row && x.col === c.col)))).ok, false);
+  assert.strictEqual(plain(s.c.saveSpaceGrid(sp.id, gridOf(sp).filter((x) => !(x.row === c.row && x.col === c.col)), lt(s, sp.id))).ok, false);
   assert.strictEqual(s.db.seats.find((x) => x.id === c.id).status, '유효');
   const freshSeat = sp.cells.find((x) => x.kind === 'seat' && x.vacant && !x.hold && x.id !== c.id);   // 기록이 전혀 없는 자리는 지울 수 있다
   assert.strictEqual(plain(s.c.previewSpaceGrid(sp.id, gridOf(sp).filter((x) => !(x.row === freshSeat.row && x.col === freshSeat.col)))).ok, true);
@@ -531,7 +532,7 @@ test('공간 이름을 바꿔 번호 방식이 바뀌면 saveSpace가 같은 락
   const d = data(s);
   const sa = d.spaces.find((x) => x.name === 'SA3실');
   const seatedHere = sa.cells.filter((c) => c.studentId || c.hold).length;
-  const input = { id: sa.id, name: '자습 3호', gender: sa.gender, rows: sa.rows, cols: sa.cols };   // SA실 → 줄-순번
+  const input = { id: sa.id, token: lt(s, sa.id), name: '자습 3호', gender: sa.gender, rows: sa.rows, cols: sa.cols };   // SA실 → 줄-순번
   const w = s.writes.length;
   const ask = plain(s.c.saveSpace(input));
   assert.deepStrictEqual([ask.ok, ask.needsConfirm], [false, true]);
@@ -545,7 +546,7 @@ test('공간 이름을 바꿔 번호 방식이 바뀌면 saveSpace가 같은 락
   assert.ok(labels.every((l) => /^\d+-\d+$/.test(l)), labels.join(','));
   // 같은 방식끼리 이름만 바꾸면 확인 없이 저장
   const sa2 = d.spaces.find((x) => x.name === 'SA4실');
-  assert.strictEqual(plain(s.c.saveSpace({ id: sa2.id, name: 'SA4호실', gender: sa2.gender, rows: sa2.rows, cols: sa2.cols })).ok, true);
+  assert.strictEqual(plain(s.c.saveSpace({ id: sa2.id, token: lt(s, sa2.id), name: 'SA4호실', gender: sa2.gender, rows: sa2.rows, cols: sa2.cols })).ok, true);
 });
 
 test('saveSpace: 번호 쓰기가 실패하면 이름도 바뀌지 않는다(번호를 먼저 쓴다)', () => {
@@ -553,10 +554,10 @@ test('saveSpace: 번호 쓰기가 실패하면 이름도 바뀌지 않는다(번
   const sa = data(s).spaces.find((x) => x.name === 'SA3실');
   const before = JSON.stringify([s.db.spaces.find((x) => x.id === sa.id), s.db.seats.filter((x) => x.space_id === sa.id)]);
   s.flags.failUpdate = true;
-  assert.throws(() => s.c.saveSpace({ id: sa.id, name: '자습 3호', gender: sa.gender, rows: sa.rows, cols: sa.cols, confirmRelabel: true }), /시트 쓰기 실패/);
+  assert.throws(() => s.c.saveSpace({ id: sa.id, token: lt(s, sa.id), name: '자습 3호', gender: sa.gender, rows: sa.rows, cols: sa.cols, confirmRelabel: true }), /시트 쓰기 실패/);
   assert.strictEqual(JSON.stringify([s.db.spaces.find((x) => x.id === sa.id), s.db.seats.filter((x) => x.space_id === sa.id)]), before);
   s.flags.failUpdate = false;
-  assert.strictEqual(plain(s.c.saveSpace({ id: sa.id, name: '자습 3호', gender: sa.gender, rows: sa.rows, cols: sa.cols, confirmRelabel: true })).ok, true, '다시 하면 된다');
+  assert.strictEqual(plain(s.c.saveSpace({ id: sa.id, token: lt(s, sa.id), name: '자습 3호', gender: sa.gender, rows: sa.rows, cols: sa.cols, confirmRelabel: true })).ok, true, '다시 하면 된다');
 });
 
 /* ───── 격자 거부 문구는 막힌 이유대로 ───── */
@@ -719,9 +720,9 @@ test('saveSpace: 입력 검사, 새 공간은 마지막 순서, 크기를 줄일
   const created = s.db.spaces.find((x) => x.id === r.id);
   assert.strictEqual(created.sort_order, '8'); assert.strictEqual(created.status, '유효');
   const floor = s.db.spaces.find((x) => x.name === '1층 자습실');
-  const shrink = plain(s.c.saveSpace({ id: floor.id, name: '1층 자습실', gender: '혼성', rows: 5, cols: 12 }));
+  const shrink = plain(s.c.saveSpace({ id: floor.id, token: lt(s, floor.id), name: '1층 자습실', gender: '혼성', rows: 5, cols: 12 }));
   assert.strictEqual(shrink.ok, false); assert.ok(shrink.errors[0].message.includes('크기 밖'));
-  assert.strictEqual(plain(s.c.saveSpace({ id: floor.id, name: '1층 자습실(새)', gender: '혼성', rows: 20, cols: 12 })).ok, true);
+  assert.strictEqual(plain(s.c.saveSpace({ id: floor.id, token: lt(s, floor.id), name: '1층 자습실(새)', gender: '혼성', rows: 20, cols: 12 })).ok, true);
 });
 
 
@@ -730,17 +731,17 @@ test('saveSpaceGrid: 같은 모양으로 다시 저장하면 바뀐 것 0건, �
   const d = data(s);
   const sp = d.spaces.find((x) => x.name === 'SA3실');
   const same = gridOf(sp);
-  assert.deepStrictEqual(plain(s.c.saveSpaceGrid(sp.id, same)), { ok: true, created: 0, updated: 0, cancelled: 0, relabelAssigned: 0, warnings: [] });
+  assert.deepStrictEqual(plain(s.c.saveSpaceGrid(sp.id, same, lt(s, sp.id))), { ok: true, created: 0, updated: 0, cancelled: 0, relabelAssigned: 0, warnings: [] });
   const emptyS = sp.cells.filter((c) => c.kind === 'seat' && c.vacant && !c.hold)[0];
   const less = same.filter((c) => !(c.row === emptyS.row && c.col === emptyS.col));
-  const r = plain(s.c.saveSpaceGrid(sp.id, less));
+  const r = plain(s.c.saveSpaceGrid(sp.id, less, lt(s, sp.id)));
   assert.strictEqual(r.ok, true); assert.strictEqual(r.cancelled, 1);
   assert.strictEqual(s.db.seats.find((x) => x.id === emptyS.id).status, '취소', '지우지 않고 취소');
   const labels = s.db.seats.filter((x) => x.space_id === sp.id && x.status === '유효' && x.kind === '좌석').map((x) => +x.label).sort((a, b) => a - b);
   assert.deepStrictEqual(labels, labels.map((_, i) => i + 1), 'SA실은 방 안 순번 1부터 빈틈없이');
   const floor = d.spaces[0];
   const seated = floor.cells.find((c) => c.studentId);
-  const bad = plain(s.c.saveSpaceGrid(floor.id, gridOf(floor).filter((c) => !(c.row === seated.row && c.col === seated.col))));
+  const bad = plain(s.c.saveSpaceGrid(floor.id, gridOf(floor).filter((c) => !(c.row === seated.row && c.col === seated.col)), lt(s, floor.id)));
   assert.strictEqual(bad.ok, false); assert.ok(bad.errors[0].includes(TRUE_MSG) && !bad.errors[0].includes('배정을 풀어'), bad.errors[0]);
 });
 
@@ -766,7 +767,7 @@ test('1층은 줄-순번(3-7): 격자를 저장하면 같은 모양이라도 0�
   const expectRelabel = after.filter((c) => c.studentId || c.hold).length;
   const pv = plain(s.c.previewSpaceGrid(floor.id, want));
   assert.strictEqual(pv.ok, true); assert.strictEqual(pv.relabelAssigned, expectRelabel); assert.ok(expectRelabel > 0); assert.strictEqual(s.writes.length, 0, '미리보기는 쓰지 않는다');
-  const sv = plain(s.c.saveSpaceGrid(floor.id, want));
+  const sv = plain(s.c.saveSpaceGrid(floor.id, want, lt(s, floor.id)));
   assert.strictEqual(sv.relabelAssigned, expectRelabel);
   assert.strictEqual(s.db.seats.find((x) => x.id === after[0].id).label, head.seatLabel, '바로 뒤 좌석이 빠진 좌석의 번호를 이어받는다');
   const col1 = after;
@@ -786,7 +787,7 @@ test('격자 저장: 지난 기간 배정만 있는 좌석은 경고 후 허용,
   const want = gridOf(sp).filter((c) => !(c.row === seat.row && c.col === seat.col));
   const pv = plain(s.c.previewSpaceGrid(sp.id, want));
   assert.strictEqual(pv.ok, true); assert.ok(pv.warnings.length === 1 && pv.warnings[0].includes('지난 기간'));
-  assert.strictEqual(plain(s.c.saveSpaceGrid(sp.id, want)).ok, true);
+  assert.strictEqual(plain(s.c.saveSpaceGrid(sp.id, want, lt(s, sp.id))).ok, true);
   // 지금 기간 배정이 있는 좌석은 거부
   const seated = d.spaces[0].cells.find((c) => c.studentId);
   const bad = plain(s.c.previewSpaceGrid(d.spaces[0].id, gridOf(d.spaces[0]).filter((c) => !(c.row === seated.row && c.col === seated.col))));
@@ -836,4 +837,54 @@ test('화면 라우팅: seats 화면은 교사 역할만 열 수 있다', () => 
   const r = loadGs(['src/Schema.gs', 'src/Auth.gs', 'src/Code.gs']);
   for (const role of ['admin', 'hall_teacher', 'attendance', 'homeroom', 'duty_manager']) assert.strictEqual(plain(r.screenResolve_('seats', [role])).ok, true, role);
   for (const role of ['student', 'parent']) assert.strictEqual(plain(r.screenResolve_('seats', [role])).ok, false, role);
+});
+
+test('격자·공간 저장의 낡은 화면 방지: 다른 관리자가 먼저 저장했으면 {stale:true}로 거부하고 아무것도 쓰지 않는다(토큰 없음·옛 토큰·새 토큰)', () => {
+  const s = admin();
+  const sp = data(s).spaces.find((x) => x.name === 'SA3실');
+  const t0 = sp.layoutToken;
+  assert.ok(/^[0-9a-f]+$/.test(t0));
+  const vacant = sp.cells.find((c) => c.kind === 'seat' && c.vacant && !c.hold);
+  const grid = gridOf(sp);
+  const less = grid.filter((c) => !(c.row === vacant.row && c.col === vacant.col));
+  // 관리자 A: 빈 좌석 하나를 없앤다 → 저장
+  assert.strictEqual(plain(s.c.saveSpaceGrid(sp.id, less, t0)).ok, true);
+  const w = s.writes.length;
+  // 관리자 B(옛 화면): 같은 옛 토큰으로 되돌려 저장 → 거부, 쓰기 없음
+  const b = plain(s.c.saveSpaceGrid(sp.id, grid, t0));
+  assert.deepStrictEqual([b.ok, b.stale, typeof b.error], [false, true, 'string']);
+  assert.ok(/다른 관리자가 먼저/.test(b.error));
+  assert.strictEqual(s.writes.length, w);
+  // 토큰이 없거나 모양이 틀려도 거부
+  [undefined, '', 5, null, 'zz'].forEach((t) => assert.strictEqual(plain(s.c.saveSpaceGrid(sp.id, grid, t)).stale, true, String(t)));
+  assert.strictEqual(s.writes.length, w);
+  // 새로 불러온 토큰이면 된다(그리고 A의 변경이 사라지지 않았다)
+  const fresh = data(s).spaces.find((x) => x.id === sp.id);
+  assert.notStrictEqual(fresh.layoutToken, t0);
+  assert.strictEqual(fresh.cells.filter((c) => c.kind === 'seat').length, sp.cells.filter((c) => c.kind === 'seat').length - 1);
+  assert.strictEqual(plain(s.c.saveSpaceGrid(sp.id, grid, fresh.layoutToken)).ok, true);
+  // saveSpace(공간 수정): 같은 규칙. 새 공간 만들기는 토큰이 필요 없다
+  const t1 = lt(s, sp.id);
+  assert.strictEqual(plain(s.c.saveSpaceGrid(sp.id, less, t1)).ok, true);   // 다른 관리자의 변경
+  const w2 = s.writes.length;
+  const rename = (token) => plain(s.c.saveSpace({ id: sp.id, token, name: sp.name, gender: sp.gender, rows: sp.rows + 1, cols: sp.cols }));
+  assert.deepStrictEqual([rename(t1).ok, rename(t1).stale, rename(undefined).stale], [false, true, true]);
+  assert.strictEqual(s.writes.length, w2);
+  assert.strictEqual(rename(lt(s, sp.id)).ok, true);
+  assert.strictEqual(plain(s.c.saveSpace({ name: 'SA9실', gender: '여', rows: 2, cols: 2 })).ok, true, '새 공간은 토큰 없이');
+});
+
+test('다른 공간·좌석 배정 변경은 격자 표를 바꾸지 않고, 칸 종류·이름이 바뀌면 바뀐다', () => {
+  const s = admin();
+  const d = data(s);
+  const a = d.spaces.find((x) => x.name === 'SA3실'), b = d.spaces.find((x) => x.name === 'SA4실');
+  const ta = a.layoutToken, tb = b.layoutToken;
+  assert.notStrictEqual(ta, tb);
+  const vacant = a.cells.find((c) => c.kind === 'seat' && c.vacant && !c.hold);
+  const stu = d.unseated[0];
+  const assigned = plain(s.c.assignSeat(TERM.id, vacant.id, stu.id, { [vacant.id]: vacant.token }));
+  assert.strictEqual(assigned.ok, true);
+  assert.strictEqual(lt(s, a.id), ta, '배정은 격자 표에 영향 없음');
+  assert.strictEqual(plain(s.c.saveSpaceGrid(b.id, gridOf(b), tb)).ok, true);
+  assert.strictEqual(lt(s, a.id), ta, '다른 공간 저장은 이 공간 표에 영향 없음');
 });
