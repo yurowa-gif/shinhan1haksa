@@ -313,3 +313,19 @@ test('지난 기간 배정이 같은 학생에게 둘이면 seatMapOn_와 같은
   const p = preview(env, d, [], 5);
   assert.strictEqual(cellsOf({ spaces: p.spaces }).find((c) => c.id === bounded.id).text, target.s.grade + '. ' + target.s.name);
 });
+
+test('저장 확인창 문구: 지금 배정은 기준일 전날까지로 끝나고 기준일부터 새 배정(뜻이 거꾸로 읽히지 않게, 서버 동작과 같다)', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, '../../src/ui/screen_seats.html'), 'utf8');
+  assert.ok(/까지로 끝나고 '.*부터 새 배정이 적용됩니다/.test(src.replace(/\s+/g, ' ')), '새 문구');
+  assert.ok(!/부터 끝나고 새 배정/.test(src), '옛 문구(기준일부터 끝난다)가 남아 있지 않다');
+  // 서버 동작: 옛 행은 기준일 전날까지(valid_to = 기준일-1), 새 행은 기준일부터
+  const env = makeEnv();
+  const d = get(env);
+  const p = preview(env, d);
+  assert.strictEqual(save(env, d, p).ok, true);
+  const ended = rows(env).filter((r) => r.valid_to);
+  assert.ok(ended.length > 0 && ended.every((r) => r.valid_to === '2027-03-19'), '기준일 3/20 → 옛 배정은 3/19까지');
+  assert.ok(rows(env).some((r) => r.valid_from === '2027-03-20' && r.status !== '취소'), '새 배정은 3/20부터');
+});
