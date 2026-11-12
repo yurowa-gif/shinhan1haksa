@@ -3,7 +3,7 @@
  * A가 화면을 읽고(token·expect를 받고) → B가 먼저 저장 → A가 옛 화면 값으로 저장.
  * 단언: 늦은 A는 옛 화면으로 덮어쓰지 못한다(거부·다시 확인), 행이 두 벌 생기지 않는다, B의 저장은 audit_log에 남고 A의 거부는 쓰기를 남기지 않는다.
  * gas-fakes strictLock(락 없이 쓰면 오류). 가짜 데이터만.
- * 근무 편성(saveDutyDay)·교대(swapDuty)는 막지 못하는 경우를 찾아 총괄에게 재현을 보냈다(결정 뒤 이 파일에 더한다).
+ * 근무 편성(saveDutyDay)·교대(swapDuty)는 T4b에서 찾은 덮어쓰기를 #139가 칸 token(expect)으로 고쳤다 — 아래 두 시험이 고정한다.
  */
 const assert = require('assert');
 const { test, plain } = require('../helpers/harness');
@@ -146,4 +146,59 @@ test('입퇴실: A 미리보기 → B가 먼저 퇴실 저장 → A 저장은 �
   assert.deepStrictEqual([c.bLogged, c.aLogged], [true, false]);
   assert.strictEqual(heads().length, 0);
   assert.strictEqual(x.env.rows('status_changes').find((r2) => r2.id === head.id).cancel_reason, '가짜 잘못 입력');
+});
+
+/* ───── 근무(#139 뒤): 두 근무표 담당자가 같은 달 화면(getDutyMonth의 칸 token)을 본 뒤 차례로 저장 ───── */
+function dutyEnv() {
+  const env = createGasEnv({ owner: ADMIN, now: '2027-01-10T10:00:00' });
+  env.scriptProps.TEST_TEACHER_EMAIL = HALL;
+  ['setup', 'seedFakeData', 'seedFakeStage1', 'seedFakeStage2'].forEach((f) => env.asOwner((c) => c[f]()));
+  env.scriptProps.MAIL_ENABLED = 'true';
+  // 메일이 실제로 나가는 주소(@example.com은 늘 빠진다)의 학사 교사 둘 = 교대 받을 사람
+  env.asOwner((c) => { c.addUser('fake.x1@fakeschool.invalid', '가짜받는이1', 'hall_teacher'); c.addUser('fake.x2@fakeschool.invalid', '가짜받는이2', 'hall_teacher'); });
+  env.strictLock = true;
+  const call = (who, fn, ...a) => plain(env.call(who, fn, ...a));
+  const users = env.rows('users'), idOf = (e) => users.find((u) => u.email === e).id;
+  const month = (who) => call(who, 'getDutyMonth', '2027-01');
+  const cell = (m, date, slot) => m.days.find((d) => d.date === date).slots.find((s) => s.slot === slot);
+  const writes = () => env.rows('audit_log').filter((r) => !String(r.action).startsWith('denied')).length;
+  const row = (date, slot) => env.rows('duty_slots').find((r) => r.date === date && r.slot === slot && r.status === '유효');
+  return { env, call, idOf, month, cell, writes, row };
+}
+const M2 = 'fake.teacher2@example.com';   // 근무표 담당자(가짜교사2), ADMIN은 관리자
+
+test('근무 편성: 두 담당자가 같은 화면을 본 뒤 B가 먼저 저장 → A의 옛 token 저장은 stale, 쓰기 0, audit은 B 것만', () => {
+  const x = dutyEnv();
+  const mA = x.month(ADMIN), mB = x.month(M2);
+  const tA = cell(mA), tB = cell(mB);
+  function cell(m) { return x.cell(m, '2027-01-12', '21:30조'); }
+  const w0 = x.writes();
+  const b = x.call(M2, 'saveDutyDay', { date: '2027-01-12', slots: { '21:30조': x.idOf(HALL) }, expect: { '21:30조': tB.token } });
+  assert.strictEqual(b.ok, true, JSON.stringify(b));
+  const w1 = x.writes();
+  const after = JSON.stringify(x.row('2027-01-12', '21:30조'));
+  const a = x.call(ADMIN, 'saveDutyDay', { date: '2027-01-12', slots: { '21:30조': x.idOf('fake.teacher3@example.com') }, expect: { '21:30조': tA.token } });
+  assert.ok(stale(a), JSON.stringify(a));
+  assert.deepStrictEqual([w1 > w0, x.writes() === w1], [true, true], 'B만 audit, A는 쓰기 0');
+  assert.strictEqual(JSON.stringify(x.row('2027-01-12', '21:30조')), after, '칸은 B가 넣은 그대로');
+  assert.strictEqual(x.row('2027-01-12', '21:30조').actual_email, HALL);
+  assert.ok(stale(x.call(ADMIN, 'saveDutyDay', { date: '2027-01-12', slots: { '21:30조': x.idOf('fake.teacher3@example.com') } })), 'expect 없이도 stale');
+});
+
+test('근무 교대(담당자 대리 기록): B가 먼저 교대 → A의 옛 token 교대는 stale, 쓰기 0, audit·교대 메일은 B 것 한 번', () => {
+  const x = dutyEnv();
+  const mA = x.month(ADMIN), mB = x.month(M2);
+  const tA = x.cell(mA, '2027-01-14', '23:00조'), tB = x.cell(mB, '2027-01-14', '23:00조');
+  const w0 = x.writes(), mail0 = x.env.mail.length;
+  const b = x.call(M2, 'swapDuty', tB.slotId, x.idOf('fake.x1@fakeschool.invalid'), { reason: '가짜', expect: tB.token });
+  assert.strictEqual(b.ok, true, JSON.stringify(b));
+  const w1 = x.writes(), mail1 = x.env.mail.length;
+  assert.ok(mail1 > mail0, 'B의 교대 메일');
+  const a = x.call(ADMIN, 'swapDuty', tA.slotId, x.idOf('fake.x2@fakeschool.invalid'), { reason: '가짜', expect: tA.token });
+  assert.ok(stale(a), JSON.stringify(a));
+  assert.deepStrictEqual([w1 > w0, x.writes() === w1], [true, true], 'B만 audit, A는 쓰기 0');
+  assert.strictEqual(x.env.mail.length, mail1, '교대 메일은 B의 한 번만');
+  const r = x.row('2027-01-14', '23:00조');
+  assert.strictEqual(r.actual_email, 'fake.x1@fakeschool.invalid', 'B의 교대가 남는다');
+  assert.ok(stale(x.call(ADMIN, 'swapDuty', tA.slotId, x.idOf('fake.x2@fakeschool.invalid'), { reason: '가짜' })), 'expect 없이도 stale');
 });
