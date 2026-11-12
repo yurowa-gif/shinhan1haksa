@@ -11,7 +11,7 @@
  * move = {type:'학사 입실'|'학사 퇴실'|'기숙사 입실'|'기숙사 퇴실'|'학사 및 기숙사 퇴실', effectiveDate, requestedAt,
  *         dinner:'중단'(기본)|'일반 석식', breakfastWithDorm(기본 true), breakfastStopWithDorm(기본 true),
  *         meals:{조식, 석식}(학사 입실 때 시작할 급식 값, 선택 — R11b)}
- * opts = {today(필수), cutoff}
+ * opts = {today(필수), cutoff, terms(있으면 학사 입실에 결정 63 2OUT 막힘 검사 — move2OutBan_)}
  * → {errors, warnings, rows:[{item, value, effective_date, effective_date_auto, requested_at, reason, source, head}],
  *    toCancel:[{id, cancel_reason}], toRestore:[{id}], summary:{date, breakfast:{value, from}|null, dinner:{value, from}|null}}
  * errors가 있으면 rows·toCancel·toRestore는 비어 있다(쓰지 않는다). toCancel과 toRestore는 겹치지 않고, toCancel은 시트에 있는 id만이다.
@@ -54,6 +54,11 @@ function movePlan_(changes, studentId, move, opts) {
   var live = (changes || []).filter(function (c) { return c && ruleRowLive_(c) && ruleStr_(c.student_id) === sid; });
   var hall = statusOn_(live, sid, '학사', E), dorm = statusOn_(live, sid, '기숙사', E);
   if (type === '학사 입실' && hall === '입실') out.errors.push(E + '에 이미 학사 입실 상태입니다');
+  if (type === '학사 입실' && opts.terms && opts.terms.length) {   // 결정 63: 2OUT 퇴실 뒤 그 학기·다음 학기에는 다시 들어올 수 없다(terms를 주지 않으면 검사하지 않는다)
+    var ban = move2OutBan_(live, sid, opts.terms, E);
+    if (ban.banned) out.errors.push(ban.until ? '2OUT 퇴실로 ' + moveMonthDay_(ban.until, E) + '까지 다시 들어올 수 없습니다'
+      : '2OUT 퇴실로 다음 학기 끝날까지 다시 들어올 수 없습니다(다음 학기가 아직 등록되지 않았습니다)');
+  }
   if (/퇴실$/.test(type) && type !== '기숙사 퇴실' && hall !== '입실') out.errors.push(E + '에 학사 입실 상태가 아닙니다');
   if (type === '학사 퇴실' && dorm === '입실') out.errors.push("기숙사생입니다. '학사 및 기숙사 퇴실'로 처리해 주세요");
   if (type === '기숙사 입실' && hall !== '입실') out.errors.push('학사생만 기숙사에 입실할 수 있습니다');
@@ -71,7 +76,7 @@ function movePlan_(changes, studentId, move, opts) {
   if (out.errors.length) return out;
   if (E < today) out.warnings.push('적용일(' + E + ')이 오늘보다 이릅니다: 지난 출석부·식수가 바뀝니다');
 
-  var planned = {}, nseq = 0;   // 이 계획이 쓸 행(시트에 아직 없다): live 안 id 'new<n>' → out.rows의 행
+  var planned = {}, nseq = 0, plannedWarn = {};   // 이 계획이 쓸 행(시트에 아직 없다): live 안 id 'new<n>' → out.rows의 행, 그 신청의 경고
   var add = function (item, value, date, auto, reason, source) {
     var row = { item: item, value: value, effective_date: date, effective_date_auto: auto, requested_at: at, reason: reason, source: source, head: !out.rows.length };
     out.rows.push(row);
@@ -102,6 +107,7 @@ function movePlan_(changes, studentId, move, opts) {
       return !(keepBefore && r && ruleStr_(r.source) === 'F7' && ruleIso_(r.requested_at) < keepBefore);
     }), reason);
     add(item, to, p.date, mopts.effectiveRule === 'entry_date' ? p.date : p.autoDate, reason, 'F7');
+    plannedWarn['new' + nseq] = p.warnings;
     p.followUps.forEach(function (f) { add(f.item, f.value, f.effective_date, f.effective_date, reason, f.source); });
     out.summary[item === '조식' ? 'breakfast' : 'dinner'] = { value: to, from: p.date };
     return p.date;
@@ -121,6 +127,7 @@ function movePlan_(changes, studentId, move, opts) {
           drop(h.id);
         } else if (planned[h.id]) {   // 이 계획이 쓸 행(퇴실과 함께 고른 급식)은 시트에 없다 → superseded처럼 쓰지 않는다
           out.rows = out.rows.filter(function (x) { return x !== planned[h.id]; });
+          out.warnings = out.warnings.filter(function (w) { return (plannedWarn[h.id] || []).indexOf(w) < 0; });   // 쓰지 않는 신청의 경고도 뺀다
           drop(h.id);
           out.warnings.push(item + ' ' + planned[h.id].value + ' 신청은 쓰지 않습니다: 더 새 신청이 있습니다');
           var sk = item === '조식' ? 'breakfast' : 'dinner';
@@ -341,6 +348,46 @@ function moveRestorable_(changes, live, tagId, skip) {
     if (!live.some(function (x) { return ruleRowLive_(x) && covers(x, c); }) && !back.some(function (x) { return covers(x, c); })) back.push(c);
   });
   return back;
+}
+
+/**
+ * 2OUT 퇴실 뒤 다시 들어오기 막힘(결정 63, 순수 함수). changes = 그 학생의 status_changes 행(취소 포함 그대로),
+ * terms = terms 행(type '학기'·'방학', start_date, end_date), ymd = 들어오려는 날 → {banned, until, leaveDate}
+ * - 기준 퇴실 = 살아 있는 학사 퇴실 중 reason '2OUT 퇴실' 또는 memo가 '[2OUT]'로 시작하고 적용일 ≤ ymd인 것 가운데 가장 늦은 것(없으면 막지
+ *   않는다 — 퇴실 취소(결정 59)로 그 행이 취소되면 막힘도 풀린다).
+ * - 막는 기간(결정 63 보충) = 퇴실일부터 '다음 학기 뒤 처음 오는 학기'의 시작 전날까지(그 학기 남은 날·다음 학기·사이의 방학 포함).
+ *   다음 학기 = 퇴실일 뒤에 시작하는 첫 학기. 그 뒤 학기가 terms에 아직 없으면 다음 학기 뒤에 오는 첫 방학의 끝날, 그것도 없으면 다음 학기
+ *   끝날. 다음 학기도 없으면 until ''(정해지지 않음 — 다음 학기가 등록될 때까지 막는다).
+ *   ASSUMPTION: '다음 학기 바로 뒤에 이어지는 방학' = 다음 학기 끝날 뒤에 시작하는 첫 방학(사이에 빈 날이 있어도).
+ * ASSUMPTION(결정 63): '학기'는 terms.type '학기', 방학은 사이에 끼면 함께 막는다. 방학 중 퇴실이면 그 뒤 첫 학기를 '다음 학기'로 본다.
+ */
+function move2OutBan_(changes, studentId, terms, ymd) {
+  var sid = ruleStr_(studentId), day = ruleStr_(ymd);
+  if (!ymdIsValid_(day)) throw new Error('날짜 형식이 아닙니다(yyyy-MM-dd): ' + ymd);
+  var leave = (changes || []).filter(function (c) {
+    var e = ruleStr_(c && c.effective_date);
+    return c && ruleRowLive_(c) && ruleStr_(c.student_id) === sid && ruleStr_(c.item) === '학사' && ruleStr_(c.value) === '퇴실' &&
+      ymdIsValid_(e) && e <= day && (ruleStr_(c.reason) === '2OUT 퇴실' || ruleStr_(c.memo).indexOf('[2OUT]') === 0);
+  }).sort(function (a, b) { return ruleStr_(a.effective_date) < ruleStr_(b.effective_date) ? -1 : 1; }).pop();
+  if (!leave) return { banned: false, until: '', leaveDate: '' };
+  var L = ruleStr_(leave.effective_date);
+  var sem = (terms || []).filter(function (t) { return t && ruleStr_(t.type) === '학기' && ymdIsValid_(ruleStr_(t.start_date)) && ymdIsValid_(ruleStr_(t.end_date)); })
+    .sort(function (a, b) { return ruleStr_(a.start_date) < ruleStr_(b.start_date) ? -1 : 1; });
+  var next = sem.filter(function (t) { return ruleStr_(t.start_date) > L; })[0];   // 다음 학기 = 퇴실일 뒤에 시작하는 첫 학기
+  var until = '';
+  if (next) {
+    var ne = ruleStr_(next.end_date), after = sem.filter(function (t) { return ruleStr_(t.start_date) > ne; })[0];
+    var vac = (terms || []).filter(function (t) { return t && ruleStr_(t.type) === '방학' && ruleStr_(t.start_date) > ne && ymdIsValid_(ruleStr_(t.end_date)); })
+      .sort(function (a, b) { return ruleStr_(a.start_date) < ruleStr_(b.start_date) ? -1 : 1; })[0];
+    until = after ? ymdAddDays_(ruleStr_(after.start_date), -1) : vac ? ruleStr_(vac.end_date) : ne;
+  }
+  return { banned: !until || day <= until, until: until, leaveDate: L };
+}
+
+/** 'yyyy-MM-dd' → 'M월 D일'(기준일과 해가 다르면 'yyyy년 M월 D일'). */
+function moveMonthDay_(ymd, base) {
+  var p = ymd.split('-');
+  return (p[0] !== String(base).slice(0, 4) ? p[0] + '년 ' : '') + Number(p[1]) + '월 ' + Number(p[2]) + '일';
 }
 
 /** x가 c보다 더 새 신청인지: 신청 일시가 늦거나, 같으면 나중에 저장된 행(created_at — statusOn_·mealPendingToCancel_의 동점 규칙과 같다). */

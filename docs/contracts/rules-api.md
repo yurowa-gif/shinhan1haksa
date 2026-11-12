@@ -46,6 +46,8 @@ function hmNorm_(v)        // 'H:mm'·'HH:mm:00' → 'HH:mm', 빈칸 '', 시각 
 function dutySlotsFor_(plan)
         // resolveDayPlan_ 결과 → 운영 안 함 [] | 월~목 [{slot:'21:30조',end},{slot:'23:00조',end}] | 금·토·일 [{slot:'단독',end},{slot:'예비',end:''}]
 function dutyOn_(rows, ymd)                   // → {duty:[{slot, email, end, swappedFrom}], standby:[{email, swappedFrom}], warnings}
+function dutyPick_(rows, ymd)                 // → {bySlot:{slot: 그날 쓸 행}, warnings}(취소 제외, updated_at 최신, 같으면 아래 행 — dutyOn_·dutyRecord_가 쓴다)
+function dutyEmail_(v)                        // → 소문자·앞뒤 공백 없는 이메일
 function dutyIsOn_(rows, email, ymd, today, windowDays)   // → boolean(그날 실제 근무자 && ymd ≤ today ≤ ymd + windowDays, 기본 0)
 function dutyRecord_(rows, month, opts)
         // opts = {operatingByDate:{}} → {teachers:[{email, total, bySlot, dates:[{date,slot,end,swappedFrom}]}],
@@ -98,6 +100,7 @@ function movePlan_(changes, studentId, move, opts)
         //    toCancel:[{id, cancel_reason}], toRestore:[{id}], summary:{date, breakfast:{value,from}|null, dinner:{value,from}|null}}
         //   move.meals:{조식, 석식}(학사 입실 때 시작할 급식, R11b)
 function moveUndoPlan_(changes, headId, opts)   // (R11b) opts = {today} → {toCancel:[{id, cancel_reason?}], toRestore:[{id}], warnings}
+function move2OutBan_(changes, studentId, terms, ymd)   // (R13, 결정 63) → {banned, until, leaveDate}
 
 // src/rules/SeatRules.gs (R14, stage3.md 1절)
 function seatDraft_(spaces, seats, students, prev, fixed, avoids, seed)   // → {assignments:[{seat_id, student_id}], unplaced:[studentId], violations, warnings}
@@ -137,7 +140,7 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts)  
         //   → {kind, date, rule, autoDate(R10), from, blocked, superseded, supersededBy:[id], toCancel:[…], followUps:[…], warnings:[]}
 function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)     // 새 행이 덮어야 할 행(R6 추가)
         // opts = {source:'F7'|'F6', requestedAt, newValue} → [{id, effective_date, value}]
-function mealCountsOn_(students, enrollments, changes, termId, ymd)
+function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId)
         // (R12) → {groups:{'여1':{hall, dorm, nonDorm, breakfast, hallDinner, generalDinner}, …, '여 합계','남 합계','1학년'…'전체'},
         //    afterLeaveHallDinner, unknownGroup:[studentId], warnings}
 ```
@@ -266,7 +269,7 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd)
 
 - `dutySlotsFor_`: 끝 시각 = min(조 시각, 그날 종료), 단독 = 그날 종료, 예비 `''`. 방학도 같은 틀(4-2). ASSUMPTION: 특별 요일 유형(exam 등)은 실제 달력 요일의 틀(R3 END와 같은 방식).
 - `dutyOn_`: 취소 제외, (date, slot)마다 `updated_at` 최신 1행(같으면 아래 행) + 경고. 근무자 = `actual_email`(빈칸이면 `original_email` — ASSUMPTION: 교대 전에는 빈칸일 수 있다). 이메일은 소문자·공백 없이. 모르는 칸 이름·근무자 없는 칸은 빼고 경고. 그 요일 틀 밖의 칸(토요일 21:30조, 화요일 단독·예비 등)은 쓰되 경고. 예비 칸은 `standby`로만(`{email, swappedFrom}`).
-- `dutyIsOn_`(근무교사 시간 범위 권한): 그날 실제 근무자만 참. 예비 지정만·교대로 넘긴 원래 근무자는 거짓. `windowDays` 기본 0(Q2 기본: 보기는 당일만, OUT 입력만 1). 잘못된 날짜·음수·소수 `windowDays`는 거짓(넓히지 않는다).
+- `dutyIsOn_`(근무교사 시간 범위 권한): 그날 실제 근무자만 참. 예비 지정만·교대로 넘긴 원래 근무자는 거짓. `windowDays` 기본 0. 호출 쪽은 OUT 입력(`out.save`)에만 1을 쓰고 보기 권한에는 쓰지 않는다(#79 근무 창 정리). 잘못된 날짜·음수·소수 `windowDays`는 거짓(넓히지 않는다).
 - `dutyRecord_`(월말 근무 기록): 교사별 합계 = 실제 근무자(원래 근무자에게는 세지 않음). `swaps` = 칸마다 마지막 교대(원래 → 실제, **예비 칸 포함**, `at`·`by`는 그날 쓴 행의 `swapped_at`·`swapped_by`, `kind`는 실제 근무자(to)가 그날 예비였으면 `'대신 근무'`, 아니면 `'교대'` — 예비 칸 자체의 교대는 `'교대'`). 예비만 있는 교사도 `teachers`에 넣는다(total 0). 예비 지정은 `standby`로 근무 합계와 따로 센다(결정 46). `standby[].dates` = 예비로 센 날(날짜 순, 예비 칸 교대 뒤의 실제 예비 기준, 출력 표의 날짜별 칸용). 그날 대신 근무한 예비는 근무로만 세고 `standby`에서는 뺀다(두 번 세지 않음). `teachers[].dates[].slot`은 저장값(`'21:30조'` 등) 그대로다. ASSUMPTION: 운영 안 하는 날(`operatingByDate[date] === false`)의 행도 세고 경고. 금액은 계산하지 않는다(결정 47 — 두 조의 수당이 같아 합계를 크게, 조별은 참고). 잘못된 달은 Error.
 
 ## 동작 메모(R9, 2026-11-07)
@@ -315,6 +318,14 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd)
 ## 동작 메모(R12, 2026-11-07)
 
 - `mealCountsOn_`: termId 기간에 등록된 학생을 그날 상태 그대로 센다(결석·외박은 빼지 않는다, 같은 학생 두 번 등록은 한 번). 학사 = 학사 `입실`, 기숙 = 학사 입실이면서 기숙사 `입실`, 비기숙 = 학사 입실이면서 기숙 아님. **조식·석식은 학사 상태로 거르지 않는다**(결정 35 — 퇴실 학생도 석식 중단일 전까지 학사 석식, `afterLeaveHallDinner`로 따로 센다). 줄은 '여1'…'남3'(학년 3 밖도 있으면 줄을 만든다), '여 합계'·'남 합계', 'N학년', '전체'이고 합계 줄 = 부분 합. ASSUMPTION: 성별(남·여)·학년(숫자)이 비었거나 다른 학생, 학생 행이 없는 등록은 어느 줄에도 넣지 않고 `unknownGroup` + 경고. 잘못된 날짜는 Error.
+
+## 동작 메모(R13, 2026-11-12)
+
+**결정 63(2OUT 퇴실 뒤 다시 들어오기)** — MoveRules.
+
+- `move2OutBan_(changes, studentId, terms, ymd)` → `{banned, until, leaveDate}`. 기준 퇴실 = 살아 있는 학사 퇴실 중 reason `2OUT 퇴실` 또는 memo가 `[2OUT]`로 시작하고 적용일 ≤ ymd인 것 가운데 가장 늦은 것(없으면 `{banned:false, until:'', leaveDate:''}`). 퇴실 취소(결정 59)로 그 행이 취소되면 막힘도 풀린다. 막는 기간(결정 63 보충) = 퇴실일부터 '다음 학기 뒤 처음 오는 학기'의 시작 전날까지(그 학기 남은 날·다음 학기·사이의 방학 포함). 다음 학기 = 퇴실일 뒤에 시작하는 첫 `type '학기'`. 그 뒤 학기가 terms에 없으면 다음 학기 끝날 뒤 처음 시작하는 `방학`의 끝날(ASSUMPTION: 사이에 빈 날이 있어도), 그것도 없으면 다음 학기 끝날. 다음 학기가 terms에 아직 없으면 `until ''`이고 막는다(다음 학기 등록 전까지). terms 순서는 상관없다. `banned` = ymd ≤ until(또는 until이 없음). 잘못된 ymd는 Error. ASSUMPTION(결정 63): '학기'는 terms.type `학기`, 방학은 사이에 끼면 함께 막는다. 방학 중 퇴실이면 그 뒤 첫 학기를 '다음 학기'로 본다.
+- `movePlan_` 학사 입실: `opts.terms`가 있고 막혀 있으면 errors `2OUT 퇴실로 M월 D일까지 다시 들어올 수 없습니다`(해가 다르면 `yyyy년 M월 D일`, until이 없으면 `…다음 학기 끝날까지 다시 들어올 수 없습니다(다음 학기가 아직 등록되지 않았습니다)`). `opts.terms`가 없거나 빈 배열이면 검사하지 않는다(호환 — 빈 terms로 무기한 막지 않게). 명단 업로드의 등록 막힘(결정 63 두 번째)은 R4 명단 쪽이 이 함수를 불러 정한다.
+- **결정 35 보충(mealCountsOn_):** 선택 인자 `prevTermId`(직전 운영 기간 id)를 주면 이번 기간에 등록이 없는 그 기간 등록생 가운데 그날 학사가 `입실`이 아니면서 석식이 `학사 석식`인 학생도 센다(학기 막바지 퇴실 뒤 석식이 다음 기간까지 이어지는 학생 — 학사 0). 이번 기간에 신청하지 않고 상태만 이어진 학생(학사 입실 그대로)·더 옛 기간·term_id 빈 등록은 세지 않는다. 주지 않으면 지금처럼 이번 기간 등록생만. C19(Meals.gs)는 직전 기간 id를 넘긴다(후속).
 
 ## 동작 메모(R14, 2026-11-12)
 

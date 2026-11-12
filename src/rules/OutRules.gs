@@ -345,7 +345,7 @@ function outDismissalGate_(violations, notes, changes, studentId, termId, ymd) {
     // 이미 퇴실했거나 앞으로 2OUT 퇴실이 잡혀 있으면(2OUT 퇴실을 두 번 만들지 않게) 이미 퇴실
     alreadyLeft: statusOn_(changes, sid, '학사', ymd) === '퇴실' || (changes || []).some(function (c) {
       return c && ruleRowLive_(c) && ruleStr_(c.student_id) === sid && ruleStr_(c.item) === '학사' && ruleStr_(c.value) === '퇴실' &&
-        ruleStr_(c.effective_date) > ymd && (ruleStr_(c.memo).indexOf('[2OUT]') === 0 || ruleStr_(c.reason) === '2OUT 퇴실');
+        ymdIsValid_(ruleStr_(c.effective_date)) && ruleStr_(c.effective_date) > ymd && (ruleStr_(c.memo).indexOf('[2OUT]') === 0 || ruleStr_(c.reason) === '2OUT 퇴실');
     }), ok: false, reason: '' };
   out.reason = out.alreadyLeft ? '이미 퇴실' : lv.count < 2 ? '퇴실 대상 아님' : !n ? '면담 기록 필요' : '';
   out.ok = !out.reason;

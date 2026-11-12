@@ -1,0 +1,102 @@
+<script>
+  /** 떨어뜨릴 짝 관리(C21, 관리자·학사 교사). 목록(취소만, 삭제 없음) + 추가. 짝·사유는 서버가 이 두 역할에게만 준다(결정 64). */
+  function renderScreen(root) {
+    var seq = 0, busy = false, data = null, view = 'list', filter = 'on', bar = null;
+    var body = el('div');
+    root.appendChild(body);
+
+    function setBar(specs) {
+      if (!bar) bar = UI.actionBar([], { mount: true });
+      clear(bar);
+      specs.forEach(function (s) {
+        var attrs = { type: 'button', class: s.kind === 'secondary' ? 'btn secondary' : 'btn', text: s.text, onclick: s.onclick };
+        if (s.disabled) attrs.disabled = 'disabled';
+        bar.appendChild(el('button', attrs));
+      });
+    }
+
+    function load() {
+      var mine = ++seq;
+      call('getAvoidPairs').then(function (r) { if (mine !== seq) return; data = r; draw(); })
+        .catch(function (err) { if (mine !== seq) return; data = null; clear(body); showError(body, err); });
+    }
+
+    function draw() {
+      clear(body);
+      if (!data) { body.appendChild(el('div', { class: 'loading', text: '불러오는 중…' })); return; }
+      if (view === 'add') drawAdd(); else drawList();
+    }
+
+    /* ───── 목록 ───── */
+    function drawList() {
+      var live = data.pairs.filter(function (p) { return p.live; }), shown = filter === 'on' ? live : data.pairs;
+      setBar(data.canEdit ? [{ text: '+ 짝 추가', onclick: function () { view = 'add'; draw(); } }] : []);
+      body.appendChild(el('div', { class: 'notice info', text: '사유는 관리자·학사 교사만 봅니다. 초안 만들기는 "좌석"·"둘 다"인 짝을 자리에서, "방"·"둘 다"인 짝을 방 배정에서 떨어뜨립니다.' }));
+      body.appendChild(UI.segmented({ options: [{ value: 'on', label: '유효 ' + live.length }, { value: 'all', label: '취소 포함 ' + data.pairs.length }], value: filter, onchange: function (v) { filter = v; draw(); } }));
+      if (!shown.length) {
+        body.appendChild(UI.emptyState(filter === 'on' ? '떨어뜨릴 짝이 없습니다.' : '짝 기록이 없습니다.', data.canEdit ? { text: '짝 추가', onclick: function () { view = 'add'; draw(); } } : null));
+        return;
+      }
+      var ul = el('ul', { class: 'list' });
+      shown.forEach(function (p) {
+        var names = p.a.display + ' ↔ ' + p.b.display;
+        var left = el('div', { style: 'min-width:0;word-break:keep-all' }, [
+          el('b', { text: names }),
+          el('div', { class: 'muted', text: '범위: ' + p.scope + ' · 사유: ' + (p.reason || '없음') }),
+          (!p.a.inTerm || !p.b.inTerm) && p.live ? el('div', { class: 'muted', text: '이번 기간에 등록되지 않은 학생이 있습니다.' }) : null
+        ]);
+        var right = !p.live ? UI.statusPill('canceled', '취소됨')
+          : (data.canEdit ? el('button', { type: 'button', class: 'btn secondary row-btn', text: '취소', onclick: function () { askCancel(p, names); } }) : null);
+        ul.appendChild(el('li', { style: 'align-items:center' }, [left, right]));
+      });
+      body.appendChild(el('div', { class: 'card' }, [ul]));
+      body.appendChild(el('div', { class: 'muted', text: '기록은 지우지 않습니다. 짝을 풀려면 [취소]를 누르세요(누가·언제 취소했는지 남습니다).' }));
+    }
+
+    function askCancel(p, names) {
+      UI.confirmSheet({ title: '이 짝을 취소할까요?', lead: names, lines: ['다음 초안부터 이 둘을 떨어뜨리지 않습니다.', '기록은 지워지지 않고 "취소됨"으로 남습니다.'], confirmText: '짝 취소', danger: true,
+        onconfirm: function () {
+          if (busy) return; busy = true;
+          call('cancelAvoidPair', p.id).then(function (r) {
+            busy = false;
+            if (!r.ok) { UI.toast(r.errors[0].message, { kind: 'warn', ms: 5000 }); } else { UI.toast('짝을 취소했습니다.', { kind: 'ok' }); }
+            load();
+          }).catch(function (e) { busy = false; UI.toast((e && e.message) || String(e), { kind: 'warn', ms: 5000 }); });
+        } });
+    }
+
+    /* ───── 추가 ───── */
+    function drawAdd() {
+      var pickA = UI.studentPicker({ students: data.students, label: '첫 번째 학생' });
+      var pickB = UI.studentPicker({ students: data.students, label: '두 번째 학생' });
+      var scope = UI.segmented({ label: '어디서 떨어뜨릴까요?', options: data.scopes.map(function (s) { return { value: s, label: s }; }), value: '둘 다', onchange: function () {} });
+      var reason = el('input', { type: 'text', maxlength: '200', autocomplete: 'off' });
+      var reasonField = UI.field('사유 (짧게, 선택)', reason, { hint: '관리자·학사 교사만 봅니다. 담임·학생·학부모에게는 보이지 않습니다.' });
+      var formErr = el('div', { class: 'error', style: 'display:none' });
+      body.appendChild(pickA); body.appendChild(pickB); body.appendChild(scope); body.appendChild(reasonField); body.appendChild(formErr);
+      body.appendChild(el('div', { class: 'notice info', text: '같은 학생 두 명 조합은 한 번만 만들 수 있습니다. 이미 있으면 목록에서 확인하세요.' }));
+      function showErr(msg) { formErr.textContent = msg || ''; formErr.style.display = msg ? '' : 'none'; }
+      function submit() {
+        if (busy) return;
+        var a = pickA.getValue(), b = pickB.getValue();
+        reasonField.setError(''); showErr('');
+        if (!a || !b) { showErr(!a ? '첫 번째 학생을 골라 주세요.' : '두 번째 학생을 골라 주세요.'); return; }
+        if (a.id === b.id) { showErr('서로 다른 두 학생을 골라 주세요.'); return; }
+        busy = true; setAddBar(true);
+        call('saveAvoidPair', { studentA: a.id, studentB: b.id, scope: scope.getValue(), reason: reason.value }).then(function (r) {
+          busy = false;
+          if (!r.ok) { setAddBar(false); r.errors.forEach(function (e) { if (e.field === 'reason') reasonField.setError(e.message); else showErr(e.message); }); return; }
+          UI.toast('짝을 추가했습니다.', { kind: 'ok' });
+          view = 'list'; filter = 'on'; load();
+        }).catch(function (e) { busy = false; setAddBar(false); showErr((e && e.message) || String(e)); });
+      }
+      function setAddBar(saving) {
+        setBar([{ text: '취소', kind: 'secondary', onclick: function () { if (busy) return; view = 'list'; draw(); } },
+          { text: saving ? '저장하는 중…' : '짝 추가', disabled: saving, onclick: submit }]);
+      }
+      setAddBar(false);
+    }
+
+    load();
+  }
+</script>
