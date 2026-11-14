@@ -233,13 +233,13 @@ function ruleList(m) {
 }
 def('outs-instant', 'C19b·C26 보충', 'OUT [항목] 탭 — 즉시 퇴실 표시와 [즉시 퇴실로 정하기] (관리자만)', {}, function (root) {
   var m = frame(root, { title: 'OUT', who: '관리자', tabs: [{ t: '기록' }, { t: '퇴실 대상', n: 3 }, { t: '오늘' }, { t: '학기' }, { t: '항목', on: true }],
-    note: '시안 · 실제 화면에 맞춤. 즉시 퇴실로 정한 항목에만 "즉시 퇴실" 표시가 붙고, 버튼은 [즉시 퇴실 해제]로 바뀐다. 자동 항목에는 이 버튼이 없다.' });
+    note: '시안 · 실제 화면에 맞춤(결정 78). 즉시 퇴실로 정한 항목에만 "즉시 퇴실" 표시가 붙고, 버튼은 [즉시 퇴실 해제]로 바뀐다. 자동 항목에는 이 버튼이 없다.' });
   ruleList(m);
 });
 def('outs-instant-confirm', 'C19b·C26 보충', '[즉시 퇴실로 정하기] 확인창 (이미 기록된 OUT에도 적용 안내)', { sheet: true }, function (root) {
   var m = frame(root, { title: 'OUT', who: '관리자', tabs: [{ t: '기록' }, { t: '퇴실 대상', n: 3 }, { t: '오늘' }, { t: '학기' }, { t: '항목', on: true }] });
   ruleList(m);
-  UI.confirmSheet({ title: '즉시 퇴실 항목으로 정합니다', lead: '라면·배달음식', lines: ['이 항목으로 OUT을 한 번 기록하면 바로 2OUT(퇴실 대상)이 됩니다.', '이번 기간에 이미 기록된 이 항목의 OUT에도 그대로 적용됩니다.', '퇴실 확정은 지금처럼 학부모 면담 기록 뒤 관리자가 합니다.'], confirmText: '즉시 퇴실로 정하기', onconfirm: function () {} });
+  UI.confirmSheet({ title: '즉시 퇴실 항목으로 정합니다', lead: '라면·배달음식', lines: ['지금부터 기록되는 이 항목의 위반부터 OUT 한 번이 바로 2OUT(퇴실 대상)이 됩니다.', '이미 기록된 위반은 그대로 셉니다(소급하지 않습니다).', '퇴실 확정은 지금처럼 학부모 면담 기록 뒤 관리자가 합니다.'], confirmText: '즉시 퇴실로 정하기', onconfirm: function () {} });
 });
 def('moves-enter-first', 'C19b·C26 보충', '신규 입실 — 적용일 기본값이 다음 달 1일 (오늘 3월 3일이면 4월 1일)', {}, function (root) {
   var m = frame(root, { title: '입퇴실·급식', who: '박선생', tabs: s4MoveTabs(), bar: [{ text: '닫기', kind: 'secondary' }, { text: '입퇴실 신청' }],
@@ -253,6 +253,35 @@ def('moves-leave-5day', 'C19b·C26 보충', '퇴실 저장 확인창 — "새 �
   var m = frame(root, { title: '입퇴실·급식', who: '박선생', tabs: s4MoveTabs(), bar: [{ text: '닫기', kind: 'secondary' }, { text: '입퇴실 신청' }] });
   s4MoveLeave(m);
   UI.confirmSheet({ title: '입퇴실을 저장합니다', lead: '3월 12일(금)부터 학사 및 기숙사 퇴실', lines: ['박다솜 학생 (3-2 7번)', '자리 공석', '기숙사 3월 12일 퇴실', '조식 3월 12일 중단', '석식 3월 22일(월) 중단', '서류 미제출로 기록됩니다', '새 달 5일이 지나 퇴실하면 그달 비용을 냅니다'], confirmText: '입퇴실 저장', onconfirm: function () {} });
+});
+
+
+/* ═════════ C26 임시 퇴실(결정 70·77, R18) — 실제 화면 #191·#195에 맞춤 ═════════ */
+def('moves-temp-leave', 'C19b·C26 보충', '입퇴실 신청 — [학사 및 기숙사 임시 퇴실]을 고르면 복귀 예정일(필수)과 건강상 안내', {}, function (root) {
+  var m = frame(root, { title: '입퇴실·급식', who: '박선생', tabs: s4MoveTabs(), bar: [{ text: '닫기', kind: 'secondary' }, { text: '입퇴실 신청' }],
+    note: '시안 · 임시 퇴실은 건강상 사유만. 복귀 예정일이 없으면 저장되지 않는다. 급식·자리는 일반 퇴실처럼 정리되고, 다시 들어오는 것은 막지 않는다.' });
+  m.appendChild(card('학생', [studentPick('', 'ㅂㄷㅅ')]));
+  m.appendChild(card('무엇을', [UI.field('유형', el('div', { class: 'chips' }, [el('button', { type: 'button', class: 'chip', disabled: 'disabled', text: '학사 퇴실' }), el('button', { type: 'button', class: 'chip', text: '학사 및 기숙사 퇴실' }), el('button', { type: 'button', class: 'chip on', text: '학사 및 기숙사 임시 퇴실' })]))]));
+  m.appendChild(card('임시 퇴실', [UI.dateField({ label: '복귀 예정일', value: '2027-03-19', onchange: function () {} }),
+    el('div', { class: 'notice info', style: 'word-break:keep-all', text: '임시 퇴실은 건강상 사유만 씁니다. 사유 칸에는 건강상 이유(예: 독감 입원)만 적어 주세요. 가정 사정·대회 출전 같은 짧은 부재는 사전 특이사항으로 적습니다.' }),
+    el('div', { class: 'muted', style: 'word-break:keep-all', text: '임시 퇴실도 일반 퇴실처럼 급식을 끊고 자리를 비웁니다. 다른 점은 다시 들어오는 것을 막지 않는 것뿐입니다.' })]));
+});
+function s4TempRow(overdue) {
+  return el('div', { style: 'padding:8px 0;border-bottom:1px solid var(--line)' }, [el('div', { text: '3월 5일(금)부터 학사 및 기숙사 퇴실' }),
+    el('div', { class: overdue ? 'notice warn' : 'muted', style: 'word-break:keep-all', text: '임시 퇴실 중 · 복귀 예정 3월 12일(금)' + (overdue ? ' (예정일이 지났습니다)' : '') }),
+    overdue ? el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:8px', text: '일반 퇴실로 바꾸기' }) : null]);
+}
+def('moves-temp-convert', 'C19b·C26 보충', '학생 기록 줄 — 임시 퇴실 중·복귀 예정, [일반 퇴실로 바꾸기] 확인 시트', { sheet: true }, function (root) {
+  var m = frame(root, { title: '입퇴실·급식', who: '박선생', tabs: [{ t: '입퇴실' }, { t: '급식 변경' }, { t: '학생 기록', on: true }] });
+  m.appendChild(card('3. 박다솜', [s4TempRow(true)]));
+  UI.confirmSheet({ title: '일반 퇴실로 바꿉니다', lead: '3월 5일(금) 임시 퇴실을 일반 퇴실로 바꿉니다', lines: ['박다솜', '재입실 제한은 처음 임시 퇴실한 날(3월 5일(금))부터 셉니다. 2028년 2월 말까지 다시 들어올 수 없습니다.', '급식·자리는 임시 퇴실 때와 같이 이미 정리되어 있어 그대로입니다.', '기록은 지우지 않고 임시 퇴실 신청서를 취소 처리합니다.'], confirmText: '일반 퇴실로 바꾸기', danger: true, onconfirm: function () {} });
+});
+def('home-temp-overdue', 'C19b·C26 보충', '담당교사 홈 — "복귀 예정일 지남" 카드 (학생을 누르면 학생 기록으로)', {}, function (root) {
+  var m = frame(root, { title: '신한1학사', who: '박선생', note: '시안 · 복귀 예정일이 지난 건강상 임시 퇴실이 있을 때만 나타나는 카드(담당교사·관리자 홈).' });
+  m.appendChild(card('복귀 예정일 지남', [el('div', { style: 'word-break:keep-all', text: '임시 퇴실 중인 학생 2명의 복귀 예정일이 지났습니다.' }),
+    el('a', { style: 'display:block;padding:10px 0;border-bottom:1px solid var(--line);color:var(--accent)', href: '#', text: '3. 박다솜 · 복귀 예정 3월 12일(금) (3일 지남)' }),
+    el('a', { style: 'display:block;padding:10px 0;border-bottom:1px solid var(--line);color:var(--accent)', href: '#', text: '2. 이나래 · 복귀 예정 3월 10일(수) (5일 지남)' }),
+    el('div', { class: 'muted', style: 'margin-top:8px;word-break:keep-all', text: '학생을 눌러 기록에서 [일반 퇴실로 바꾸기]를 누를 수 있습니다. 복귀했다면 입퇴실 신청에서 학사 입실을 기록해 주세요.' })]));
 });
 
 /* ═════════ 실행 ═════════ */

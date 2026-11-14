@@ -497,6 +497,9 @@ D12 시안(`design/preview/stage4-screens.js`, 실행 `node design/preview/stage
 | `outs-instant-confirm` | [즉시 퇴실로 정하기] 확인창 | 관리자 |
 | `moves-enter-first` | 신규 입실: 적용일 기본값이 다음 달 1일(결정 74③) | 학사 교사·관리자 |
 | `moves-leave-5day` | 퇴실 저장 확인창: "새 달 5일이 지나 퇴실하면 그달 비용을 냅니다" 안내(결정 74④, 비용 계산 없음) | 학사 교사·관리자 |
+| `moves-temp-leave` | 입퇴실 신청: [학사 및 기숙사 임시 퇴실]을 고르면 복귀 예정일(필수)·건강상 안내(결정 70·77) | 학사 교사·관리자 |
+| `moves-temp-convert` | 학생 기록 줄 "임시 퇴실 중·복귀 예정"과 [일반 퇴실로 바꾸기] 확인 시트 | 학사 교사·관리자 |
+| `home-temp-overdue` | 담당교사 홈 "복귀 예정일 지남" 카드 | 학사 교사·관리자 |
 
 ### C27-1. 서류 체크리스트 (실제 화면 `screen_docs.html`에 맞춘 시안)
 
