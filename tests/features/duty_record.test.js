@@ -91,7 +91,7 @@ function file(x, who, month, fmt) {
   }));
 }
 
-test('getDutyRecordFile: 근무표 담당자·관리자는 PDF(임시 양식)를 받고, 학사 교사·출결 담당은 거부 + denied:duty.record, 렌더 HTML에 교사별 합계와 교대 3건', () => {
+test('getDutyRecordFile: 근무표 담당자·관리자는 PDF를 받고, 학사 교사·출결 담당은 거부 + denied:duty.record, 렌더 HTML에 교사별 합계와 교대 3건', () => {
   const x = makeEnv();
   const o = oracle(x.slots);
   for (const who of [DUTY, ADMIN]) {

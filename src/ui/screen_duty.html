@@ -355,7 +355,7 @@
       refresh();
     }
 
-    /* ───────── 기록표 탭(C14): 월말 근무 기록, 근무표 담당자·관리자는 PDF(임시 양식)·엑셀, 학사 교사는 본인 행만 ───────── */
+    /* ───────── 기록표 탭(C14): 월말 근무 기록, 근무표 담당자·관리자는 PDF·엑셀, 학사 교사는 본인 행만 ───────── */
     function drawViewTabs() {
       clear(tabsBox);
       tabsBox.appendChild(UI.segmented({ label: '화면', options: [{ value: 'duty', label: '근무표' }, { value: 'record', label: '기록표' }], value: state.view,
@@ -417,7 +417,7 @@
       if (r.canFile) {
         var row = el('div', { style: 'margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center' });
         var MIMES = { pdf: 'application/pdf', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
-        var LABELS = { pdf: 'PDF 받기(임시 양식)', xlsx: '엑셀 받기' }, KO = { pdf: 'PDF', xlsx: '엑셀' };
+        var LABELS = { pdf: 'PDF 받기', xlsx: '엑셀 받기' }, KO = { pdf: 'PDF', xlsx: '엑셀' };
         var btns = {};
         function fileBtn(fmt) {
           var btn = el('button', { type: 'button', class: fmt === 'pdf' ? 'btn' : 'btn secondary', text: LABELS[fmt] });
