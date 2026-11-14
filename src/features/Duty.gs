@@ -354,7 +354,7 @@ function dtyRecordCalendar_(d) {
 
 /**
  * 월말 근무 기록표 파일. 근무표 담당자·관리자(duty.record). 공유·Drive 저장 없이 base64로 바로 내려준다(출석부 PDF와 같음).
- * 'pdf'(기본, 임시 양식) 또는 'xlsx'(결정 67: 시트1 월별 근무표, 시트2 교사별 합계·교대 목록). xlsx는 Utilities.zip으로 직접 만든다 —
+ * 'pdf'(기본) 또는 'xlsx'(결정 67: 시트1 월별 근무표, 시트2 교사별 합계·교대 목록). xlsx는 Utilities.zip으로 직접 만든다 —
  * 권한을 더하지 않고 Drive에 임시 파일을 만들지 않는다. XML은 src/print의 순수 함수(printXlsxFiles_·printDutyRecordWorkbook_)가 만든다.
  */
 function getDutyRecordFile(month, format) {
