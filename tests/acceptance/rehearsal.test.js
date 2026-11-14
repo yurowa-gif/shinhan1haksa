@@ -126,6 +126,16 @@ function rehearse(n) {
   const mc = call(ADMIN, 'getMealCounts', '2027-03-05');
   const all = mc.rows.find((r) => r.key === '전체');
 
+  // 4b) 휴일·시험 기간(결정 72, C24·R21): 관리자가 휴일 블록(제안 틀)을 저장하고, 기간 일괄 설정으로 5/5 휴일·4/19~23 시험 기간(종료 24:00)
+  const sd = call(ADMIN, 'getScheduleData', '2027-05');
+  ok(call(ADMIN, 'saveBlocks', '학기', 'holiday', sd.suggestedBlocks['학기|holiday'], (sd.blockTokens || {})['학기|holiday'] || ''), '휴일 블록');
+  const batch = (input) => ok(call(ADMIN, 'saveDayBatch', input, ok(call(ADMIN, 'previewDayBatch', input), '일괄 미리보기').sig), '일괄 저장');
+  const hol = batch({ from: '2027-05-05', to: '2027-05-05', weekdays: [3], dayType: 'holiday' });
+  const exam = batch({ from: '2027-04-19', to: '2027-04-23', weekdays: [1, 2, 3, 4, 5], end: '24:00', memo: '가짜 시험 기간' });
+  const holSheet = call(ADMIN, 'getAttendanceSheet', '2027-05-05');
+  const examSheet = call(ADMIN, 'getAttendanceSheet', '2027-04-23');
+  const holSlots = call(ADMIN, 'getDutyMonth', '2027-05').days.find((d) => d.date === '2027-05-05').slots.map((x) => x.slot);
+
   // 5) 학기 전환. 여름방학은 이어받기가 없고(명단 올리기) — 1학기 끝 학사생 + 신규 1명 + 2OUT 퇴실 학생(막힘)을 올린다.
   //    2학기는 1학기 학사생을 이어받는다(퇴실 E·2OUT D 제외, 재입실 F 포함)
   env.setNow('2027-07-10T10:00:00');
@@ -160,7 +170,9 @@ function rehearse(n) {
       summerCarry: cpS.applicable, stay: stayIds.size, banned: pv2.lists.banned.map((b) => b.student_no), newCount: pv2.counts.newStudents,
       summer: { after: summerAfter.size, hasD: summerAfter.has(D), hasF: summerAfter.has(F), hasE: summerAfter.has(E) },
       carry: cp.count, fall: { size: fallIds.size, hasD: fallIds.has(D), hasE: fallIds.has(E), hasF: fallIds.has(F) },
-      dStudentNo: students.find((s) => s.id === D).student_no
+      dStudentNo: students.find((s) => s.id === D).student_no,
+      holiday: { changed: hol.changed, labels: holSheet.blockLabels, slots: holSlots, operating: holSheet.operating, names: students.filter((s) => holSheet.html.includes(s.name)).length },
+      exam: { changed: exam.changed, operating: examSheet.operating }
     }
   };
 }
@@ -168,7 +180,7 @@ function rehearse(n) {
 const big = rehearse(180);
 const small = rehearse(30);
 
-test('리허설 180명: 명단 → 좌석·방 초안 → 1주일 기록 → 식수 집계 → 여름방학 전환(신규 1명, 2OUT 퇴실 학생 막힘)', () => {
+test('리허설 180명: 명단 → 좌석·방 초안 → 1주일 기록 → 식수 집계 → 휴일·시험 기간 일괄 설정 → 여름방학 전환(신규 1명, 2OUT 퇴실 학생 막힘)', () => {
   const f = big.facts;
   assert.strictEqual(f.students, 180);
   assert.strictEqual(f.seated, 180, '좌석 초안이 180명 모두 앉힌다(1층 146 + SA 51)');
@@ -187,6 +199,12 @@ test('리허설 180명: 명단 → 좌석·방 초안 → 1주일 기록 → 식
   assert.deepStrictEqual([f.summer.after, f.summer.hasD, f.summer.hasE, f.summer.hasF], [f.stay + 1, false, false, true], '방학 등록 = 1학기 끝 학사생 + 신규 1명');
   assert.strictEqual(f.carry, f.stay, '2학기 이어받기 = 1학기 끝 학사생(기존 유지, 퇴실 반영)');
   assert.deepStrictEqual([f.fall.size, f.fall.hasD, f.fall.hasE, f.fall.hasF], [f.stay, false, false, true]);
+  // 휴일·시험 기간(결정 72): 휴일 블록 저장 → 기간 일괄 설정
+  assert.deepStrictEqual([f.holiday.changed, f.holiday.operating], [1, true]);
+  assert.deepStrictEqual(f.holiday.labels, ['09–12', '14–15:30', '15:30–17', '19–20:30', '20:30–21:50'], '휴일은 휴일 블록(오전 토요일·오후 일요일 칸)');
+  assert.deepStrictEqual(f.holiday.slots, ['단독', '예비'], '휴일 근무 틀 = 단독 + 예비(R21)');
+  assert.strictEqual(f.holiday.names, f.stay, '휴일 출석부 = 1학기 학사생(퇴실 E·2OUT D 빠짐)');
+  assert.deepStrictEqual([f.exam.changed, f.exam.operating], [5, true], '시험 기간 5일(종료 24:00, 금요일 포함)');
 });
 
 test('같은 흐름 30명도 통과하고, 공개 함수마다 시트 읽기 횟수는 180명에서 늘지 않는다(학생 수에 비례하지 않음)', () => {
