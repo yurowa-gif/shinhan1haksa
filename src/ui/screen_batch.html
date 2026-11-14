@@ -1,6 +1,6 @@
 <script>
   /**
-   * 학년 일괄 퇴실 화면(C26, 결정 74①, 관리자만). 두 탭: [일괄 퇴실](학년·퇴실일·석식 → 미리보기 → 저장) · [지난 일괄 퇴실](일괄 단위로 되돌리기, 결정 59).
+   * 학년 일괄 퇴실 화면(C26, 결정 74①, 관리자만). 두 탭: [일괄 퇴실](학년·퇴실일·석식 → 미리보기 → 저장) · [지난 기록](일괄 단위로 되돌리기, 결정 59).
    * 대상·유형(기숙사생은 학사 및 기숙사 퇴실)·건너뜀 이유는 서버(BatchLeave.gs → R20 규칙)가 정한다. 화면은 보여 주고 제외할 학생을 고르게만 한다.
    */
   function renderScreen(root) {
@@ -108,7 +108,7 @@
         var exc = p.list.filter(function (l) { return l.excluded; });
         if (exc.length) lines.push('직접 뺀 학생: ' + exc.map(function (l) { return l.label; }).join(', '));
         lines.push('일괄 퇴실도 다시 들어오는 것이 막힙니다(결정 77).');
-        lines.push('저장하면 [지난 일괄 퇴실]에서 한 번에 되돌릴 수 있습니다.');
+        lines.push('저장하면 [지난 기록] 탭에서 한 번에 되돌릴 수 있습니다.');
         lines = lines.concat(p.warnings || []);
         UI.confirmSheet({ title: '학년 일괄 퇴실을 저장합니다', lead: p.lead + ' · ' + U.formatDateKo(pl.effectiveDate, false) + '부터', lines: lines, confirmText: '일괄 퇴실 저장', danger: true, onconfirm: function () {
           busy = true; drawBar();
@@ -124,7 +124,7 @@
       drawResult(); drawBar();
     }
 
-    /* ───────── [지난 일괄 퇴실] ───────── */
+    /* ───────── [지난 기록] ───────── */
     function renderUndo(root) {
       var my = ++seq, box = el('div');
       root.appendChild(box);
