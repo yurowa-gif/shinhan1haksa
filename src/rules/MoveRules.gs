@@ -8,10 +8,13 @@
 
 /**
  * 입퇴실 하나의 계획.
- * move = {type:'학사 입실'|'학사 퇴실'|'기숙사 입실'|'기숙사 퇴실'|'학사 및 기숙사 퇴실', effectiveDate, requestedAt,
+ * move = {type:'학사 입실'|'학사 퇴실'|'기숙사 입실'|'기숙사 퇴실'|'학사 및 기숙사 퇴실'|'학사 임시 퇴실'|'학사 및 기숙사 임시 퇴실',
+ *         effectiveDate, requestedAt, returnDate(임시 퇴실이면 필수, 퇴실일 뒤 — 결정 70·77),
  *         dinner:'중단'(기본)|'일반 석식', breakfastWithDorm(기본 true), breakfastStopWithDorm(기본 true),
  *         meals:{조식, 석식}(학사 입실 때 시작할 급식 값, 선택 — R11b)}
- * opts = {today(필수), cutoff, terms(있으면 학사 입실에 결정 63 2OUT 막힘 검사 — move2OutBan_)}
+ * opts = {today(필수), cutoff, terms(있으면 학사 입실에 재입실 막힘 검사 — moveReentryBan_, 결정 63·70·77)}
+ * 임시 퇴실(결정 77, 건강상만): 쓰는 행·급식 정리는 일반 퇴실과 같고(급식 끊음, 자리·침대도 비움), 대표 행만 reason '임시 퇴실',
+ *   memo '[임시] return:<복귀 예정일>'이다(isTempLeaveRow_ — 재입실을 막지 않는 표시). 사람이 쓴 사유는 저장 쪽이 memo 뒤에 공백으로 잇는다.
  * → {errors, warnings, rows:[{item, value, effective_date, effective_date_auto, requested_at, reason, source, head}],
  *    toCancel:[{id, cancel_reason}], toRestore:[{id}], summary:{date, breakfast:{value, from}|null, dinner:{value, from}|null}}
  * errors가 있으면 rows·toCancel·toRestore는 비어 있다(쓰지 않는다). toCancel과 toRestore는 겹치지 않고, toCancel은 시트에 있는 id만이다.
@@ -45,6 +48,12 @@ function movePlan_(changes, studentId, move, opts) {
   var out = { errors: [], warnings: [], rows: [], toCancel: [], toRestore: [], summary: { date: E, breakfast: null, dinner: null } };
   var types = { '학사 입실': [['학사', '입실']], '학사 퇴실': [['학사', '퇴실']], '기숙사 입실': [['기숙사', '입실']],
     '기숙사 퇴실': [['기숙사', '퇴실']], '학사 및 기숙사 퇴실': [['학사', '퇴실'], ['기숙사', '퇴실']] };
+  var temp = type === '학사 임시 퇴실' || type === '학사 및 기숙사 임시 퇴실', R = ruleStr_(move.returnDate);
+  if (temp) {   // 결정 77: 임시 퇴실은 일반 퇴실과 같은 계획 + 대표 행 표시만 다르다
+    type = type.replace(' 임시 퇴실', ' 퇴실');
+    if (!ymdIsValid_(R)) out.errors.push('임시 퇴실은 복귀 예정일이 필요합니다(yyyy-MM-dd): ' + R);
+    else if (!(R > E)) out.errors.push('복귀 예정일은 퇴실일 뒤여야 합니다: ' + R);
+  }
   if (!types[type]) out.errors.push('입퇴실 유형이 아닙니다: ' + type);
   if (!ymdIsValid_(E)) out.errors.push('적용일 형식이 아닙니다(yyyy-MM-dd): ' + E);
   if (!/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?$/.test(at)) out.errors.push('신청 일시는 날짜와 시각이 모두 필요합니다(yyyy-MM-ddTHH:mm): ' + at);
@@ -54,10 +63,10 @@ function movePlan_(changes, studentId, move, opts) {
   var live = (changes || []).filter(function (c) { return c && ruleRowLive_(c) && ruleStr_(c.student_id) === sid; });
   var hall = statusOn_(live, sid, '학사', E), dorm = statusOn_(live, sid, '기숙사', E);
   if (type === '학사 입실' && hall === '입실') out.errors.push(E + '에 이미 학사 입실 상태입니다');
-  if (type === '학사 입실' && opts.terms && opts.terms.length) {   // 결정 63: 2OUT 퇴실 뒤 그 학기·다음 학기에는 다시 들어올 수 없다(terms를 주지 않으면 검사하지 않는다)
-    var ban = move2OutBan_(live, sid, opts.terms, E);
-    if (ban.banned) out.errors.push(ban.until ? '2OUT 퇴실로 ' + moveMonthDay_(ban.until, E) + '까지 다시 들어올 수 없습니다'
-      : '2OUT 퇴실로 다음 학기 끝날까지 다시 들어올 수 없습니다(다음 학기가 아직 등록되지 않았습니다)');
+  if (type === '학사 입실' && opts.terms && opts.terms.length) {   // 결정 63·70: 2OUT·자진 퇴실 뒤 그 학기·다음 학기에는 다시 들어올 수 없다(terms를 주지 않으면 검사하지 않는다)
+    var ban = moveReentryBan_(live, sid, opts.terms, E), why = ban.kind === '2OUT' ? '2OUT 퇴실로 ' : '퇴실(' + moveMonthDay_(ban.leaveDate, E) + ')로 ';
+    if (ban.banned) out.errors.push(ban.until ? why + moveMonthDay_(ban.until, E) + '까지 다시 들어올 수 없습니다'
+      : why + '다음 학기 끝날까지 다시 들어올 수 없습니다(다음 학기가 아직 등록되지 않았습니다)');
   }
   if (/퇴실$/.test(type) && type !== '기숙사 퇴실' && hall !== '입실') out.errors.push(E + '에 학사 입실 상태가 아닙니다');
   if (type === '학사 퇴실' && dorm === '입실') out.errors.push("기숙사생입니다. '학사 및 기숙사 퇴실'로 처리해 주세요");
@@ -162,7 +171,8 @@ function movePlan_(changes, studentId, move, opts) {
     }
   };
 
-  types[type].forEach(function (s) { add(s[0], s[1], E, E, type, 'F6'); });
+  types[type].forEach(function (s) { add(s[0], s[1], E, E, temp ? '임시 퇴실' : type, 'F6'); });
+  if (temp) out.rows[0].memo = '[임시] return:' + R;   // 대표 행(학사 퇴실)만
   // 같은 날 기록이 있는데 이 기록의 신청 일시가 더 이르면 저장해도 상태가 바뀌지 않는다(statusOn_ 동점 = 신청 일시) — 정리만 하면 어긋난다
   if (types[type].some(function (s) { return statusOn_(live, sid, s[0], E) !== s[1]; })) {
     return { errors: ['같은 날(' + E + ') 기록보다 신청 일시가 이릅니다 — 신청 일시를 확인해 주세요'], warnings: [], rows: [], toCancel: [], toRestore: [],
@@ -351,25 +361,27 @@ function moveRestorable_(changes, live, tagId, skip) {
 }
 
 /**
- * 2OUT 퇴실 뒤 다시 들어오기 막힘(결정 63, 순수 함수). changes = 그 학생의 status_changes 행(취소 포함 그대로),
- * terms = terms 행(type '학기'·'방학', start_date, end_date), ymd = 들어오려는 날 → {banned, until, leaveDate}
- * - 기준 퇴실 = 살아 있는 학사 퇴실 중 reason '2OUT 퇴실' 또는 memo가 '[2OUT]'로 시작하고 적용일 ≤ ymd인 것 가운데 가장 늦은 것(없으면 막지
- *   않는다 — 퇴실 취소(결정 59)로 그 행이 취소되면 막힘도 풀린다).
+ * 퇴실 뒤 다시 들어오기 막힘(결정 63·70·77, 순수 함수). changes = 그 학생의 status_changes 행(취소 포함 그대로),
+ * terms = terms 행(type '학기'·'방학', start_date, end_date), ymd = 들어오려는 날 → {banned, until, leaveDate, kind:'2OUT'|'자진'|''}
+ * - 기준 퇴실 = 살아 있는 기록된 학사 퇴실(source '명단업로드' 제외 — 명단에서 빠진 것은 기록된 퇴실이 아니다, 결정 77①) 중 적용일 ≤ ymd인
+ *   것 가운데 가장 늦은 것(같은 날이면 statusOn_ 순서). **그것이 임시 퇴실(isTempLeaveRow_)이면 막지 않는다**(결정 70 — 그 전 퇴실의 막힘은
+ *   이미 지나고 다시 들어온 것이다). 2OUT 퇴실(reason '2OUT 퇴실' 또는 memo '[2OUT]…') → kind '2OUT', 그 밖(일괄 퇴실·전학 포함) → '자진'.
+ *   없으면 막지 않는다 — 퇴실 취소(결정 59)로 그 행이 취소되면 막힘도 풀린다. 임시 퇴실을 일반 퇴실로 바꾸면(임시 퇴실 취소 + 같은 날짜
+ *   일반 퇴실) 막힘은 처음 임시 퇴실한 날부터다(결정 77④). 기숙사 퇴실은 보지 않는다(총괄 가정: 기숙사 재입실은 막지 않음).
  * - 막는 기간(결정 63 보충) = 퇴실일부터 '다음 학기 뒤 처음 오는 학기'의 시작 전날까지(그 학기 남은 날·다음 학기·사이의 방학 포함).
  *   다음 학기 = 퇴실일 뒤에 시작하는 첫 학기. 그 뒤 학기가 terms에 아직 없으면 다음 학기 뒤에 오는 첫 방학의 끝날, 그것도 없으면 다음 학기
  *   끝날. 다음 학기도 없으면 until ''(정해지지 않음 — 다음 학기가 등록될 때까지 막는다).
  *   ASSUMPTION: '다음 학기 바로 뒤에 이어지는 방학' = 다음 학기 끝날 뒤에 시작하는 첫 방학(사이에 빈 날이 있어도).
  * ASSUMPTION(결정 63): '학기'는 terms.type '학기', 방학은 사이에 끼면 함께 막는다. 방학 중 퇴실이면 그 뒤 첫 학기를 '다음 학기'로 본다.
  */
-function move2OutBan_(changes, studentId, terms, ymd) {
+function moveReentryBan_(changes, studentId, terms, ymd) {
   var sid = ruleStr_(studentId), day = ruleStr_(ymd);
   if (!ymdIsValid_(day)) throw new Error('날짜 형식이 아닙니다(yyyy-MM-dd): ' + ymd);
-  var leave = (changes || []).filter(function (c) {
-    var e = ruleStr_(c && c.effective_date);
-    return c && ruleRowLive_(c) && ruleStr_(c.student_id) === sid && ruleStr_(c.item) === '학사' && ruleStr_(c.value) === '퇴실' &&
-      ymdIsValid_(e) && e <= day && (ruleStr_(c.reason) === '2OUT 퇴실' || ruleStr_(c.memo).indexOf('[2OUT]') === 0);
-  }).sort(function (a, b) { return ruleStr_(a.effective_date) < ruleStr_(b.effective_date) ? -1 : 1; }).pop();
-  if (!leave) return { banned: false, until: '', leaveDate: '' };
+  var leave = statusRowOn_((changes || []).filter(function (c) {
+    return c && ruleStr_(c.item) === '학사' && ruleStr_(c.value) === '퇴실' && ruleStr_(c.source) !== '명단업로드';
+  }), sid, '학사', day);
+  if (!leave || isTempLeaveRow_(leave)) return { banned: false, until: '', leaveDate: '', kind: '' };
+  var kind = ruleStr_(leave.reason) === '2OUT 퇴실' || ruleStr_(leave.memo).indexOf('[2OUT]') === 0 ? '2OUT' : '자진';
   var L = ruleStr_(leave.effective_date);
   var sem = (terms || []).filter(function (t) { return t && ruleStr_(t.type) === '학기' && ymdIsValid_(ruleStr_(t.start_date)) && ymdIsValid_(ruleStr_(t.end_date)); })
     .sort(function (a, b) { return ruleStr_(a.start_date) < ruleStr_(b.start_date) ? -1 : 1; });
@@ -381,7 +393,12 @@ function move2OutBan_(changes, studentId, terms, ymd) {
       .sort(function (a, b) { return ruleStr_(a.start_date) < ruleStr_(b.start_date) ? -1 : 1; })[0];
     until = after ? ymdAddDays_(ruleStr_(after.start_date), -1) : vac ? ruleStr_(vac.end_date) : ne;
   }
-  return { banned: !until || day <= until, until: until, leaveDate: L };
+  return { banned: !until || day <= until, until: until, leaveDate: L, kind: kind };
+}
+
+/** 옛 이름(R13) — 명단 업로드(Roster.gs)가 부른다. 결정 70부터 자진 퇴실도 막는다. */
+function move2OutBan_(changes, studentId, terms, ymd) {
+  return moveReentryBan_(changes, studentId, terms, ymd);
 }
 
 /** 'yyyy-MM-dd' → 'M월 D일'(기준일과 해가 다르면 'yyyy년 M월 D일'). */

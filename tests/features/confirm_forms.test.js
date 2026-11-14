@@ -137,7 +137,8 @@ test('입퇴실 확인서 모델: 학사 및 기숙사 퇴실이면 둘 다, 학
   assert.strictEqual(pdf(env, ADMIN, 'getMoveConfirmPdf', b.id).model.remark, '', '2OUT 퇴실 사유는 확인서에 적지 않는다');
   env.expectDenied(OTHER, 'status.edit', 'getMoveConfirmPdf', a.id);
   ['test.student@example.com', 'test.parent@example.com'].forEach((w) => env.expectDenied(w, 'status.list', 'getMoveConfirmPdf', a.id));
-  // 재입실(학사 입실) 확인서: 입실, 학사만
+  // 재입실(학사 입실) 확인서: 입실, 학사만. 결정 70·77: 일반 퇴실 뒤에는 다시 들어올 수 없어 건강상 임시 퇴실로 바꿔 둔다
+  env.asOwner((c) => c.updateRecord_('status_changes', a.id, { reason: '임시 퇴실', memo: '[임시] return:2027-03-20' }, ADMIN));
   const ctx = env.call(ADMIN, 'getMoveContext', dorm, '2027-03-20');
   const back = saveMove(env, ADMIN, { studentId: dorm, type: '학사 입실', requestedAt: '2027-03-03T15:40:00', effectiveDate: '2027-03-20', docSubmitted: false, meals: ctx.reentry.meals });
   const z = pdf(env, ADMIN, 'getMoveConfirmPdf', back.id);

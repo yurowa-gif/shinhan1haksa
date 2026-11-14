@@ -68,6 +68,7 @@
 | status_changes | doc_submitted | 대표 행 `TRUE`·`FALSE`. 연결 행(일반 석식 행 포함)과 명단업로드 행은 `''`. 서류 미제출 목록은 `FALSE`만 센다 |
 | status_changes | effective_date_auto | 규칙 계산값. effective_date와 다르면 교사가 고친 행(사유는 reason) |
 | status_changes | reason(자동) | 퇴실 정리 행 `학사 퇴실 조식 중단`·`학사 퇴실 석식 중단`(movePlan_), 2OUT 퇴실 대표 행 `2OUT 퇴실`(날짜·면담 정보 없음). `2OUT 퇴실` 사유와 `[2OUT]`으로 시작하는 memo는 **예약어**다. 일반 입퇴실 입력(관리자 포함)에서는 거부하고, C20(`out.dismiss` + 면담 관문) 서버만 쓴다 |
+| status_changes | reason·memo(임시 퇴실, 결정 70·77) | 건강상 임시 퇴실 대표 행: reason `임시 퇴실`, memo `[임시] return:yyyy-MM-dd`(+ 공백 뒤 사람이 쓴 사유). 연결 기숙사 퇴실 행 reason도 `임시 퇴실`. `임시 퇴실` 사유와 `[임시]`로 시작하는 memo는 **예약어**(일반 입력 거부, 임시 퇴실 유형만 쓴다). 둘이 다 있어야 임시 퇴실로 본다(`isTempLeaveRow_`) |
 | status_changes | memo(자동) | 2OUT 퇴실 대표 행 `[2OUT] out:<OUT id> note:<면담 id>`. 화면에 내보내지 않는다 |
 | status_changes | cancel_reason | `[자동] <원인 행 id> …`(규칙이 취소) 또는 사람이 적은 사유(2자 이상) |
 

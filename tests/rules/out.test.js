@@ -544,7 +544,7 @@ table('outDismissalGate_: 면담 기록이 있어야 퇴실 확정(결정 4·PRD
 
 test('outDismissalGate_: 결과 모양 — triggerOutId = 발생 순 둘째(같으면 created_at·id), 면담 칸은 id·날짜·교사만', () => {
   const r = gate(TWO(), [NOTE({ content: '내용은 넘어오지 않는다' })]);
-  assert.deepStrictEqual(r, { count: 2, level: 2, triggerOutId: 'o2', meetingNote: { id: 'n1', date: '2027-03-11', teacher_email: 'hr@example.com' }, alreadyLeft: false, ok: true, reason: '' });
+  assert.deepStrictEqual(r, { count: 2, level: 2, triggerOutId: 'o2', meetingNote: { id: 'n1', date: '2027-03-11', teacher_email: 'hr@example.com' }, tempLeave: null, alreadyLeft: false, ok: true, reason: '' });
   const tie = [OUT('b', '2027-03-03T21:00:00'), OUT('a', '2027-03-03T21:00:00')];
   assert.strictEqual(gate(tie, []).triggerOutId, 'b');
 });
