@@ -45,11 +45,12 @@
       head.appendChild(UI.segmented({ label: '석식', options: [{ value: 'sum', label: '석식 합계' }, { value: 'split', label: '석식 나눠 보기' }], value: split ? 'split' : 'sum',
         onchange: function (v) { split = v === 'split'; draw(); } }));
       // 석식 합계 보기는 360px에서 옆으로 밀지 않도록 비기숙 칸을 뺀다(나눠 보기에서 확인).
-      var heads = split ? ['학년·성별', '학사', '기숙', '비기숙', '조식', '석식 학사', '석식 일반'] : ['학년·성별', '학사', '기숙', '조식', '석식'];
+      var lunch = !!data.hasLunch;   // 방학 기간이면 조식 뒤에 중식 열(결정 73)
+      var heads = split ? ['학년·성별', '학사', '기숙', '비기숙', '조식'].concat(lunch ? ['중식'] : [], ['석식 학사', '석식 일반']) : ['학년·성별', '학사', '기숙', '조식'].concat(lunch ? ['중식'] : [], ['석식']);
       var isTotal = function (k) { return / 합계$|^전체$|학년$/.test(k) && k !== '' && !/^[여남]\d/.test(k); };
       var tbody = el('tbody', {}, data.rows.map(function (r) {
-        var vals = [r.hall, r.dorm, r.nonDorm, r.breakfast, r.hallDinner, r.generalDinner].map(Number);
-        var show = split ? vals : [vals[0], vals[1], vals[3], vals[4] + vals[5]];
+        var vals = [r.hall, r.dorm, r.nonDorm, r.breakfast, r.hallDinner, r.generalDinner].map(Number), lu = Number(r.lunch) || 0;
+        var show = split ? vals.slice(0, 4).concat(lunch ? [lu] : [], vals.slice(4)) : [vals[0], vals[1], vals[3]].concat(lunch ? [lu] : [], [vals[4] + vals[5]]);
         return el('tr', { class: isTotal(r.key) ? 'total' : '' }, [el('th', { scope: 'row', text: r.key })].concat(show.map(function (v) { return el('td', { text: String(v) }); })));
       }));
       var thead = el('thead', {}, [el('tr', {}, heads.map(function (h) { return el('th', { scope: 'col', text: h }); }))]);
