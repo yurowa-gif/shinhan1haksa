@@ -298,15 +298,28 @@ function outFirstStart_(blocks) {
 /**
  * 그 학생의 이번 기간 OUT 단계(학기마다 초기화 = termId가 같은 것만 센다).
  * status 빈칸·'유효'인 OUT만 센다(직접·자동 모두). → {count, level:0|1|2, label:''|'1OUT'|'퇴실 대상'}
- * 2개 이상이면 '퇴실 대상'(결정 4: 학부모 면담 기록 후 관리자가 퇴실 확정, 유예 없음).
+ * 2 이상이면 '퇴실 대상'(결정 4: 학부모 면담 기록 후 관리자가 퇴실 확정, 유예 없음).
+ * opts.instantRuleIds(결정 69, 선택): 즉시 퇴실 항목(violation_rules id). 그 rule_id의 OUT 한 건은 2로 센다(count = OUT 수의 합).
  */
-function outLevel_(violations, studentId, termId) {
-  var sid = ruleStr_(studentId), tid = ruleStr_(termId);
-  var count = (violations || []).filter(function (v) {
-    return v && ruleRowLive_(v) && ruleStr_(v.student_id) === sid && ruleStr_(v.term_id) === tid;
-  }).length;
+function outLevel_(violations, studentId, termId, opts) {
+  var count = outLiveFor_(violations, studentId, termId).reduce(function (n, v) { return n + outWeight_(v, opts); }, 0);
   var level = count >= 2 ? 2 : count;
   return { count: count, level: level, label: ['', '1OUT', '퇴실 대상'][level] };
+}
+
+/** 그 학생·그 기간의 살아 있는 OUT 행. */
+function outLiveFor_(violations, studentId, termId) {
+  var sid = ruleStr_(studentId), tid = ruleStr_(termId);
+  return (violations || []).filter(function (v) {
+    return v && ruleRowLive_(v) && ruleStr_(v.student_id) === sid && ruleStr_(v.term_id) === tid;
+  });
+}
+
+/** OUT 한 건의 무게: opts.instantRuleIds(즉시 퇴실 항목, 결정 69)에 rule_id가 있으면 2, 아니면 1. */
+function outWeight_(v, opts) {
+  var ids = (opts && opts.instantRuleIds) || [];
+  var rid = ruleStr_(v.rule_id);
+  return rid && ids.some(function (x) { return ruleStr_(x) === rid; }) ? 2 : 1;
 }
 
 /**
@@ -347,23 +360,23 @@ function outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes) {
  * 2OUT 퇴실 확정 관문(결정 4, PRD F12·F6). 면담 기록 전에는 막는다.
  * notes = counsel_notes 행 중 id·student_id·type·linked_violation_id·status·date·teacher_email만(내용은 넘기지 않는다).
  * → {count, level, triggerOutId, meetingNote:{id, date, teacher_email}|null, alreadyLeft, ok, reason:''|'퇴실 대상 아님'|'면담 기록 필요'|'이미 퇴실'}
- * - 이번 기간 살아 있는 OUT(outLevel_과 같음)을 occurred_at → created_at → id 순으로 놓았을 때 둘째가 triggerOutId.
+ * - 이번 기간 살아 있는 OUT(outLevel_과 같음)을 occurred_at → created_at → id 순으로 놓았을 때 합이 처음 2가 되는 OUT이 triggerOutId
+ *   (보통은 둘째, opts.instantRuleIds의 즉시 퇴실 항목이면 그 한 건 — 결정 69).
  * - 면담 = status 빈칸·유효, 같은 학생, type '2OUT 학부모 면담', 이번 기간 살아 있는 OUT에 연결, 날짜 ≥ triggerOut 발생일.
  * - alreadyLeft = ymd에 학사 퇴실 상태이거나 앞으로 2OUT 퇴실(memo '[2OUT]…' 또는 reason '2OUT 퇴실')이 잡혀 있음. 보통 미래 퇴실은
  *   막지 않는다(그 뒤 movePlan_이 '이후 날짜에 입퇴실 기록'으로 그 퇴실을 가리킨다, 총괄 결정). 순서: 이미 퇴실 → 퇴실 대상 아님(2건 미만) → 면담 기록 필요 → ok.
  * 결정 51: 연결한 OUT이 나중에 취소되면 그 면담은 세지 않는다(다른 2건이 남아도 다시 면담), 둘째 OUT보다 앞선 날짜의 면담도.
  */
-function outDismissalGate_(violations, notes, changes, studentId, termId, ymd) {
+function outDismissalGate_(violations, notes, changes, studentId, termId, ymd, opts) {
   var sid = ruleStr_(studentId), tid = ruleStr_(termId);
-  var lv = outLevel_(violations, sid, tid);
-  var live = (violations || []).filter(function (v) {
-    return v && ruleRowLive_(v) && ruleStr_(v.student_id) === sid && ruleStr_(v.term_id) === tid;
-  }).sort(function (a, b) {
+  var lv = outLevel_(violations, sid, tid, opts);
+  var live = outLiveFor_(violations, sid, tid).sort(function (a, b) {
     var ka = [ruleIso_(a.occurred_at), ruleIso_(a.created_at), ruleStr_(a.id)], kb = [ruleIso_(b.occurred_at), ruleIso_(b.created_at), ruleStr_(b.id)];
     for (var i = 0; i < 3; i++) if (ka[i] !== kb[i]) return ka[i] < kb[i] ? -1 : 1;
     return 0;
   });
-  var trigger = live[1] || null;
+  var sum = 0, trigger = null;   // 합이 처음 2가 되는 OUT(즉시 퇴실 항목이면 그 한 건, 결정 69)
+  live.some(function (v) { sum += outWeight_(v, opts); if (sum >= 2) trigger = v; return !!trigger; });
   var liveIds = live.map(function (v) { return ruleStr_(v.id); });
   var n = trigger && (notes || []).filter(function (x) {
     return x && ruleRowLive_(x) && ruleStr_(x.student_id) === sid && ruleStr_(x.type) === '2OUT 학부모 면담' &&
