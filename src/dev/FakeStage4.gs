@@ -8,7 +8,7 @@
  * - (S4-0, 결정 75·76) 서류 종류 6가지 + 2027 1학기 학생별 제출 표시(일부 미제출·해당없음),
  *   프로그램 1개(4/7 '가짜 파워클래스', 그날 학사생 전원 = 30명대) + 참가자 + 참가자마다 '학사 내 프로그램' 사전 특이사항,
  *   가짜 전화번호(학생 010-0000-1xxx, 보호자 010-0000-2xxx)와 보호자 이름. 실제와 겹치지 않는 형식만.
- *   ASSUMPTION: 프로그램 특이사항의 모양(group_id = 프로그램 id, 확정, 요청자 = 출결 담당)은 C28이 정하면 맞춘다.
+ *   프로그램 특이사항의 모양은 C28(#173)과 같다: 묶음 id는 참가자마다 새로, 사유 '프로그램: 이름', 확정, 만든 사람 = 요청·확정자.
  * - (R19, 결정 73) 2027 여름방학(테스트) 기간 + 등록(1학기 끝날 학사생 그대로) + 중식 신청: 셋 중 둘은 방학 시작일부터 실시,
  *   그중 한 명은 방학 중(7/21 수 10:00) 미실시 신청 → 다음 주 월요일. 적용일은 mealPlanChange_로 계산한다.
  * 120명대 프로그램은 리허설(학생 100명 이상)에서 만든다.
@@ -73,8 +73,8 @@ function buildFakeStage4Contacts_(term, termStudentIds, programIds, students, gu
   var participants = [], exceptions = [];
   programIds.forEach(function (sid, i) {
     var eid = fakeId_('f9b00000', i + 1);
-    exceptions.push({ id: eid, term_id: term.id, group_id: pid, student_id: sid, date: FAKE4_PROGRAM.date, blocks: FAKE4_PROGRAM.blocks,
-      type: FAKE4_EX_TYPE, reason: FAKE4_PROGRAM.name, status: '확정', requested_by: FAKE4_BY, requested_at: '2027-04-05T09:00:00',
+    exceptions.push({ id: eid, term_id: term.id, group_id: fakeId_('f9e00000', i + 1), student_id: sid, date: FAKE4_PROGRAM.date, blocks: FAKE4_PROGRAM.blocks,
+      type: FAKE4_EX_TYPE, reason: '프로그램: ' + FAKE4_PROGRAM.name, status: '확정', requested_by: FAKE4_BY, requested_at: '2027-04-05T09:00:00',
       confirmed_by: FAKE4_BY, confirmed_at: '2027-04-05T09:00:00', cancel_reason: '' });
     participants.push({ id: fakeId_('f9a00000', i + 1), program_id: pid, student_id: sid, exception_id: eid, status: '유효' });
   });

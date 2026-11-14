@@ -102,7 +102,9 @@ test('seedFakeStage4 서류·프로그램·전화(S4-0): 서류 6종·일부 미
   parts.forEach((p) => {
     const e = ex[p.exception_id];
     assert.ok(e && e.student_id === p.student_id && e.date === prog[0].date && e.blocks === prog[0].blocks && e.status === '확정' && /^학사 내 프로그램/.test(e.type));
+    assert.strictEqual(e.reason, '프로그램: ' + prog[0].name, 'C28과 같은 사유');
   });
+  assert.strictEqual(new Set(parts.map((p) => ex[p.exception_id].group_id)).size, parts.length, '묶음 id는 참가자마다 새로(C28)');
   env.setNow(prog[0].date + 'T15:00:00');
   assert.ok(JSON.stringify(plain(env.call(ADMIN, 'getAttendanceSheet', prog[0].date, true))).includes('내부'), '출석부 칸에 내부(학사 내 프로그램)');
 
