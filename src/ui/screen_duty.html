@@ -355,7 +355,7 @@
       refresh();
     }
 
-    /* ───────── 기록표 탭(C14): 월말 근무 기록, 근무표 담당자·관리자는 PDF(임시 양식), 학사 교사는 본인 행만 ───────── */
+    /* ───────── 기록표 탭(C14): 월말 근무 기록, 근무표 담당자·관리자는 PDF(임시 양식)·엑셀, 학사 교사는 본인 행만 ───────── */
     function drawViewTabs() {
       clear(tabsBox);
       tabsBox.appendChild(UI.segmented({ label: '화면', options: [{ value: 'duty', label: '근무표' }, { value: 'record', label: '기록표' }], value: state.view,
@@ -415,24 +415,35 @@
       recBox.appendChild(sw);
       recBox.appendChild(el('div', { class: 'muted', text: '이 표는 ' + koStamp(r.generatedAt) + '에 만들었고, 근무표는 ' + (r.lastChangedAt ? koStamp(r.lastChangedAt) + '에 마지막으로 바뀌었습니다.' : '바뀐 적이 없습니다.') + ' 출력한 뒤 근무표가 또 바뀌었는지 이 시각으로 확인하세요.' }));
       if (r.canFile) {
-        var btn = el('button', { type: 'button', class: 'btn', style: 'margin-top:12px', text: 'PDF 받기(임시 양식)' });
-        btn.addEventListener('click', function () {
-          var mine = recSeq;   // 만드는 동안 달·탭이 바뀌면 이 PDF는 쓰지 않는다
-          btn.disabled = true; btn.textContent = 'PDF 만드는 중…';
-          call('getDutyRecordFile', r.month, 'pdf').then(function (f) {
-            if (mine !== recSeq || !btn.parentNode) { UI.toast('기록표가 바뀌어 이 PDF는 쓰지 않았습니다. 필요하면 기록표에서 PDF 받기를 다시 눌러 주세요.', { kind: 'warn', ms: 5000 }); return; }
-            btn.disabled = false; btn.textContent = 'PDF 받기(임시 양식)';
-            if (!f.ok) { UI.toast(f.error || 'PDF를 만들지 못했습니다.', { kind: 'warn', ms: 5000 }); return; }
-            var bin = atob(f.base64), arr = new Uint8Array(bin.length);
-            for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-            var url = URL.createObjectURL(new Blob([arr], { type: 'application/pdf' }));
-            var a = el('a', { class: 'btn secondary', style: 'margin-left:8px', href: url, download: f.name, text: f.name + ' 열기' });
-            var old = recBox.querySelector('a.btn.secondary[download]'); if (old) old.remove();
-            btn.parentNode.insertBefore(a, btn.nextSibling); a.click();
-            UI.toast('PDF를 만들었습니다. 받아지지 않으면 옆 링크를 누르세요.', { kind: 'ok', ms: 5000 });
-          }).catch(function (err) { if (mine === recSeq) { btn.disabled = false; btn.textContent = 'PDF 받기(임시 양식)'; } UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); });
-        });
-        recBox.appendChild(btn);
+        var row = el('div', { style: 'margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center' });
+        var MIMES = { pdf: 'application/pdf', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
+        var LABELS = { pdf: 'PDF 받기(임시 양식)', xlsx: '엑셀 받기' }, KO = { pdf: 'PDF', xlsx: '엑셀' };
+        var btns = {};
+        function fileBtn(fmt) {
+          var btn = el('button', { type: 'button', class: fmt === 'pdf' ? 'btn' : 'btn secondary', text: LABELS[fmt] });
+          btns[fmt] = btn;
+          btn.addEventListener('click', function () {
+            var mine = recSeq;   // 만드는 동안 달·탭이 바뀌면 이 파일은 쓰지 않는다
+            Object.keys(btns).forEach(function (k) { btns[k].disabled = true; });
+            btn.textContent = KO[fmt] + ' 만드는 중…';
+            function reset() { Object.keys(btns).forEach(function (k) { btns[k].disabled = false; btns[k].textContent = LABELS[k]; }); }
+            call('getDutyRecordFile', r.month, fmt).then(function (f) {
+              if (mine !== recSeq || !btn.parentNode) { UI.toast('기록표가 바뀌어 이 파일은 쓰지 않았습니다. 필요하면 기록표에서 다시 눌러 주세요.', { kind: 'warn', ms: 5000 }); return; }
+              reset();
+              if (!f.ok) { UI.toast(f.error || KO[fmt] + ' 파일을 만들지 못했습니다.', { kind: 'warn', ms: 5000 }); return; }
+              var bin = atob(f.base64), arr = new Uint8Array(bin.length);
+              for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+              var url = URL.createObjectURL(new Blob([arr], { type: MIMES[fmt] }));
+              var a = el('a', { class: 'btn secondary', href: url, download: f.name, text: f.name + ' 열기' });
+              var old = row.querySelector('a[download]'); if (old) old.remove();
+              row.appendChild(a); a.click();
+              UI.toast(KO[fmt] + ' 파일을 만들었습니다. 받아지지 않으면 옆 링크를 누르세요.', { kind: 'ok', ms: 5000 });
+            }).catch(function (err) { if (mine === recSeq) reset(); UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); });
+          });
+          return btn;
+        }
+        row.appendChild(fileBtn('pdf')); row.appendChild(fileBtn('xlsx'));
+        recBox.appendChild(row);
       }
     }
 
