@@ -16,8 +16,8 @@ var FOOD_CHIPS = [
 var FOOD_RULE_TEXT = {
   same_day: '마감 시각 전 신청이라 신청일 당일부터 적용됩니다.',
   next_day: '마감 시각 이후 신청이라 다음 날부터 적용됩니다.',
-  next_monday: '월·화 신청이라 다음 주 월요일부터 적용됩니다.',
-  monday_after_next: '수~일 신청이라 다다음 주 월요일부터 적용됩니다.',
+  next_monday: '수요일 마감 시각 전 신청이라 다음 주 월요일부터 적용됩니다.',
+  monday_after_next: '수요일 마감 시각이 지나 신청해서 다다음 주 월요일부터 적용됩니다.',
   initial: '지금 그 급식이 없어 신청일부터 적용됩니다.',
   manual: '선생님이 직접 고친 날짜입니다.'
 };

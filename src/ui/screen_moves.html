@@ -390,7 +390,7 @@
         clear(extra);
         if (hallLeave()) {
           dinnerSeg = UI.segmented({ label: '석식', value: dinner, options: [{ value: '중단', label: '중단' }, { value: '일반 석식', label: '일반 석식으로' }], onchange: function (v) { dinner = v; dinnerField.setError(''); refresh(); } });
-          dinnerField = UI.field('석식', dinnerSeg, { hint: '"중단"은 미실시 규칙(수~일 신청이면 다다음 주 월요일)을 따릅니다.' });
+          dinnerField = UI.field('석식', dinnerSeg, { hint: '"중단"은 미실시 규칙(수요일 11:30이 지나 신청하면 다다음 주 월요일)을 따릅니다.' });
           if (!dinner) dinnerField.setError('석식을 골라 주세요. 기본값이 없습니다.');
           extra.appendChild(el('div', { class: 'card' }, [el('h2', { text: '급식 정리' }), dinnerField, el('div', { class: 'notice info', text: '조식은 적용일부터 바로 중단됩니다.' })]));
         } else if (type === '학사 입실' && mctx && mctx.reentry) {
