@@ -20,98 +20,112 @@ function typeChips(on) {
 }
 function progress(done, total) { return el('div', { class: 'muted', style: 'margin:4px 0 8px', text: '제출 ' + done + ' / ' + total + '명 · 미제출 ' + (total - done) + '명' }); }
 
-/* ═════════ C27 서류 체크리스트 ═════════ */
-def('docs-home', 'C27 서류', '학사 교사 홈의 "학기 초 서류" 카드', {}, function (root) {
-  var m = frame(root, { title: '신한1학사', who: '박선생', note: '시안 · 학사 교사 홈에 얹는 카드. 담당 학생의 미제출만 보인다(학생 이름은 담당교사에게만). 2단계의 "서류 미제출"(입퇴실·급식 신청 서류)과 다른 카드다.' });
-  m.appendChild(card('학기 초 서류 미제출', [
-    row([UI.statusPill('requested', '12명 · 30건')], 'margin:4px 0 8px'),
-    el('div', { class: 'muted', text: '2. 이나래 · 3. 박다솜 · 1. 김가온 외 9명' }),
-    link('서류 체크리스트 열기', '', 'margin-top:12px')]));
+/* ═════════ C27 서류 체크리스트 (실제 화면 screen_docs.html 에 맞춘 모양 + 실제에 없는 제안 3장은 `docs-proposal-` 로 표시) ═════════ */
+(function () {   // 실제 화면이 자체 <style>로 쓰는 줄·버튼 모양(screen_docs.html)을 시안에도 같게 둔다
+  var st = document.createElement('style');
+  st.textContent = '.doc-row{padding:10px 0;border-bottom:1px solid var(--line);word-break:keep-all}.doc-row:last-child{border-bottom:0}.doc-line{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}.doc-btns{display:flex;gap:6px;flex-wrap:wrap}.doc-btns button{min-height:48px}.doc-btns button.on{background:var(--accent);color:#fff;border-color:var(--accent)}';
+  document.head.appendChild(st);
+})();
+function docBtns(cur, disabled) {
+  var box = el('div', { class: 'doc-btns' });
+  ['제출', '미제출', '해당없음'].forEach(function (t) {
+    var b = el('button', { type: 'button', class: 'btn secondary' + (cur === t ? ' on' : ''), text: t, 'aria-pressed': cur === t ? 'true' : 'false' });
+    if (disabled) b.disabled = true; box.appendChild(b);
+  });
+  return box;
+}
+var DOC_STU = [['10405', '이나래', '박선생', { '입실 동의서': '미제출', '자기소개서': '미제출', '결핵검사': '미제출' }], ['20310', '박다솜', '박선생', { '자기소개서': '미제출', '결핵검사': '미제출' }], ['10305', '김가온', '박선생', { '입실 동의서': '미제출', '학원 수강증': '미제출' }], ['20212', '정하나', '박선생', { '자기소개서': '미제출', '결핵검사': '미제출' }]];
+function docHead(m, mode, note, withType) {
+  var head = card('서류 체크리스트', [el('div', { class: 'muted', text: '2027 1학기 · 서류를 낸 학생을 표시합니다. 표시하지 않은 칸은 "미제출"입니다.' }),
+    el('div', { class: 'notice warn', text: '미제출 30건 (학생 12명)' }),
+    UI.segmented({ options: [{ value: 'missing', label: '미제출 목록' }, { value: 'type', label: '서류별' }], value: mode, onchange: function () {} })]);
+  if (withType) head.appendChild(UI.field('서류 종류', el('select', {}, DOC_TYPES.map(function (t) { var o = el('option', { value: t, text: t }); if (t === '자기소개서') o.selected = true; return o; })), {}));
+  m.appendChild(head);
+}
+def('docs-home', 'C27 서류', '홈의 "서류 체크리스트" 카드 (관리자·출결 담당·학사 교사 홈)', {}, function (root) {
+  var m = frame(root, { title: '신한1학사', who: '박선생', note: '시안(실제 home_*.html에 맞춤) · 홈 카드. 미제출 건수와 학생 수만 보이고(이름 없음) [서류 체크리스트 열기]로 들어간다. 2단계의 "급식·입퇴실 서류" 카드와 다르다.' });
+  m.appendChild(card('서류 체크리스트', [row([UI.statusPill('todo', '미제출 30건 · 학생 12명')], 'margin:8px 0'), el('div', { class: 'muted', text: '학기 초 서류(동의서 등)를 냈는지 표시합니다.' }), link('서류 체크리스트 열기', '', 'margin-top:12px')]));
 });
 
-def('docs-by-type', 'C27 서류', '서류별 체크 (담당 학생, 미제출만)', {}, function (root) {
-  var m = frame(root, { title: '학기 초 서류', who: '박선생', tabs: [{ t: '서류별', on: true }, { t: '학생별' }, { t: '미제출 목록', n: 12 }],
-    note: '시안 · 서류 종류를 고르고 담당 학생을 체크한다. 체크 = 제출(그 자리에서 저장), 체크를 풀면 미제출, 해당없음은 줄 끝 [⋯]에서. 담당 26명 · 2027 1학기.' });
-  m.appendChild(el('div', { class: 'muted', style: 'margin-bottom:4px', text: '2027 1학기 · 담당 26명' }));
-  m.appendChild(typeChips('입실 동의서'));
-  m.appendChild(UI.segmented({ options: [{ value: 'miss', label: '미제출만' }, { value: 'all', label: '전체' }], value: 'miss', onchange: function () {} }));
-  m.appendChild(progress(21, 26));
-  var ul = el('ul', { class: 'list' });
-  [['2', '이나래'], ['3', '박다솜'], ['1', '김가온'], ['2', '정하나'], ['1', '이서준']].forEach(function (s) { ul.appendChild(docRow(lab(s[0], s[1]), false, '')); });
-  m.appendChild(card('', [ul]));
-  m.appendChild(el('div', { class: 'muted', text: '체크하면 오늘(3월 8일)이 제출일로 저장됩니다. 잘못 눌렀으면 체크를 풀어 주세요(기록은 지워지지 않고 이전·이후가 남습니다).' }));
+def('docs-missing', 'C27 서류', '서류 체크리스트 — 미제출 목록 (학생마다 빠진 서류와 [제출][미제출][해당없음])', {}, function (root) {
+  var m = frame(root, { title: '서류 체크리스트', who: '박선생', note: '시안(실제 screen_docs.html에 맞춤) · 기본 모양. 미제출이 있는 학생만, 빠진 서류마다 상태 버튼 셋(누르는 즉시 저장). 학생은 "학번 이름 · 담당 선생님"으로 보인다(실제 화면 그대로 — 이름 규칙 "1. 김가온"과 다름).' });
+  docHead(m, 'missing');
+  var body = card('', []);
+  DOC_STU.forEach(function (r) {
+    var rw = el('div', { class: 'doc-row' }, [el('b', { text: r[0] + ' ' + r[1] }), el('span', { class: 'muted', text: ' · 담당 ' + r[2] })]);
+    Object.keys(r[3]).forEach(function (t) { rw.appendChild(el('div', { class: 'doc-line' }, [el('span', { text: t }), docBtns(r[3][t], false)])); });
+    body.appendChild(rw);
+  });
+  m.appendChild(body);
 });
 
-def('docs-state-sheet', 'C27 서류', '서류 상태 시트 (제출·미제출·해당없음, 제출일, 메모)', { sheet: true }, function (root) {
-  var m = frame(root, { title: '학기 초 서류', who: '박선생', tabs: [{ t: '서류별', on: true }, { t: '학생별' }, { t: '미제출 목록', n: 12 }], note: '시안 · 줄 끝 [⋯]를 누르면 상태 시트가 열린다.' });
-  m.appendChild(typeChips('결핵검사'));
-  var ul = el('ul', { class: 'list' }); ul.appendChild(docRow(lab('2', '이나래'), false, '')); m.appendChild(card('', [ul]));
-  var date = UI.dateField({ label: '제출일', value: '2027-03-08', onchange: function () {} });
-  var memo = el('input', { type: 'text', value: '' });
-  UI.bottomSheet({ title: '2. 이나래 · 결핵검사', content: el('div', {}, [
-    UI.segmented({ options: [{ value: '제출', label: '제출' }, { value: '미제출', label: '미제출' }, { value: '해당없음', label: '해당없음' }], value: '해당없음', onchange: function () {} }),
-    el('div', { class: 'muted', style: 'margin-bottom:8px', text: '해당없음은 이 학생에게 이 서류가 필요 없을 때(예: 학원 수강증을 내지 않는 학생)입니다.' }),
-    date, UI.field('메모 (선택)', memo, { hint: '길게 쓰지 않습니다.' })]),
-    actions: [{ text: '닫기', kind: 'secondary', onclick: function () {} }, { text: '저장', onclick: function () {} }], onclose: function () {} }).open();
+def('docs-by-type', 'C27 서류', '서류 체크리스트 — 서류별 (서류 종류를 고르면 학생 줄마다 상태 버튼)', {}, function (root) {
+  var m = frame(root, { title: '서류 체크리스트', who: '박선생', note: '시안(실제에 맞춤) · [서류별]에서는 서류 종류를 고르는 `select`가 생기고 학생 줄마다 [제출][미제출][해당없음].' });
+  docHead(m, 'type', '', true);
+  var body = card('', []);
+  [['10405', '이나래', '미제출'], ['20310', '박다솜', '미제출'], ['10305', '김가온', '제출'], ['20212', '정하나', '미제출'], ['10312', '이서준', '제출'], ['20218', '최하늘', '해당없음']].forEach(function (r) {
+    body.appendChild(el('div', { class: 'doc-row' }, [el('b', { text: r[0] + ' ' + r[1] }), el('span', { class: 'muted', text: ' · 담당 박선생' }), docBtns(r[2], false)]));
+  });
+  m.appendChild(body);
 });
 
-def('docs-by-student', 'C27 서류', '학생별 서류 (한 명의 서류 전부)', {}, function (root) {
-  var m = frame(root, { title: '학기 초 서류', who: '박선생', tabs: [{ t: '서류별' }, { t: '학생별', on: true }, { t: '미제출 목록', n: 12 }], note: '시안 · 학생 한 명을 찾으면 서류 6종을 한 번에 본다(면담하면서 확인할 때).' });
+def('docs-readonly', 'C27 서류', '서류 체크리스트 — 출결 담당 보기만 (버튼이 꺼져 있다)', {}, function (root) {
+  var m = frame(root, { title: '서류 체크리스트', who: '정선생', note: '정선생(출결 담당) 화면 · 출결 담당은 학사생 전체를 보지만 표시는 못 한다(`doc.view`만, `doc.edit` 없음) → 버튼이 꺼지고 안내 한 줄.' });
+  docHead(m, 'missing');
+  var body = card('', [el('div', { class: 'muted', text: '보기만 할 수 있습니다. 표시는 담당 선생님·관리자가 합니다.' })]);
+  DOC_STU.slice(0, 3).forEach(function (r) {
+    var rw = el('div', { class: 'doc-row' }, [el('b', { text: r[0] + ' ' + r[1] }), el('span', { class: 'muted', text: ' · 담당 ' + r[2] })]);
+    Object.keys(r[3]).forEach(function (t) { rw.appendChild(el('div', { class: 'doc-line' }, [el('span', { text: t }), docBtns(r[3][t], true)])); });
+    body.appendChild(rw);
+  });
+  m.appendChild(body);
+});
+
+def('docs-types', 'C27 서류', '서류 종류 관리 (관리자, 칸마다 이름·설명·순서·[저장]·[끄기])', {}, function (root) {
+  var m = frame(root, { title: '서류 체크리스트', who: '관리자', note: '시안(실제에 맞춤) · 서류 체크리스트 화면 맨 아래 관리자 카드. 서류 종류마다 이름·설명·순서 입력과 [저장]·[끄기](삭제 없음), 맨 아래 새 서류 추가. 순서는 숫자를 직접 적는다. 고칠 점: 실제 화면의 입력칸은 UI.field로 감싸이지 않아 높이가 21px이라(48px 미만) 이 시안은 감싼 모양으로 그렸다.' });
+  docHead(m, 'missing');
+  var tc = card('서류 종류 관리', [el('div', { class: 'muted', text: '입실 동의서, 개인정보 동의서 등. 끄면 목록에서 사라지지만 제출 기록은 남습니다.' })]);
+  DOC_TYPES.slice(0, 3).forEach(function (t, i) {
+    tc.appendChild(el('div', { class: 'doc-row' }, [UI.field('서류 이름', el('input', { type: 'text', value: t })), UI.field('설명', el('input', { type: 'text', value: i === 0 ? '입실 전 서명 받은 동의서' : '' })), UI.field('순서', el('input', { type: 'text', value: String(i + 1) })),
+      el('div', { class: 'doc-line' }, [el('button', { type: 'button', class: 'btn secondary', text: '저장' }), el('button', { type: 'button', class: 'btn secondary', text: '끄기' })])]));
+  });
+  tc.appendChild(el('div', { class: 'doc-row' }, [el('b', { text: '새 서류' }), UI.field('새 서류 이름', el('input', { type: 'text', placeholder: '예: 입실 동의서' })), UI.field('설명(선택)', el('input', { type: 'text' })), el('div', { class: 'doc-line' }, [el('button', { type: 'button', class: 'btn', text: '서류 추가' })])]));
+  m.appendChild(tc);
+});
+
+def('docs-type-off', 'C27 서류', '서류 종류 끄기 확인 (삭제 아님)', { sheet: true }, function (root) {
+  var m = frame(root, { title: '서류 체크리스트', who: '관리자', note: '시안(실제에 맞춤) · [끄기]를 누르면 확인창.' });
+  docHead(m, 'missing');
+  UI.confirmSheet({ title: '"결핵검사"을(를) 끌까요?', lines: ['목록에서 사라집니다.', '이미 표시한 제출 기록은 지워지지 않습니다.'], confirmText: '끄기', danger: true, onconfirm: function () {} });
+});
+
+/* ───── 아래 셋은 시안에만 있고 실제 화면에 없다(제안, 꼭 필요한지는 총괄 판단). 이름이 docs-proposal- 로 시작한다 ───── */
+def('docs-proposal-by-student', 'C27 제안(실제와 다름)', '제안: 학생별 보기 (한 학생의 서류 전부) — 실제 화면에 없음', {}, function (root) {
+  var m = frame(root, { title: '서류 체크리스트', who: '박선생', tabs: [{ t: '서류별' }, { t: '학생별', on: true }, { t: '미제출 목록', n: 12 }], note: '실제와 다름(제안) · 면담하면서 한 학생의 서류 6종을 한눈에 보는 [학생별] 탭. 실제 화면에는 없다(미제출 목록·서류별 둘뿐).' });
   m.appendChild(studentPick('학생', 'ㅇㄴㄹ'));
   var ul = el('ul', { class: 'list' });
   [['입실 동의서', '제출', '3월 2일'], ['학부모 개인정보 동의', '제출', '3월 2일'], ['자기소개서', '미제출', ''], ['상담 설문', '제출', '3월 5일'], ['결핵검사', '미제출', ''], ['학원 수강증', '해당없음', '']].forEach(function (r) {
     var kind = r[1] === '제출' ? 'confirmed' : (r[1] === '미제출' ? 'requested' : 'mute');
     ul.appendChild(el('li', { style: 'align-items:center' }, [el('div', { style: 'min-width:0;word-break:keep-all' }, [el('b', { text: r[0] }), r[2] ? el('div', { class: 'muted', text: '제출일 ' + r[2] }) : null]), UI.statusPill(kind, r[1])]));
   });
-  m.appendChild(card('2. 이나래 · 미제출 2건', [ul, link('상태 바꾸기', 'secondary', 'margin-top:8px')]));
+  m.appendChild(card('이나래 · 미제출 2건', [ul]));
 });
-
-def('docs-unsubmitted', 'C27 서류', '미제출 목록 (학생별로 모은 것)', {}, function (root) {
-  var m = frame(root, { title: '학기 초 서류', who: '박선생', tabs: [{ t: '서류별' }, { t: '학생별' }, { t: '미제출 목록', on: true, n: 12 }], note: '시안 · 담당 학생 중 미제출이 있는 학생만, 많은 순서로. 서류 이름 칩을 누르면 그 서류만 거른다.' });
-  m.appendChild(el('div', { class: 'muted', style: 'margin-bottom:8px', text: '12명 · 30건' }));
-  m.appendChild(typeChips(''));
-  var ul = el('ul', { class: 'list' });
-  [['2', '이나래', ['자기소개서', '결핵검사', '입실 동의서']], ['3', '박다솜', ['자기소개서', '결핵검사']], ['1', '김가온', ['입실 동의서', '학원 수강증']], ['2', '정하나', ['자기소개서', '결핵검사']], ['1', '이서준', ['입실 동의서']], ['2', '최하늘', ['자기소개서']]].forEach(function (r) {
-    ul.appendChild(el('li', { style: 'align-items:flex-start' }, [el('div', { style: 'min-width:0;word-break:keep-all' }, [el('b', { text: lab(r[0], r[1]) }), el('div', { class: 'muted', text: r[2].join(' · ') })]), UI.statusPill('requested', r[2].length + '건')]));
-  });
-  m.appendChild(card('', [ul, link('더 보기(6명)', 'secondary', 'margin-top:8px')]));
+def('docs-proposal-state-sheet', 'C27 제안(실제와 다름)', '제안: [⋯] 상태 시트 (제출일·메모) — 실제 화면에 없음', { sheet: true }, function (root) {
+  var m = frame(root, { title: '서류 체크리스트', who: '박선생', note: '실제와 다름(제안) · 제출일·메모를 남기는 시트. 실제 화면은 [제출][미제출][해당없음] 버튼만 있고 제출일·메모를 받지 않는다(탭에는 `submitted_date`·`memo` 열이 있다).' });
+  docHead(m, 'type', '', true);
+  UI.bottomSheet({ title: '이나래 · 결핵검사', content: el('div', {}, [UI.segmented({ options: [{ value: '제출', label: '제출' }, { value: '미제출', label: '미제출' }, { value: '해당없음', label: '해당없음' }], value: '제출', onchange: function () {} }),
+    UI.dateField({ label: '제출일', value: '2027-03-08', onchange: function () {} }), UI.field('메모 (선택)', el('input', { type: 'text', value: '' }), {})]),
+    actions: [{ text: '닫기', kind: 'secondary', onclick: function () {} }, { text: '저장', onclick: function () {} }], onclose: function () {} }).open();
 });
-
-def('docs-summary', 'C27 서류', '관리자 서류 진행 (서류별·담당교사별)', {}, function (root) {
-  var m = frame(root, { title: '학기 초 서류', who: '관리자', tabs: [{ t: '진행', on: true }, { t: '서류 종류' }], note: '시안 · 관리자 화면. 학사생 180명 전체의 진행과 담당교사별 미제출(독촉할 곳). 학생 이름은 없다(숫자만).' });
+def('docs-proposal-summary', 'C27 제안(실제와 다름)', '제안: 관리자 서류 진행 (서류별·담당교사별 숫자) — 실제 화면에 없음', {}, function (root) {
+  var m = frame(root, { title: '서류 체크리스트', who: '관리자', note: '실제와 다름(제안) · 관리자가 어느 선생님이 서류를 덜 받았는지 한눈에 보는 표. 실제 화면에는 없다(관리자도 미제출 목록·서류별로 본다). 학생 이름 없이 숫자만.' });
   var t1 = el('table', { class: 'data compact' }, [el('thead', {}, [el('tr', {}, ['서류', '제출', '미제출', '해당없음'].map(function (h) { return el('th', { text: h }); }))]),
-    el('tbody', {}, [['입실 동의서', 171, 9, 0], ['학부모 개인정보 동의', 168, 12, 0], ['자기소개서', 150, 30, 0], ['상담 설문', 175, 5, 0], ['결핵검사', 130, 38, 12], ['학원 수강증', 90, 20, 70]].map(function (r) {
-      return el('tr', {}, r.map(function (v) { return el('td', { text: String(v) }); })); }))]);
-  m.appendChild(el('h2', { text: '서류별 (학사생 180명)', style: 'margin:4px 0 8px' }));
-  m.appendChild(el('div', { class: 'tablewrap' }, [t1]));
+    el('tbody', {}, [['입실 동의서', 171, 9, 0], ['학부모 개인정보 동의', 168, 12, 0], ['자기소개서', 150, 30, 0], ['상담 설문', 175, 5, 0], ['결핵검사', 130, 38, 12], ['학원 수강증', 90, 20, 70]].map(function (r) { return el('tr', {}, r.map(function (v) { return el('td', { text: String(v) }); })); }))]);
+  m.appendChild(el('h2', { text: '서류별 (학사생 180명)', style: 'margin:4px 0 8px' })); m.appendChild(el('div', { class: 'tablewrap' }, [t1]));
   var t2 = el('table', { class: 'data compact' }, [el('thead', {}, [el('tr', {}, ['담당교사', '담당 학생', '미제출 건수'].map(function (h) { return el('th', { text: h }); }))]),
     el('tbody', {}, [['박선생', 26, 30], ['김선생', 31, 22], ['이선생', 30, 18], ['최선생', 29, 16], ['정선생', 32, 15], ['한선생', 32, 13]].map(function (r) { return el('tr', {}, r.map(function (v) { return el('td', { text: String(v) }); })); })
       .concat([el('tr', { class: 'total' }, ['전체', 180, 114].map(function (v) { return el('td', { text: String(v) }); }))]))]);
-  m.appendChild(el('h2', { text: '담당교사별 미제출', style: 'margin:16px 0 8px' }));
-  m.appendChild(el('div', { class: 'tablewrap' }, [t2]));
-  m.appendChild(el('div', { class: 'muted', text: '표는 옆으로 밀 수 있습니다(첫 열은 고정). 합계 줄은 굵은 글씨 + 회색 바탕.' }));
-});
-
-def('docs-types', 'C27 서류', '관리자 서류 종류 관리 (추가·이름·순서·취소, 삭제 없음)', {}, function (root) {
-  var m = frame(root, { title: '학기 초 서류', who: '관리자', tabs: [{ t: '진행' }, { t: '서류 종류', on: true }], bar: [{ text: '+ 서류 종류 추가' }],
-    note: '시안 · 관리자만. 서류 종류는 지우지 않고 [취소]로 끈다(취소해도 이미 받은 제출 기록은 남는다).' });
-  m.appendChild(el('div', { class: 'notice info', text: '서류 종류는 학기마다 새로 만들지 않아도 됩니다. 학기가 바뀌면 학생별 제출 표시만 새로 시작합니다.' }));
-  var ul = el('ul', { class: 'list' });
-  DOC_TYPES.forEach(function (t, i) {
-    ul.appendChild(el('li', { style: 'align-items:center' }, [el('div', { style: 'min-width:0;word-break:keep-all' }, [el('b', { text: (i + 1) + '. ' + t }), el('div', { class: 'muted', text: i === 4 ? '입실 전 결핵 검진 결과' : '' })]),
-      row([el('button', { type: 'button', class: 'btn secondary row-btn', 'aria-label': t + ' 위로', text: '▲' }), el('button', { type: 'button', class: 'btn secondary row-btn', 'aria-label': t + ' 아래로', text: '▼' }), el('button', { type: 'button', class: 'btn secondary row-btn', text: '고치기' })], 'flex-wrap:nowrap')]));
-  });
-  m.appendChild(card('', [ul]));
-  m.appendChild(el('h2', { text: '취소된 종류', style: 'margin:16px 0 8px' }));
-  m.appendChild(card('', [el('ul', { class: 'list' }, [el('li', { style: 'align-items:center' }, [el('div', { style: 'word-break:keep-all' }, [el('b', { text: '건강 설문' }), el('div', { class: 'muted', text: '작년까지 사용' })]), UI.statusPill('canceled', '취소됨')])])]));
-});
-
-def('docs-type-edit', 'C27 서류', '서류 종류 추가·고치기 시트', { sheet: true }, function (root) {
-  var m = frame(root, { title: '학기 초 서류', who: '관리자', tabs: [{ t: '진행' }, { t: '서류 종류', on: true }], bar: [{ text: '+ 서류 종류 추가' }], note: '시안 · [+ 서류 종류 추가] 또는 [고치기]를 누르면 열린다.' });
-  var name = el('input', { type: 'text', value: '' }), desc = el('input', { type: 'text', value: '' });
-  var f = UI.field('이름', name, { hint: '이미 있는 서류 이름과 같을 수 없습니다.' });
-  UI.bottomSheet({ title: '서류 종류 추가', content: el('div', {}, [f, UI.field('설명 (선택)', desc, { hint: '교사가 무엇을 받는 서류인지 알 수 있게 한 줄로.' })]),
-    actions: [{ text: '닫기', kind: 'secondary', onclick: function () {} }, { text: '추가', onclick: function () {} }], onclose: function () {} }).open();
+  m.appendChild(el('h2', { text: '담당교사별 미제출', style: 'margin:16px 0 8px' })); m.appendChild(el('div', { class: 'tablewrap' }, [t2]));
 });
 
 /* ═════════ C28 프로그램 + 참가자 (코딩B가 만든 실제 화면 #173에 맞춘 모양: [목록|새 프로그램] 탭, 카드 안 펼치기, 아래 바는 입력에서만) ═════════ */

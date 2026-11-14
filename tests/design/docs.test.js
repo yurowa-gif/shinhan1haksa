@@ -157,7 +157,7 @@ test('D12 4단계 시안(stage4-screens.js)의 화면 이름이 모두 screens.m
     assert.ok(sec.indexOf('`' + id + '`') >= 0, '5-4 절에 `' + id + '` 가 없다');
     assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'docs', 'design', 'stage4-photos', id + '.png')), id + ' 사진이 없다');
   });
-  ['`doc.edit`', '`doc.view`', '`doc.types`', '`program.edit`', '`program.view`', '삭제 버튼은 없다', '미정', '행이 없으면 미제출', '함께 취소됩니다', '그대로 두고 프로그램 특이사항을 따로 만듭니다'].forEach((t) => assert.ok(sec.indexOf(t) >= 0 || doc.indexOf(t) >= 0, t));
+  ['`doc.edit`', '`doc.view`', '`doc.types`', '`program.edit`', '`program.view`', '삭제 버튼은 없다', '`docs-proposal-summary`', '실제와 다름', '미정', '행이 없으면 미제출', '함께 취소됩니다', '그대로 두고 프로그램 특이사항을 따로 만듭니다'].forEach((t) => assert.ok(sec.indexOf(t) >= 0 || doc.indexOf(t) >= 0, t));
 });
 
 test('2단계 선생님 확인 체크리스트: 단계 번호(A1~E4)가 겹치지 않고 모든 줄이 7칸(번호·누가·누르는 것·통과 모습·사진·결과)이며, print-check 9·10절 번호(44~66)가 이어진다', () => {
