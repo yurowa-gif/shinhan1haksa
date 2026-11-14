@@ -136,12 +136,13 @@ function mealEffectiveDate_(kind, requestedAt, opts)
 function mealChangeKind_(item, fromValue, toValue)
         // → 'none'|'initial'|'start'|'to_general'|'stop'. fromValue = 새 행 적용일에 실제로 적용되는 값(R6)
 function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts)   // F7 신청 하나의 계획(R6 추가)
-        // opts = {cutoff, leaveDate, today(필수), effectiveDate, effectiveRule:'manual'|'entry_date'(R10), entry(재입실일 경계, Y)}
+        // opts = {cutoff, leaveDate, today(필수), effectiveDate, effectiveRule:'manual'|'entry_date'(R10), entry(재입실일 경계, Y),
+        //         vacation(item '중식'이면 필수: 그 방학 terms 행, R19)}
         //   → {kind, date, rule, autoDate(R10), from, blocked, superseded, supersededBy:[id], toCancel:[…], followUps:[…], warnings:[]}
 function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)     // 새 행이 덮어야 할 행(R6 추가)
         // opts = {source:'F7'|'F6', requestedAt, newValue} → [{id, effective_date, value}]
-function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId)
-        // (R12) → {groups:{'여1':{hall, dorm, nonDorm, breakfast, hallDinner, generalDinner}, …, '여 합계','남 합계','1학년'…'전체'},
+function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, vacation)
+        // (R12, vacation·lunch R19) → {groups:{'여1':{hall, dorm, nonDorm, breakfast, lunch, hallDinner, generalDinner}, …, '여 합계','남 합계','1학년'…'전체'},
         //    afterLeaveHallDinner, unknownGroup:[studentId], warnings}
 ```
 
@@ -322,6 +323,11 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId)
 ## 동작 메모(R12, 2026-11-07)
 
 - `mealCountsOn_`: termId 기간에 등록된 학생을 그날 상태 그대로 센다(결석·외박은 빼지 않는다, 같은 학생 두 번 등록은 한 번). 학사 = 학사 `입실`, 기숙 = 학사 입실이면서 기숙사 `입실`, 비기숙 = 학사 입실이면서 기숙 아님. **조식·석식은 학사 상태로 거르지 않는다**(결정 35 — 퇴실 학생도 석식 중단일 전까지 학사 석식, `afterLeaveHallDinner`로 따로 센다). 줄은 '여1'…'남3'(학년 3 밖도 있으면 줄을 만든다), '여 합계'·'남 합계', 'N학년', '전체'이고 합계 줄 = 부분 합. ASSUMPTION: 성별(남·여)·학년(숫자)이 비었거나 다른 학생, 학생 행이 없는 등록은 어느 줄에도 넣지 않고 `unknownGroup` + 경고. 잘못된 날짜는 Error.
+- **방학 중식(R19, 결정 73):** item `중식`, 값 `실시`·`미실시`(조식과 같은 값·같은 적용일 규칙 — 실시 11:30, 미실시 수 11:30). 학사생 값은 `실시`.
+  - `mealPlanChange_(…, '중식', …, {vacation})`: `vacation`(그 방학 terms 행, `start_date`·`end_date`)이 없거나 날짜가 아니면 Error. 방학 시작일 **전** 중식 행은 보지 않는다(지난 방학 값이 이어지지 않게 — 방학마다 새로 신청). 계산한 적용일이 시작일보다 이르면 시작일(rule `vacation_start`, 방학 전에 미리 낸 신청), 고친 날(manual)이 시작일보다 이르면 Error, 적용일이 끝날 뒤면 경고. 막힘은 조식과 같다(그날 퇴실 상태면 `실시` 불가). **퇴실 정리 followUps를 쓰지 않는다.**
+  - `mealCountsOn_(…, prevTermId, vacation)`: `vacation`을 주고 그날이 방학 안이면 `lunch` = 학사 `입실`이면서 시작일 이후 중식 행으로 본 값이 `실시`. 주지 않으면 `lunch`는 0. 저장 쪽은 termId 기간이 방학이면 그 terms 행을 넘긴다.
+  - `movePlan_`·퇴실 취소는 중식을 건드리지 않는다: 퇴실한 날부터 집계에서 빠지고(학사 입실인 날만 셈), 재입실하면 퇴실 전 값으로 이어진다. ASSUMPTION(결정 73 — 선생님 질문 후보): 중식은 퇴실일에 끝난다(조식처럼, 석식의 결정 35 미실시 규칙 아님).
+  - 저장 쪽(코딩): F7 신청 화면의 중식 버튼은 방학 기간에만, 식수 집계·xlsx·PDF에 `lunch` 열(방학일 때만), 명단 업로드의 중식 열은 이번 범위 밖.
 
 ## 동작 메모(R13, 2026-11-12)
 

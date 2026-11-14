@@ -139,6 +139,22 @@
     "cancelDocType": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getContactList": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getStudentContact": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "previewContacts": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "commitContacts": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }
