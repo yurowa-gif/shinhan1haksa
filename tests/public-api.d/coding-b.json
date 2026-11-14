@@ -123,6 +123,30 @@
     "convertTempLeave": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getBatchLeaveContext": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "previewBatchLeave": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveBatchLeave": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "listBatchLeaves": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "previewBatchUndo": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "undoBatchLeave": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }
