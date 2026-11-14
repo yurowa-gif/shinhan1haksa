@@ -133,7 +133,8 @@ function reconcileAutoOuts_(exceptions, violations, opts)
         // opts = {autoTypes, ruleName:'무단 지각·결석·이탈', ruleId, per:'group'|'row', dutyByDate:{}, studentIds:[](선택),
         //         autoTypeSince:{유형:'yyyy-MM-ddTHH:mm:ss' 또는 [넓힌 시각…]}(선택, 설정을 넓혀 새로 자동 대상이 된 유형과 넓힌 시각 — 배열이면 넓힘 이력)}
         // → {toCreate, toCancel:[{violationId, reason}], toUpdate:[{violationId, patch}]}
-function outLevel_(violations, studentId, termId, opts)   // {count, level:0|1|2, label:''|'1OUT'|'퇴실 대상'}, opts = {instantRuleIds:[]}(결정 69, 선택)
+function outLevel_(violations, studentId, termId, opts)   // {count, level:0|1|2, label:''|'1OUT'|'퇴실 대상'}, opts = {instantRuleIds:[]}(결정 69) 또는 {instantPeriods:{}}(결정 78), 선택
+function outInstantNext_(snapshot, currentIds, nowIso)   // (R17 보충, 결정 78) → {snapshot:{ids, periods}, periods:{ruleId:[{from, to}]}, changed}
 function outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes)   // (R9) → {snapshot:{types, since, widened}, since, widened, changed}
 function outDismissalGate_(violations, notes, changes, studentId, termId, ymd, opts)   // opts = outLevel_과 같음
         // (R9) → {count, level, triggerOutId, meetingNote:{id,date,teacher_email}|null, alreadyLeft, ok, reason:''|'퇴실 대상 아님'|'면담 기록 필요'|'이미 퇴실'}
@@ -244,6 +245,9 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, 
 - `outLevel_`: 같은 학생·같은 `term_id`(학기마다 초기화)에서 status 빈칸·`유효`인 OUT 수(직접·자동 모두). 2 이상이면 `level:2`, `'퇴실 대상'`.
 - **즉시 퇴실 항목(결정 69):** `opts.instantRuleIds`(violation_rules `id` 목록)에 `rule_id`가 있는 OUT 한 건은 **2로 센다** — `count`는 OUT 수의 합이라 그 한 건만으로 `level:2`. 취소된 OUT은 세지 않는다(다른 OUT과 같음). `outDismissalGate_`의 `triggerOutId`는 시간순으로 합이 처음 2가 되는 OUT(즉시 항목이면 그 한 건), 면담 날짜도 그 OUT 발생일 이후. opts를 주지 않으면 지금과 같다.
   - **설정 계약(코딩B):** `settings` 탭(시트 구조 변경 없음) 키 `out.instant_rule_ids`, 값 = 즉시 퇴실 항목의 violation_rules `id`를 쉼표로(빈칸·없음 = 즉시 항목 없음). 관리자 설정 화면에서 violation_rules 이름을 골라 id로 저장한다. OUT 단계를 보이는 곳(`Outs.gs` getOutContext·listOuts·saveOut 결과, `AutoOuts.gs` 단계 알림, `Counsel.gs`·`Outs.gs`의 `outDismissalGate_`)은 모두 이 값을 읽어 `{instantRuleIds}`로 넘긴다 — 한 곳만 넘기면 화면마다 단계가 달라진다. `rule_id`가 빈 OUT(자동 OUT의 rule_id는 R-AUTO 행)은 1로 센다.
+  - **결정 78(R17 보충) — 지정한 뒤에 기록된 위반부터 2:** `opts.instantPeriods = {ruleId:[{from, to}]}`를 주면 `instantRuleIds`는 보지 않고, OUT 행 `created_at`이 그 항목의 지정 구간(`from ≤ created_at < to`, `to ''`면 지금까지) 안일 때만 2로 센다. 지정 전에 기록된 위반은 1 그대로, 지정을 풀면 그 뒤 기록은 1. ASSUMPTION: '기록된 시각' = `created_at`(발생 일시가 지정 전이어도 지정 뒤에 기록했으면 2), `created_at`이 비면 1.
+  - `outInstantNext_(snapshot, currentIds, nowIso)`: `outAutoSinceNext_`와 같은 방식의 지정 이력. 새로 지정된 id는 `{from: now, to: ''}`, 풀린 id는 열린 구간의 `to = now`, 다시 지정하면 새 구간. 스냅숏이 없으면(처음·분실) 지금 지정된 id는 지금부터(소급하지 않음). 손으로 고친 모양은 틀린 구간을 버리고, 지정됐는데 열린 구간이 없으면 지금부터 열고, 풀렸는데 열린 구간은 닫는다(`changed:true` — 저장). 잘못된 nowIso는 Error.
+  - **저장 쪽 계약(코딩B, #171 소급 연결을 바꿈):** 스크립트 속성 **`OUT_INSTANT_SINCE`**(JSON = `snapshot`, `AUTO_OUT_SINCE`처럼 백업 대상 `BAK_STATE_VALUES`에 넣는다)를 둔다. ① `setOutInstantRule`은 settings 값을 바꾼 **같은 락 안에서** `outInstantNext_(스냅숏, 새 id 목록, 지금)`을 부르고 `changed`면 속성에 쓴다. ② OUT 수를 세는 모든 곳(`vioOutOpts_`)은 `{instantPeriods: periods}`를 넘긴다 — 읽을 때도 `outInstantNext_(스냅숏, settings 값, 지금)`으로 맞춰(settings를 손으로 고친 경우) `changed`면 속성을 고친다(락 안에서). 모양이 틀린 속성(JSON 아님 등)은 없는 것(null)으로 본다. ③ `setOutInstantRule`의 `affected`는 지정 순간에는 늘 0이다(이미 기록된 OUT은 바뀌지 않음) — 확인 시트 문구를 '이번부터 기록되는 OUT부터 2OUT'으로 바꾼다.
   - ASSUMPTION(선생님 질문 후보): 설정은 **지금 값**으로 센다 — 이번 기간에 이미 있는 그 항목 OUT도 설정에 넣는 순간 2로 센다(소급). 자동 OUT 설정처럼 '넣은 뒤부터만'으로 하려면 저장 때 무게를 남길 칸이 필요하다(시트 구조 변경).
 - 이 파일은 DateRules(`ymdIsValid_`·`ruleStr_`·`ruleIso_`·`ruleRowLive_`)·AttendanceRules(`attTypeBase_`·`parseBlockSpec_`)를 부른다. 테스트는 세 파일을 함께 올린다.
 
