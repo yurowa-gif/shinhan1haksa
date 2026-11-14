@@ -341,13 +341,12 @@
         if (btn) { if (btn.disabled) return; btn.disabled = true; }
         call('setOutInstantRule', x.id, !x.instant).then(function (r) {
           if (!r.ok) { if (btn) btn.disabled = false; UI.toast(r.errors[0].message, { kind: 'warn', ms: 5000 }); return; }
-          loadRules(r.instant ? '즉시 퇴실 항목으로 정했습니다.' + (r.affected ? ' 이번 기간 학생 ' + r.affected + '명이 퇴실 대상이 됩니다.' : '')
-            : '즉시 퇴실을 해제했습니다.' + (r.affected ? ' 이번 기간 학생 ' + r.affected + '명이 퇴실 대상에서 빠집니다.' : ''));
+          loadRules(r.instant ? '즉시 퇴실 항목으로 정했습니다. 지금부터 기록되는 위반부터 2OUT으로 셉니다.' : '즉시 퇴실을 해제했습니다. 이미 지정 중에 기록된 OUT은 그대로 2OUT으로 남고, 지금부터 기록되는 위반은 1OUT으로 셉니다.');
         }).catch(function (err) { if (btn) btn.disabled = false; UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); });
       }
       if (x.instant) { send(); return; }
       UI.confirmSheet({ title: '즉시 퇴실 항목으로 정합니다', lead: x.name,
-        lines: ['이 항목으로 OUT을 한 번 기록하면 바로 2OUT(퇴실 대상)이 됩니다.', '이번 기간에 이미 기록된 이 항목의 OUT에도 그대로 적용됩니다.', '퇴실 확정은 지금처럼 학부모 면담 기록 뒤 관리자가 합니다.'],
+        lines: ['지금부터 기록되는 이 항목의 위반부터 OUT 한 번이 바로 2OUT(퇴실 대상)이 됩니다.', '이미 기록된 위반은 그대로 셉니다(소급하지 않습니다).', '퇴실 확정은 지금처럼 학부모 면담 기록 뒤 관리자가 합니다.'],
         confirmText: '즉시 퇴실로 정하기', onconfirm: send });
     }
     function openRule(x) {

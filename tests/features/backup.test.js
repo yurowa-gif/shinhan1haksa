@@ -39,12 +39,14 @@ test('runBackupNow: 데이터 파일 3개 복사 + 상태 JSON, 폴더 ID 저장
 test('상태 JSON: 허용 목록 값만, 파일·폴더 ID와 시험 이메일은 이름만', () => {
   const env = makeEnv();
   env.scriptProps.AUTO_OUT_SINCE = JSON.stringify({ types: ['x'], since: { x: '2027-03-01T00:00:00' } });
+  env.scriptProps.OUT_INSTANT_SINCE = JSON.stringify({ ids: ['r1'], periods: { r1: [{ from: '2027-03-02T10:00:00', to: '' }] } });   // 즉시 퇴실 지정 이력(결정 78)
   env.scriptProps.TEST_TEACHER_EMAIL = 'secret.person@fakeschool.invalid';
   run(env);
   const f = env.drive.filesIn(folderId(env)).find((x) => /앱상태\.json$/.test(x.name));
   const j = JSON.parse(f.content);
   assert.strictEqual(j.values.MAIL_ENABLED, 'true');
   assert.ok(j.values.AUTO_OUT_SINCE.indexOf('2027-03-01') > 0);
+  assert.ok(j.values.OUT_INSTANT_SINCE.indexOf('2027-03-02T10:00:00') > 0, '즉시 퇴실 지정 이력도 백업된다');
   ['DB_ID', 'COUNSEL_ID', 'CONFIG_ID', 'BACKUP_FOLDER_ID', 'TEST_TEACHER_EMAIL'].forEach((k) => assert.ok(j.이름만.includes(k), k));
   const text = f.content;
   ['DB_ID', 'COUNSEL_ID', 'CONFIG_ID'].forEach((k) => assert.ok(text.indexOf(env.scriptProps[k]) < 0, k + ' 값이 새어 나감'));

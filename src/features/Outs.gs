@@ -12,8 +12,32 @@ function vioInstantIds_() {
   return row ? String(row.value || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean) : [];
 }
 
-/** OUT 수를 세는 모든 곳이 같이 쓰는 규칙 옵션. 한 곳만 빠지면 화면마다 단계가 달라진다. */
-function vioOutOpts_() { return { instantRuleIds: vioInstantIds_() }; }
+var VIO_INSTANT_SINCE_PROP = 'OUT_INSTANT_SINCE';   // 지정 이력 스냅숏(스크립트 속성, 백업 BAK_STATE_VALUES에 포함) — 결정 78
+
+/** 지정 이력의 다음 값(R17 보충 outInstantNext_)을 속성의 스냅숏과 지금 settings로 계산한다(저장하지 않는다). */
+function vioInstantNext_() {
+  var raw = PropertiesService.getScriptProperties().getProperty(VIO_INSTANT_SINCE_PROP), snap = null;
+  try { snap = raw ? JSON.parse(raw) : null; } catch (e) { snap = null; }
+  return outInstantNext_(snap, vioInstantIds_(), nowIso_());
+}
+
+/**
+ * 지정 이력을 settings와 맞춘다(결정 78): 바뀐 것이 있으면 락 안에서 다시 계산해 스냅숏을 저장한다. 바뀐 것이 없으면 락 없이 끝난다
+ * (읽기 화면이 늘 락을 잡지 않게). 설정을 시트에서 손으로 고쳐도 처음 읽는 순간부터 새로 지정된 것으로 센다(소급하지 않는다).
+ */
+function vioInstantSync_() {
+  var r = vioInstantNext_();
+  if (!r.changed) return r;
+  return withLock_(function () {
+    invalidate_('config', 'settings');
+    var again = vioInstantNext_();
+    if (again.changed) PropertiesService.getScriptProperties().setProperty(VIO_INSTANT_SINCE_PROP, JSON.stringify(again.snapshot));
+    return again;
+  });
+}
+
+/** OUT 수를 세는 모든 곳이 같이 쓰는 규칙 옵션({instantPeriods}, 결정 78). 한 곳만 빠지면 화면마다 단계가 달라진다. */
+function vioOutOpts_() { return { instantPeriods: vioInstantSync_().periods }; }
 
 /**
  * 교사 홈의 OUT 카드 데이터(getHomeData가 부른다). 아직 없으면 null.
@@ -182,7 +206,8 @@ function vioValidate_(input, user) {
   var rows = vioViolations_(term);
   var opts = vioOutOpts_();
   var before = outLevel_(rows, student.id, term.id, opts);
-  var n = before.count + outWeight_({ rule_id: rule.id }, opts), level = n >= 2 ? 2 : n;
+  var n = before.count + outWeight_({ rule_id: rule.id, created_at: nowIso_() }, opts),   // 새 OUT은 지금 기록되므로 지금 시각으로 무게를 잰다(결정 78)
+    level = n >= 2 ? 2 : n;
   Object.assign(out, { ok: true, term: term, student: student, enrollment: enrollment, rule: rule, detectedName: detectedName, detectedEmail: detectedEmail, memo: memo, rows: rows,
     before: before, after: { count: n, level: level, label: ['', '1OUT', '퇴실 대상'][level] },
     warnings: vioDupWarnings_(rows, student.id, when.ymd, rule.id) });
@@ -529,9 +554,10 @@ function getOutRules() {
 }
 
 /**
- * 즉시 퇴실 항목 켜기·끄기(관리자, 결정 69). 이 항목의 OUT 한 건이 한 번에 2OUT(퇴실 대상)이 된다. 값은 settings 키 out.instant_rule_ids(id 쉼표)에 둔다.
- * 자동 항목은 정할 수 없다(자동 1OUT이라 1로 센다). 지금 기간에 이미 기록된 OUT에도 그대로 적용된다(소급 — 규칙 기본값, 선생님 답을 기다리는 중).
- * → {ok:true, instant, affected(이 항목 때문에 새로 퇴실 대상이 되는/되지 않게 되는 이번 기간 학생 수)} | {ok:false, errors}
+ * 즉시 퇴실 항목 켜기·끄기(관리자, 결정 69·78). 이 항목의 OUT 한 건이 한 번에 2OUT(퇴실 대상)이 된다. 값은 settings 키 out.instant_rule_ids(id 쉼표)에 두고,
+ * 지정한 시각은 스크립트 속성 OUT_INSTANT_SINCE(outInstantNext_)에 같은 락 안에서 남긴다 — **지정한 뒤에 기록된 OUT부터** 2로 센다(소급 안 함).
+ * 자동 항목은 정할 수 없다(자동 1OUT이라 1로 센다).
+ * → {ok:true, instant, changed} | {ok:false, errors}
  */
 function setOutInstantRule(ruleId, instant) {
   var user = requirePermission_('out.rules');
@@ -548,23 +574,14 @@ function setOutInstantRule(ruleId, instant) {
     var after = before.filter(function (x) { return known[x] && x !== id; });   // 지워진 항목 id는 이때 정리한다
     if (instant) after.push(id);
     var changed = after.join(',') !== before.join(',');
-    var affected = 0, term = getCurrentTerm_();
-    if (term) {
-      var rows = vioViolations_(term), a = { instantRuleIds: before }, b = { instantRuleIds: after }, seen = {};
-      rows.forEach(function (v) {
-        var sid = String(v.student_id);
-        if (!ruleRowLive_(v) || seen[sid] || String(v.rule_id) !== id) return;
-        seen[sid] = true;
-        if ((outLevel_(rows, sid, term.id, a).level === 2) !== (outLevel_(rows, sid, term.id, b).level === 2)) affected++;
-      });
-    }
     if (changed) {
       var row = readAll_('settings', 'config').filter(function (r) { return String(r.key || '').trim() === VIO_INSTANT_KEY; })[0];
       if (row) updateRecord_('settings', row.id, { value: after.join(',') }, user.email, 'config');
       else appendRecord_('settings', { key: VIO_INSTANT_KEY, value: after.join(','), description: '즉시 퇴실(한 번에 2OUT) 항목의 violation_rules id를 쉼표로' }, user.email, 'config');
       invalidate_('config', 'settings');
     }
-    return { ok: true, instant: after.indexOf(id) >= 0, changed: changed, affected: affected };
+    vioInstantSync_();   // 같은 락 안: 방금 바뀐 지정을 지금 시각으로 기록한다(결정 78 — 이 시각 전에 기록된 OUT은 그대로 1)
+    return { ok: true, instant: after.indexOf(id) >= 0, changed: changed };
   });
 }
 
