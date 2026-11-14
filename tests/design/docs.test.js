@@ -131,7 +131,7 @@ test('D9 학교 양식 문서: 확인서 모델·근무 기록표 xlsx 칸 배�
   const d = (f) => css.readFile('docs/design/' + f);
   const check = d('print-check.md');
   const nums = check.split('\n').filter((l) => /^\| \d+ \|/.test(l)).map((l) => l.split('|')[1].trim());
-  for (let n = 44; n <= 82; n++) assert.ok(nums.indexOf(String(n)) >= 0, '확인표에 ' + n + '번이 없다');
+  for (let n = 44; n <= 84; n++) assert.ok(nums.indexOf(String(n)) >= 0, '확인표에 ' + n + '번이 없다');
   assert.ok(check.indexOf('## 11. 확인서 두 종') >= 0 && check.indexOf('임시 양식') < 0, '임시 양식 문구가 남아 있다');
   const duty = d('duty-record.md');
   ['시트 1 "근무표"', '시트 2 "근무 합계"', '원래 근무자=>실제 근무자', 'Utilities.zip', '수식 없음', '결정 47', '결정 46', 'A4 가로', '학생 이름은 어디에도 넣지 않는다'].forEach((t) => assert.ok(duty.indexOf(t) >= 0, t));
