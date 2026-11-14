@@ -160,3 +160,63 @@ test('즉시 퇴실 지정 시점(결정 78): 지정 전 OUT은 1 그대로 → 
   const f = env.drive.filesIn(env.scriptProps.BACKUP_FOLDER_ID).find((x) => /앱상태\.json$/.test(x.name));
   assert.strictEqual(JSON.parse(f.content).values.OUT_INSTANT_SINCE, since, '백업 상태 = 지금 지정 이력');
 });
+
+test('학년 일괄 퇴실 흐름(결정 74①·79, 방학 중): 3학년 저장 → 출석부·식수 집계에서 빠짐(조식 퇴실일, 석식·중식 미실시 규칙) → 다음 학기 명단 막힘 → 일괄 되돌리기 → 모두 원래대로', () => {
+  const env = seededEnv('2027-07-21T10:00:00');   // 가짜 여름방학(7/19~8/13) 수요일 10:00
+  env.asOwner((c) => c.seedFakeStage4());
+  const h = helpers(env);
+  const vac = env.rows('terms').find((t) => t.type === '방학');
+  const EFF = '2027-07-23', AT = '2027-07-21T10:00:00';
+  const input = { grade: '3', effectiveDate: EFF, requestedAt: AT, dinner: '중단', docSubmitted: true, reason: '' };
+  const g3 = env.rows('enrollments').filter((e) => e.term_id === vac.id).map((e) => e.student_id)
+    .filter((sid) => String(h.stu[sid].grade) === '3' && h.on(sid, '학사', EFF) === '입실');
+  const items = ['학사', '기숙사', '조식', '석식', '중식'];
+  const snapshot = (ymd) => g3.map((sid) => items.map((it) => h.on(sid, it, ymd)));
+  const before = { eff: snapshot(EFF), mon: snapshot('2027-07-26') };
+  const counts = (d) => { const r = h.call(ADMIN, 'getMealCounts', d).rows; return [r.find((x) => x.key === '3학년'), r.find((x) => x.key === '전체')]; };
+  const [g3Before, allBefore] = counts(EFF);
+  const [g3MonBefore] = counts('2027-07-26');
+  assert.ok(g3.length >= 5 && g3Before.lunch > 0, '3학년 ' + g3.length + '명, 중식 ' + g3Before.lunch);
+  const later = laterTerms(h);
+  const uniq = g3.filter((sid) => env.rows('students').filter((s) => s.name === h.stu[sid].name).length === 1);
+
+  // 저장
+  const p = ok(h.call(ADMIN, 'previewBatchLeave', input), '일괄 미리보기');
+  assert.strictEqual(p.count, g3.length);
+  const s = ok(h.call(ADMIN, 'saveBatchLeave', input, p.expect), '일괄 저장');
+  // 퇴실일(7/23 금): 학사 퇴실, 조식 미실시, 석식은 미실시 규칙의 날(수 11:30 전 → 다음 주 월요일 7/26)까지 그대로.
+  // 중식은 행을 쓰지 않고(rules-api R19) 식수 집계가 같은 중단일 전날까지만 센다(결정 79) — 아래 집계로 본다
+  const stop = env.as(ADMIN, (c) => c.mealEffectiveDate_('stop', AT, { leaveDate: EFF }).date);
+  assert.strictEqual(stop, '2027-07-26');
+  g3.forEach((sid, i) => {
+    assert.strictEqual(h.on(sid, '학사', EFF), '퇴실');
+    if (before.eff[i][2] === '실시') assert.strictEqual(h.on(sid, '조식', EFF), '미실시', '조식은 퇴실일');
+    ['석식'].forEach((it, k) => {
+      const was = before.eff[i][3 + k];
+      if (was && was !== '미실시') {
+        assert.strictEqual(h.on(sid, it, '2027-07-25'), was, it + ' 미실시 규칙의 날 전까지는 그대로');
+        assert.strictEqual(h.on(sid, it, stop), '미실시', it + ' ' + stop + '부터 미실시(결정 35·79)');
+      }
+    });
+  });
+  const [g3After, allAfter] = counts(EFF);
+  assert.deepStrictEqual([g3After.hall, g3After.breakfast], [0, 0], '식수 집계: 퇴실일부터 학사·조식 0');
+  assert.strictEqual(g3After.lunch, g3Before.lunch, '중식은 중단일(7/26) 전까지 그대로 센다(결정 79)');
+  assert.strictEqual(allAfter.hall, allBefore.hall - g3.length);
+  const [g3Mon] = counts('2027-07-26');
+  assert.deepStrictEqual([g3MonBefore.lunch > 0, g3Mon.lunch], [true, 0], '중단일(7/26)부터 중식 0');
+  uniq.forEach((sid) => assert.strictEqual(h.sheetHas(EFF, sid), false, h.stu[sid].name + ' 출석부에서 빠짐'));
+  assert.deepStrictEqual(bannedIn(h, later.fall, '2027-09-01', g3).sort(), g3.map((sid) => h.stu[sid].student_no).sort(), '일괄 퇴실도 자진 퇴실: 2학기 명단에서 막힘(결정 77①)');
+
+  // 일괄 되돌리기 → 모두 원래대로
+  const row = h.call(ADMIN, 'listBatchLeaves').items.find((x) => x.batchId === s.batchId);
+  assert.deepStrictEqual([row.gradeText, row.live, row.canUndo], ['3학년', g3.length, true]);
+  const pu = ok(h.call(ADMIN, 'previewBatchUndo', s.batchId), '되돌리기 미리보기');
+  ok(h.call(ADMIN, 'undoBatchLeave', s.batchId, '가짜: 날짜 착오', pu.expect), '되돌리기');
+  assert.deepStrictEqual({ eff: snapshot(EFF), mon: snapshot('2027-07-26') }, before, '학사·기숙사·조식·석식·중식 모두 원래대로');
+  assert.deepStrictEqual(counts(EFF), [g3Before, allBefore], '식수 집계 원래대로');
+  assert.strictEqual(counts('2027-07-26')[0].lunch, g3MonBefore.lunch, '7/26 중식도 원래대로');
+  uniq.forEach((sid) => assert.strictEqual(h.sheetHas(EFF, sid), true, h.stu[sid].name + ' 출석부에 다시'));
+  assert.deepStrictEqual(bannedIn(h, later.fall, '2027-09-01', g3), [], '되돌린 뒤 막힘 없음');
+  env.expectDenied(HALL, 'batch.leave', 'previewBatchLeave', input);
+});
