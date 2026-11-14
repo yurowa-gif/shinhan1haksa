@@ -183,6 +183,8 @@ test('이미 퇴실 상태·뒤 날짜 기록이 있는 학생은 대상/건너�
   assert.strictEqual(p.ok, true, JSON.stringify(p));
   const row = p.list.find((l) => l.id === pending.id);
   assert.ok(row.skipped, '건너뛴 이유가 목록에 보인다: ' + JSON.stringify(row));
+  assert.ok(/3월 20일/.test(row.skipped) && !/\d{4}-\d{2}-\d{2}/.test(row.skipped) && !/3월 20일\(/.test(row.skipped), '날짜는 "M월 D일"로(숫자 날짜·요일 없이): ' + row.skipped);
+  assert.ok(p.skipped.every((x) => !/\d{4}-\d{2}-\d{2}/.test(x.reason) && !/\d{4}-\d{2}-\d{2}/.test(x.label)));
   assert.strictEqual(p.skipped.length, p.list.filter((l) => l.skipped).length);
   assert.strictEqual(p.count, t.length - p.skipped.length);
   const r = call(x, ADMIN, 'saveBatchLeave', input(), p.expect);

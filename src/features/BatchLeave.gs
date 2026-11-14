@@ -93,11 +93,11 @@ function batView_(c, d) {
     var s = byId[id] || {}, p = planOf[id];
     return { id: id, label: batLabel_(s), classNo: String(s.class_no), number: s.number, type: p ? p.type : '', dorm: !!p && p.type === '학사 및 기숙사 퇴실', excluded: c.targets.indexOf(id) < 0, skipped: '' };
   });
-  c.plan.skipped.forEach(function (x) { var row = list.filter(function (l) { return l.id === x.studentId; })[0]; if (row) row.skipped = inoutKo_(x.reason); });
+  c.plan.skipped.forEach(function (x) { var row = list.filter(function (l) { return l.id === x.studentId; })[0]; if (row) row.skipped = inoutKoShort_(x.reason); });
   var warnings = [];
-  c.plan.plans.forEach(function (p) { p.warnings.forEach(function (w) { w = inoutKo_(w); if (warnings.indexOf(w) < 0) warnings.push(w); }); });
+  c.plan.plans.forEach(function (p) { p.warnings.forEach(function (w) { w = inoutKoShort_(w); if (warnings.indexOf(w) < 0) warnings.push(w); }); });
   var first = c.plan.plans[0], summary = first ? first.summary : null;
-  return { list: list, skipped: c.plan.skipped.map(function (x) { return { studentId: x.studentId, label: batLabel_(byId[x.studentId] || {}), reason: inoutKo_(x.reason) }; }),
+  return { list: list, skipped: c.plan.skipped.map(function (x) { return { studentId: x.studentId, label: batLabel_(byId[x.studentId] || {}), reason: inoutKoShort_(x.reason) }; }),
     warnings: warnings, count: c.plan.plans.length, dormCount: c.plan.plans.filter(function (p) { return p.type === '학사 및 기숙사 퇴실'; }).length,
     dinnerFrom: summary && summary.dinner ? summary.dinner.from : '', breakfastFrom: summary && summary.breakfast ? summary.breakfast.from : '' };
 }
