@@ -284,6 +284,47 @@ def('home-temp-overdue', 'C19b·C26 보충', '담당교사 홈 — "복귀 예�
     el('div', { class: 'muted', style: 'margin-top:8px;word-break:keep-all', text: '학생을 눌러 기록에서 [일반 퇴실로 바꾸기]를 누를 수 있습니다. 복귀했다면 입퇴실 신청에서 학사 입실을 기록해 주세요.' })]));
 });
 
+
+/* ═════════ C26 학년 일괄 퇴실(결정 74①, R20) — 실제 화면 #196에 맞춤 ═════════ */
+function s4BatchTabs(on) { return card('', [UI.segmented({ label: '화면', value: on, options: [{ value: 'new', label: '일괄 퇴실' }, { value: 'undo', label: '지난 기록' }], onchange: function () {} })]); }
+function s4BatchForm(m) {
+  m.appendChild(s4BatchTabs('new'));
+  m.appendChild(card('무엇을', [el('div', { class: 'muted', style: 'word-break:keep-all;margin-bottom:8px', text: '2027 1학기 · 오늘 학사 입실 학생 수입니다. 퇴실일에 입실 상태인 학생만 대상이 됩니다.' }),
+    UI.field('학년', el('div', { class: 'chips' }, [el('button', { type: 'button', class: 'chip', text: '1학년 62명' }), el('button', { type: 'button', class: 'chip', text: '2학년 60명' }), el('button', { type: 'button', class: 'chip on', text: '3학년 58명' })])),
+    UI.dateField({ label: '퇴실일', value: '2027-11-19', shortcuts: [{ label: '오늘', value: '2027-11-18' }, { label: '내일', value: '2027-11-19' }], onchange: function () {} })]));
+  m.appendChild(card('', [UI.field('석식', UI.segmented({ label: '석식', value: '중단', options: [{ value: '중단', label: '중단' }, { value: '일반 석식', label: '일반 석식으로' }], onchange: function () {} }), { hint: '"중단"은 미실시 규칙(수요일 11:30이 지나 신청하면 다다음 주 월요일)을 따릅니다. 조식은 퇴실일부터 바로 중단됩니다.' }),
+    UI.field('사유(선택)', el('input', { type: 'text', value: '3학년 수능 뒤 일괄 퇴실' }), { hint: '모든 학생의 기록에 같은 사유로 남습니다.' })]));
+}
+def('batch-new', 'C26 일괄 퇴실', '학년 일괄 퇴실 — 학년·퇴실일·석식을 고르면 대상 명단 (기숙사생 표시, 체크를 풀어 빼기)', {}, function (root) {
+  var m = frame(root, { title: '학년 일괄 퇴실', who: '관리자', bar: [{ text: '비우기', kind: 'secondary' }, { text: '일괄 퇴실 저장', kind: 'danger' }],
+    note: '시안 · 실제 화면에 맞춤(관리자만). 학년 칩·석식을 고르면 아래 확인 카드에 대상이 나온다. 퇴실시키지 않을 학생은 체크를 푼다.' });
+  s4BatchForm(m);
+  var list = el('div', { style: 'border:1px solid var(--line);border-radius:8px;padding:4px 8px' });
+  [['3. 박다솜 3-1 4번', true, false, ''], ['3. 이나래 3-1 7번 · 기숙사생', true, true, ''], ['3. 최하늘 3-2 2번 · 기숙사생', false, true, ''], ['3. 정하나 3-3 9번', true, false, '건너뜀: 이미 퇴실한 학생입니다']].forEach(function (r) {
+    var cb = el('input', { type: 'checkbox', style: 'flex:0 0 auto;width:22px;height:22px' }); cb.checked = r[1]; if (r[3]) cb.disabled = true;
+    list.appendChild(el('label', { style: 'display:flex;align-items:flex-start;gap:10px;min-height:44px;padding:6px 0' }, [cb, el('span', { style: 'word-break:keep-all' }, [el('span', { text: r[0] }), r[3] ? el('div', { class: 'muted', text: r[3] }) : null])]));
+  });
+  m.appendChild(card('확인', [el('div', { style: 'font-size:var(--font-xl);font-weight:700;margin-bottom:8px', text: '3학년 56명 일괄 퇴실' }),
+    el('ul', { class: 'list' }, ['56명이 11월 19일(금)부터 학사 퇴실이 됩니다.', '기숙사생 40명은 학사 및 기숙사 퇴실로 기록됩니다.', '일괄 퇴실도 자진 퇴실이라 다시 들어오는 것이 막힙니다(결정 77).'].map(function (t) { return el('li', { text: t }); })),
+    el('div', { class: 'notice warn', style: 'word-break:keep-all', text: '퇴실시키지 않고 건너뛰는 학생 1명(이유는 아래 목록)' }),
+    el('div', { class: 'muted', style: 'margin:8px 0 4px', text: '퇴실시키지 않을 학생은 체크를 풀어 주세요. 체크한 56명이 퇴실합니다.' }), list]));
+});
+def('batch-confirm', 'C26 일괄 퇴실', '[일괄 퇴실 저장] 확인 시트 (대상 수·빠지는 학생·재입실 막힘·되돌릴 수 있음)', { sheet: true }, function (root) {
+  var m = frame(root, { title: '학년 일괄 퇴실', who: '관리자', bar: [{ text: '비우기', kind: 'secondary' }, { text: '일괄 퇴실 저장', kind: 'danger' }] });
+  s4BatchForm(m);
+  UI.confirmSheet({ title: '학년 일괄 퇴실을 저장합니다', lead: '3학년 56명 일괄 퇴실 · 11월 19일(금)부터', lines: ['대상 56명(기숙사생 40명은 학사 및 기숙사 퇴실)', '빠지는 학생: 정하나(이미 퇴실한 학생입니다)', '직접 뺀 학생: 최하늘', '일괄 퇴실도 다시 들어오는 것이 막힙니다(결정 77).', '저장하면 [지난 일괄 퇴실]에서 한 번에 되돌릴 수 있습니다.'], confirmText: '일괄 퇴실 저장', danger: true, onconfirm: function () {} });
+});
+def('batch-undo', 'C26 일괄 퇴실', '[지난 기록] 탭 — 일괄 단위 카드와 [일괄 되돌리기] 시트 (사유 2자 이상)', { sheet: true }, function (root) {
+  var m = frame(root, { title: '학년 일괄 퇴실', who: '관리자' });
+  m.appendChild(s4BatchTabs('undo'));
+  m.appendChild(card('', [el('div', { style: 'display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap' }, [el('h2', { style: 'margin:0', text: '3학년 일괄 퇴실' })]),
+    el('div', { class: 'muted', text: '11월 19일(금)부터 · 퇴실 56명' }), el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:8px', text: '일괄 되돌리기' })]));
+  var area = el('textarea', { maxlength: '200' });
+  UI.bottomSheet({ title: '일괄 되돌리기', content: el('div', {}, [el('p', { class: 'sheet-lead', text: '일괄 퇴실 56명을 되돌립니다' }), el('div', { class: 'muted', text: '3학년 · 11월 19일(금)부터' }),
+    el('ul', { class: 'list' }, ['학사 입실 상태로 돌아가고 급식·자리도 퇴실 전으로 돌아갑니다.', '기록은 지우지 않고 퇴실 신청서를 취소 처리합니다.'].map(function (t) { return el('li', { text: t }); })),
+    UI.field('되돌리는 사유', area, { hint: '2자 이상 적어 주세요. 사유는 기록에 남습니다.' })]), actions: [{ text: '돌아가기', kind: 'secondary', onclick: function () {} }, { text: '일괄 되돌리기', kind: 'danger', disabled: true, onclick: function () {} }] }).open();
+});
+
 /* ═════════ 실행 ═════════ */
 function renderScreen(id) {
   var s = SCREENS[id];
