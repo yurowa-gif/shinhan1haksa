@@ -53,13 +53,14 @@ test('지난 방학 중식 행은 보지 않는다: 여름 실시가 남아 있�
   assert.deepStrictEqual(pick(plan(ch, '미실시', '2027-07-20T09:00:00')), ['stop', '2027-07-26', 'next_monday']);
 });
 
-test('퇴실: 퇴실 상태인 날의 실시는 막힘(조식처럼 — 먼저 신청했어도), 퇴실 정리 followUps는 쓰지 않음(조식은 씀)', () => {
+test('퇴실(결정 79): 퇴실 기록 뒤 신청한 실시는 막힘, 먼저 신청했으면 중단일(미실시 규칙) 전까지는 막지 않음(석식처럼), 퇴실 정리 followUps는 쓰지 않음(조식은 씀)', () => {
   const left = HALL.concat([CH('학사', '퇴실', '2027-07-20', { source: 'F6', requested_at: '2027-07-20T09:00:00' })]);
   const b = plan(left, '실시', '2027-07-21T09:00:00');
   assert.deepStrictEqual([b.kind, b.date], ['none', '']);
   assert.match(b.blocked, /학사 퇴실 상태라 중식 실시/);
-  const early = plan(left, '실시', '2027-07-19T09:00:00', { today: '2027-07-21', effectiveDate: '2027-07-20' });   // 퇴실 기록보다 먼저 신청
-  assert.ok(early.blocked, '중식은 퇴실일에 끝난다(석식의 결정 35가 아님)');
+  const early = plan(left, '실시', '2027-07-19T09:00:00', { today: '2027-07-21', effectiveDate: '2027-07-20' });   // 퇴실 기록(7/20 화 09:00)보다 먼저 신청
+  assert.deepStrictEqual([early.blocked, early.date, early.followUps], ['', '2027-07-20', []], '중단일(7/26) 전이라 막지 않고, 끊는 행도 쓰지 않는다(집계가 정함)');
+  assert.ok(plan(left, '실시', '2027-07-19T09:00:00', { today: '2027-07-21', effectiveDate: '2027-07-26' }).blocked, '중단일 이후 적용은 막힘');
   const future = HALL.concat([CH('학사', '퇴실', '2027-07-30', { source: 'F6', requested_at: '2027-07-20T09:00:00' })]);
   const p = plan(future, '실시', '2027-07-21T09:00:00');
   assert.deepStrictEqual([p.kind, p.date, p.followUps], ['start', '2027-07-21', []]);
@@ -83,15 +84,23 @@ const lunchOn = (changes, ymd, vac) => {
   return [r.groups['전체'].lunch, r.groups['여2'].lunch, r.groups['남1'].lunch];
 };
 
-test('집계 lunch: 방학 안·학사 입실·이번 방학 행 값이 실시인 학생만 — 퇴실한 날부터 빠지고 재입실하면 다시 셈', () => {
+test('집계 lunch: 방학 안·이번 방학 행 값이 실시·학사 입실이거나 퇴실 뒤 중단일 전(결정 79) — 재입실하면 다시 셈', () => {
   const B = (item, value, eff, extra) => Object.assign(CH(item, value, eff, extra), { student_id: 'b' });
+  // b: 7/27(화) 09:00에 7/30 퇴실 기록 → 미실시 규칙 중단일 8/2(월). 8/6 재입실
   const ch = HALL.concat([CH('중식', '실시', '2027-07-19'), CH('중식', '미실시', '2027-08-09'),
     B('학사', '입실', '2027-03-01'), B('중식', '실시', '2027-07-21'),
-    B('학사', '퇴실', '2027-07-30', { source: 'F6' }), B('학사', '입실', '2027-08-04', { source: 'F6' })]);
+    B('학사', '퇴실', '2027-07-30', { source: 'F6', requested_at: '2027-07-27T09:00:00' }), B('학사', '입실', '2027-08-06', { source: 'F6', requested_at: '2027-08-05T09:00:00' })]);
   assert.deepStrictEqual(lunchOn(ch, '2027-07-19'), [1, 1, 0]);
   assert.deepStrictEqual(lunchOn(ch, '2027-07-21'), [2, 1, 1]);
-  assert.deepStrictEqual(lunchOn(ch, '2027-07-30'), [1, 1, 0]);   // b 퇴실일
-  assert.deepStrictEqual(lunchOn(ch, '2027-08-04'), [2, 1, 1]);   // b 재입실 → 퇴실 전 값
+  assert.deepStrictEqual(lunchOn(ch, '2027-07-30'), [2, 1, 1]);   // b 퇴실일 — 중단일 전이라 센다
+  assert.deepStrictEqual(lunchOn(ch, '2027-08-01'), [2, 1, 1]);
+  assert.deepStrictEqual(lunchOn(ch, '2027-08-02'), [1, 1, 0]);   // 중단일부터 빠짐
+  assert.deepStrictEqual(lunchOn(ch, '2027-08-06'), [2, 1, 1]);   // b 재입실 → 퇴실 전 값
+  // 수요일 오후에 기록한 퇴실은 다다음 주 월요일까지, 신청 일시가 틀리면 퇴실일에 끝남
+  const late = ch.map((c) => c.student_id === 'b' && c.value === '퇴실' ? Object.assign({}, c, { requested_at: '2027-07-28T13:00:00' }) : c);
+  assert.deepStrictEqual(lunchOn(late, '2027-08-05'), [2, 1, 1]);
+  const bad = ch.map((c) => c.student_id === 'b' && c.value === '퇴실' ? Object.assign({}, c, { requested_at: '' }) : c);
+  assert.deepStrictEqual(lunchOn(bad, '2027-07-30'), [1, 1, 0]);
   assert.deepStrictEqual(lunchOn(ch, '2027-08-09'), [1, 0, 1]);   // a 미실시
   assert.deepStrictEqual(lunchOn(ch, '2027-07-18', V), [0, 0, 0]);   // 방학 전날
   assert.deepStrictEqual(lunchOn(ch, '2027-08-21', V), [0, 0, 0]);   // 방학 다음 날(값은 실시로 남아 있어도)

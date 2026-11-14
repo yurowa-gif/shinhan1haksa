@@ -401,6 +401,68 @@ function move2OutBan_(changes, studentId, terms, ymd) {
   return moveReentryBan_(changes, studentId, terms, ymd);
 }
 
+/**
+ * 학년 일괄 퇴실 대상(결정 74①, R20). students = students 행(id, grade), enrollments = 등록 행(term_id, student_id), changes = status_changes
+ * 전부, termId·grade·ymd(퇴실일) → 그 기간에 등록돼 있고 학년이 grade이며 ymd에 학사 '입실'인 학생 id(students 순서, 중복 없음).
+ * 잘못된 ymd는 Error.
+ */
+function moveBatchTargets_(students, enrollments, changes, termId, grade, ymd) {
+  var day = ruleStr_(ymd), tid = ruleStr_(termId), gr = ruleStr_(grade);
+  if (!ymdIsValid_(day)) throw new Error('날짜 형식이 아닙니다(yyyy-MM-dd): ' + ymd);
+  var enrolled = {};
+  (enrollments || []).forEach(function (e) { if (e && ruleStr_(e.term_id) === tid) enrolled[ruleStr_(e.student_id)] = true; });
+  var out = [];
+  (students || []).forEach(function (st) {
+    var sid = ruleStr_(st && st.id);
+    if (sid && enrolled[sid] && ruleStr_(st.grade) === gr && out.indexOf(sid) < 0 && statusOn_(changes, sid, '학사', day) === '입실') out.push(sid);
+  });
+  return out;
+}
+
+/**
+ * 학년 일괄 퇴실 계획(결정 74①, R20). 학생마다 movePlan_ 한 번 — 유형은 퇴실일에 기숙사 '입실'이면 '학사 및 기숙사 퇴실', 아니면
+ * '학사 퇴실'(자동). move = {effectiveDate, requestedAt, dinner}(모두에게 같음), opts = movePlan_ opts + batchId(필수, 저장 쪽이 만든 UUID).
+ * → {plans:[{studentId, type, rows, toCancel, toRestore, warnings, summary}], skipped:[{studentId, reason}]}
+ * - 대표 행(학사 퇴실) memo = '[일괄] <batchId>'(moveBatchUndoPlan_이 이것으로 한 번에 되돌린다). 사유(reason)는 일반 퇴실과 같다.
+ * - 오류가 난 학생(이미 퇴실·뒤 날짜 기록 등)은 skipped에 첫 오류와 함께 빼고 나머지는 계획한다. 같은 학생 id가 두 번이면 한 번만.
+ * - 급식·좌석·방은 일반 퇴실과 같다(급식 정리 행은 movePlan_ 그대로, 좌석·방은 퇴실 학생 자리를 빈자리로 보는 지금 동작). 일괄 퇴실은
+ *   자진 퇴실이라 재입실이 막힌다(결정 77①). 순수 함수 — 같은 입력이면 같은 결과(미리보기 = 저장, 저장 쪽은 expect 서명으로 바뀐 것을 막는다).
+ */
+function moveBatchPlan_(changes, studentIds, move, opts) {
+  opts = opts || {};
+  move = move || {};
+  var batch = ruleStr_(opts.batchId);
+  if (!batch || /\s/.test(batch)) throw new Error('batchId가 필요합니다(공백 없는 값)');
+  var out = { plans: [], skipped: [] }, seen = {};
+  (studentIds || []).forEach(function (id) {
+    var sid = ruleStr_(id);
+    if (!sid || seen[sid]) return;
+    seen[sid] = true;
+    var type = statusOn_(changes, sid, '기숙사', ruleStr_(move.effectiveDate)) === '입실' ? '학사 및 기숙사 퇴실' : '학사 퇴실';
+    var p = movePlan_(changes, sid, { type: type, effectiveDate: move.effectiveDate, requestedAt: move.requestedAt, dinner: move.dinner }, opts);
+    if (p.errors.length) { out.skipped.push({ studentId: sid, reason: p.errors[0] }); return; }
+    p.rows[0].memo = '[일괄] ' + batch;
+    out.plans.push({ studentId: sid, type: type, rows: p.rows, toCancel: p.toCancel, toRestore: p.toRestore, warnings: p.warnings, summary: p.summary });
+  });
+  return out;
+}
+
+/**
+ * 일괄 퇴실 되돌리기(결정 59·74①, R20): memo가 '[일괄] <batchId>'인 살아 있는 학사 퇴실 대표마다 moveUndoPlan_.
+ * → {plans:[{studentId, headId, toCancel, toRestore, warnings}]}(학생 순서는 changes 순서). 없으면 plans [].
+ */
+function moveBatchUndoPlan_(changes, batchId, opts) {
+  var tag = '[일괄] ' + ruleStr_(batchId);
+  var heads = (changes || []).filter(function (c) {
+    return c && ruleRowLive_(c) && ruleStr_(c.item) === '학사' && ruleStr_(c.value) === '퇴실' && ruleStr_(batchId) &&
+      (ruleStr_(c.memo) === tag || ruleStr_(c.memo).indexOf(tag + ' ') === 0);
+  });
+  return { plans: heads.map(function (h) {
+    var u = moveUndoPlan_(changes, h.id, opts);
+    return { studentId: ruleStr_(h.student_id), headId: ruleStr_(h.id), toCancel: u.toCancel, toRestore: u.toRestore, warnings: u.warnings };
+  }) };
+}
+
 /** 'yyyy-MM-dd' → 'M월 D일'(기준일과 해가 다르면 'yyyy년 M월 D일'). */
 function moveMonthDay_(ymd, base) {
   var p = ymd.split('-');

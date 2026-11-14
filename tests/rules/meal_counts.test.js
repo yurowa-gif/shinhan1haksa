@@ -68,13 +68,14 @@ function rng(seed) {
 }
 const VALUES = { '학사': ['입실', '퇴실'], '기숙사': ['입실', '퇴실'], '조식': ['실시', '미실시'], '중식': ['실시', '미실시'], '석식': ['학사 석식', '일반 석식', '미실시'] };
 // 그날 값: 유효 행 중 적용일 ≤ 그날, 적용일이 가장 늦고, 같으면 신청 일시가 늦은 행(vocabulary.md)
-function valueOn(rows, sid, item, d) {
+function valueOn(rows, sid, item, d) { const r = rowOn(rows, sid, item, d); return r ? r.value : ''; }
+function rowOn(rows, sid, item, d) {
   let best = null;
   for (const r of rows) {
     if (r.student_id !== sid || r.item !== item || r.status !== '유효' || r.effective_date > d) continue;
     if (!best || r.effective_date > best.effective_date || (r.effective_date === best.effective_date && r.requested_at >= best.requested_at)) best = r;
   }
-  return best ? best.value : '';
+  return best;
 }
 
 test('오라클 무작위 시험 100가지: 줄마다 숫자가 단순 계산과 같고, 합계 줄 = 부분 합', () => {
@@ -94,6 +95,11 @@ test('오라클 무작위 시험 100가지: 줄마다 숫자가 단순 계산과
     const d = '2027-03-0' + (1 + Math.floor(R() * 9));
     const vac = seed % 2 ? { start_date: '2027-03-04', end_date: '2027-03-07' } : null;   // 홀수 seed는 방학(R19 중식)
     const r = plain(ctx.mealCountsOn_(st, en, ch, 'T1', d, '', vac));
+    const lunchAfterLeave = (sid) => {   // 결정 79: 퇴실 뒤 중단일(미실시 규칙) 전
+      const lv = rowOn(ch, sid, '학사', d);
+      if (!lv || lv.value !== '퇴실') return false;
+      try { return d < plain(ctx.mealEffectiveDate_('stop', lv.requested_at, { leaveDate: lv.effective_date })).date; } catch (e) { return false; }
+    };
     const lunchOn = (sid) => !!vac && d >= vac.start_date && d <= vac.end_date && valueOn(ch.filter((c) => c.item !== '중식' || c.effective_date >= vac.start_date), sid, '중식', d) === '실시';
     const want = {};
     const add = (k, v) => { want[k] = want[k] || { hall: 0, dorm: 0, nonDorm: 0, breakfast: 0, lunch: 0, hallDinner: 0, generalDinner: 0 }; for (const m in v) want[k][m] += v[m]; };
@@ -106,7 +112,7 @@ test('오라클 무작위 시험 100가지: 줄마다 숫자가 단순 계산과
       if (!s.gender) continue;
       const hall = valueOn(ch, s.id, '학사', d) === '입실', dorm = hall && valueOn(ch, s.id, '기숙사', d) === '입실', dn = valueOn(ch, s.id, '석식', d);
       if (dn === '학사 석식' && !hall) after++;
-      const v = { hall: +hall, dorm: +dorm, nonDorm: +(hall && !dorm), breakfast: +(valueOn(ch, s.id, '조식', d) === '실시'), lunch: +(hall && lunchOn(s.id)), hallDinner: +(dn === '학사 석식'), generalDinner: +(dn === '일반 석식') };
+      const v = { hall: +hall, dorm: +dorm, nonDorm: +(hall && !dorm), breakfast: +(valueOn(ch, s.id, '조식', d) === '실시'), lunch: +(lunchOn(s.id) && (hall || lunchAfterLeave(s.id))), hallDinner: +(dn === '학사 석식'), generalDinner: +(dn === '일반 석식') };
       [s.gender + s.grade, s.gender + ' 합계', s.grade + '학년', '전체'].forEach((k) => add(k, v));
     }
     for (const k of Object.keys(r.groups)) {
