@@ -1,6 +1,6 @@
 # S4-0 새 탭·열 설계 (결정 75·76) — 총괄 검토용
 
-> 코딩A, 2026-11-14. 코드는 이 설계가 승인된 뒤에 씁니다. 시트 구조 변경은 선생님이 승인하셨습니다(결정 75·76).
+> 코딩A, 2026-11-14. **승인됨(총괄): 기간별 student_docs, 보호자 이름도 숨김, program.edit에 hall_teacher 추가.** 같은 PR에서 구현했다. 시트 구조 변경은 선생님이 승인하셨습니다(결정 75·76).
 
 ## 1. 새 탭
 
@@ -32,7 +32,8 @@
 | `doc.view` | admin, hall_teacher, attendance | 학생 한 명 조회는 `scope:'student'`(담당·근무·관리자), 목록은 함수 안에서 범위 계산 | 서류 체크리스트 보기. 담임·학생·학부모에게는 내보내지 않는다 |
 | `doc.edit` | admin, hall_teacher | `scope:'student'`(담당·그날 근무교사·관리자, 결정 60의 기간) | 제출·미제출·해당없음 표시 |
 | `doc.types` | admin | — | 서류 종류 추가·이름·정렬·취소 |
-| `program.edit` | admin, attendance | — | 프로그램·참가자 입력·취소(출결 담당이 사전 특이사항을 맡으므로) |
+| `program.view` | admin, attendance, hall_teacher | — | 프로그램 목록 보기(출결 담당은 목록에서 본다) |
+| `program.edit` | admin, hall_teacher | — | 프로그램·참가자 입력·취소(특강·체험학습은 학사 교사가 운영). 만든 사람과 상관없이 생기는 특이사항은 '확정', 만든 이는 감사 기록에 |
 | `contact.view` | admin, hall_teacher | `scope:'student'`(= 그 학생의 담당교사·관리자·**그날 근무교사**, `canAccessStudentByFacts_`의 `isAssigned`·`isOnDuty && isEnrolled`), `dutyWindow` 없음(오늘 근무자만) | 전화번호·보호자 이름 보기. `attendance`·`homeroom`·`duty_manager`는 넣지 않는다 |
 | `contact.edit` | admin | — | 명단 올리기로만 받는다(`roster.edit`가 이미 관리자만이라 별도 화면 없음) |
 
@@ -60,7 +61,6 @@
 - 전화번호 입력 화면(명단 올리기 열은 C29), 서류 체크리스트 화면(C27), 프로그램 화면·특이사항 생성(C28). S4-0은 탭·열·권한 키·읽기/감사 마스크와 그 시험까지.
 - 학생·학부모 화면의 본인 전화(6.1 뒤).
 
-## 6. 총괄께 묻는 점
-1. `student_docs`를 기간별 탭으로 하는 것(학기 초 서류라 학기마다 새로 시작)에 동의하시는지, 아니면 기간 무관 한 탭에 `term_id` 열로 둘지.
-2. `contact.view`에서 보호자 **이름**도 전화와 같이 숨기는 것(위 2절)으로 괜찮은지.
-3. `program.edit` 역할에 `hall_teacher`(담당 학생 프로그램)를 더할지(지금은 관리자·출결 담당).
+## 6. 구현 메모
+- `contact.edit`는 만들지 않았다(명단 올리기는 `roster.edit`, 관리자만).
+- `updateRecord_`는 줄 전체를 다시 쓰므로 연락처 열이 지워지지 않게 그 줄의 원래 값(`readContacts_`)을 쓴다. 시험이 잡는다.

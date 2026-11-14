@@ -35,6 +35,7 @@ var ROLE_PRIORITY = ['admin', 'attendance', 'hall_teacher', 'duty_manager', 'hom
  * 1단계: status_changes, day_schedules, blocks, fixed_schedules, spaces, seats, seat_assignments + 기간별 탭(SCHEMA_TERM_TABS).
  * 2단계(결정 41): duty_slots, violation_rules, 기간별 violations, counsel_notes·status_changes 열 추가.
  * 3단계(결정 64): avoid_pairs, rooms, room_assignments.
+ * 4단계(결정 75·76): doc_types, programs, program_participants, 기간별 student_docs, students.phone, guardian_links.name·phone.
  */
 var SCHEMA = {
   db: {
@@ -42,9 +43,9 @@ var SCHEMA = {
     // homeroom_class는 담임 학급 "학년-반" 형식(예: 1-3).
     users: ['email', 'name', 'roles', 'homeroom_class', 'active', 'memo'],
     terms: ['name', 'type', 'start_date', 'end_date', 'memo'],
-    students: ['student_no', 'name', 'gender', 'grade', 'class_no', 'number', 'track', 'email', 'memo'],
+    students: ['student_no', 'name', 'gender', 'grade', 'class_no', 'number', 'track', 'email', 'phone', 'memo'],   // phone: 결정 76(개인 연락처, readAll_에서 빠진다)
     enrollments: ['term_id', 'student_id', 'teacher_email', 'veritas', 'commute_type', 'end_type', 'memo'],
-    guardian_links: ['parent_email', 'student_id', 'relation', 'memo'],
+    guardian_links: ['parent_email', 'student_id', 'relation', 'name', 'phone', 'memo'],   // name·phone: 결정 76(보호자 이름·전화, readAll_에서 빠진다)
     // 변경자·시각은 공통 열 created_by·created_at을 쓴다.
     audit_log: ['sheet', 'row_id', 'action', 'before', 'after', 'detail'],
 
@@ -78,7 +79,15 @@ var SCHEMA = {
     // 호실. gender 남·여, capacity 정원, status 유효·취소. 기본 35실은 setup()·seedDefaultRooms()가 채운다(관리자가 고친다, 결정 24)
     rooms: ['floor', 'room_no', 'gender', 'capacity', 'sort_order', 'status', 'memo'],
     // 기간별 방 배정(seat_assignments와 같은 모양). valid_from·valid_to가 비면 기간 전체. status: 배정·취소
-    room_assignments: ['term_id', 'room_id', 'student_id', 'valid_from', 'valid_to', 'status', 'memo']
+    room_assignments: ['term_id', 'room_id', 'student_id', 'valid_from', 'valid_to', 'status', 'memo'],
+
+    /* ───── 4단계(결정 75·76, S4-0 설계 #160 승인) ───── */
+    // 서류 종류(관리자). status: 유효·취소(지우지 않는다). 학생별 제출 표시는 기간별 탭 student_docs
+    doc_types: ['name', 'description', 'sort_order', 'status'],
+    // 학사 프로그램(1행 = 1날짜). blocks: 'ALL' 또는 'HH:mm-HH:mm;…'(exceptions.blocks와 같은 표기). status: 유효·취소
+    programs: ['name', 'date', 'blocks', 'memo', 'status'],
+    // 프로그램 참가자(1행 = 1명). exception_id = 그 참가로 만든 사전 특이사항 id(프로그램 취소 시 함께 취소). status: 유효·취소
+    program_participants: ['program_id', 'student_id', 'exception_id', 'status']
   },
   counsel: {
     // target·linked_violation_id·cancel_reason은 2단계(결정 41). 6단계 열은 그때 setup이 제자리에 끼운다
@@ -136,7 +145,9 @@ var SCHEMA_TERM_TABS = {
     'requested_by', 'requested_at', 'confirmed_by', 'confirmed_at', 'cancel_reason'],
   // F4 OUT(결정 41). 학기마다 초기화되므로 기간별. 열은 R5(OutRules.gs)·vocabulary.md violations와 같다
   violations: ['term_id', 'student_id', 'occurred_at', 'rule_id', 'rule_name', 'memo', 'detected_by', 'entered_by',
-    'status', 'source', 'source_exception_id', 'cancel_reason']
+    'status', 'source', 'source_exception_id', 'cancel_reason'],
+  // 학기 초 서류 체크리스트(결정 75). 학생·서류 종류마다 최대 1행, 행이 없으면 미제출. state: 제출·미제출·해당없음
+  student_docs: ['term_id', 'student_id', 'doc_type_id', 'state', 'submitted_date', 'memo']
 };
 
 /** 기간별 탭 이름. 예: termSheetName_('exceptions', 'a1b2c3d4-…') → 'exceptions_a1b2c3d4' */
