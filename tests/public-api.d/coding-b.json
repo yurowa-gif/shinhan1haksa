@@ -87,6 +87,42 @@
     "setOutInstantRule": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getProgramContext": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "listPrograms": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "previewProgram": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveProgram": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "cancelProgram": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "addProgramStudents": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "removeProgramStudent": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "previewConvertTempLeave": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "convertTempLeave": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }

@@ -57,7 +57,7 @@ function permissions_() {
     'doc.types': { roles: ['admin'] },
     // 프로그램: 특강·체험학습은 학사 교사가 운영한다. 만든 사람과 상관없이 생기는 특이사항은 '확정'(학교가 정한 일정), 만든 이는 감사 기록에. 출결 담당은 목록에서 본다
     'program.view': { roles: ['admin', 'attendance', 'hall_teacher'] },
-    'program.edit': { roles: ['admin', 'hall_teacher'] },
+    'program.edit': { roles: ['admin', 'attendance', 'hall_teacher'] },
     // 연락처(전화·보호자 이름): 그 학생의 담당교사·관리자·그날 근무교사만(hall_teacher + scope student). 출결·담임·근무표 담당자는 안 된다
     // 연락처를 볼 수 있는 학생 목록(번호 없음): 학사 교사는 담당 학생, 관리자·오늘 근무교사는 이번 기간 학사생 전체
     'contact.list': { roles: ['admin', 'hall_teacher'] },

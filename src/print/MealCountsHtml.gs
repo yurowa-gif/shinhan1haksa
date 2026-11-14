@@ -4,6 +4,7 @@
  *   printRenderMealCounts_(model, opts) → HTML 문서 문자열(A4 세로 한 쪽, 여백 14mm → 인쇄 폭 515.9pt라 내용 폭은 515pt).
  *
  * model 모양은 docs/design/meal-counts-model.md: R12 mealCountsOn_ 결과(counts)를 그대로 받고, 머리말·참고 정보를 더한다.
+ * 방학 기간 날짜(model.showLunch === true)에는 조식 다음에 중식 열(groups[].lunch)이 더해진다(결정 73). 학기 중에는 열이 없다.
  * 행 = counts.groups의 줄(여1·여2·여3·남1·남2·남3·여 합계·남 합계·N학년·전체, 결정 67), 열 = 학사 / 기숙 / 비기숙 / 조식 / 석식(학사·일반·계).
  * 신청 기준 인원이다(결석·외박을 반영하지 않음, PRD §12). 퇴실 후 석식 유지 인원·서류 미제출 수·알 수 없는 학생 경고를 아래에 적는다.
  * 렌더러는 숫자를 바꾸지 않는다. 다만 합계가 부분 합과 맞는지 검사해서 안 맞으면 경고 줄에 어느 줄인지 적는다(조용히 틀린 표를 내지 않는다).
@@ -11,6 +12,16 @@
  */
 
 var PRINT_MC_COLS = [['hall', '학사'], ['dorm', '기숙'], ['nonDorm', '비기숙'], ['breakfast', '조식'], ['hallDinner', '석식 학사'], ['generalDinner', '석식 일반']];
+
+/** 열 목록. model.showLunch === true(그날이 방학 기간, 결정 73·R19)이면 조식 다음에 중식 열을 끼운다. 학기 중에는 중식 열이 없다 */
+function printMealCols_(model) {
+  var v = model.showLunch;
+  if (v !== undefined && v !== null && v !== true && v !== false) throw new Error('showLunch는 true·false여야 합니다: ' + v);
+  if (v !== true) return PRINT_MC_COLS;
+  var out = [];
+  PRINT_MC_COLS.forEach(function (c) { out.push(c); if (c[0] === 'breakfast') out.push(['lunch', '중식']); });
+  return out;
+}
 
 /** 줄 이름 순서(결정 67, 현황표 '전체' 탭 집계 표와 같다): 여1·여2·여3·남1·남2·남3 → 여 합계·남 합계 → 1·2·3학년 → 전체, 모르는 이름은 끝(버리지 않는다) */
 function printMealRowOrder_(keys) {
@@ -37,7 +48,8 @@ function printMealNum_(v) {
 }
 
 /** 합계 검사: 학사 = 기숙 + 비기숙, 성별 합계·학년 합계·전체 = 부분 합. → 어긋난 줄 설명 목록 */
-function printMealCheck_(groups) {
+function printMealCheck_(groups, cols) {
+  cols = cols || PRINT_MC_COLS;   // MealCountsXlsx.gs도 이 함수를 부른다(열 목록 없이 — 학기 열). 방학 중식 열 검사는 cols로 넘긴다
   var bad = [];
   var keys = Object.keys(groups);
   function g(k, m) { return groups[k] ? (printMealNum_(groups[k][m]) || 0) : 0; }
@@ -47,7 +59,7 @@ function printMealCheck_(groups) {
   function sumRows(rows, m) { return rows.reduce(function (n, r) { return n + g(r, m); }, 0); }
   function check(total, parts) {
     if (!groups[total]) return;
-    PRINT_MC_COLS.forEach(function (c) { if (g(total, c[0]) !== sumRows(parts, c[0])) bad.push(total + ': ' + c[1] + ' ≠ 부분 합'); });
+    cols.forEach(function (c) { if (g(total, c[0]) !== sumRows(parts, c[0])) bad.push(total + ': ' + c[1] + ' ≠ 부분 합'); });
   }
   ['여', '남'].forEach(function (s) { check(s + ' 합계', keys.filter(function (k) { return new RegExp('^' + s + '\\d+$').test(k); })); });
   keys.filter(function (k) { return /^\d+학년$/.test(k); }).forEach(function (k) {
@@ -65,17 +77,18 @@ function printRenderMealCounts_(model, opts) {
   var counts = model.counts || {};
   var groups = counts.groups || {};
   var keys = printMealRowOrder_(Object.keys(groups));
+  var cols = printMealCols_(model);
   var title = printEsc_(model.title || '신한학사 식수 집계');
   var line = '0.6pt solid #555';
   var td = 'padding:5pt 6pt;text-align:right;border:' + line + ';font-size:11pt;';
   var thS = 'padding:5pt 6pt;border:' + line + ';background:#e6e6e6;font-size:9pt;';
-  var head = '<tr><th style="' + thS + 'text-align:left">구분</th>' + PRINT_MC_COLS.map(function (c) { return '<th style="' + thS + 'text-align:right">' + printEsc_(c[1]) + '</th>'; }).join('') +
+  var head = '<tr><th style="' + thS + 'text-align:left">구분</th>' + cols.map(function (c) { return '<th style="' + thS + 'text-align:right">' + printEsc_(c[1]) + '</th>'; }).join('') +
     '<th style="' + thS + 'text-align:right">석식 계</th></tr>';
   var rows = keys.map(function (k) {
     var v = groups[k] || {};
     var total = /합계$/.test(k) || k === '전체' || /^\d+학년$/.test(k);
     var st = total ? 'font-weight:bold;background:#e8e8e8;' : '';
-    var cells = PRINT_MC_COLS.map(function (c) {
+    var cells = cols.map(function (c) {
       var n = printMealNum_(v[c[0]]);
       return '<td style="' + td + st + '">' + (n === null ? '?' : n) + '</td>';
     });
@@ -89,6 +102,7 @@ function printRenderMealCounts_(model, opts) {
 
   var notes = ['신청 기준 인원입니다(결석·외박은 반영하지 않습니다).',
     '학사 = 기숙 + 비기숙. 석식 계 = 석식 학사 + 석식 일반. 퇴실한 학생도 석식 중단일 전까지는 학사 석식에 포함됩니다.'];
+  if (model.showLunch === true) notes.push('중식은 방학 기간에만 집계합니다(조식·석식과 같은 신청 기준).');
   var after = printMealNum_(counts.afterLeaveHallDinner);
   notes.push('퇴실 후 석식 유지 ' + (after === null ? '?' : after) + '명(학사 퇴실했지만 석식 중단일 전이라 학사 석식에 포함).');
   if (model.docRows !== undefined && model.docRows !== null) notes.push('아직 서류가 없는 신청 ' + (printMealNum_(model.docRows) === null ? '?' : printMealNum_(model.docRows)) + '건(전체 기준, 집계에는 이미 포함, 이름은 담당교사 화면에서 봅니다).');   // 화면과 같은 '건' 기준
@@ -99,7 +113,7 @@ function printRenderMealCounts_(model, opts) {
     return !unknown.some(function (id) { return id !== '' && w.indexOf(id + ' 학생') === 0; });
   });
   if (unknown.length) warnings.push('성별·학년을 알 수 없는 학생 ' + unknown.length + '명은 어느 줄에도 넣지 않았습니다.');
-  printMealCheck_(groups).forEach(function (b) { warnings.push('합계가 맞지 않습니다 — ' + b); });
+  printMealCheck_(groups, cols).forEach(function (b) { warnings.push('합계가 맞지 않습니다 — ' + b); });
   var foot = '<div style="font-size:9pt;line-height:13pt;margin-top:10pt">' + notes.map(printEsc_).join('<br>') +
     warnings.map(function (w) { return '<br><b>※ ' + printEsc_(w) + '</b>'; }).join('') + '</div>';
 

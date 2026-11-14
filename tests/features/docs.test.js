@@ -141,3 +141,28 @@ test('기간 탭이 없는 옛 기간: 보기는 열리고(missingTab), 저장�
   const r = call(env, OWNER, 'saveDocState', { studentId: x.mine[0], docTypeId: t, state: '제출', expect: '미제출' });
   assert.deepStrictEqual([r.ok, /setup/.test(r.error)], [false, true]);
 });
+
+test('관리자 진행 표(C27b): 서류별 제출·미제출·해당없음 학생 수와 담당교사별 미제출 = 직접 센 값, 이름·이메일 없음, 관리자에게만', () => {
+  const env = seeded(), x = info(env);
+  const a = addType(env, '입실 동의서'), b = addType(env, '결핵검사');
+  const n = x.all.length;
+  call(env, OWNER, 'saveDocState', { studentId: x.all[0], docTypeId: a, state: '제출', expect: '미제출' });
+  call(env, OWNER, 'saveDocState', { studentId: x.all[1], docTypeId: a, state: '제출', expect: '미제출' });
+  call(env, OWNER, 'saveDocState', { studentId: x.all[0], docTypeId: b, state: '해당없음', expect: '미제출' });
+  const p = call(env, OWNER, 'getDocData').progress;
+  assert.deepStrictEqual(p.byType.map((r) => [r.name, r.submitted, r.missing, r.na]), [['입실 동의서', 2, n - 2, 0], ['결핵검사', 0, n - 1, 1]]);
+  // 담당교사별: 직접 센 값
+  const enr = env.rows('enrollments').filter((e) => e.term_id === x.term.id);
+  const nameOf = (email) => (env.rows('users').find((u) => u.email.toLowerCase() === email.toLowerCase()) || {}).name;
+  const stuDocs = (sid) => ({ [a]: sid === x.all[0] || sid === x.all[1] ? '제출' : '미제출', [b]: sid === x.all[0] ? '해당없음' : '미제출' });
+  const want = {};
+  enr.forEach((e) => { const t = nameOf(e.teacher_email) || '(담당 없음)'; const w = (want[t] = want[t] || { students: 0, missing: 0 }); w.students++; w.missing += Object.values(stuDocs(e.student_id)).filter((v) => v === '미제출').length; });
+  assert.deepStrictEqual(Object.fromEntries(p.byTeacher.map((r) => [r.teacher, { students: r.students, missing: r.missing }])), want);
+  assert.deepStrictEqual(p.total, { students: n, missing: n * 2 - 3 });
+  assert.ok(p.byTeacher.every((r, i, arr) => !i || arr[i - 1].missing >= r.missing), '미제출이 많은 선생님부터');
+  assert.ok(!/@/.test(JSON.stringify(p)) && !env.rows('students').some((s) => JSON.stringify(p).includes(s.name)), '이름·이메일 없음');
+  for (const who of [HALL, ATT, OTHER]) assert.strictEqual(call(env, who, 'getDocData').progress, null, who);
+  // 학생 표기용 필드
+  const s0 = call(env, OWNER, 'getDocData').students[0];
+  assert.ok(s0.grade && s0.classNo && s0.number, JSON.stringify(s0));
+});

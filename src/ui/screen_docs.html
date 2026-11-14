@@ -12,18 +12,24 @@
     var data = null, seq = 0, busy = false, mode = 'missing', typeId = '';
     var head = el('div', { class: 'card' });
     var body = el('div', { class: 'card' });
+    var progBox = el('div', { class: 'card' });
     var typesBox = el('div', { class: 'card' });
-    root.appendChild(head); root.appendChild(body); root.appendChild(typesBox);
+    root.appendChild(head); root.appendChild(progBox); root.appendChild(body); root.appendChild(typesBox);
 
     function load() {
       var mine = ++seq;
       call('getDocData').then(function (r) { if (mine !== seq) return; data = r; if (!typeId || !r.types.some(function (t) { return t.id === typeId; })) typeId = r.types.length ? r.types[0].id : ''; draw(); })
         .catch(function (err) { if (mine !== seq) return; clear(head); clear(body); clear(typesBox); showError(head, err); });
     }
+    /** 다른 화면과 같은 학생 표기: "2. 이나래"(학년. 이름) + 흐리게 "2-3 5번" */
+    function studentLine(st) {
+      return [el('b', { text: UI.util.studentLabel(st) }), el('span', { class: 'muted', text: ' ' + st.grade + '-' + st.classNo + ' ' + st.number + '번' }),
+        st.teacher ? el('span', { class: 'muted', text: ' · 담당 ' + st.teacher }) : null];
+    }
     function typeName(id) { var t = data.types.filter(function (x) { return x.id === id; })[0]; return t ? t.name : ''; }
 
     function draw() {
-      drawHead(); drawBody(); drawTypes();
+      drawHead(); drawProgress(); drawBody(); drawTypes();
     }
     function drawHead() {
       clear(head);
@@ -70,19 +76,37 @@
       if (mode === 'type') {
         if (!data.students.length) { body.appendChild(UI.emptyState('볼 수 있는 학생이 없습니다.')); return; }
         data.students.forEach(function (s) {
-          body.appendChild(el('div', { class: 'doc-row' }, [el('b', { text: s.display }), s.teacher ? el('span', { class: 'muted', text: ' · 담당 ' + s.teacher }) : null, stateButtons(s, typeId)]));
+          body.appendChild(el('div', { class: 'doc-row' }, studentLine(s).concat([stateButtons(s, typeId)])));
         });
         return;
       }
       var list = data.students.filter(function (s) { return data.types.some(function (t) { return s.docs[t.id] === '미제출'; }); });
       if (!list.length) { body.appendChild(UI.emptyState(data.students.length ? '미제출 서류가 없습니다.' : '볼 수 있는 학생이 없습니다.')); return; }
       list.forEach(function (s) {
-        var row = el('div', { class: 'doc-row' }, [el('b', { text: s.display }), s.teacher ? el('span', { class: 'muted', text: ' · 담당 ' + s.teacher }) : null]);
+        var row = el('div', { class: 'doc-row' }, studentLine(s));
         data.types.filter(function (t) { return s.docs[t.id] === '미제출'; }).forEach(function (t) {
           row.appendChild(el('div', { class: 'doc-line' }, [el('span', { text: t.name }), stateButtons(s, t.id)]));
         });
         body.appendChild(row);
       });
+    }
+
+    /* ───── 관리자 진행 표(C27b): 서류별·담당교사별 숫자, 학생 이름 없음 ───── */
+    function table(heads, rows, totalRow) {
+      var trs = rows.map(function (r) { return el('tr', {}, r.map(function (v, i) { return i === 0 ? el('th', { scope: 'row', text: String(v) }) : el('td', { text: String(v) }); })); });
+      if (totalRow) trs.push(el('tr', { class: 'total' }, totalRow.map(function (v, i) { return i === 0 ? el('th', { scope: 'row', text: String(v) }) : el('td', { text: String(v) }); })));
+      return el('div', { class: 'tablewrap' }, [el('table', { class: 'data compact' }, [el('thead', {}, [el('tr', {}, heads.map(function (h) { return el('th', { scope: 'col', text: h }); }))]), el('tbody', {}, trs)])]);
+    }
+    function drawProgress() {
+      clear(progBox);
+      if (!data.progress || !data.types.length) { progBox.style.display = 'none'; return; }
+      progBox.style.display = '';
+      var p = data.progress;
+      progBox.appendChild(el('h2', { text: '서류별 (학사생 ' + p.total.students + '명)' }));
+      progBox.appendChild(table(['서류', '제출', '미제출', '해당없음'], p.byType.map(function (r) { return [r.name, r.submitted, r.missing, r.na]; })));
+      progBox.appendChild(el('h2', { style: 'margin-top:16px', text: '담당교사별 미제출' }));
+      progBox.appendChild(table(['담당교사', '담당 학생', '미제출 건수'], p.byTeacher.map(function (r) { return [r.teacher, r.students, r.missing]; }), ['전체', p.total.students, p.total.missing]));
+      progBox.appendChild(el('div', { class: 'muted', text: '어느 선생님께 서류를 챙겨 달라고 말씀드릴지 보는 표입니다. 학생 이름은 나오지 않습니다.' }));
     }
 
     /* ───── 서류 종류 관리(관리자) ───── */
@@ -92,9 +116,9 @@
       typesBox.appendChild(el('h2', { text: '서류 종류 관리' }));
       typesBox.appendChild(el('div', { class: 'muted', text: '입실 동의서, 개인정보 동의서 등. 끄면 목록에서 사라지지만 제출 기록은 남습니다.' }));
       data.types.forEach(function (t) {
-        var name = el('input', { type: 'text', maxlength: '40', 'aria-label': '서류 이름' }); name.value = t.name;
-        var desc = el('input', { type: 'text', maxlength: '100', 'aria-label': '설명' }); desc.value = t.description;
-        var order = el('input', { type: 'text', inputmode: 'numeric', maxlength: '4', 'aria-label': '순서' }); order.value = String(t.sort_order);
+        var name = el('input', { type: 'text', maxlength: '40' }); name.value = t.name;
+        var desc = el('input', { type: 'text', maxlength: '100' }); desc.value = t.description;
+        var order = el('input', { type: 'text', inputmode: 'numeric', maxlength: '4' }); order.value = String(t.sort_order);
         var err = el('div', { class: 'error', style: 'display:none' });
         var save = el('button', { type: 'button', class: 'btn secondary', text: '저장' });
         save.addEventListener('click', function () {
@@ -107,17 +131,17 @@
             call('cancelDocType', t.id, t.token).then(function (r) { busy = false; afterType(r, err, '껐습니다.'); }).catch(function (e) { busy = false; err.textContent = (e && e.message) || String(e); err.style.display = ''; });
           } });
         } });
-        typesBox.appendChild(el('div', { class: 'doc-row' }, [name, desc, order, err, el('div', { class: 'doc-line' }, [save, off])]));
+        typesBox.appendChild(el('div', { class: 'doc-row' }, [UI.field('서류 이름', name, { name: 'name' }), UI.field('설명 (선택)', desc, { name: 'description' }), UI.field('순서', order, { name: 'sort_order', hint: '작은 숫자가 위에 나옵니다.' }), err, el('div', { class: 'doc-line' }, [save, off])]));
       });
-      var nn = el('input', { type: 'text', maxlength: '40', placeholder: '새 서류 이름', 'aria-label': '새 서류 이름' });
-      var nd = el('input', { type: 'text', maxlength: '100', placeholder: '설명(선택)', 'aria-label': '새 서류 설명' });
+      var nn = el('input', { type: 'text', maxlength: '40' });
+      var nd = el('input', { type: 'text', maxlength: '100' });
       var nerr = el('div', { class: 'error', style: 'display:none' });
       var add = el('button', { type: 'button', class: 'btn', text: '서류 추가' });
       add.addEventListener('click', function () {
         if (busy) return; busy = true; nerr.style.display = 'none';
         call('saveDocType', { name: nn.value, description: nd.value }).then(function (r) { busy = false; afterType(r, nerr, '추가했습니다.'); }).catch(function (e) { busy = false; nerr.textContent = (e && e.message) || String(e); nerr.style.display = ''; });
       });
-      typesBox.appendChild(el('div', { class: 'doc-row' }, [el('b', { text: '새 서류' }), nn, nd, nerr, el('div', { class: 'doc-line' }, [add])]));
+      typesBox.appendChild(el('div', { class: 'doc-row' }, [el('b', { text: '새 서류' }), UI.field('서류 이름', nn, { name: 'name' }), UI.field('설명 (선택)', nd, { name: 'description' }), nerr, el('div', { class: 'doc-line' }, [add])]));
     }
     function afterType(r, errBox, okMsg) {
       if (r.stale) { UI.toast(r.error, { kind: 'warn', ms: 6000 }); load(); return; }

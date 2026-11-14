@@ -3,7 +3,7 @@
  *
  *   printMealCountsWorkbook_(model) → printXlsxFiles_가 받는 {sheets:[…]}
  *
- * model = MealCountsHtml(PDF)과 같은 모양: {date, termName, operating, counts(mealCountsOn_ 결과), docRows, docUnsubmitted, preparedBy, generatedAt}.
+ * model = MealCountsHtml(PDF)과 같은 모양: {date, termName, operating, hasLunch(방학이면 중식 열), counts(mealCountsOn_ 결과), docRows, docUnsubmitted, preparedBy, generatedAt}.
  * 시트 '식수 집계': 열 학사·기숙·비기숙·조식·석식(학사·일반·계). 행 순서는 결정 67: 여1·여2·여3·남1·남2·남3 → 여 합계·남 합계 → 1·2·3학년 → 전체.
  * 숫자는 계산하지 않고 counts.groups 그대로 옮긴다(석식 계만 학사+일반). 합계 검사는 PDF 렌더러와 같은 printMealCheck_.
  */
@@ -31,6 +31,8 @@ function printMealCountsWorkbook_(model) {
   var counts = model.counts || {}, groups = counts.groups || {};
   var keys = printMcxOrder_(Object.keys(groups));
   var cols = [['hall', '학사'], ['dorm', '기숙'], ['nonDorm', '비기숙'], ['breakfast', '조식'], ['hallDinner', '석식 학사'], ['generalDinner', '석식 일반']];
+  // 방학 기간이면 조식 뒤에 중식 열(결정 73, model.hasLunch). 석식 계 앞의 열 순서는 그대로
+  if (model.hasLunch) cols.splice(4, 0, ['lunch', '중식']);
   var num = function (v) { var n = printMealNum_(v); return n === null ? '?' : n; };   // 읽을 수 없는 값은 조용히 0으로 두지 않고 ?로 보인다
   var p = model.date.split('-');
   var rows = [
@@ -56,5 +58,6 @@ function printMealCountsWorkbook_(model) {
   printMealCheck_(groups).forEach(function (b) { notes.push('※ 합계가 맞지 않습니다 — ' + b); });
   if (model.preparedBy || model.generatedAt) notes.push('작성: ' + (model.preparedBy || '') + (model.generatedAt ? ' · 만든 시각 ' + model.generatedAt : ''));
   notes.forEach(function (t) { rows.push([{ v: t, s: 'note' }]); });
-  return { sheets: [{ name: '식수 집계', cols: [14, 9, 9, 9, 9, 11, 11, 9], rows: rows, merges: ['A1:H1'], freeze: { rows: 4, cols: 1 }, landscape: false }] };
+  var widths = model.hasLunch ? [14, 9, 9, 9, 9, 9, 11, 11, 9] : [14, 9, 9, 9, 9, 11, 11, 9];
+  return { sheets: [{ name: '식수 집계', cols: widths, rows: rows, merges: [model.hasLunch ? 'A1:I1' : 'A1:H1'], freeze: { rows: 4, cols: 1 }, landscape: false }] };
 }

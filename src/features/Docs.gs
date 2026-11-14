@@ -62,6 +62,30 @@ function docMissingCount_(studentIds, types, idx) {
   return { students: students, items: total };
 }
 
+/**
+ * 순수: 관리자 진행 표(C27b). 이름 없이 숫자만 — 서류별 {제출·미제출·해당없음} 학생 수, 담당교사별 {담당 학생 수, 미제출 건수}, 전체.
+ * students = [{id, teacher, docs:{서류id:상태}}], types = [{id,name}]. 담당교사 이름이 비면 '(담당 없음)'.
+ */
+function docProgress_(students, types) {
+  var byType = types.map(function (t) {
+    var r = { id: t.id, name: t.name, submitted: 0, missing: 0, na: 0 };
+    students.forEach(function (s) {
+      var v = s.docs[t.id];
+      if (v === '제출') r.submitted++; else if (v === '해당없음') r.na++; else r.missing++;
+    });
+    return r;
+  });
+  var by = {}, order = [];
+  students.forEach(function (s) {
+    var name = s.teacher || '(담당 없음)';
+    if (!by[name]) { by[name] = { teacher: name, students: 0, missing: 0 }; order.push(name); }
+    by[name].students++;
+    types.forEach(function (t) { if (s.docs[t.id] === '미제출') by[name].missing++; });
+  });
+  var byTeacher = order.map(function (n) { return by[n]; }).sort(function (a, b) { return b.missing - a.missing || a.teacher.localeCompare(b.teacher); });
+  return { byType: byType, byTeacher: byTeacher, total: { students: students.length, missing: byTeacher.reduce(function (n, r) { return n + r.missing; }, 0) } };
+}
+
 /** 서류 체크리스트 화면 자료 */
 function getDocData() {
   var user = requirePermission_('doc.view');
@@ -79,7 +103,7 @@ function getDocData() {
       var docs = {};
       types.forEach(function (t) { docs[t.id] = docStateOf_(idx, s.id, t.id); });
       var en = enrOf[s.id];
-      return { id: s.id, student_no: s.student_no, name: s.name, display: s.student_no + ' ' + s.name, teacher: en ? teacherName[normalizeEmail_(en.teacher_email)] || '' : '', docs: docs };
+      return { id: s.id, student_no: s.student_no, name: s.name, grade: Number(s.grade) || s.grade, classNo: s.class_no, number: s.number, display: s.student_no + ' ' + s.name, teacher: en ? teacherName[normalizeEmail_(en.teacher_email)] || '' : '', docs: docs };
     });
   var missing = docMissingCount_(students.map(function (s) { return s.id; }), types, idx);
   return {
@@ -87,7 +111,8 @@ function getDocData() {
     canEdit: hasAnyAllowedRole_(user.roles, permissions_()['doc.edit'].roles),
     canTypes: hasAnyAllowedRole_(user.roles, permissions_()['doc.types'].roles),
     types: types.map(function (t) { return { id: t.id, name: t.name, description: t.description || '', sort_order: Number(t.sort_order) || 0, token: String(t.updated_at || '') }; }),
-    students: students, missing: missing
+    students: students, missing: missing,
+    progress: hasAnyAllowedRole_(user.roles, permissions_()['doc.types'].roles) ? docProgress_(students, types) : null   // 관리자 진행 표: 서류 종류를 정하는 사람(관리자)에게만
   };
 }
 
