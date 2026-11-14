@@ -131,7 +131,7 @@ test('D9 학교 양식 문서: 확인서 모델·근무 기록표 xlsx 칸 배�
   const d = (f) => css.readFile('docs/design/' + f);
   const check = d('print-check.md');
   const nums = check.split('\n').filter((l) => /^\| \d+ \|/.test(l)).map((l) => l.split('|')[1].trim());
-  for (let n = 44; n <= 82; n++) assert.ok(nums.indexOf(String(n)) >= 0, '확인표에 ' + n + '번이 없다');
+  for (let n = 44; n <= 84; n++) assert.ok(nums.indexOf(String(n)) >= 0, '확인표에 ' + n + '번이 없다');
   assert.ok(check.indexOf('## 11. 확인서 두 종') >= 0 && check.indexOf('임시 양식') < 0, '임시 양식 문구가 남아 있다');
   const duty = d('duty-record.md');
   ['시트 1 "근무표"', '시트 2 "근무 합계"', '원래 근무자=>실제 근무자', 'Utilities.zip', '수식 없음', '결정 47', '결정 46', 'A4 가로', '학생 이름은 어디에도 넣지 않는다'].forEach((t) => assert.ok(duty.indexOf(t) >= 0, t));
@@ -157,7 +157,7 @@ test('D12 4단계 시안(stage4-screens.js)의 화면 이름이 모두 screens.m
     assert.ok(sec.indexOf('`' + id + '`') >= 0, '5-4 절에 `' + id + '` 가 없다');
     assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'docs', 'design', 'stage4-photos', id + '.png')), id + ' 사진이 없다');
   });
-  ['`doc.edit`', '`doc.view`', '`doc.types`', '`program.edit`', '`program.view`', '삭제 버튼은 없다', '미정', '행이 없으면 미제출', '함께 \\"취소\\"로 바뀝니다'].forEach((t) => assert.ok(sec.indexOf(t) >= 0 || doc.indexOf(t) >= 0, t));
+  ['`doc.edit`', '`doc.view`', '`doc.types`', '`program.edit`', '`program.view`', '삭제 버튼은 없다', '`docs-proposal-summary`', '실제와 다름', '미정', '행이 없으면 미제출', '함께 취소됩니다', '그대로 두고 프로그램 특이사항을 따로 만듭니다'].forEach((t) => assert.ok(sec.indexOf(t) >= 0 || doc.indexOf(t) >= 0, t));
 });
 
 test('2단계 선생님 확인 체크리스트: 단계 번호(A1~E4)가 겹치지 않고 모든 줄이 7칸(번호·누가·누르는 것·통과 모습·사진·결과)이며, print-check 9·10절 번호(44~66)가 이어진다', () => {

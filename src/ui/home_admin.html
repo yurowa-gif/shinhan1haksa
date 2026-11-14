@@ -80,7 +80,8 @@
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '사전 특이사항' }),
       el('div', { class: 'muted', text: '병결·가정사유·학원 등을 입력하고 담임·담당교사의 요청을 확정합니다.' }),
-      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=exceptions', text: '특이사항 열기' })
+      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=exceptions', text: '특이사항 열기' }),
+      el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=programs', text: '학사 프로그램 열기' })
     ]));
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '출석부' }),
@@ -124,6 +125,15 @@
         el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=rooms&tab=stats', text: '정원 현황판 열기' }),
         el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=rooms', text: '방 배정 열기' })
       ]));
+    }
+    if (f.tempLeave && f.tempLeave.n) {   // 복귀 예정일이 지난 건강상 임시 퇴실(결정 77④): 담당교사가 [일반 퇴실로 바꾸기]로 정리한다
+      var tk = [el('h2', { text: '복귀 예정일 지남' }), el('div', { style: 'word-break:keep-all', text: '임시 퇴실 중인 학생 ' + f.tempLeave.n + '명의 복귀 예정일이 지났습니다.' })];
+      f.tempLeave.list.forEach(function (x) {
+        tk.push(el('a', { style: 'display:block;padding:10px 0;border-bottom:1px solid var(--line);color:var(--accent)', href: d.appUrl + '?page=moves&tab=history&student=' + encodeURIComponent(x.studentId), text: x.label + ' · 복귀 예정 ' + x.returnKo + ' (' + x.daysLate + '일 지남)' }));
+      });
+      if (f.tempLeave.n > f.tempLeave.list.length) tk.push(el('div', { class: 'muted', style: 'margin-top:8px', text: '그 밖에 ' + (f.tempLeave.n - f.tempLeave.list.length) + '명이 더 있습니다.' }));
+      tk.push(el('div', { class: 'muted', style: 'margin-top:8px;word-break:keep-all', text: '학생을 눌러 기록에서 [일반 퇴실로 바꾸기]를 누를 수 있습니다. 복귀했다면 입퇴실 신청에서 학사 입실을 기록해 주세요.' }));
+      root.appendChild(el('div', { class: 'card' }, tk));
     }
     var n = f.docMissing || 0;
     var kids = [el('h2', { text: '급식·입퇴실 서류' }),

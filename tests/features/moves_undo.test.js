@@ -29,6 +29,8 @@ const valueOn = (env, sid, item, ymd) => env.as(ADMIN, (c) => c.statusOn_(c.read
 const days = (from, n) => Array.from({ length: n }, (_, i) => { const d = new Date(from + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + i); return d.toISOString().slice(0, 10); });
 const snap = (env, sid) => days('2027-03-01', 61).map((d) => ['학사', '기숙사', '조식', '석식'].map((it) => valueOn(env, sid, it, d)).join('|')).join('\n');
 const cancel = (env, who, id, why) => { const p = env.call(who, 'previewCancelMove', id); return { p, r: env.call(who, 'cancelMove', id, why || '잘못 입력함', p.expect || '') }; };
+// 결정 70·77: 일반 퇴실 뒤에는 그 학기에 다시 들어올 수 없으므로 재입실 흐름은 건강상 임시 퇴실로 본다(저장 화면이 임시 퇴실을 받기 전까지 행을 고쳐 만든다)
+const tempify = (env, r) => { env.asOwner((c) => c.updateRecord_('status_changes', r.id, { reason: '임시 퇴실', memo: '[임시] return:2027-03-20' }, env.owner)); return r; };
 
 test('적용일 전 퇴실 취소: 3/1~4/30 매일 학사·기숙사·조식·석식 값이 퇴실 신청 전과 같고, 행은 지워지지 않고 취소로 남는다', () => {
   const env = makeEnv();
@@ -84,7 +86,7 @@ test('권한: 남의 학생 headId는 denied:status.edit, 학생·학부모·근
 test('입력 거부: 사유가 짧거나 없음 · 없는 id · 입실 행 · 연결 행 · 확인 뒤 바뀜(stale)', () => {
   const env = makeEnv();
   const { non } = pick(env);
-  const r = saveOk(env, HALL, input(non, '학사 퇴실', '2027-03-03T15:00:00', '2027-03-10'));
+  const r = tempify(env, saveOk(env, HALL, input(non, '학사 퇴실', '2027-03-03T15:00:00', '2027-03-10')));
   const p = env.call(HALL, 'previewCancelMove', r.id);
   assert.strictEqual(env.call(HALL, 'cancelMove', r.id, '가', p.expect).ok, false);
   assert.strictEqual(env.call(HALL, 'cancelMove', r.id, '', p.expect).ok, false);
@@ -105,7 +107,7 @@ test('재입실: 학사 입실 = 퇴실 전 급식 값이 재입실일부터 이
   const env = makeEnv();
   const { dorm } = pick(env);
   const bk0 = valueOn(env, dorm, '조식', '2027-03-04'), dn0 = valueOn(env, dorm, '석식', '2027-03-04');
-  saveOk(env, HALL, input(dorm, '학사 및 기숙사 퇴실', '2027-03-03T15:00:00', '2027-03-05'));
+  tempify(env, saveOk(env, HALL, input(dorm, '학사 및 기숙사 퇴실', '2027-03-03T15:00:00', '2027-03-05')));
   assert.strictEqual(valueOn(env, dorm, '석식', '2027-03-20'), '미실시');
   const ctx = env.call(HALL, 'getMoveContext', dorm, '2027-03-08');
   assert.ok(ctx.types.some((t) => t.type === '학사 입실' && t.enabled));
@@ -123,7 +125,7 @@ test('재입실: 학사 입실 = 퇴실 전 급식 값이 재입실일부터 이
   // 다른 값을 고르면 그 값이 재입실일부터
   const env2 = makeEnv();
   const d2 = pick(env2).dorm;
-  saveOk(env2, HALL, input(d2, '학사 및 기숙사 퇴실', '2027-03-03T15:00:00', '2027-03-05'));
+  tempify(env2, saveOk(env2, HALL, input(d2, '학사 및 기숙사 퇴실', '2027-03-03T15:00:00', '2027-03-05')));
   saveOk(env2, HALL, input(d2, '학사 입실', '2027-03-03T15:30:00', '2027-03-08', { meals: { '조식': '미실시', '석식': '일반 석식' } }));
   assert.strictEqual(valueOn(env2, d2, '조식', '2027-03-09'), '미실시');
   assert.strictEqual(valueOn(env2, d2, '석식', '2027-03-20'), '일반 석식');
@@ -133,7 +135,7 @@ test('재입실이 있는 퇴실을 취소하면 재입실·기숙사 입실 기
   const env = makeEnv();
   const { dorm } = pick(env);
   const before = snap(env, dorm);
-  const leave = saveOk(env, ADMIN, input(dorm, '학사 및 기숙사 퇴실', '2027-03-03T15:00:00', '2027-03-05'));
+  const leave = tempify(env, saveOk(env, ADMIN, input(dorm, '학사 및 기숙사 퇴실', '2027-03-03T15:00:00', '2027-03-05')));
   const ctx = env.call(ADMIN, 'getMoveContext', dorm, '2027-03-08');
   saveOk(env, ADMIN, input(dorm, '학사 입실', '2027-03-03T15:30:00', '2027-03-08', { meals: ctx.reentry.meals }));
   const c = cancel(env, ADMIN, leave.id, '퇴실 자체가 잘못');
@@ -199,7 +201,7 @@ test('퇴실 전 조식 값이 없던 학생의 재입실: 기본값은 조식 �
   const sid = own.find((s) => !isDorm(env, s) && valueOn(env, s, '조식', '2027-03-04') === '');
   assert.ok(sid, '시드에 조식 값이 없는 비기숙 학생이 있어야 한다');
   const bk = (id) => rowsOf(env, id).filter((r) => r.item === '조식').length;
-  saveOk(env, HALL, input(sid, '학사 퇴실', '2027-03-03T15:00:00', '2027-03-05'));
+  tempify(env, saveOk(env, HALL, input(sid, '학사 퇴실', '2027-03-03T15:00:00', '2027-03-05')));
   const ctx = env.call(HALL, 'getMoveContext', sid, '2027-03-08');
   assert.strictEqual(ctx.reentry.meals['조식'], '', '기본값은 없음');
   const n0 = bk(sid);
@@ -215,7 +217,7 @@ test('퇴실 전 조식 값이 없던 학생의 재입실: 기본값은 조식 �
   assert.strictEqual(valueOn(env, sid, '조식', '2027-03-09'), '');
   // 값이 있던 항목을 비워 보내는 것은 거부
   const env2 = makeEnv(); const d2 = pick(env2).dorm;
-  saveOk(env2, HALL, input(d2, '학사 및 기숙사 퇴실', '2027-03-03T15:00:00', '2027-03-05'));
+  tempify(env2, saveOk(env2, HALL, input(d2, '학사 및 기숙사 퇴실', '2027-03-03T15:00:00', '2027-03-05')));
   const bad = prev(env2, HALL, input(d2, '학사 입실', '2027-03-03T15:30:00', '2027-03-08', { meals: { '조식': '', '석식': '학사 석식' } }));
   assert.strictEqual(bad.ok, false); assert.ok(bad.errors.some((e) => e.field === 'meals'));
 });
@@ -223,7 +225,7 @@ test('퇴실 전 조식 값이 없던 학생의 재입실: 기본값은 조식 �
 test('followups 36: 퇴실 전력이 있는 재입실은 저장(saveMove)도 급식(meals)이 없으면 거부하고 행을 쓰지 않는다. 서버가 기본값을 대신 채우지 않는다', () => {
   const env = makeEnv();
   const { dorm } = pick(env);
-  saveOk(env, HALL, input(dorm, '학사 및 기숙사 퇴실', '2027-03-03T15:00:00', '2027-03-05'));
+  tempify(env, saveOk(env, HALL, input(dorm, '학사 및 기숙사 퇴실', '2027-03-03T15:00:00', '2027-03-05')));
   const n = env.rows('status_changes').length;
   const base = input(dorm, '학사 입실', '2027-03-03T15:30:00', '2027-03-08');
   const r = env.call(HALL, 'saveMove', base, '');

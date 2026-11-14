@@ -544,7 +544,7 @@ table('outDismissalGate_: 면담 기록이 있어야 퇴실 확정(결정 4·PRD
 
 test('outDismissalGate_: 결과 모양 — triggerOutId = 발생 순 둘째(같으면 created_at·id), 면담 칸은 id·날짜·교사만', () => {
   const r = gate(TWO(), [NOTE({ content: '내용은 넘어오지 않는다' })]);
-  assert.deepStrictEqual(r, { count: 2, level: 2, triggerOutId: 'o2', meetingNote: { id: 'n1', date: '2027-03-11', teacher_email: 'hr@example.com' }, alreadyLeft: false, ok: true, reason: '' });
+  assert.deepStrictEqual(r, { count: 2, level: 2, triggerOutId: 'o2', meetingNote: { id: 'n1', date: '2027-03-11', teacher_email: 'hr@example.com' }, tempLeave: null, alreadyLeft: false, ok: true, reason: '' });
   const tie = [OUT('b', '2027-03-03T21:00:00'), OUT('a', '2027-03-03T21:00:00')];
   assert.strictEqual(gate(tie, []).triggerOutId, 'b');
 });
@@ -622,3 +622,52 @@ test('결정 69: 퇴실 관문의 triggerOutId는 합이 처음 2가 되는 OUT 
   assert.strictEqual(plain(ctx.outDismissalGate_(late, [], HALL_IN, 's1', 'T1', '2027-03-10', INST)).triggerOutId, 'o2');   // 보통 둘째가 먼저 2
 });
 
+
+/* ───── 결정 78: 즉시 퇴실 항목은 지정한 뒤 기록된 위반부터 2(지정 이력) ───── */
+
+const T1 = '2027-03-10T09:00:00', T3 = '2027-03-20T09:00:00', T4 = '2027-04-01T09:00:00';
+const nextI = (snap, ids, now) => plain(ctx.outInstantNext_(snap, ids, now));
+
+test('outInstantNext_: 처음(스냅숏 없음)은 지금부터, 그대로면 changed 없음, 풀면 닫고 다시 지정하면 새 구간', () => {
+  const a = nextI(null, ['R-SMOKE', ' R-SMOKE ', ''], T1);
+  assert.deepStrictEqual(a, { snapshot: { ids: ['R-SMOKE'], periods: { 'R-SMOKE': [{ from: T1, to: '' }] } }, periods: { 'R-SMOKE': [{ from: T1, to: '' }] }, changed: true });
+  const same = nextI(a.snapshot, ['R-SMOKE'], '2027-03-15T09:00:00');
+  assert.deepStrictEqual([same.changed, same.periods], [false, a.periods]);
+  const off = nextI(a.snapshot, [], T3);
+  assert.deepStrictEqual([off.changed, off.snapshot.ids, off.periods], [true, [], { 'R-SMOKE': [{ from: T1, to: T3 }] }]);
+  const on = nextI(off.snapshot, ['R-SMOKE', 'R-DELIVERY'], T4);
+  assert.deepStrictEqual(on.periods, { 'R-SMOKE': [{ from: T1, to: T3 }, { from: T4, to: '' }], 'R-DELIVERY': [{ from: T4, to: '' }] });
+  assert.throws(() => ctx.outInstantNext_(null, [], '2027-03-10'), /일시 형식/);
+});
+
+test('outInstantNext_: 손으로 고친 스냅숏 — 틀린 구간은 버리고, 지정됐는데 열린 구간이 없으면 지금부터, 풀렸는데 열린 구간은 닫음', () => {
+  const r = nextI({ ids: ['A'], periods: { A: [{ from: 'x', to: '' }], B: [{ from: T1, to: '' }] } }, ['A'], T3);
+  assert.deepStrictEqual([r.changed, r.periods], [true, { A: [{ from: T3, to: '' }], B: [{ from: T1, to: T3 }] }]);
+  const mid = nextI({ ids: ['A'], periods: { A: [{ from: T1, to: '' }, { from: T3, to: '' }] } }, ['A'], T4);
+  assert.deepStrictEqual([mid.changed, mid.periods.A], [true, [{ from: T1, to: T1 }, { from: T3, to: '' }]]);
+  assert.strictEqual(nextI({ ids: ['A'], periods: { A: [{ from: T1, to: '' }] } }, ['A'], T4).changed, false);
+  const bad = nextI({ ids: ['A'], periods: { A: [{ from: T1, to: '' }, { from: 'x', to: '' }] } }, ['A'], T4);   // 틀린 구간만 버려도 저장한다
+  assert.deepStrictEqual([bad.changed, bad.periods.A], [true, [{ from: T1, to: '' }]]);
+  const lost = nextI({ ids: ['A'], periods: {} }, ['A'], T4);   // 지정됐는데 구간이 없음 → 지금부터 열고 저장
+  assert.deepStrictEqual([lost.changed, lost.periods.A], [true, [{ from: T4, to: '' }]]);
+  assert.strictEqual(nextI(null, [], T4).changed, false, '지정도 이력도 없으면 쓸 것이 없다');
+});
+
+test('outLevel_ instantPeriods: 지정 전에 기록된 위반은 1, 지정 중 기록은 2, 푼 뒤 기록은 1, 다시 지정 뒤 2 — created_at 기준(발생 일시 아님), created_at 비면 1', () => {
+  const P = { instantPeriods: { 'R-SMOKE': [{ from: T1, to: T3 }, { from: T4, to: '' }] } };
+  const lv = (created, occurred) => plain(ctx.outLevel_([OUTR('o1', 'R-SMOKE', occurred || '2027-03-05T21:00:00', { created_at: created })], 's1', 'T1', P)).count;
+  assert.deepStrictEqual(['2027-03-09T23:59:59', T1, '2027-03-19T23:00:00', T3, '2027-03-25T09:00:00', T4, '2027-05-01T09:00:00', ''].map((c) => lv(c)), [1, 2, 2, 1, 1, 2, 2, 1]);
+  assert.strictEqual(lv('2027-03-15T09:00:00', '2027-03-01T21:00:00'), 2, '발생이 지정 전이어도 기록이 지정 뒤면 2');
+  assert.strictEqual(plain(ctx.outLevel_([OUTR('o1', 'R-PHONE', '2027-03-15T21:00:00')], 's1', 'T1', P)).count, 1);
+  // instantPeriods를 주면 instantRuleIds는 보지 않는다(소급 판정과 섞이지 않게)
+  assert.strictEqual(plain(ctx.outLevel_([OUTR('o1', 'R-SMOKE', '2027-03-05T21:00:00')], 's1', 'T1', Object.assign({ instantRuleIds: ['R-SMOKE'] }, P))).count, 1);
+});
+
+test('outDismissalGate_ instantPeriods: 지정 뒤 기록된 즉시 항목 1건이면 그 건이 trigger, 지정 전 기록이면 퇴실 대상 아님', () => {
+  const P = { instantPeriods: { 'R-SMOKE': [{ from: T1, to: '' }] } };
+  const before = [OUTR('o1', 'R-SMOKE', '2027-03-05T21:00:00')];
+  const after = [OUTR('o1', 'R-SMOKE', '2027-03-15T21:00:00')];
+  assert.strictEqual(plain(ctx.outDismissalGate_(before, [], HALL_IN, 's1', 'T1', '2027-03-20', P)).reason, '퇴실 대상 아님');
+  const g = plain(ctx.outDismissalGate_(after, [], HALL_IN, 's1', 'T1', '2027-03-20', P));
+  assert.deepStrictEqual([g.count, g.triggerOutId, g.reason], [2, 'o1', '면담 기록 필요']);
+});

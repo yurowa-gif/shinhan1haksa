@@ -1,6 +1,6 @@
 # S4-0 새 탭·열 설계 (결정 75·76) — 총괄 검토용
 
-> 코딩A, 2026-11-14. **승인됨(총괄): 기간별 student_docs, 보호자 이름도 숨김, program.edit에 hall_teacher 추가.** 같은 PR에서 구현했다. 시트 구조 변경은 선생님이 승인하셨습니다(결정 75·76).
+> 코딩A, 2026-11-14. **승인됨(총괄): 기간별 student_docs, 보호자 이름도 숨김, program.edit에 hall_teacher 추가(이후 #182로 attendance도 추가).** 같은 PR에서 구현했다. 시트 구조 변경은 선생님이 승인하셨습니다(결정 75·76).
 
 ## 1. 새 탭
 
@@ -33,7 +33,7 @@
 | `doc.edit` | admin, hall_teacher | `scope:'student'`(담당·그날 근무교사·관리자, 결정 60의 기간) | 제출·미제출·해당없음 표시 |
 | `doc.types` | admin | — | 서류 종류 추가·이름·정렬·취소 |
 | `program.view` | admin, attendance, hall_teacher | — | 프로그램 목록 보기(출결 담당은 목록에서 본다) |
-| `program.edit` | admin, hall_teacher | — | 프로그램·참가자 입력·취소(특강·체험학습은 학사 교사가 운영). 만든 사람과 상관없이 생기는 특이사항은 '확정', 만든 이는 감사 기록에 |
+| `program.edit` | admin, attendance, hall_teacher | — | 프로그램·참가자 입력·취소(특강·체험학습은 학사 교사가 운영, **출결 담당도 입력 — #182**). 만든 사람과 상관없이 생기는 특이사항은 '확정', 만든 이는 감사 기록에 |
 | `contact.view` | admin, hall_teacher | `scope:'student'`(= 그 학생의 담당교사·관리자·**그날 근무교사**, `canAccessStudentByFacts_`의 `isAssigned`·`isOnDuty && isEnrolled`), `dutyWindow` 없음(오늘 근무자만) | 전화번호·보호자 이름 보기. `attendance`·`homeroom`·`duty_manager`는 넣지 않는다 |
 | `contact.edit` | admin | — | 명단 올리기로만 받는다(`roster.edit`가 이미 관리자만이라 별도 화면 없음) |
 

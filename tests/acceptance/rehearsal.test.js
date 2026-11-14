@@ -108,7 +108,9 @@ function rehearse(n) {
     return ok(call(ADMIN, 'saveMove', i, ok(call(ADMIN, 'previewMove', i), type + ' 미리보기').expect), type + ' 저장');
   };
   move(E, '학사 퇴실', '2027-03-03T15:00:00', '2027-03-05');
-  move(F, '학사 퇴실', '2027-03-03T15:00:00', '2027-03-04');
+  const fLeave = move(F, '학사 퇴실', '2027-03-03T15:00:00', '2027-03-04');
+  // 결정 70·77: 일반 퇴실 뒤에는 그 학기에 다시 들어올 수 없다 — 재입실하는 F는 건강상 임시 퇴실(저장 화면이 받기 전까지 행을 고쳐 만든다)
+  env.asOwner((c) => c.updateRecord_('status_changes', fLeave.id, { reason: '임시 퇴실', memo: '[임시] return:2027-03-08' }, env.owner));
   const phone = env.rows('violation_rules').find((r) => r.name.startsWith('휴대폰'));
   ['2027-03-02T21:00', '2027-03-03T19:00'].forEach((at) => ok(call(ADMIN, 'saveOut', { studentId: D, occurredAt: at, ruleId: phone.id, detectedBy: '', memo: '가짜' }), 'OUT'));
   const dTeacher = env.rows('enrollments').find((e) => e.term_id === term.id && e.student_id === D).teacher_email;
@@ -126,6 +128,32 @@ function rehearse(n) {
   const mc = call(ADMIN, 'getMealCounts', '2027-03-05');
   const all = mc.rows.find((r) => r.key === '전체');
 
+  // 4b) 휴일·시험 기간(결정 72, C24·R21): 관리자가 휴일 블록(제안 틀)을 저장하고, 기간 일괄 설정으로 5/5 휴일·4/19~23 시험 기간(종료 24:00)
+  const sd = call(ADMIN, 'getScheduleData', '2027-05');
+  ok(call(ADMIN, 'saveBlocks', '학기', 'holiday', sd.suggestedBlocks['학기|holiday'], (sd.blockTokens || {})['학기|holiday'] || ''), '휴일 블록');
+  const batch = (input) => ok(call(ADMIN, 'saveDayBatch', input, ok(call(ADMIN, 'previewDayBatch', input), '일괄 미리보기').sig), '일괄 저장');
+  const hol = batch({ from: '2027-05-05', to: '2027-05-05', weekdays: [3], dayType: 'holiday' });
+  const exam = batch({ from: '2027-04-19', to: '2027-04-23', weekdays: [1, 2, 3, 4, 5], end: '24:00', memo: '가짜 시험 기간' });
+  const holSheet = call(ADMIN, 'getAttendanceSheet', '2027-05-05');
+  const examSheet = call(ADMIN, 'getAttendanceSheet', '2027-04-23');
+  const holSlots = call(ADMIN, 'getDutyMonth', '2027-05').days.find((d) => d.date === '2027-05-05').slots.map((x) => x.slot);
+
+  // 4c) 학사 프로그램(결정 75②, C28): 학사 교사가 4/14 프로그램에 학사생 약 70%(180명이면 126명)를 넣는다 → 참가자마다 특이사항 → 출석부 '내부' → 취소하면 함께 취소
+  const pDate = '2027-04-14';
+  const pIds = students.map((s) => s.id).filter((id) => on(id, '학사', pDate) === '입실').slice(0, Math.round(n * 0.7));
+  const pIn = { name: '가짜 면접특강', date: pDate, blocks: '20:00-22:00', memo: '', studentIds: pIds };
+  call(HALL, 'previewProgram', pIn);
+  let prog = call(HALL, 'saveProgram', pIn);
+  if (prog.needsConfirm) prog = call(HALL, 'saveProgram', Object.assign({ confirmOverlap: true }, pIn));
+  ok(prog, '프로그램 저장');
+  const exTab = () => env.rows('exceptions_' + term.id.slice(0, 8));
+  const progEx = () => exTab().filter((e) => e.date === pDate && /^학사 내 프로그램/.test(e.type));
+  const progSheet = call(ADMIN, 'getAttendanceSheet', pDate);
+  const progMade = progEx().filter((e) => e.status === '확정').length;
+  const progInner = (progSheet.html.match(/내부/g) || []).length;
+  const progCancel = ok(call(HALL, 'cancelProgram', prog.id, '가짜: 강사 사정'), '프로그램 취소');
+  const progLeft = progEx().filter((e) => e.status !== '취소').length;
+
   // 5) 학기 전환. 여름방학은 이어받기가 없고(명단 올리기) — 1학기 끝 학사생 + 신규 1명 + 2OUT 퇴실 학생(막힘)을 올린다.
   //    2학기는 1학기 학사생을 이어받는다(퇴실 E·2OUT D 제외, 재입실 F 포함)
   env.setNow('2027-07-10T10:00:00');
@@ -141,6 +169,16 @@ function rehearse(n) {
   const pv2 = ok(call(ADMIN, 'previewRoster', text2, opts2), '방학 명단 미리보기');
   ok(call(ADMIN, 'commitRoster', text2, opts2, { counts: pv2.counts, termId: pv2.term.id, ymd: pv2.ymd }), '방학 명단 저장');
   const summerAfter = new Set(env.rows('enrollments').filter((e) => e.term_id === st.id).map((e) => e.student_id));
+  // 5b) 방학 중식(결정 73, C30): 방학 학사생 셋이 방학 전(7/12 10:00)에 중식 실시 신청 → 방학 시작일부터, 식수 집계 중식 열
+  env.setNow('2027-07-12T10:30:00');
+  const lunchIds = [...summerAfter].filter((id) => id !== newbie.id).slice(0, 3);
+  lunchIds.forEach((sid) => {
+    const li = { studentId: sid, chip: 'l_on', requestedAt: '2027-07-12T10:00:00', docSubmitted: true };
+    ok(call(ADMIN, 'saveMealChange', li, ok(call(ADMIN, 'previewMealChange', li), '중식 미리보기').expect), '중식 저장');
+  });
+  const lunchOn = lunchIds.map((sid) => [on(sid, '중식', '2027-07-18'), on(sid, '중식', '2027-07-19')]);
+  const mcV = call(ADMIN, 'getMealCounts', '2027-07-20');
+  const lunchAll = Number((mcV.rows.find((r) => r.key === '전체') || {}).lunch);
   const t2 = ok(call(ADMIN, 'saveTerm', { name: '2027 2학기', type: '학기', start_date: '2027-09-01', end_date: '2027-12-31', memo: '가짜' }), '2학기 만들기');
   const cp = ok(call(ADMIN, 'previewCarryOver', t2.id), '이어받기 미리보기');
   ok(call(ADMIN, 'commitCarryOver', t2.id, cp.count), '이어받기 저장');
@@ -160,7 +198,11 @@ function rehearse(n) {
       summerCarry: cpS.applicable, stay: stayIds.size, banned: pv2.lists.banned.map((b) => b.student_no), newCount: pv2.counts.newStudents,
       summer: { after: summerAfter.size, hasD: summerAfter.has(D), hasF: summerAfter.has(F), hasE: summerAfter.has(E) },
       carry: cp.count, fall: { size: fallIds.size, hasD: fallIds.has(D), hasE: fallIds.has(E), hasF: fallIds.has(F) },
-      dStudentNo: students.find((s) => s.id === D).student_no
+      dStudentNo: students.find((s) => s.id === D).student_no,
+      holiday: { changed: hol.changed, labels: holSheet.blockLabels, slots: holSlots, operating: holSheet.operating, names: students.filter((s) => holSheet.html.includes(s.name)).length },
+      exam: { changed: exam.changed, operating: examSheet.operating },
+      program: { asked: pIds.length, saved: prog.count, made: progMade, inner: progInner, canceled: progCancel.canceledExceptions, left: progLeft },
+      lunch: { on: lunchOn, all: lunchAll }
     }
   };
 }
@@ -168,7 +210,7 @@ function rehearse(n) {
 const big = rehearse(180);
 const small = rehearse(30);
 
-test('리허설 180명: 명단 → 좌석·방 초안 → 1주일 기록 → 식수 집계 → 여름방학 전환(신규 1명, 2OUT 퇴실 학생 막힘)', () => {
+test('리허설 180명: 명단 → 좌석·방 초안 → 1주일 기록 → 식수 집계 → 휴일·시험 기간 일괄 설정 → 프로그램 126명 만들기·취소 → 여름방학 전환(신규 1명, 2OUT 퇴실 학생 막힘)·방학 중식', () => {
   const f = big.facts;
   assert.strictEqual(f.students, 180);
   assert.strictEqual(f.seated, 180, '좌석 초안이 180명 모두 앉힌다(1층 146 + SA 51)');
@@ -187,6 +229,20 @@ test('리허설 180명: 명단 → 좌석·방 초안 → 1주일 기록 → 식
   assert.deepStrictEqual([f.summer.after, f.summer.hasD, f.summer.hasE, f.summer.hasF], [f.stay + 1, false, false, true], '방학 등록 = 1학기 끝 학사생 + 신규 1명');
   assert.strictEqual(f.carry, f.stay, '2학기 이어받기 = 1학기 끝 학사생(기존 유지, 퇴실 반영)');
   assert.deepStrictEqual([f.fall.size, f.fall.hasD, f.fall.hasE, f.fall.hasF], [f.stay, false, false, true]);
+  // 휴일·시험 기간(결정 72): 휴일 블록 저장 → 기간 일괄 설정
+  assert.deepStrictEqual([f.holiday.changed, f.holiday.operating], [1, true]);
+  assert.deepStrictEqual(f.holiday.labels, ['09–12', '14–15:30', '15:30–17', '19–20:30', '20:30–21:50'], '휴일은 휴일 블록(오전 토요일·오후 일요일 칸)');
+  assert.deepStrictEqual(f.holiday.slots, ['단독', '예비'], '휴일 근무 틀 = 단독 + 예비(R21)');
+  assert.strictEqual(f.holiday.names, f.stay, '휴일 출석부 = 1학기 학사생(퇴실 E·2OUT D 빠짐)');
+  assert.deepStrictEqual([f.exam.changed, f.exam.operating], [5, true], '시험 기간 5일(종료 24:00, 금요일 포함)');
+  // 프로그램 120명대(C28): 참가자마다 특이사항, 출석부 '내부', 취소하면 모두 함께 취소
+  assert.strictEqual(f.program.asked, 126);
+  assert.deepStrictEqual([f.program.saved, f.program.made], [126, 126], '참가자 126명 = 확정 특이사항 126행');
+  assert.ok(f.program.inner >= 126, '출석부 칸 내부 ' + f.program.inner);
+  assert.deepStrictEqual([f.program.canceled, f.program.left], [126, 0], '프로그램 취소 → 특이사항 모두 취소');
+  // 방학 중식(C30): 방학 전 신청은 방학 시작일부터, 식수 집계 중식 열
+  f.lunch.on.forEach((x) => assert.deepStrictEqual(x, ['', '실시'], '중식은 방학 시작일(7/19)부터'));
+  assert.strictEqual(f.lunch.all, 3, '식수 집계 7/20 중식 = 3');
 });
 
 test('같은 흐름 30명도 통과하고, 공개 함수마다 시트 읽기 횟수는 180명에서 늘지 않는다(학생 수에 비례하지 않음)', () => {

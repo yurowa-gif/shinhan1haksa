@@ -300,6 +300,9 @@ function outFirstStart_(blocks) {
  * status 빈칸·'유효'인 OUT만 센다(직접·자동 모두). → {count, level:0|1|2, label:''|'1OUT'|'퇴실 대상'}
  * 2 이상이면 '퇴실 대상'(결정 4: 학부모 면담 기록 후 관리자가 퇴실 확정, 유예 없음).
  * opts.instantRuleIds(결정 69, 선택): 즉시 퇴실 항목(violation_rules id). 그 rule_id의 OUT 한 건은 2로 센다(count = OUT 수의 합).
+ * opts.instantPeriods(결정 78, 선택 — 주면 instantRuleIds 대신 이것만 본다): {ruleId:[{from, to}]}(outInstantNext_의 periods).
+ *   그 항목이 즉시 퇴실이던 동안(from ≤ created_at < to, to ''면 지금까지) **기록된** OUT만 2로 센다 — 지정 전에 기록된 위반은 그대로 1,
+ *   지정을 풀면 그 뒤 기록은 1. ASSUMPTION: '기록된 시각' = OUT 행 created_at(발생 일시 occurred_at이 아님), created_at이 비면 1.
  */
 function outLevel_(violations, studentId, termId, opts) {
   var count = outLiveFor_(violations, studentId, termId).reduce(function (n, v) { return n + outWeight_(v, opts); }, 0);
@@ -315,11 +318,51 @@ function outLiveFor_(violations, studentId, termId) {
   });
 }
 
-/** OUT 한 건의 무게: opts.instantRuleIds(즉시 퇴실 항목, 결정 69)에 rule_id가 있으면 2, 아니면 1. */
+/** OUT 한 건의 무게: 즉시 퇴실 항목이면 2, 아니면 1. opts.instantPeriods가 있으면 기록 시각으로(결정 78), 없으면 instantRuleIds(결정 69). */
 function outWeight_(v, opts) {
-  var ids = (opts && opts.instantRuleIds) || [];
   var rid = ruleStr_(v.rule_id);
-  return rid && ids.some(function (x) { return ruleStr_(x) === rid; }) ? 2 : 1;
+  if (!rid) return 1;
+  if (opts && opts.instantPeriods) {
+    var at = ruleIso_(v.created_at);
+    return (opts.instantPeriods[rid] || []).some(function (p) {
+      return p && ruleIso_(p.from) <= at && (!ruleStr_(p.to) || at < ruleIso_(p.to));
+    }) ? 2 : 1;
+  }
+  var ids = (opts && opts.instantRuleIds) || [];
+  return ids.some(function (x) { return ruleStr_(x) === rid; }) ? 2 : 1;
+}
+
+/**
+ * 즉시 퇴실 항목 지정 이력의 다음 값(결정 78 — outAutoSinceNext_와 같은 방식, 스크립트 속성 스냅숏, 시트 구조 변경 없음).
+ * snapshot = {ids:[], periods:{ruleId:[{from, to}]}} | null, currentIds = 지금 settings 'out.instant_rule_ids', nowIso = 지금.
+ * → {snapshot:{ids, periods}, periods, changed}   periods는 outLevel_·outDismissalGate_의 opts.instantPeriods로 넘긴다.
+ * - 새로 지정된 id → {from: nowIso, to: ''}를 더한다(다시 지정해도 새 구간). 지정이 풀린 id → 열린 구간의 to = nowIso.
+ * - null(처음·분실)이면 지금 지정된 id는 모두 nowIso부터(스냅숏을 잃어도 소급하지 않는다 — 자동 OUT 넓힘과 같다).
+ * - 손으로 고친 모양: 형식이 틀린 구간은 버리고, 지정된 id인데 열린 구간이 없으면 nowIso부터 열고, 지정되지 않았는데 열린 구간은 닫는다.
+ * 잘못된 nowIso는 Error.
+ */
+function outInstantNext_(snapshot, currentIds, nowIso) {
+  var now = ruleIso_(nowIso);
+  isoLocalSplit_(now);
+  var isoOk = function (x) { return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(x); };
+  var norm = function (list) { var o = []; (list || []).forEach(function (x) { x = ruleStr_(x); if (x && o.indexOf(x) < 0) o.push(x); }); return o; };
+  var base = norm(snapshot && snapshot.ids), cur = norm(currentIds), old = (snapshot && snapshot.periods) || {}, periods = {}, fixed = false;
+  Object.keys(old).forEach(function (id) {
+    var list = (Array.isArray(old[id]) ? old[id] : []).map(function (p) { return { from: ruleIso_(p && p.from), to: ruleIso_(p && p.to) }; });
+    var good = list.filter(function (p) { return isoOk(p.from) && (!p.to || (isoOk(p.to) && p.to >= p.from)); });
+    if (good.length !== list.length) fixed = true;
+    if (good.length) periods[id] = good.sort(function (a, b) { return a.from < b.from ? -1 : 1; });
+  });
+  var open = function (id) { var l = periods[id] || []; return l.length && !l[l.length - 1].to ? l[l.length - 1] : null; };
+  Object.keys(periods).forEach(function (id) {   // 지정되지 않은 id의 열린 구간은 닫는다(풀린 것)
+    if (cur.indexOf(id) < 0 && open(id)) { open(id).to = now; if (base.indexOf(id) < 0) fixed = true; }
+    periods[id].slice(0, -1).forEach(function (p) { if (!p.to) { p.to = p.from; fixed = true; } });   // 가운데 열린 구간(손으로 고침)은 길이 0으로
+  });
+  cur.forEach(function (id) {
+    if (!open(id)) { (periods[id] = periods[id] || []).push({ from: now, to: '' }); if (base.indexOf(id) >= 0) fixed = true; }
+  });
+  var changed = fixed || base.length !== cur.length || cur.some(function (id) { return base.indexOf(id) < 0; });
+  return { snapshot: { ids: cur, periods: periods }, periods: periods, changed: changed };
 }
 
 /**
@@ -359,12 +402,15 @@ function outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes) {
 /**
  * 2OUT 퇴실 확정 관문(결정 4, PRD F12·F6). 면담 기록 전에는 막는다.
  * notes = counsel_notes 행 중 id·student_id·type·linked_violation_id·status·date·teacher_email만(내용은 넘기지 않는다).
- * → {count, level, triggerOutId, meetingNote:{id, date, teacher_email}|null, alreadyLeft, ok, reason:''|'퇴실 대상 아님'|'면담 기록 필요'|'이미 퇴실'}
+ * → {count, level, triggerOutId, meetingNote:{id, date, teacher_email}|null, alreadyLeft, tempLeave:{id, leaveDate, returnDate}|null, ok,
+ *    reason:''|'퇴실 대상 아님'|'면담 기록 필요'|'이미 퇴실'|'임시 퇴실 중'}
  * - 이번 기간 살아 있는 OUT(outLevel_과 같음)을 occurred_at → created_at → id 순으로 놓았을 때 합이 처음 2가 되는 OUT이 triggerOutId
  *   (보통은 둘째, opts.instantRuleIds의 즉시 퇴실 항목이면 그 한 건 — 결정 69).
  * - 면담 = status 빈칸·유효, 같은 학생, type '2OUT 학부모 면담', 이번 기간 살아 있는 OUT에 연결, 날짜 ≥ triggerOut 발생일.
  * - alreadyLeft = ymd에 학사 퇴실 상태이거나 앞으로 2OUT 퇴실(memo '[2OUT]…' 또는 reason '2OUT 퇴실')이 잡혀 있음. 보통 미래 퇴실은
- *   막지 않는다(그 뒤 movePlan_이 '이후 날짜에 입퇴실 기록'으로 그 퇴실을 가리킨다, 총괄 결정). 순서: 이미 퇴실 → 퇴실 대상 아님(2건 미만) → 면담 기록 필요 → ok.
+ *   막지 않는다(그 뒤 movePlan_이 '이후 날짜에 입퇴실 기록'으로 그 퇴실을 가리킨다, 총괄 결정).
+ * - tempLeave(결정 77③) = ymd에 건강상 임시 퇴실 중(tempLeaveOn_)이면 그 퇴실. 그때는 alreadyLeft가 아니고(면담은 할 수 있다) 퇴실 확정만
+ *   막는다(reason '임시 퇴실 중' — 복귀 뒤에 진행). 순서: 이미 퇴실 → 퇴실 대상 아님(2건 미만) → 임시 퇴실 중 → 면담 기록 필요 → ok.
  * 결정 51: 연결한 OUT이 나중에 취소되면 그 면담은 세지 않는다(다른 2건이 남아도 다시 면담), 둘째 OUT보다 앞선 날짜의 면담도.
  */
 function outDismissalGate_(violations, notes, changes, studentId, termId, ymd, opts) {
@@ -385,11 +431,12 @@ function outDismissalGate_(violations, notes, changes, studentId, termId, ymd, o
   var out = { count: lv.count, level: lv.level, triggerOutId: trigger ? ruleStr_(trigger.id) : '',
     meetingNote: n ? { id: ruleStr_(n.id), date: ruleStr_(n.date), teacher_email: ruleStr_(n.teacher_email) } : null,
     // 이미 퇴실했거나 앞으로 2OUT 퇴실이 잡혀 있으면(2OUT 퇴실을 두 번 만들지 않게) 이미 퇴실
-    alreadyLeft: statusOn_(changes, sid, '학사', ymd) === '퇴실' || (changes || []).some(function (c) {
+    tempLeave: tempLeaveOn_(changes, sid, ymd),
+    alreadyLeft: (statusOn_(changes, sid, '학사', ymd) === '퇴실' && !tempLeaveOn_(changes, sid, ymd)) || (changes || []).some(function (c) {
       return c && ruleRowLive_(c) && ruleStr_(c.student_id) === sid && ruleStr_(c.item) === '학사' && ruleStr_(c.value) === '퇴실' &&
         ymdIsValid_(ruleStr_(c.effective_date)) && ruleStr_(c.effective_date) > ymd && (ruleStr_(c.memo).indexOf('[2OUT]') === 0 || ruleStr_(c.reason) === '2OUT 퇴실');
     }), ok: false, reason: '' };
-  out.reason = out.alreadyLeft ? '이미 퇴실' : lv.count < 2 ? '퇴실 대상 아님' : !n ? '면담 기록 필요' : '';
+  out.reason = out.alreadyLeft ? '이미 퇴실' : lv.count < 2 ? '퇴실 대상 아님' : out.tempLeave ? '임시 퇴실 중' : !n ? '면담 기록 필요' : '';
   out.ok = !out.reason;
   return out;
 }

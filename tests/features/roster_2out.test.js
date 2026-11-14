@@ -76,15 +76,20 @@ test('명단 저장: 막힌 학생 한 명만 빼고 나머지는 저장된다(�
   assert.strictEqual(r2.ok, false); assert.strictEqual(r2.stale, true);
 });
 
-test('퇴실 취소로 2OUT 퇴실 행이 취소되면 막힘이 풀리고, 학기 밖에서는 막지 않는다(다른 일반 퇴실·1OUT은 막지 않는다)', () => {
+test('퇴실 취소로 2OUT 퇴실 행이 취소되면 막힘이 풀리고, 임시 퇴실·1OUT은 막지 않는다, 일반(자진) 퇴실은 막는다(결정 70·77)', () => {
   const env = makeEnv();
   const { s, t } = pick2(env);
   const tid = term(env, '2027 1학기').id;
   const text = rosterText(env, tid, { [s]: T2, [t]: T2 });
-  // 일반 퇴실(2OUT 아님)은 막지 않는다
-  env.asOwner((c) => c.appendRecord_('status_changes', { student_id: s, item: '학사', value: '퇴실', effective_date: '2026-12-10', effective_date_auto: '2026-12-10', requested_at: '2026-12-08T08:00:00',
-    reason: '가정 사정', memo: '', source: 'F6', status: '유효', doc_submitted: 'TRUE', linked_change_id: '', cancel_reason: '' }, ADMIN));
+  // 건강상 임시 퇴실은 막지 않는다
+  const tmp = env.asOwner((c) => c.appendRecord_('status_changes', { student_id: s, item: '학사', value: '퇴실', effective_date: '2026-12-10', effective_date_auto: '2026-12-10', requested_at: '2026-12-08T08:00:00',
+    reason: '임시 퇴실', memo: '[임시] return:2027-01-10', source: 'F6', status: '유효', doc_submitted: 'TRUE', linked_change_id: '', cancel_reason: '' }, ADMIN));
   assert.strictEqual(env.call(ADMIN, 'previewRoster', text, opts(env)).counts.banned, 0);
+  // 일반 퇴실(자진)은 막는다 — 메시지는 '퇴실(날짜)로'
+  env.asOwner((c) => c.updateRecord_('status_changes', tmp.id || tmp, { reason: '가정 사정', memo: '' }, ADMIN));
+  const pv = env.call(ADMIN, 'previewRoster', text, opts(env));
+  assert.strictEqual(pv.counts.banned, 1);
+  assert.ok(/퇴실\([^)]*12월 10일[^)]*\)로 /.test(JSON.stringify(pv)) && JSON.stringify(pv).indexOf('2OUT 퇴실로') < 0, JSON.stringify(pv).slice(0, 400));
   const env2 = makeEnv();
   const id = addLeave2out(env2, s, '2026-12-10');
   assert.strictEqual(env2.call(ADMIN, 'previewRoster', text, opts(env2)).counts.banned, 1);
@@ -130,10 +135,10 @@ test('막힌 학생의 "기록과 명단이 다릅니다 … 입퇴실로 처리
   addLeave2out(env, s, '2027-03-10');
   const banned = warnOf(env, s, text);
   assert.strictEqual(banned.length, 0, '막힌 학생 경고가 없다: ' + banned.join(' | '));
-  const env2 = makeEnv();   // 같은 상태지만 2OUT이 아닌 일반 퇴실이면 경고가 남는다
+  const env2 = makeEnv();   // 같은 상태지만 건강상 임시 퇴실이면(막히지 않음, 결정 70) 경고가 남는다
   env2.asOwner((c) => c.appendRecord_('status_changes', { student_id: s, item: '학사', value: '퇴실', effective_date: '2027-03-10', effective_date_auto: '2027-03-10', requested_at: '2027-03-08T08:00:00',
-    reason: '가정 사정', memo: '', source: 'F6', status: '유효', doc_submitted: 'TRUE', linked_change_id: '', cancel_reason: '' }, ADMIN));
-  assert.ok(warnOf(env2, s, text).length >= 1, '일반 퇴실이면 경고가 남는다');
+    reason: '임시 퇴실', memo: '[임시] return:2027-04-10', source: 'F6', status: '유효', doc_submitted: 'TRUE', linked_change_id: '', cancel_reason: '' }, ADMIN));
+  assert.ok(warnOf(env2, s, text).length >= 1, '임시 퇴실이면 경고가 남는다');
 });
 
 test('명단 줄의 학생 구글 계정이 저장된 것과 달라 새 학생(new:)으로 읽혀도 같은 학번·이름의 막힌 학생이면 막는다(중복 학생·학사 입실이 만들어지지 않는다)', () => {

@@ -893,7 +893,7 @@ const ban = (rows, ymd, terms) => plain(ctx.move2OutBan_(rows, 's1', terms || TE
 table('move2OutBan_: 1학기 4/10 2OUT 퇴실 → 같은 학기·여름방학·2학기·겨울방학은 막고(다음 해 1학기 시작 전날 3/1까지), 다음 해 1학기는 허용(결정 63 보충)', [
   ['2027-05-01', true], ['2027-07-30', true], ['2027-09-01', true], ['2027-12-24', true], ['2027-12-25', true], ['2028-03-01', true], ['2028-03-02', false]
 ], ([ymd, banned]) => {
-  assert.deepStrictEqual(ban(HALL().concat([OUT2('2027-04-10')]), ymd), { banned, until: '2028-03-01', leaveDate: '2027-04-10' });
+  assert.deepStrictEqual(ban(HALL().concat([OUT2('2027-04-10')]), ymd), { banned, until: '2028-03-01', leaveDate: '2027-04-10', kind: '2OUT' });
 });
 
 test('move2OutBan_: 다음 학기 뒤 학기가 terms에 없으면 그 뒤 첫 방학 끝날, 방학도 없으면 다음 학기 끝날(결정 63 보충)', () => {
@@ -907,9 +907,9 @@ test('move2OutBan_: 다음 학기 뒤 학기가 terms에 없으면 그 뒤 첫 �
 
 test('move2OutBan_: 퇴실 당일도 막음, reason만 있고 memo 빈 행도 2OUT, 2OUT 퇴실이 둘이면 늦은 것 기준, 학기 시작일 퇴실은 그 학기가 아닌 다음 학기 기준', () => {
   assert.strictEqual(ban(HALL().concat([OUT2('2027-04-10')]), '2027-04-10').banned, true);
-  assert.strictEqual(ban(HALL().concat([OUT2('2027-04-10', { memo: '' })]), '2027-05-01').banned, true);
+  assert.deepStrictEqual([ban(HALL().concat([OUT2('2027-04-10', { memo: '' })]), '2027-05-01').banned, ban(HALL().concat([OUT2('2027-04-10', { memo: '' })]), '2027-05-01').kind], [true, '2OUT']);
   const two = HALL().concat([OUT2('2027-04-10', { id: 'o1' }), OUT2('2027-10-01')]);
-  assert.deepStrictEqual(ban(two, '2027-11-01'), { banned: true, until: '2028-07-14', leaveDate: '2027-10-01' });
+  assert.deepStrictEqual(ban(two, '2027-11-01'), { banned: true, until: '2028-07-14', leaveDate: '2027-10-01', kind: '2OUT' });
   assert.deepStrictEqual(ban(two.slice().reverse(), '2027-11-01').leaveDate, '2027-10-01');
   assert.strictEqual(ban(HALL().concat([OUT2('2027-08-16')]), '2027-09-01').until, '2028-07-14');   // 2학기 시작일 퇴실 → 다음 학기 = 2028 1학기
 });
@@ -918,16 +918,16 @@ test('move2OutBan_: 2학기 10/1 퇴실 → 겨울방학·다음 해 1학기 막
   const rows = HALL().concat([OUT2('2027-10-01')]);
   assert.deepStrictEqual([ban(rows, '2028-01-10').banned, ban(rows, '2028-04-01').banned, ban(rows, '2028-07-15').banned], [true, true, false]);
   assert.strictEqual(ban(rows, '2028-04-01').until, '2028-07-14');
-  assert.deepStrictEqual(ban(rows, '2028-09-01', TERMS.slice(0, 4)), { banned: true, until: '', leaveDate: '2027-10-01' });
+  assert.deepStrictEqual(ban(rows, '2028-09-01', TERMS.slice(0, 4)), { banned: true, until: '', leaveDate: '2027-10-01', kind: '2OUT' });
 });
 
-test('move2OutBan_: 2OUT 아닌 퇴실·퇴실 전 날·취소된 2OUT 퇴실은 막지 않음, memo [2OUT]만 있어도 2OUT, 방학 중 퇴실은 앞 학기 기준(가정)', () => {
+test('move2OutBan_: 2OUT 아닌 퇴실은 자진으로 막음(결정 70), 퇴실 전 날·취소된 2OUT 퇴실은 막지 않음, memo [2OUT]만 있어도 2OUT, 방학 중 퇴실은 앞 학기 기준(가정)', () => {
   const plainLeave = CH('학사', '퇴실', '2027-04-10', { source: 'F6', requested_at: '2027-04-09T09:00:00', reason: '개인 사정' });
-  assert.strictEqual(ban(HALL().concat([plainLeave]), '2027-05-01').banned, false);
+  assert.deepStrictEqual(ban(HALL().concat([plainLeave]), '2027-05-01'), { banned: true, until: '2028-03-01', leaveDate: '2027-04-10', kind: '자진' });
   assert.strictEqual(ban(HALL().concat([OUT2('2027-04-10')]), '2027-04-09').banned, false);
   assert.strictEqual(ban(HALL().concat([OUT2('2027-04-10', { status: '취소' })]), '2027-05-01').banned, false);
   assert.strictEqual(ban(HALL().concat([OUT2('2027-04-10', { reason: '' })]), '2027-05-01').banned, true);
-  assert.deepStrictEqual(ban(HALL().concat([OUT2('2027-07-30')]), '2027-09-01'), { banned: true, until: '2028-03-01', leaveDate: '2027-07-30' });
+  assert.deepStrictEqual(ban(HALL().concat([OUT2('2027-07-30')]), '2027-09-01'), { banned: true, until: '2028-03-01', leaveDate: '2027-07-30', kind: '2OUT' });
   assert.throws(() => ban(HALL(), '2027-02-30'), /yyyy-MM-dd/);
 });
 

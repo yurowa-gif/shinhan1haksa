@@ -29,6 +29,40 @@ test('식수 집계 표: 줄 순서·숫자·석식 계가 모델과 같다(그�
   assert.deepStrictEqual(t[11].v, [30, 24, 6, 23, 27, 3, 30]);
 });
 
+test('방학 기간 날짜(showLunch)에는 조식 다음에 중식 열이 생기고 학기 중에는 열이 없다(결정 73)', () => {
+  const m = buildModel({ vacation: true });
+  const html = render(m);
+  const heads = [...html.slice(html.indexOf('<thead>'), html.indexOf('</thead>')).matchAll(/<th\s[^>]*>(.*?)<\/th>/g)].map((x) => x[1]);
+  assert.deepStrictEqual(heads, ['구분', '학사', '기숙', '비기숙', '조식', '중식', '석식 학사', '석식 일반', '석식 계']);
+  const COLS_V = ['hall', 'dorm', 'nonDorm', 'breakfast', 'lunch', 'hallDinner', 'generalDinner'];
+  const t = readTable(html);
+  t.forEach((r) => {
+    const g = m.counts.groups[r.name];
+    assert.deepStrictEqual(r.v, COLS_V.map((c) => g[c]).concat([g.hallDinner + g.generalDinner]), r.name);
+  });
+  assert.deepStrictEqual(t[11].v, [30, 24, 6, 23, 23, 27, 3, 30]);
+  assert.ok(html.indexOf('중식은 방학 기간에만 집계합니다') > 0 && html.indexOf('합계가 맞지 않습니다') < 0 && html.indexOf('※') < 0);
+  // 학기 중: showLunch 가 없으면 groups 에 lunch 가 있어도(R12는 늘 준다) 열이 없다
+  const term = buildModel(); Object.keys(term.counts.groups).forEach((k) => { term.counts.groups[k].lunch = 0; });
+  const th = render(term);
+  assert.ok(th.indexOf('중식') < 0, '학기 중에는 중식 열도 안내도 없다');
+  assert.deepStrictEqual(readTable(th)[11].v, [30, 24, 6, 23, 27, 3, 30]);
+  const off = buildModel({ vacation: true }); off.showLunch = false;
+  assert.ok(render(off).indexOf('중식') < 0);
+});
+
+test('중식 열도 합계 검사를 받고, 값이 없거나 숫자가 아니면 ?이며, showLunch 가 true·false가 아니면 오류', () => {
+  const bad = buildModel({ vacation: true });
+  bad.counts.groups['여 합계'].lunch = 9;
+  bad.counts.groups['3학년'].lunch = undefined;
+  const html = render(bad);
+  assert.ok(html.indexOf('합계가 맞지 않습니다 — 여 합계: 중식 ≠ 부분 합') > 0, '여 합계 중식이 어긋남');
+  const row3 = readTable(html).find((r) => r.name === '3학년');
+  assert.strictEqual(row3.v[4], '?', '값이 없으면 0으로 바꾸지 않고 ?');
+  const one = buildModel({ vacation: true }); one.showLunch = 'yes';
+  assert.throws(() => render(one));
+});
+
 test('R12 mealCountsOn_ 결과를 그대로 받아 그린다(결정 35: 퇴실 후 석식 유지 인원, 모르는 학생 경고)', () => {
   const ST = (id, gender, grade) => ({ id, student_no: '', name: '가짜' + id, gender, grade });
   const EN = (sid) => ({ id: 'e' + sid, term_id: 'T1', student_id: sid });
