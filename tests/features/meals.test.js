@@ -853,3 +853,15 @@ test('사이 날(3/1)에도 다음 기간에만 등록된 신입생을 학생 �
   assert.strictEqual(old.ymd, '', '막 끝난 기간에 등록된 학생은 ymd 없이 열린다');
   assert.strictEqual(env.expectAllowed(HALL, 'listStudentStatus', old.id, old.ymd).student.id, old.id);
 });
+
+test('미실시 적용일 안내 문구는 결정 71: 수요일 마감 전이면 다음 주 월요일, 지나면 다다음 주 월요일(옛 "수~일" 말이 없다)', () => {
+  const env = makeEnv('2027-03-05T12:00:00');
+  clearListTimes(env);
+  const a = pick(env).a;
+  const text = (at) => { const p = prev(env, ADMIN, input(a, 'd_off', at)); assert.strictEqual(p.ok, true, JSON.stringify(p)); return [p.lead, p.date, ...(p.lines || [])].join(' | ') + ' ' + JSON.stringify(p); };
+  const before = text('2027-03-03T10:00:00');   // 수 마감 전
+  assert.ok(before.includes('수요일 마감 시각 전 신청이라 다음 주 월요일'), before);
+  const after = text('2027-03-04T10:00:00');    // 목
+  assert.ok(after.includes('수요일 마감 시각이 지나 신청해서 다다음 주 월요일'), after);
+  assert.ok(!before.includes('수~일') && !after.includes('수~일') && !before.includes('월·화 신청'));
+});
