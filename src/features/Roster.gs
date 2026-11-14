@@ -232,7 +232,7 @@ function rosterApplyBan_(diff, ctx, ymd) {
     var b = banFor(sid), st = byId[sid] || {};
     info[sid] = true;
     list.push({ student_id: sid, student_no: String(st.student_no || ''), name: String(st.name || ''), until: b.until,
-      message: b.until ? '2OUT 퇴실로 ' + rosterBanDateKo_(b.until, ymd) + '까지 입실할 수 없습니다' : '2OUT 퇴실로 다음 학기 끝날까지 입실할 수 없습니다(다음 학기가 아직 등록되지 않았습니다)' });
+      message: (b.kind === '2OUT' ? '2OUT 퇴실로 ' : '퇴실(' + rosterBanDateKo_(b.leaveDate, ymd) + ')로 ') + (b.until ? rosterBanDateKo_(b.until, ymd) + '까지 입실할 수 없습니다' : '다음 학기 끝날까지 입실할 수 없습니다(다음 학기가 아직 등록되지 않았습니다)') });   // 결정 70: 자진 퇴실도
   };
   Object.keys(touched).forEach(function (sid) { if (banFor(sid).banned) add(sid); });
   // 계정 이메일을 고쳐 올려 diffRoster_가 '새 학생'(new:학번)으로 본 줄도 같은 학번·이름의 막힌 기존 학생이면 막는다(중복 학생·학사 입실이 만들어지지 않게)
