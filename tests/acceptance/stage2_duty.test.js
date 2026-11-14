@@ -39,7 +39,7 @@ test('끝까지 ①: 교대 3건 + 화면에서 1건 더 → 기록표 교사별
   const slot = env.rows('duty_slots').find((r) => r.date === '2027-01-27' && r.slot === '21:30조' && r.status === '유효');
   assert.strictEqual(slot.actual_email, TESTER, '시드: 1/27 21:30조 = 시험 교사');
   const before = actualCount(env.rows('duty_slots'));
-  const sw = plain(env.call(TESTER, 'swapDuty', slot.id, idOf(DUTY)));
+  const sw = plain(env.call(TESTER, 'swapDuty', slot.id, idOf(DUTY), { expect: env.asOwner((c) => c.dtySlotToken_(c.readAll_('duty_slots').find((r) => r.id === slot.id))) }));
   assert.strictEqual(sw.ok, true, JSON.stringify(sw));
 
   const rows = env.rows('duty_slots');

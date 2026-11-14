@@ -11,6 +11,10 @@ const terms = [{ id: 't1', name: '1학기', type: '학기', start_date: '2027-03
 const month = (m, over) => plain(ctx.calMonthPlans_(m, Object.assign({ terms, daySchedules: [], blocks, defaults }, over || {})));
 const day = (days, d) => days.find((x) => x.date === d);
 
+/** 화면이 getScheduleData로 받는 '최신인가' 표를 지금 상태에서 다시 계산(저장 직전 값) */
+const dtok = (s, date) => s.c.calRowsToken_(s.c.calDayRows_(s.c.readAll_('day_schedules'), date));
+const btok = (s, tt, dt) => s.c.calRowsToken_(s.c.calBlockGroupRows_(s.c.readAll_('blocks'), tt, dt));
+
 test('calDefaults_: 설정이 없으면 PRD 3.3 기본값, 있으면 설정값(금요일 study.fri.*)', () => {
   assert.deepStrictEqual(defaults, { mon_thu: { start: '18:30', end: '23:50' }, fri: { start: '18:30', end: '23:00' },
     sat: { start: '09:00', end: '17:00' }, sun: { start: '14:00', end: '22:00' } });
@@ -201,10 +205,10 @@ test('getScheduleData: 교사 역할은 보기 가능(canEdit false), 관리자�
 
 test('saveDaySchedule: 이전 유효 행을 취소하고 새 행을 쓴다 → 미리보기에 반영 → 되돌리면 기본', () => {
   const s = makeServer('a@example.com', ['admin']);
-  assert.deepStrictEqual(plain(s.c.saveDaySchedule({ date: '2027-03-10', operating: false, memo: '수능' })), { ok: true, canceledSlots: 0 });
+  assert.deepStrictEqual(plain(s.c.saveDaySchedule({ date: '2027-03-10', operating: false, memo: '수능', token: dtok(s, '2027-03-10') })), { ok: true, canceledSlots: 0 });
   assert.strictEqual(plain(s.c.getScheduleData('2027-03')).days.find((d) => d.date === '2027-03-10').operating, false);
   // 같은 날을 다시 저장하면 이전 행이 '취소'되고 유효 행은 하나
-  s.c.saveDaySchedule({ date: '2027-03-10', operating: true, end: '22:00' });
+  s.c.saveDaySchedule({ date: '2027-03-10', operating: true, end: '22:00', token: dtok(s, '2027-03-10') });
   const rows = s.db.day_schedules.filter((r) => r.date === '2027-03-10');
   assert.deepStrictEqual(rows.map((r) => r.status), ['취소', '유효']);
   assert.deepStrictEqual(plain(s.c.getScheduleData('2027-03')).days.find((d) => d.date === '2027-03-10').blockLabels, ['18–20', '20–22']);
@@ -222,13 +226,13 @@ test('saveDaySchedule: 검사에 걸리면 아무것도 쓰지 않는다', () =>
 test('saveBlocks: 22–24를 22–23:30으로 바꾸면 그 행만 취소+새로 쓰고, 같은 내용으로 다시 저장하면 쓰기 0건', () => {
   const s = makeServer('a@example.com', ['admin']);
   const input = [{ start: '18:00', end: '20:00' }, { start: '20:00', end: '22:00' }, { start: '22:00', end: '23:30' }];
-  const r = plain(s.c.saveBlocks('학기', 'mon_thu', input));
+  const r = plain(s.c.saveBlocks('학기', 'mon_thu', input, btok(s, '학기', 'mon_thu')));
   assert.deepStrictEqual(r, { ok: true, kept: 2, cancelled: 1, created: 1 });
   const active = s.db.blocks.filter((b) => b.status === '유효' && b.day_type === 'mon_thu');
   assert.deepStrictEqual(active.map((b) => b.start + '-' + b.end), ['18:00-20:00', '20:00-22:00', '22:00-23:30']);
   assert.strictEqual(s.db.blocks.filter((b) => b.status === '취소').length, 1, '삭제 없이 취소 표시');
   const before = s.writes.length;
-  assert.deepStrictEqual(plain(s.c.saveBlocks('학기', 'mon_thu', input)), { ok: true, kept: 3, cancelled: 0, created: 0 });
+  assert.deepStrictEqual(plain(s.c.saveBlocks('학기', 'mon_thu', input, btok(s, '학기', 'mon_thu'))), { ok: true, kept: 3, cancelled: 0, created: 0 });
   assert.strictEqual(s.writes.length, before);
   // 다른 요일 유형 블록은 그대로
   assert.strictEqual(s.db.blocks.filter((b) => b.status === '유효' && b.day_type === 'fri').length, 3);
@@ -236,11 +240,11 @@ test('saveBlocks: 22–24를 22–23:30으로 바꾸면 그 행만 취소+새로
 
 test('saveBlocks: 나쁜 입력(겹침·잘못된 유형)은 쓰지 않는다 / 방학 블록을 새로 만들 수 있다', () => {
   const s = makeServer('a@example.com', ['admin']);
-  const bad = plain(s.c.saveBlocks('학기', 'mon_thu', [{ start: '18:00', end: '21:00' }, { start: '20:00', end: '22:00' }]));
+  const bad = plain(s.c.saveBlocks('학기', 'mon_thu', [{ start: '18:00', end: '21:00' }, { start: '20:00', end: '22:00' }], btok(s, '학기', 'mon_thu')));
   assert.strictEqual(bad.ok, false); assert.deepStrictEqual(s.writes, []);
   assert.throws(() => s.c.saveBlocks('여름', 'mon_thu', []), /학기 또는 방학/);
   assert.throws(() => s.c.saveBlocks('학기', 'Mon Thu!', []), /요일 유형/);
-  assert.deepStrictEqual(plain(s.c.saveBlocks('방학', 'mon_thu', [{ start: '09:00', end: '12:00' }, { start: '14:00', end: '17:00' }])),
+  assert.deepStrictEqual(plain(s.c.saveBlocks('방학', 'mon_thu', [{ start: '09:00', end: '12:00' }, { start: '14:00', end: '17:00' }], btok(s, '방학', 'mon_thu'))),
     { ok: true, kept: 0, cancelled: 0, created: 2 });
   const d = plain(s.c.getScheduleData('2027-07')).days.find((x) => x.date === '2027-07-21');
   assert.deepStrictEqual(d.blockLabels, ['09–12', '14–17'], '방학 날은 방학 블록');
@@ -250,4 +254,42 @@ test('화면 라우팅: schedule 화면은 교사 역할만 열 수 있다', () 
   const r = loadGs(['src/Schema.gs', 'src/Auth.gs', 'src/Code.gs']);
   for (const role of ['admin', 'hall_teacher', 'attendance', 'homeroom']) assert.strictEqual(plain(r.screenResolve_('schedule', [role])).ok, true, role);
   for (const role of ['student', 'parent']) assert.strictEqual(plain(r.screenResolve_('schedule', [role])).ok, false, role);
+});
+
+test('낡은 화면 방지(saveBlocks): A가 읽고 B가 먼저 저장하면 A의 옛 화면 저장은 {stale:true}·쓰기 0, 표가 없거나 틀려도 같고, 새 표로는 된다', () => {
+  const s = makeServer('a@example.com', ['admin']);
+  const seen = plain(s.c.getScheduleData('2027-03')).blockTokens;   // 관리자 A가 화면을 연다
+  assert.ok(typeof seen['학기|mon_thu'] === 'string' && seen['학기|mon_thu'].length > 0);
+  const input = [{ start: '18:00', end: '20:00' }, { start: '20:00', end: '22:00' }, { start: '22:00', end: '23:30' }];
+  assert.strictEqual(plain(s.c.saveBlocks('학기', 'mon_thu', input, seen['학기|mon_thu'])).ok, true);   // B가 먼저 저장
+  const w = s.writes.length, blocks = JSON.stringify(s.db.blocks);
+  const old = plain(s.c.saveBlocks('학기', 'mon_thu', [{ start: '18:00', end: '21:00' }], seen['학기|mon_thu']));   // A의 옛 화면
+  assert.deepStrictEqual([old.ok, old.stale, /새로 불러온 뒤/.test(old.error)], [false, true, true]);
+  [undefined, '', 5, null, 'zz'].forEach((t) => assert.strictEqual(plain(s.c.saveBlocks('학기', 'mon_thu', input, t)).stale, true, String(t)));
+  assert.strictEqual(s.writes.length, w, '쓰기 0건');
+  assert.strictEqual(JSON.stringify(s.db.blocks), blocks);
+  const fresh = plain(s.c.getScheduleData('2027-03')).blockTokens['학기|mon_thu'];
+  assert.notStrictEqual(fresh, seen['학기|mon_thu']);
+  assert.strictEqual(plain(s.c.saveBlocks('학기', 'mon_thu', [{ start: '18:00', end: '21:00' }], fresh)).ok, true);
+  // 다른 (유형, 요일)의 표는 영향이 없다
+  assert.strictEqual(plain(s.c.getScheduleData('2027-03')).blockTokens['학기|fri'], seen['학기|fri']);
+});
+
+test('낡은 화면 방지(saveDaySchedule): A가 읽고 B가 먼저 저장하면 A의 옛 화면 저장은 {stale:true}·쓰기 0(검사 오류는 표보다 먼저), 새 표로는 된다', () => {
+  const s = makeServer('a@example.com', ['admin']);
+  const tokens = () => plain(s.c.getScheduleData('2027-03')).dayTokens;
+  const seen = tokens();
+  assert.strictEqual(seen['2027-03-10'], '', '일정이 없는 날의 표는 빈 글자');
+  assert.strictEqual(plain(s.c.saveDaySchedule({ date: '2027-03-10', operating: true, end: '22:00', token: seen['2027-03-10'] })).ok, true);   // B
+  const w = s.writes.length, rows = JSON.stringify(s.db.day_schedules);
+  const old = plain(s.c.saveDaySchedule({ date: '2027-03-10', operating: false, memo: '옛 화면', token: seen['2027-03-10'] }));   // A의 옛 화면
+  assert.deepStrictEqual([old.ok, old.stale], [false, true]);
+  [undefined, '', 7, null].forEach((t) => assert.strictEqual(plain(s.c.saveDaySchedule({ date: '2027-03-10', operating: false, token: t })).stale, true, String(t)));
+  assert.strictEqual(s.writes.length, w);
+  assert.strictEqual(JSON.stringify(s.db.day_schedules), rows);
+  // 검사 오류(날짜 형식·시각)는 표와 상관없이 먼저 나온다
+  assert.strictEqual(plain(s.c.saveDaySchedule({ date: '2027-03-10', operating: true, start: '22:00', end: '18:00', token: 'x' })).stale, undefined);
+  // 다른 날짜의 표는 영향 없음, 새 표로는 된다
+  assert.strictEqual(tokens()['2027-03-11'], seen['2027-03-11']);
+  assert.strictEqual(plain(s.c.saveDaySchedule({ date: '2027-03-10', operating: false, memo: '새 화면', token: tokens()['2027-03-10'] })).ok, true);
 });

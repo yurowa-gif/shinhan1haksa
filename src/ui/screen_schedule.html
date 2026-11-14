@@ -121,8 +121,9 @@
         Array.prototype.forEach.call(dayBox.querySelectorAll('.fix'), function (n) { n.textContent = ''; });
         function doSave(ids) {
         call('saveDaySchedule', { date: d.date, operating: operating.value === 'TRUE', start: start.value, end: end.value,
-          day_type: dayType.value, memo: memo.value, confirmIds: ids || null }).then(function (r) {
+          day_type: dayType.value, memo: memo.value, confirmIds: ids || null, token: (state.data.dayTokens || {})[d.date] || '' }).then(function (r) {
           save.disabled = false;
+          if (r.stale) { UI.toast(r.error, { kind: 'warn', ms: 6000 }); load(state.month); return; }   // 다른 관리자가 먼저 바꿨다: 새로 불러온다
           if (r.needsConfirm) return confirmDutyCancel(d, r, function () { save.disabled = true; doSave(r.confirmIds); });
           if (!r.ok) { showFieldErrors(dayBox, r.errors); msg.appendChild(el('div', { class: 'error', text: '저장하지 못했습니다. 빨간 글씨를 고쳐 주세요.' })); return; }
           load(state.month, '저장했습니다.');
@@ -177,8 +178,9 @@
       if (note) blkBox.appendChild(el('div', { class: 'cal-ok', text: note }));
       save.addEventListener('click', function () {
         save.disabled = true; clear(msg);
-        call('saveBlocks', term.value, dtype.value, rows).then(function (r) {
+        call('saveBlocks', term.value, dtype.value, rows, (state.data.blockTokens || {})[term.value + '|' + dtype.value] || '').then(function (r) {
           save.disabled = false;
+          if (r.stale) { UI.toast(r.error, { kind: 'warn', ms: 6000 }); load(state.month); return; }   // 다른 관리자가 먼저 바꿨다: 새로 불러온다
           if (!r.ok) {
             msg.appendChild(el('div', { class: 'error', text: '저장하지 못했습니다.' }));
             r.errors.forEach(function (er) { msg.appendChild(el('div', { class: 'fix', text: (er.index + 1) + '번째 블록: ' + er.message })); });

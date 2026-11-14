@@ -74,9 +74,14 @@ function termSort_(terms) {
 }
 
 /** 화면에 내보내는 모양(_row 같은 내부 값은 뺀다) */
+/** 그 기간 행의 '화면이 최신인가' 표(수정 저장 때 input.token으로 보낸다) */
+function termToken_(t) {
+  return [t.id, t.updated_at || '', t.name, t.type, t.start_date, t.end_date, t.memo || ''].join('|');
+}
+
 function termView_(t, currentId) {
   return {
-    id: t.id, name: t.name, type: t.type, start_date: t.start_date, end_date: t.end_date,
+    id: t.id, token: termToken_(t), name: t.name, type: t.type, start_date: t.start_date, end_date: t.end_date,
     memo: t.memo || '', isCurrent: !!currentId && t.id === currentId
   };
 }
@@ -97,7 +102,7 @@ function listTerms() {
 }
 
 /**
- * 기간 추가(id 없음) 또는 수정(id 있음). 관리자만.
+ * 기간 추가(id 없음) 또는 수정(id 있음). 관리자만. 수정은 화면이 본 기간 표(input.token = listTerms의 token)가 지금과 같아야 한다(아니면 {stale:true}).
  * 검사에 걸리면 저장하지 않고 {ok:false, errors}를 돌려준다.
  */
 function saveTerm(input) {
@@ -110,7 +115,9 @@ function saveTerm(input) {
     var id = String((input && input.id) || '');
     var saved;
     if (id) {
-      if (!findById_('terms', id)) throw new Error('수정할 기간을 찾을 수 없습니다. 목록을 새로 불러와 주세요.');
+      var curTerm = findById_('terms', id);
+      if (!curTerm) throw new Error('수정할 기간을 찾을 수 없습니다. 목록을 새로 불러와 주세요.');
+      if (typeof input.token !== 'string' || input.token !== termToken_(curTerm)) return { ok: false, stale: true, error: '다른 관리자가 먼저 바꿨습니다. 새로 불러온 뒤 다시 해 주세요.' };
       saved = updateRecord_('terms', id, check.record, user.email);
     } else {
       saved = appendRecord_('terms', check.record, user.email);

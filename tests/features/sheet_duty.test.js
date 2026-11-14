@@ -68,7 +68,7 @@ test('취소된 칸만 있으면 칸이 없는 것으로 본다, 다른 날 칸�
 
 test('운영 안 하는 날은 출석부를 만들지 않아도 응답 모양은 같다, 권한은 그대로(담임은 거부)', () => {
   const x = makeEnv();
-  x.env.call(ADMIN, 'saveDaySchedule', { date: WED, operating: false, memo: '행사' });
+  x.env.call(ADMIN, 'saveDaySchedule', { date: WED, operating: false, memo: '행사', token: x.env.asOwner((c) => c.calRowsToken_(c.calDayRows_(c.readAll_('day_schedules'), WED))) });
   const r = x.sheet(WED);
   assert.deepStrictEqual([r.ok, r.operating], [true, false]);
   x.env.expectDenied(HOMEROOM, 'sheet.view', 'getAttendanceSheet', WED, {});

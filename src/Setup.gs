@@ -51,14 +51,17 @@ function setup() {
   seedRooms_(owner, report);
   seedSettings_(owner, report);
 
-  var users = readAll_('users');
-  if (!users.length) {
-    appendRecord_('users', {
-      email: owner, name: '관리자(소유자)', roles: 'admin,hall_teacher', homeroom_class: '', active: 'TRUE',
-      memo: 'setup()이 자동 등록'
-    }, owner);
-    report.push('[등록] 소유자 계정을 관리자·학사 교사로 등록: ' + owner);
-  }
+  // 비어 있는지 보는 것과 쓰는 것을 한 락 안에서 한다(동시에 두 번 실행해도 소유자 줄이 둘 생기지 않게)
+  withLock_(function () {
+    invalidate_('db', 'users');
+    if (!readAll_('users').length) {
+      appendRecord_('users', {
+        email: owner, name: '관리자(소유자)', roles: 'admin,hall_teacher', homeroom_class: '', active: 'TRUE',
+        memo: 'setup()이 자동 등록'
+      }, owner);
+      report.push('[등록] 소유자 계정을 관리자·학사 교사로 등록: ' + owner);
+    }
+  });
 
   if (props_().getProperty('DIAG_ENABLED') === null) {
     props_().setProperty('DIAG_ENABLED', 'true');
@@ -218,13 +221,17 @@ function addUser(email, name, roles, homeroomClass) {
   var bad = String(roles || '').split(',').map(function (r) { return r.trim(); })
     .filter(function (r) { return r && ROLES.indexOf(r) < 0; });
   if (bad.length) throw new Error('알 수 없는 역할: ' + bad.join(', '));
-  var dup = readAll_('users').filter(function (u) { return normalizeEmail_(u.email) === email; })[0];
-  if (dup) {
-    return updateRecord_('users', dup.id, {
-      name: name, roles: roles, homeroom_class: homeroomClass || '', active: 'TRUE'
+  // 같은 이메일 찾기와 쓰기를 한 락 안에서(같은 이메일을 동시에 추가해도 두 줄이 생기지 않게). 락 안에서 다시 읽는다
+  return withLock_(function () {
+    invalidate_('db', 'users');
+    var dup = readAll_('users').filter(function (u) { return normalizeEmail_(u.email) === email; })[0];
+    if (dup) {
+      return updateRecord_('users', dup.id, {
+        name: name, roles: roles, homeroom_class: homeroomClass || '', active: 'TRUE'
+      }, owner);
+    }
+    return appendRecord_('users', {
+      email: email, name: name, roles: roles, homeroom_class: homeroomClass || '', active: 'TRUE', memo: ''
     }, owner);
-  }
-  return appendRecord_('users', {
-    email: email, name: name, roles: roles, homeroom_class: homeroomClass || '', active: 'TRUE', memo: ''
-  }, owner);
+  });
 }

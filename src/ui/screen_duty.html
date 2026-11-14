@@ -220,7 +220,8 @@
       sel.addEventListener('change', refresh);
       function doSwap(ack) {
         busy = true; refresh(); err.textContent = '';
-        call('swapDuty', s.slotId, sel.value, { acknowledge: !!ack, reason: reason ? reason.value.trim() : '' }).then(function (r) {
+        call('swapDuty', s.slotId, sel.value, { acknowledge: !!ack, reason: reason ? reason.value.trim() : '', expect: s.token }).then(function (r) {
+          if (r.stale) { busy = false; sheet.close(); UI.toast(r.message, { kind: 'warn', ms: 6000 }); load(state.month, { week: state.week }); return; }   // 그 사이 근무표가 바뀌었다: 다시 불러온다
           if (r.needsConfirm) {
             busy = false; refresh();
             return UI.confirmSheet({ title: '같은 날 다른 칸에도 있습니다', lead: r.warnings[0], lines: ['그래도 교대하면 한 선생님이 두 칸을 맡습니다'], confirmText: '그대로 교대',
@@ -313,10 +314,12 @@
       function done(msg) { sheet.close(); load(state.data.month, { week: state.week, note: msg }); }
       function fail(e) { busy = false; refresh(); err((e && e.message) || String(e)); }
 
+      function slotTokens() { var t = {}; x.slots.forEach(function (q) { t[q.slot] = q.token; }); return t; }
       function saveSlots(ack) {
         var ch = slotChanges();
         if (!Object.keys(ch).length) return done('저장했습니다.');
-        call('saveDutyDay', { date: x.date, slots: ch, acknowledge: !!ack }).then(function (r) {
+        call('saveDutyDay', { date: x.date, slots: ch, expect: slotTokens(), acknowledge: !!ack }).then(function (r) {
+          if (r.stale) { sheet.close(); UI.toast(r.message, { kind: 'warn', ms: 6000 }); load(state.data.month, { week: state.week }); return; }   // 다른 담당자가 먼저 바꿨다: 다시 불러온다
           if (r.ok) return done('저장했습니다.');
           if (r.needsConfirm) {
             busy = false; refresh();
