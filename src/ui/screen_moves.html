@@ -302,7 +302,7 @@
   function renderMoveTab(root, prefillId) {
     var U = UI.util;
     var alive = true, typeSeq = 0;   // 탭을 떠난 뒤 늦게 온 응답·예약이 화면·아래 바를 다시 만들지 않게
-    var ctx = null, picked = null, mctx = null, type = '', dinner = '', doc = false, breakfastOn = true, last = null, seq = 0, timer = null, busy = false, atTouched = false, meals = null;   // meals = 재입실 급식 선택(학사 입실일 때만)
+    var ctx = null, picked = null, mctx = null, type = '', dinner = '', doc = false, breakfastOn = true, last = null, seq = 0, timer = null, busy = false, atTouched = false, meals = null, dateField = null, dateTouched = false;   // meals = 재입실 급식 선택(학사 입실일 때만)
     var dismiss = null, dismissMsg = '', savedMove = null;   // savedMove = 방금 저장한 신청서(확인서 안내)
        // 2OUT 퇴실 확정에서 넘어온 신청서(서버가 다시 확인한 값만, 주소 값은 믿지 않는다)
     var body = el('div');
@@ -311,6 +311,7 @@
     function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
     function removeBar() { if (bar) { bar.remove(); bar = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); } }
     function plusDay(ymd) { var d = new Date(ymd + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); }
+    function nextMonthFirst(ymd) { var y = +ymd.slice(0, 4), m = +ymd.slice(5, 7); return (m === 12 ? y + 1 : y) + '-' + String(m === 12 ? 1 : m + 1).padStart(2, '0') + '-01'; }   // 결정 74: 신규 입실일 기본값
     function hallLeave() { return type === '학사 퇴실' || type === '학사 및 기숙사 퇴실'; }
 
     call('getMealContext').then(function (c) {
@@ -327,6 +328,7 @@
 
     function draw() {
       resetState();   // 다시 그릴 때마다 이전 선택·서류 체크를 비운다
+      dateTouched = false;
       clear(body); removeBar();
       if (!ctx.canEdit) { body.appendChild(el('div', { class: 'notice info', text: '입퇴실은 담당교사와 관리자만 신청합니다. 이 화면에서는 볼 수만 있습니다.' })); return; }
       if (!ctx.students.length) { body.appendChild(UI.emptyState('신청할 수 있는 학생이 없습니다. 이번 운영 기간 명단과 담당교사를 확인해 주세요.')); return; }
@@ -366,7 +368,8 @@
         clear(chips); clear(hints);
         if (!mctx) { chips.appendChild(el('span', { class: 'muted', text: '학생을 고르면 가능한 유형이 나옵니다.' })); }
         else mctx.types.filter(function (t) { return !dismiss || t.type === '학사 퇴실' || t.type === '학사 및 기숙사 퇴실'; }).forEach(function (t) {
-          var b = el('button', { type: 'button', class: t.type === type ? 'chip on' : 'chip', text: t.type, onclick: function () { type = t.type; dinner = ''; meals = null; breakfastOn = true; drawTypes(); drawExtras(); refresh(); } });
+          var b = el('button', { type: 'button', class: t.type === type ? 'chip on' : 'chip', text: t.type, onclick: function () { type = t.type; dinner = ''; if (dateField && !dismiss && !dateTouched && /입실/.test(type) && !mctx.reentry) dateField.setValue(nextMonthFirst(ctx.today));   // 신규 입실은 다음 달 1일이 기본(고칠 수 있다)
+           meals = null; breakfastOn = true; drawTypes(); drawExtras(); refresh(); } });
           if (!t.enabled) { b.disabled = true; if (t.hint.indexOf('기숙사생은') === 0) hints.appendChild(el('div', { class: 'hint', text: t.hint })); }
           chips.appendChild(b);
         });
@@ -378,7 +381,7 @@
 
       var at = el('input', { type: 'datetime-local', value: ctx.now.slice(0, 16), max: ctx.now.slice(0, 16) });
       at.addEventListener('change', function () { atTouched = true; refresh(); });
-      var dateField = UI.dateField({ label: '적용일', value: dismiss ? dismiss.effectiveDate : ctx.today, shortcuts: [{ label: '오늘', value: ctx.today }, { label: '내일', value: plusDay(ctx.today) }], onchange: function () { last = null; drawResult(); drawBar(); if (picked) loadTypes(picked.id); else refresh(); } });   // 날짜가 바뀌는 동안 이전 미리보기와 켜진 버튼을 남기지 않는다
+      dateField = UI.dateField({ label: '적용일', value: dismiss ? dismiss.effectiveDate : ctx.today, shortcuts: [{ label: '오늘', value: ctx.today }, { label: '내일', value: plusDay(ctx.today) }], onchange: function () { dateTouched = true; last = null; drawResult(); drawBar(); if (picked) loadTypes(picked.id); else refresh(); } });   // 날짜가 바뀌는 동안 이전 미리보기와 켜진 버튼을 남기지 않는다
       body.appendChild(el('div', { class: 'card' }, [UI.field('신청 일시', at, { hint: '서류를 받은 날짜·시각입니다. 기본값은 지금입니다.' }), dateField]));
 
       var extra = el('div');
@@ -462,7 +465,7 @@
       }
       function confirmSave() {
         var p = last;
-        UI.confirmSheet({ title: '입퇴실을 저장합니다', lead: p.lead, lines: [U.studentLabel(picked) + ' (' + picked.grade + '-' + picked.classNo + ' ' + picked.number + '번)'].concat(dismiss ? ['2OUT 퇴실 확정'] : []).concat(p.lines).concat(type === '학사 입실' ? ['옛 자리가 넘어갔으면 자리 배정이 필요합니다'] : []).concat(doc ? [] : ['서류 미제출로 기록됩니다']).concat(p.warnings || []),
+        UI.confirmSheet({ title: '입퇴실을 저장합니다', lead: p.lead, lines: [U.studentLabel(picked) + ' (' + picked.grade + '-' + picked.classNo + ' ' + picked.number + '번)'].concat(dismiss ? ['2OUT 퇴실 확정'] : []).concat(p.lines).concat(type === '학사 입실' ? ['옛 자리가 넘어갔으면 자리 배정이 필요합니다'] : []).concat(doc ? [] : ['서류 미제출로 기록됩니다']).concat(p.warnings || []).concat(/퇴실/.test(type) && !dismiss ? ['새 달 5일이 지나 퇴실하면 그달 비용을 냅니다'] : []),
           confirmText: '입퇴실 저장', danger: /퇴실/.test(type), onconfirm: function () {
             busy = true; drawBar();
             call('saveMove', payload(), p.expect).then(function (r) {

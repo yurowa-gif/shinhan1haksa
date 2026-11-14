@@ -391,3 +391,21 @@ test('학부모 저장도 미리보기와 기간이 다르면 거부한다', () 
   assert.strictEqual(plain(s.c.commitGuardians(text, OPTS, p.counts)).stale, true);
   assert.strictEqual(s.writes.length, w);
 });
+
+test('학기 중 추가 선발(결정 74②): 기간 중간 날짜로 올려도 막히지 않고, 새 학생만 그 날짜부터 들어온다', () => {
+  const s = admin();
+  assert.strictEqual(commit(s, FULL).ok, true);
+  const base = fake.students[0], e0 = enrOf[base.id];
+  const extra = ['39999', base.grade, base.class_no, 99, '가짜추가', base.gender, base.track, 'O', 'O', 'X', 'O', '학사', e0.commute_type, e0.teacher_email, 'fake.extra@example.com', ''].join(',');
+  const text = FULL + '\n' + extra;
+  const mid = { termId: TERM2.id, ymd: '2027-04-12' };
+  const p = prev(s, text, mid);
+  assert.strictEqual(p.ok, true, JSON.stringify(p.errors));
+  assert.strictEqual(p.counts.newStudents, 1);
+  const before = s.db.status_changes.length;
+  const r = commit(s, text, mid);
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(s.db.students.length, 31);
+  const added = s.db.status_changes.slice(before);
+  assert.ok(added.length > 0 && added.every((c) => c.effective_date === '2027-04-12'), '새 학생의 상태는 올린 날짜부터');
+});
