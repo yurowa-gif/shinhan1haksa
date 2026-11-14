@@ -13,7 +13,7 @@
 
     function draw() {
       removeBar(); clear(body); clear(tabsBox);
-      tabsBox.appendChild(el('div', { class: 'card' }, [UI.segmented({ label: '화면', value: tab, options: [{ value: 'new', label: '일괄 퇴실' }, { value: 'undo', label: '지난 일괄 퇴실' }], onchange: function (v) { tab = v; draw(); } })]));
+      tabsBox.appendChild(el('div', { class: 'card' }, [UI.segmented({ label: '화면', value: tab, options: [{ value: 'new', label: '일괄 퇴실' }, { value: 'undo', label: '지난 기록' }], onchange: function (v) { tab = v; draw(); } })]));
       if (tab === 'undo') renderUndo(body); else renderNew(body);
     }
 
