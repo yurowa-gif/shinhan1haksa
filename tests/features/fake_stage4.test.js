@@ -22,11 +22,11 @@ const counts = (env) => tabs.map((t) => env.rows(t).length);
 test('seedFakeStage4: 휴일 블록 5·휴일 2일·시험 기간 5일·추가 입실 3명(학생·등록·상태 행), 두 번 실행해도 +0', () => {
   const env = seededEnv();
   const before = counts(env);
-  assert.strictEqual(env.asOwner((c) => c.seedFakeStage4()), '가짜 4단계 데이터: blocks +5, day_schedules +7, students +3, enrollments +3, status_changes +8, doc_types +6, student_docs +170, programs +1, exceptions +32, program_participants +32, students 연락처 33, guardian_links 연락처 30');
+  assert.strictEqual(env.asOwner((c) => c.seedFakeStage4()), '가짜 4단계 데이터: blocks +5, day_schedules +7, students +3, enrollments +3, status_changes +8, doc_types +6, student_docs +170, programs +1, exceptions +32, program_participants +32, students 연락처 33, guardian_links 연락처 30, 방학 +1, 방학 등록 +32, 중식 +23');
   const first = tabs.map((t) => JSON.stringify(env.rows(t)));
-  assert.strictEqual(env.asOwner((c) => c.seedFakeStage4()), '가짜 4단계 데이터: blocks +0, day_schedules +0, students +0, enrollments +0, status_changes +0, doc_types +0, student_docs +0, programs +0, exceptions +0, program_participants +0, students 연락처 0, guardian_links 연락처 0');
+  assert.strictEqual(env.asOwner((c) => c.seedFakeStage4()), '가짜 4단계 데이터: blocks +0, day_schedules +0, students +0, enrollments +0, status_changes +0, doc_types +0, student_docs +0, programs +0, exceptions +0, program_participants +0, students 연락처 0, guardian_links 연락처 0, 방학 +0, 방학 등록 +0, 중식 +0');
   assert.deepStrictEqual(tabs.map((t) => JSON.stringify(env.rows(t))), first, '두 번째 실행 뒤 그대로');
-  assert.deepStrictEqual(counts(env), before.map((n, i) => n + [5, 7, 3, 3, 8][i]));
+  assert.deepStrictEqual(counts(env), before.map((n, i) => n + [5, 7, 3, 3 + 32, 8 + 23][i]));
 
   const days = env.rows('day_schedules');
   assert.deepStrictEqual(days.filter((d) => d.day_type === 'holiday').map((d) => [d.date, d.start, d.end]), [['2027-05-05', '09:00', '21:50'], ['2027-06-03', '09:00', '21:50']]);
@@ -37,7 +37,7 @@ test('seedFakeStage4: 휴일 블록 5·휴일 2일·시험 기간 5일·추가 �
   assert.strictEqual(new Set(env.rows('students').map((s) => s.student_no)).size, env.rows('students').length, '학번 겹침 없음');
   extra.forEach((s) => {
     assert.ok(env.rows('enrollments').some((e) => e.student_id === s.id && e.term_id === term.id), s.name + ' 이번 기간 등록');
-    const ch = env.rows('status_changes').filter((c) => c.student_id === s.id);
+    const ch = env.rows('status_changes').filter((c) => c.student_id === s.id && c.item !== '중식');   // 중식은 방학 시드(아래 시험)
     assert.ok(ch.length >= 2 && ch.every((c) => c.effective_date === '2027-04-01' && c.source === '명단업로드'), s.name + ' 4/1 입실 행');
   });
   assert.strictEqual(env.rows('status_changes').filter((c) => extra.some((s) => s.id === c.student_id) && c.item === '기숙사').length, 1, '기숙사생 1명');
@@ -115,4 +115,24 @@ test('seedFakeStage4 서류·프로그램·전화(S4-0): 서류 6종·일부 미
   assert.ok(contactAudit.every((x) => x.after.includes('(연락처 생략)')), '값 대신 생략 표시');
   assert.ok(!JSON.stringify(env.rows('audit_log')).includes('010-0000') && !JSON.stringify(env.rows('audit_log')).includes('가짜보호자'), '감사 기록에 번호·보호자 이름 값 없음');
   assert.ok(!JSON.stringify(env.as(ADMIN, (c) => c.readAll_('students'))).includes('010-0000'), 'readAll_에는 연락처 열이 없다');
+});
+
+test('seedFakeStage4 방학 중식(R19): 여름방학 기간·등록(1학기 끝날 학사생), 중식은 방학 시작일부터 22명, 1명은 방학 중 미실시 → 다음 주 월요일, 집계 lunch는 방학 날만', () => {
+  const env = seededEnv();
+  env.asOwner((c) => c.seedFakeStage4());
+  const vac = env.rows('terms').find((t) => t.type === '방학');
+  assert.deepStrictEqual([vac.name, vac.start_date, vac.end_date], ['2027 여름방학(테스트)', '2027-07-19', '2027-08-13']);
+  const t1 = env.rows('terms').find((t) => t.name === '2027 1학기');
+  const on = (sid, item, ymd) => env.as(ADMIN, (c) => c.statusOn_(c.readAll_('status_changes'), sid, item, ymd));
+  const vacIds = env.rows('enrollments').filter((e) => e.term_id === vac.id).map((e) => e.student_id).sort();
+  const stay = env.rows('enrollments').filter((e) => e.term_id === t1.id && on(e.student_id, '학사', t1.end_date) === '입실').map((e) => e.student_id).sort();
+  assert.deepStrictEqual(vacIds, stay, '방학 등록 = 1학기 끝날 학사생');
+  const lunch = env.rows('status_changes').filter((c) => c.item === '중식');
+  assert.strictEqual(lunch.filter((c) => c.value === '실시' && c.effective_date === vac.start_date).length, 22);
+  const stop = lunch.filter((c) => c.value === '미실시');
+  assert.deepStrictEqual(stop.map((c) => [c.requested_at, c.effective_date]), [['2027-07-21T10:00:00', '2027-07-26']], '수 11:30 전 → 다음 주 월요일(결정 71)');
+  const counts = (ymd, v) => env.as(ADMIN, (c) => c.mealCountsOn_(c.readAll_('students'), c.readAll_('enrollments'), c.readAll_('status_changes'), v ? vac.id : t1.id, ymd, '', v ? vac : undefined).groups['전체'].lunch);
+  assert.strictEqual(counts('2027-07-20', true), 22);
+  assert.strictEqual(counts('2027-07-27', true), 21, '미실시 적용 뒤');
+  assert.strictEqual(counts('2027-03-09', false), 0, '학기에는 중식 0');
 });
