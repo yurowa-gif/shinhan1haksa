@@ -611,7 +611,7 @@ function getMealCountsPdf(date) {
   var user = requirePermission_('meal.count');
   var m = foodCountsModel_(foodCountsDate_(date));
   if (!m.term) return { ok: false, error: '운영 기간이 아닌 날은 출력할 수 없습니다.' };
-  var html = printRenderMealCounts_({ date: m.date, termName: m.term.name, operating: m.operating, hasLunch: !!m.hasLunch, counts: m.counts, docUnsubmitted: m.docUnsubmitted, docRows: m.docRows,
+  var html = printRenderMealCounts_({ date: m.date, termName: m.term.name, operating: m.operating, hasLunch: !!m.hasLunch, showLunch: !!m.hasLunch, counts: m.counts, docUnsubmitted: m.docUnsubmitted, docRows: m.docRows,
     preparedBy: user.name, generatedAt: nowIso_().slice(0, 16).replace('T', ' ') });
   var name = '식수집계_' + m.date + '(' + ymdWeekdayKo_(m.date) + ').pdf';
   var bytes = sheetMakePdf_(html, name).getBytes();
