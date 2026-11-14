@@ -17,9 +17,9 @@ test('줄 모양: 성별+학년, 성별 합계, 학년, 전체 — 숫자는 학
   const ch = [].concat(STUDENT('a', '입실', '입실', '실시', '학사 석식'), STUDENT('b', '입실', '퇴실', '미실시', '일반 석식'), STUDENT('c', '입실', '퇴실', '실시', '미실시'));
   const r = counts(st, st.map((s) => EN(s.id)), ch, '2027-03-02');
   assert.deepStrictEqual(Object.keys(r.groups), ['여1', '여2', '여3', '여 합계', '남1', '남2', '남3', '남 합계', '1학년', '2학년', '3학년', '전체']);
-  assert.deepStrictEqual(r.groups['여1'], { hall: 1, dorm: 1, nonDorm: 0, breakfast: 1, hallDinner: 1, generalDinner: 0 });
-  assert.deepStrictEqual(r.groups['1학년'], { hall: 2, dorm: 1, nonDorm: 1, breakfast: 2, hallDinner: 1, generalDinner: 0 });
-  assert.deepStrictEqual(r.groups['전체'], { hall: 3, dorm: 1, nonDorm: 2, breakfast: 2, hallDinner: 1, generalDinner: 1 });
+  assert.deepStrictEqual(r.groups['여1'], { hall: 1, dorm: 1, nonDorm: 0, breakfast: 1, lunch: 0, hallDinner: 1, generalDinner: 0 });
+  assert.deepStrictEqual(r.groups['1학년'], { hall: 2, dorm: 1, nonDorm: 1, breakfast: 2, lunch: 0, hallDinner: 1, generalDinner: 0 });
+  assert.deepStrictEqual(r.groups['전체'], { hall: 3, dorm: 1, nonDorm: 2, breakfast: 2, lunch: 0, hallDinner: 1, generalDinner: 1 });
   assert.deepStrictEqual([r.unknownGroup, r.warnings, r.afterLeaveHallDinner], [[], [], 0]);
 });
 
@@ -66,7 +66,7 @@ function rng(seed) {
   let a = seed >>> 0;
   return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
-const VALUES = { '학사': ['입실', '퇴실'], '기숙사': ['입실', '퇴실'], '조식': ['실시', '미실시'], '석식': ['학사 석식', '일반 석식', '미실시'] };
+const VALUES = { '학사': ['입실', '퇴실'], '기숙사': ['입실', '퇴실'], '조식': ['실시', '미실시'], '중식': ['실시', '미실시'], '석식': ['학사 석식', '일반 석식', '미실시'] };
 // 그날 값: 유효 행 중 적용일 ≤ 그날, 적용일이 가장 늦고, 같으면 신청 일시가 늦은 행(vocabulary.md)
 function valueOn(rows, sid, item, d) {
   let best = null;
@@ -92,9 +92,11 @@ test('오라클 무작위 시험 100가지: 줄마다 숫자가 단순 계산과
       }
     }
     const d = '2027-03-0' + (1 + Math.floor(R() * 9));
-    const r = counts(st, en, ch, d);
+    const vac = seed % 2 ? { start_date: '2027-03-04', end_date: '2027-03-07' } : null;   // 홀수 seed는 방학(R19 중식)
+    const r = plain(ctx.mealCountsOn_(st, en, ch, 'T1', d, '', vac));
+    const lunchOn = (sid) => !!vac && d >= vac.start_date && d <= vac.end_date && valueOn(ch.filter((c) => c.item !== '중식' || c.effective_date >= vac.start_date), sid, '중식', d) === '실시';
     const want = {};
-    const add = (k, v) => { want[k] = want[k] || { hall: 0, dorm: 0, nonDorm: 0, breakfast: 0, hallDinner: 0, generalDinner: 0 }; for (const m in v) want[k][m] += v[m]; };
+    const add = (k, v) => { want[k] = want[k] || { hall: 0, dorm: 0, nonDorm: 0, breakfast: 0, lunch: 0, hallDinner: 0, generalDinner: 0 }; for (const m in v) want[k][m] += v[m]; };
     const done = new Set();
     let after = 0;
     for (const e of en) {
@@ -104,11 +106,11 @@ test('오라클 무작위 시험 100가지: 줄마다 숫자가 단순 계산과
       if (!s.gender) continue;
       const hall = valueOn(ch, s.id, '학사', d) === '입실', dorm = hall && valueOn(ch, s.id, '기숙사', d) === '입실', dn = valueOn(ch, s.id, '석식', d);
       if (dn === '학사 석식' && !hall) after++;
-      const v = { hall: +hall, dorm: +dorm, nonDorm: +(hall && !dorm), breakfast: +(valueOn(ch, s.id, '조식', d) === '실시'), hallDinner: +(dn === '학사 석식'), generalDinner: +(dn === '일반 석식') };
+      const v = { hall: +hall, dorm: +dorm, nonDorm: +(hall && !dorm), breakfast: +(valueOn(ch, s.id, '조식', d) === '실시'), lunch: +(hall && lunchOn(s.id)), hallDinner: +(dn === '학사 석식'), generalDinner: +(dn === '일반 석식') };
       [s.gender + s.grade, s.gender + ' 합계', s.grade + '학년', '전체'].forEach((k) => add(k, v));
     }
     for (const k of Object.keys(r.groups)) {
-      assert.deepStrictEqual(r.groups[k], want[k] || { hall: 0, dorm: 0, nonDorm: 0, breakfast: 0, hallDinner: 0, generalDinner: 0 }, 'seed ' + seed + ' ' + k);
+      assert.deepStrictEqual(r.groups[k], want[k] || { hall: 0, dorm: 0, nonDorm: 0, breakfast: 0, lunch: 0, hallDinner: 0, generalDinner: 0 }, 'seed ' + seed + ' ' + k);
     }
     assert.strictEqual(r.afterLeaveHallDinner, after, 'seed ' + seed);
     for (const m of Object.keys(r.groups['전체'])) {
@@ -126,7 +128,7 @@ test('결정 35 보충: prevTermId를 주면 직전 기간에만 등록된 학�
     STUDENT('b', '입실', '퇴실', '실시', '일반 석식'), [CH('b', '학사', '퇴실', '2027-03-12')], STUDENT('c', '입실', '퇴실', '실시', '학사 석식'));
   const en = [EN('a', 'T0'), EN('b', 'T0'), EN('c', 'T0'), EN('c')];
   const r = plain(ctx.mealCountsOn_(st, en, ch, 'T1', '2027-03-15', 'T0'));
-  assert.deepStrictEqual(r.groups['전체'], { hall: 1, dorm: 0, nonDorm: 1, breakfast: 1, hallDinner: 2, generalDinner: 0 });
+  assert.deepStrictEqual(r.groups['전체'], { hall: 1, dorm: 0, nonDorm: 1, breakfast: 1, lunch: 0, hallDinner: 2, generalDinner: 0 });
   assert.strictEqual(r.afterLeaveHallDinner, 1);
   assert.deepStrictEqual(plain(ctx.mealCountsOn_(st, en, ch, 'T1', '2027-03-15')).groups['전체'].hallDinner, 1);   // 주지 않으면 지금처럼
   assert.strictEqual(plain(ctx.mealCountsOn_(st, en, ch, 'T1', '2027-03-22', 'T0')).groups['전체'].hallDinner, 1);   // 중단일 뒤엔 안 셈
@@ -142,6 +144,6 @@ test('결정 35 보충: 직전 기간에서 학사 입실 상태만 이어진 �
     STUDENT('e', '입실', '퇴실', '실시', '학사 석식'), [CH('e', '학사', '퇴실', '2027-07-14')]);
   const en = [EN('a', 'T1'), EN('b', 'T1'), EN('c', 'T1'), EN('c', 'V'), EN('d', 'T0'), { id: 'ee', term_id: '', student_id: 'e' }];
   const r = plain(ctx.mealCountsOn_(st, en, ch, 'V', '2027-07-20', 'T1'));
-  assert.deepStrictEqual(r.groups['전체'], { hall: 1, dorm: 0, nonDorm: 1, breakfast: 1, hallDinner: 2, generalDinner: 0 });
+  assert.deepStrictEqual(r.groups['전체'], { hall: 1, dorm: 0, nonDorm: 1, breakfast: 1, lunch: 0, hallDinner: 2, generalDinner: 0 });
   assert.strictEqual(r.afterLeaveHallDinner, 1);
 });
