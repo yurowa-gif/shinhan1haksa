@@ -182,14 +182,15 @@ test('4단계 선생님 확인 체크리스트: 번호(A1~L4)가 겹치지 않�
   assert.ok(rows.length >= 100, '단계 수 ' + rows.length);
   rows.forEach((l) => assert.strictEqual(l.replace(/\\\|/g, '').split('|').length, 8, l.slice(0, 40)));   // 칸 안의 \| 는 칸 구분이 아니다
   ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'].forEach((s) => assert.ok(ids.indexOf(s + '1') >= 0, s + '절이 없다'));
-  ['입퇴실 확인서 비고 칸 높이', '빈 양식 종이', '51mm', 'ASSUMPTION', '새 달 5일이 지나 퇴실하면 그달 비용을 냅니다', '다음 달 1일', '즉시 퇴실로 정하기', '결정 78', '학사 프로그램 열기', '확인서 인쇄', '임시 퇴실', '일괄 퇴실', '급식실 양식으로 출력', '엑셀로 받기'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
+  ['입퇴실 확인서 비고 칸 높이', '빈 양식 종이', '51mm', 'ASSUMPTION', '새 달 5일이 지나 퇴실하면 그달 비용을 냅니다', '다음 달 1일', '즉시 퇴실로 정하기', '결정 78', '학사 프로그램 열기', '확인서 인쇄', '임시 퇴실', '일괄 퇴실', '복귀 예정일 지남', '일반 퇴실로 바꾸기', '소급하지 않습니다', '급식실 양식으로 출력', '엑셀로 받기'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
+  assert.ok(doc.indexOf('이미 기록된 이 항목의 OUT에도 그대로') < 0, '결정 78 이전의 소급 문구가 남아 있다');
   const imgs = [...doc.matchAll(/!\[[^\]]*\]\(([^)]+\.png)\)/g)].map((m) => m[1]);
-  assert.ok(imgs.length >= 25, '사진 수 ' + imgs.length);
+  assert.ok(imgs.length >= 28, '사진 수 ' + imgs.length);
   imgs.forEach((f) => assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'docs', 'design', f)), f + ' 파일이 없다'));
   // 이 문서가 시안 사진으로 쓰는 4단계 시안 이름(백틱)은 stage4-screens.js 에 실제로 있어야 한다
   const src = css.readFile('design/preview/stage4-screens.js');
   const defs = [...src.matchAll(/^def\('([^']+)'/gm)].map((m) => m[1]);
-  ['outs-instant', 'outs-instant-confirm', 'moves-enter-first', 'moves-leave-5day'].forEach((id) => { assert.ok(defs.indexOf(id) >= 0, id); assert.ok(doc.indexOf('`' + id + '`') >= 0, '`' + id + '` 가 문서에 없다'); });
+  ['outs-instant', 'outs-instant-confirm', 'moves-enter-first', 'moves-leave-5day', 'moves-temp-leave', 'moves-temp-convert', 'home-temp-overdue'].forEach((id) => { assert.ok(defs.indexOf(id) >= 0, id); assert.ok(doc.indexOf('`' + id + '`') >= 0, '`' + id + '` 가 문서에 없다'); });
   const old = css.readFile('docs/design/stage4-teacher-checks-coding-a.md');
   assert.ok(old.indexOf('stage4-teacher-checks.md') >= 0, 'coding-a 초안에 합친 문서 링크가 없다');
   // 번호가 같은 코딩A 초안의 단계(A1~F9)가 합친 문서에도 그대로 있다
