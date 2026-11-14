@@ -9,10 +9,39 @@
    * 입퇴실·급식 화면(2단계, CODING-B). [입퇴실](F6-1, C18a) · [급식 변경](F7-1) · [학생 기록](C17b).
    * 날짜·이유·취소할 행은 서버(previewMealChange)가 계산한 것만 보여 준다. docs/design/screens.md F7-1.
    */
+
+  /** 확인서 PDF(결정 68): 서버가 만든 PDF(base64)를 이 화면에서만 내려받는다(Drive에 남기지 않는다). 결과 알림은 호출 쪽이 한다 */
+  function downloadPdf(r) {
+    var bin = atob(r.base64), arr = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    var a = el('a', { href: URL.createObjectURL(new Blob([arr], { type: 'application/pdf' })), download: r.name, style: 'display:none' });
+    document.body.appendChild(a); a.click(); setTimeout(function () { a.remove(); URL.revokeObjectURL(a.href); }, 1000);
+  }
+  /** [확인서 인쇄] 버튼: fn = getMealConfirmPdf | getMoveConfirmPdf, id = 신청 행 id. 누르는 동안 꺼 두고, 실패 이유는 알림으로 */
+  function confirmButton(fn, id, isAlive) {
+    var btn = el('button', { type: 'button', class: 'btn secondary', style: 'flex:0 0 auto;white-space:nowrap', text: '확인서 인쇄' });
+    btn.addEventListener('click', function () {
+      if (btn.disabled) return;
+      btn.disabled = true; btn.textContent = '만드는 중…';
+      call(fn, id).then(function (r) {
+        btn.disabled = false; btn.textContent = '확인서 인쇄';
+        if (isAlive && !isAlive()) return;
+        if (!r.ok) { UI.toast(r.error || '확인서를 만들지 못했습니다.', { kind: 'warn', ms: 5000 }); return; }
+        downloadPdf(r); UI.toast('확인서를 만들었습니다. 서명을 받은 뒤 [제출 표시]를 눌러 주세요.', { kind: 'ok', ms: 5000 });
+      }).catch(function (err) { btn.disabled = false; btn.textContent = '확인서 인쇄'; UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); });
+    });
+    return btn;
+  }
+  /** 방금 저장한 신청서의 확인서 안내 카드(저장 뒤 화면을 다시 그려도 남는다). onclose = [닫기] */
+  function savedCard(text, fn, id, isAlive, onclose) {
+    return el('div', { class: 'card' }, [el('div', { class: 'mv-row' }, [el('div', { class: 'mv-text', style: 'word-break:keep-all', text: text }), confirmButton(fn, id, isAlive)]),
+      el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:8px', text: '닫기', onclick: onclose })]);
+  }
+
   function renderMealTab(root) {
     var U = UI.util;
     var alive = true;   // 탭을 떠난 뒤 늦게 온 응답이 화면·아래 바를 다시 그리지 않게
-    var ctx = null, picked = null, chip = '', doc = false, fixing = false, seq = 0, timer = null, last = null, busy = false;
+    var ctx = null, picked = null, chip = '', kind = '', doc = false, fixing = false, seq = 0, timer = null, last = null, busy = false, saved = null;   // kind = 확인서 사유 구분, saved = 방금 저장한 신청서(확인서 안내)
     var body = el('div');
     root.appendChild(body);
     var bar = null;
@@ -26,6 +55,7 @@
       resetState();   // 다시 그릴 때마다 이전 선택·서류 체크를 비운다(저장 왕복 중에 누른 것이 새 화면에 몰래 남지 않게)
       clear(body); removeBar();
       body.appendChild(el('h2', { text: (ctx.term ? ctx.term.name + ' · ' : '') + '급식 변경' }));
+      if (saved) body.appendChild(savedCard(saved.text, 'getMealConfirmPdf', saved.id, function () { return alive; }, function () { saved = null; draw(); }));
       if (!ctx.canEdit) {
         body.appendChild(el('div', { class: 'notice info', text: '급식 변경은 담당교사와 관리자만 신청합니다. 이 화면에서는 볼 수만 있습니다.' }));
         return;
@@ -68,6 +98,7 @@
       function drawFix() {
         clear(fixBox);
         if (fixing) { fixBox.appendChild(dateField); fixBox.appendChild(reasonField); }
+        if (typeof drawKind === 'function') drawKind();   // 적용일을 고치는 중에는 사유 칸 하나를 함께 쓴다
       }
       var dateText = el('div', { class: 'mv-text' });
       body.appendChild(el('div', { class: 'card' }, [
@@ -75,6 +106,20 @@
         el('div', { class: 'mv-row' }, [dateText, fixBtn]),
         result, fixBox
       ]));
+
+      // 확인서 사유 구분(결정 68, 선택): 전입·전출·장기결석·대회출전·기타. '기타'는 사유 글이 확인서에 적힌다
+      var kindChips = el('div', { class: 'chips' }), kindBox = el('div');
+      var kindInput = el('input', { type: 'text', maxlength: '100' });
+      kindInput.addEventListener('input', refresh);
+      function drawKind() {
+        clear(kindChips); clear(kindBox);
+        ['전입', '전출', '장기결석', '대회출전', '기타'].forEach(function (k) {
+          kindChips.appendChild(el('button', { type: 'button', class: k === kind ? 'chip on' : 'chip', text: k, onclick: function () { kind = kind === k ? '' : k; drawKind(); refresh(); } }));
+        });
+        if (kind === '기타' && !fixing) kindBox.appendChild(UI.field('기타 사유(확인서에 적힙니다)', kindInput));
+      }
+      drawKind();
+      body.appendChild(el('div', { class: 'card' }, [UI.field('확인서 사유 구분(선택)', kindChips, { hint: '급식 확인서에 ○로 표시됩니다. 정하지 않으면 비워 둡니다.' }), kindBox]));
 
       var docBox = el('input', { type: 'checkbox' });
       docBox.addEventListener('change', function () { doc = docBox.checked; drawDoc(); });
@@ -85,7 +130,7 @@
 
       function payload() {
         return { studentId: picked ? picked.id : '', chip: chip, requestedAt: at.value ? at.value + ':00' : '', effectiveDate: fixing ? dateField.getValue() : '',
-          reason: fixing ? reasonInput.value.trim() : '', docSubmitted: doc };
+          reason: fixing ? reasonInput.value.trim() : (kind === '기타' ? kindInput.value.trim() : ''), reasonKind: kind, docSubmitted: doc };
       }
       function drawResult() {
         clear(result); clear(dateText);
@@ -139,6 +184,7 @@
               if (!alive) return;
               if (r.stale) { busy = false; UI.toast(r.error, { kind: 'warn', ms: 5000 }); refresh(); return; }
               if (!r.ok) { busy = false; UI.toast((r.errors && r.errors[0] && r.errors[0].message) || r.blocked || '저장하지 못했습니다.', { kind: 'warn', ms: 5000 }); refresh(); return; }
+              saved = r.confirmForm ? { id: r.id, text: '방금 저장한 신청서의 학교급식(미)실시 확인서를 인쇄해 서명을 받으세요.' } : null;
               resetState();   // 다음 학생에게 이전 학생의 선택·서류 체크가 남지 않게 모두 비운다
               window.scrollTo(0, 0);
               // 다시 불러오는 동안은 busy를 유지한다(그 사이 눌린 버튼이 빈 학생으로 저장되지 않게)
@@ -148,7 +194,7 @@
           }
         });
       }
-      function resetState() { picked = null; chip = ''; doc = false; fixing = false; last = null; seq++; clearTimeout(timer); }
+      function resetState() { picked = null; chip = ''; kind = ''; doc = false; fixing = false; last = null; seq++; clearTimeout(timer); }
       function reset() { resetState(); draw(); }
       drawResult(); drawBar();
     }
@@ -188,6 +234,10 @@
         } });
       } else if (h.docState === 'missing') right = UI.statusPill('todo', '서류 미제출');
       else if (h.docState === 'done') right = UI.statusPill('mute', '서류 제출');
+      if (h.confirmForm) {   // 확인서 인쇄(결정 68): 급식 변경 신청(실시·미실시가 바뀔 때)·입퇴실 신청. 담당교사·관리자만 보인다
+        var fb = confirmButton(h.confirmForm === 'meal' ? 'getMealConfirmPdf' : 'getMoveConfirmPdf', h.id, function () { return alive; });
+        right = right ? el('div', { style: 'display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:0 0 auto' }, [right, fb]) : fb;
+      }
       if (h.canCancelMove) {   // 퇴실 취소: 같이 취소·되살아나는 것과 경고를 서버가 계산해 확인 시트에 그대로 보인다
         var cb = el('button', { type: 'button', class: 'btn secondary', style: 'flex:0 0 auto;white-space:nowrap', text: '퇴실 취소', onclick: function (e) { cancelSheet(h, name, e.currentTarget); } });
         right = right ? el('div', { style: 'display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:0 0 auto' }, [right, cb]) : cb;
@@ -253,7 +303,8 @@
     var U = UI.util;
     var alive = true, typeSeq = 0;   // 탭을 떠난 뒤 늦게 온 응답·예약이 화면·아래 바를 다시 만들지 않게
     var ctx = null, picked = null, mctx = null, type = '', dinner = '', doc = false, breakfastOn = true, last = null, seq = 0, timer = null, busy = false, atTouched = false, meals = null;   // meals = 재입실 급식 선택(학사 입실일 때만)
-    var dismiss = null, dismissMsg = '';   // 2OUT 퇴실 확정에서 넘어온 신청서(서버가 다시 확인한 값만, 주소 값은 믿지 않는다)
+    var dismiss = null, dismissMsg = '', savedMove = null;   // savedMove = 방금 저장한 신청서(확인서 안내)
+       // 2OUT 퇴실 확정에서 넘어온 신청서(서버가 다시 확인한 값만, 주소 값은 믿지 않는다)
     var body = el('div');
     root.appendChild(body);
     var bar = null;
@@ -280,6 +331,7 @@
       if (!ctx.canEdit) { body.appendChild(el('div', { class: 'notice info', text: '입퇴실은 담당교사와 관리자만 신청합니다. 이 화면에서는 볼 수만 있습니다.' })); return; }
       if (!ctx.students.length) { body.appendChild(UI.emptyState('신청할 수 있는 학생이 없습니다. 이번 운영 기간 명단과 담당교사를 확인해 주세요.')); return; }
 
+      if (savedMove) body.appendChild(savedCard(savedMove.text, 'getMoveConfirmPdf', savedMove.id, function () { return alive; }, function () { savedMove = null; draw(); }));
       if (dismissMsg) body.appendChild(el('div', { class: 'notice warn', text: dismissMsg }));
       var status = el('div', { class: 'muted' });
       var picker = UI.studentPicker({ students: ctx.students, label: '학생', onpick: function (s) {
@@ -419,6 +471,7 @@
               if (r.stale) { busy = false; UI.toast(r.error, { kind: 'warn', ms: 5000 }); refresh(); return; }
               if (!r.ok && gateClosed(r)) { busy = false; return; }
               if (!r.ok) { busy = false; UI.toast((r.errors && r.errors[0] && r.errors[0].message) || '저장하지 못했습니다.', { kind: 'warn', ms: 5000 }); refresh(); return; }
+              savedMove = r.duplicate ? null : { id: r.id, text: '방금 저장한 입퇴실 신청서의 확인서(행정실 제출용)를 인쇄해 서명을 받으세요.' };
               resetState(); dismiss = null; dismissMsg = '';
               window.scrollTo(0, 0);
               call('getMealContext').then(function (c) { if (alive) { busy = false; ctx = c; draw(); } })   // 다시 불러오는 동안은 busy 유지
