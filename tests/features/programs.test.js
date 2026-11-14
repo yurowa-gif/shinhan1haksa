@@ -30,7 +30,7 @@ test('권한: 쓰기 5개는 관리자·학사 교사만(denied:program.edit), �
   const p = call(x, ADMIN, 'saveProgram', input(x));
   assert.strictEqual(p.ok, true, JSON.stringify(p));
   const before = counts(x);
-  for (const who of [ATT, DUTY, HOMEROOM, STUDENT, PARENT]) {
+  for (const who of [DUTY, HOMEROOM, STUDENT, PARENT]) {
     x.env.expectDenied(who, 'program.edit', 'previewProgram', input(x, { name: '다른 것' }));
     x.env.expectDenied(who, 'program.edit', 'saveProgram', input(x, { name: '다른 것' }));
     x.env.expectDenied(who, 'program.edit', 'cancelProgram', p.id, '사유 두 글자');
@@ -44,6 +44,24 @@ test('권한: 쓰기 5개는 관리자·학사 교사만(denied:program.edit), �
   assert.deepStrictEqual(counts(x), before);
   for (const who of [ADMIN, T1, ATT]) { x.env.expectAllowed(who, 'getProgramContext', DATE); x.env.expectAllowed(who, 'listPrograms', {}); }
   x.env.expectAllowed(T1, 'previewProgram', input(x, { name: '학사 교사 미리보기' }));
+  x.env.expectAllowed(ATT, 'previewProgram', input(x, { name: '출결 담당 미리보기' }));
+});
+
+test('출결 담당도 학사 교사처럼 프로그램을 만들고(담당이 아닌 학생 포함 누구나 참가자), 참가자를 더하고 빼고 프로그램을 취소한다 — 만든 사람은 audit에 출결 담당', () => {
+  const x = makeEnv();
+  const ATT_EMAIL = ATT;
+  const mixed = x.students.slice(0, 12).map((s) => s.id);
+  assert.ok(new Set(x.enr.filter((e) => mixed.includes(e.student_id)).map((e) => e.teacher_email)).size >= 2, '담당교사가 여럿인 학생들');
+  const p = call(x, ATT, 'saveProgram', Object.assign(input(x, { studentIds: mixed }), { confirmOverlap: true }));   // 가짜 데이터에 같은 날 특이사항이 있는 학생이 섞여 있다
+  assert.strictEqual(p.ok, true, JSON.stringify(p));
+  assert.strictEqual(p.count, 12);
+  assert.ok(x.env.rows('programs').every((r) => r.created_by === ATT_EMAIL));
+  assert.ok(progExc(x).every((e) => e.status === '확정' && e.confirmed_by === ATT_EMAIL));
+  assert.strictEqual(call(x, ATT, 'addProgramStudents', p.id, [x.students[12].id]).count, 1);
+  assert.strictEqual(call(x, ATT, 'removeProgramStudent', p.id, x.students[12].id, '참가하지 않기로 함').ok, true);
+  const c = call(x, ATT, 'cancelProgram', p.id, '강사 사정으로 취소');
+  assert.deepStrictEqual([c.ok, c.count], [true, 12]);
+  assert.ok(progExc(x).every((e) => e.status === '취소'));
 });
 
 test('saveProgram: 프로그램 1 + 참가자 N + 확정 특이사항 N(유형·날짜·블록·묶음은 학생마다), 참가자 행이 그 특이사항 id를 갖고, 만든 사람·audit이 남고 메일은 없다', () => {
@@ -189,8 +207,8 @@ test('listPrograms: 날짜순, 살아 있는 참가자만(학년·반·번호 �
   call(x, ADMIN, 'cancelProgram', a.id, '일정 변경으로 취소');
   const l = call(x, ATT, 'listPrograms', {});
   assert.deepStrictEqual(l.items.map((i) => i.name), ['A 특강', 'C 특강', 'B 특강']);
-  assert.strictEqual(l.canEdit, false);
-  assert.ok(l.items.every((i) => i.canCancel === false));
+  assert.strictEqual(l.canEdit, true, '출결 담당도 program.edit');
+  assert.deepStrictEqual(l.items.map((i) => i.canCancel), [false, true, true], '취소된 프로그램은 취소 버튼이 없다');
   assert.deepStrictEqual([l.items[0].status, l.items[0].count, l.items[0].participants.length], ['취소', 0, 0]);
   assert.strictEqual(l.items[2].count, 3);
   assert.deepStrictEqual([l.today, l.items[2].exceptionCount, l.items[0].exceptionCount], ['2027-03-03', 3, 0], '특이사항 건수(살아 있는 것만)');
@@ -208,7 +226,7 @@ test('getProgramContext: 편집 권한이 있을 때만 학생 목록(그 기간
   assert.ok(adm.blocks.length > 0 && adm.term.id === x.term.id);
   assert.ok(adm.students.every((q) => typeof q.dorm === 'boolean') && adm.students.some((q) => q.dorm) && adm.students.some((q) => !q.dorm), '기숙사생 표시(반 단위 담기의 "기숙사생만")');
   const att = call(x, ATT, 'getProgramContext', DATE);
-  assert.deepStrictEqual([att.canEdit, att.students.length], [false, 0]);
+  assert.deepStrictEqual([att.canEdit, att.students.length > 0], [true, true]);
   assert.throws(() => x.env.call(ADMIN, 'getProgramContext', '2027-13-45'), /날짜/);
 });
 
