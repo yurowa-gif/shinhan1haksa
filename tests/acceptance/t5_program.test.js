@@ -2,7 +2,7 @@
  * T5 흐름 시험: C28 학사 프로그램(결정 75②). seedFakeStage1~4 위에서, 화면이 부르는 공개 함수만. 가짜 데이터만.
  * 학사 교사가 프로그램을 만들면 참가자마다 '학사 내 프로그램' 특이사항(묶음 id 따로) → 출석부 칸 '내부'.
  * 한 학생 특이사항을 출결 담당이 따로 취소 → 참가자 한 명 빼기 → 프로그램 취소: 남은 특이사항이 함께 취소되고,
- * 따로 취소된 행의 사유는 그대로 남는다. 권한: 출결 담당은 보기만, 담임은 보기도 못 한다.
+ * 따로 취소된 행의 사유는 그대로 남는다. 권한(#182): 출결 담당도 만들기·취소할 수 있고, 담임은 보기도 고치기도 못 한다.
  */
 const assert = require('assert');
 const { test, plain } = require('../helpers/harness');
@@ -23,7 +23,7 @@ function seededEnv() {
   return env;
 }
 
-test('프로그램 흐름: 만들기 → 참가자마다 특이사항(묶음 따로)·출석부 내부 → 따로 취소·한 명 빼기 → 프로그램 취소(함께 취소, 따로 취소된 사유는 그대로), 출결은 보기만·담임 거부', () => {
+test('프로그램 흐름: 만들기 → 참가자마다 특이사항(묶음 따로)·출석부 내부 → 따로 취소·한 명 빼기 → 프로그램 취소(함께 취소, 따로 취소된 사유는 그대로), 출결 담당도 만들기·취소, 담임 거부', () => {
   const env = seededEnv();
   const term = env.rows('terms').find((t) => t.name === '2027 1학기');
   const exTab = () => env.rows(env.as(ADMIN, (c) => c.termSheetName_('exceptions', term.id)));
@@ -69,8 +69,13 @@ test('프로그램 흐름: 만들기 → 참가자마다 특이사항(묶음 따
   assert.ok(!JSON.stringify(plain(env.call(ADMIN, 'getAttendanceSheet', DATE, true))).includes('내부'), '취소 뒤 출석부에 내부 없음(가짜 파워클래스는 다른 날)');
   assert.ok(exTab().length >= parts.length, '행은 지우지 않는다');
 
-  // 권한: 출결 담당은 보기만, 담임은 보기도 못 한다
+  // 권한(#182): 출결 담당도 만들기·취소, 담임은 보기도 고치기도 못 한다
   assert.ok(JSON.stringify(plain(env.call(ATT, 'listPrograms', { termId: term.id }))).includes(sv.id), '출결 담당 목록에 이 프로그램');
-  env.expectDenied(ATT, 'program.edit', 'saveProgram', Object.assign({}, input, { name: '가짜 다른 특강' }));
+  const other = Object.assign({}, input, { name: '가짜 다른 특강', studentIds: ids.slice(0, 2), confirmOverlap: true });
+  const as = plain(env.call(ATT, 'saveProgram', other));
+  assert.deepStrictEqual([as.ok, as.count], [true, 2], JSON.stringify(as).slice(0, 300));
+  const ac = plain(env.call(ATT, 'cancelProgram', as.id, '가짜: 일정 변경'));
+  assert.deepStrictEqual([ac.ok, ac.canceledExceptions], [true, 2], JSON.stringify(ac));
+  env.expectDenied(HOMEROOM, 'program.edit', 'saveProgram', Object.assign({}, other, { name: '가짜 세 번째 특강' }));
   env.expectDenied(HOMEROOM, 'program.view', 'listPrograms', {});
 });
