@@ -211,6 +211,50 @@ def('program-cancel', 'C28 프로그램', '프로그램 취소 확인 (사유 �
   UI.confirmWithReason({ title: '프로그램을 취소합니다', message: '면접 특강 · 4월 17일(토). 참가자 33명의 사전 특이사항도 함께 취소됩니다(기록은 남습니다).', reasonLabel: '사유', confirmText: '프로그램 취소', danger: true, onconfirm: function () {} });
 });
 
+/* ═════════ C19b 즉시 퇴실 항목(결정 69·78)·C26 입퇴실 세부(결정 74) — 4단계 확인 체크리스트의 사진용 ═════════ */
+function s4MoveTabs() { return [{ t: '입퇴실', on: true }, { t: '급식 변경' }, { t: '학생 기록' }]; }
+function s4MoveLeave(m) {
+  m.appendChild(card('학생', [studentPick('', 'ㅂㄷㅅ')]));
+  m.appendChild(card('무엇을', [UI.field('유형', el('div', { class: 'chips' }, [el('button', { type: 'button', class: 'chip', disabled: 'disabled', text: '학사 퇴실' }), el('button', { type: 'button', class: 'chip on', text: '학사 및 기숙사 퇴실' })]))]));
+  m.appendChild(card('날짜', [UI.dateField({ label: '적용일', value: '2027-03-12', shortcuts: [{ label: '오늘', value: '2027-03-03' }], onchange: function () {} })]));
+}
+function ruleItem(name, desc, pills, btns) {   // 실제 screen_outs.html 의 쪽 안 CSS(.out-item 블록, .out-line 가로 나열)를 인라인으로 따라 한다
+  return el('li', { class: 'out-item', style: 'display:block' }, [el('div', { class: 'out-line', style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, [el('b', { class: 'out-who', style: 'word-break:keep-all', text: name })].concat(pills)),
+    desc ? el('div', { class: 'muted', text: desc }) : null,
+    el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-top:8px' }, btns.map(function (t) { return el('button', { type: 'button', class: 'btn secondary row-btn', style: 'margin-top:0', text: t }); }))]);
+}
+function ruleList(m) {
+  var ul = el('ul', { class: 'list', style: 'margin-top:8px' }, [
+    ruleItem('자습 분위기 방해', '', [], ['수정', '끄기', '즉시 퇴실로 정하기']),
+    ruleItem('흡연', '', [UI.statusPill('todo', '즉시 퇴실')], ['수정', '끄기', '즉시 퇴실 해제']),
+    ruleItem('라면·배달음식', '', [], ['수정', '끄기', '즉시 퇴실로 정하기']),
+    ruleItem('미인정 지각', '자동으로 기록됩니다', [UI.statusPill('mute', '자동')], ['수정'])]);
+  m.appendChild(card('OUT 항목', [el('div', { class: 'muted', text: '교사가 OUT을 기록할 때 고르는 항목입니다. 지우지 않고 끄기만 합니다(이미 기록된 OUT은 그대로).' }), ul, el('button', { type: 'button', class: 'btn block', style: 'margin-top:12px', text: '항목 추가' })]));
+}
+def('outs-instant', 'C19b·C26 보충', 'OUT [항목] 탭 — 즉시 퇴실 표시와 [즉시 퇴실로 정하기] (관리자만)', {}, function (root) {
+  var m = frame(root, { title: 'OUT', who: '관리자', tabs: [{ t: '기록' }, { t: '퇴실 대상', n: 3 }, { t: '오늘' }, { t: '학기' }, { t: '항목', on: true }],
+    note: '시안 · 실제 화면에 맞춤. 즉시 퇴실로 정한 항목에만 "즉시 퇴실" 표시가 붙고, 버튼은 [즉시 퇴실 해제]로 바뀐다. 자동 항목에는 이 버튼이 없다.' });
+  ruleList(m);
+});
+def('outs-instant-confirm', 'C19b·C26 보충', '[즉시 퇴실로 정하기] 확인창 (이미 기록된 OUT에도 적용 안내)', { sheet: true }, function (root) {
+  var m = frame(root, { title: 'OUT', who: '관리자', tabs: [{ t: '기록' }, { t: '퇴실 대상', n: 3 }, { t: '오늘' }, { t: '학기' }, { t: '항목', on: true }] });
+  ruleList(m);
+  UI.confirmSheet({ title: '즉시 퇴실 항목으로 정합니다', lead: '라면·배달음식', lines: ['이 항목으로 OUT을 한 번 기록하면 바로 2OUT(퇴실 대상)이 됩니다.', '이번 기간에 이미 기록된 이 항목의 OUT에도 그대로 적용됩니다.', '퇴실 확정은 지금처럼 학부모 면담 기록 뒤 관리자가 합니다.'], confirmText: '즉시 퇴실로 정하기', onconfirm: function () {} });
+});
+def('moves-enter-first', 'C19b·C26 보충', '신규 입실 — 적용일 기본값이 다음 달 1일 (오늘 3월 3일이면 4월 1일)', {}, function (root) {
+  var m = frame(root, { title: '입퇴실·급식', who: '박선생', tabs: s4MoveTabs(), bar: [{ text: '닫기', kind: 'secondary' }, { text: '입퇴실 신청' }],
+    note: '시안 · 입실 유형(학사 입실·기숙사 입실)을 고르면 적용일이 다음 달 1일로 채워진다. 직접 고쳐도 되고, 고친 뒤에는 유형을 바꿔도 다시 채우지 않는다.' });
+  m.appendChild(card('학생', [studentPick('', 'ㅂㄷㅅ')]));
+  m.appendChild(card('무엇을', [UI.field('유형', el('div', { class: 'chips' }, [el('button', { type: 'button', class: 'chip on', text: '학사 입실' }), el('button', { type: 'button', class: 'chip', text: '학사 퇴실' })]))]));
+  m.appendChild(card('날짜', [inputField('신청 일시', 'datetime-local', '2027-03-03T10:45', '신청서를 받은 날짜·시각. 기본값은 지금입니다.'),
+    UI.dateField({ label: '적용일', value: '2027-04-01', shortcuts: [{ label: '오늘', value: '2027-03-03' }, { label: '내일', value: '2027-03-04' }], onchange: function () {} })]));
+});
+def('moves-leave-5day', 'C19b·C26 보충', '퇴실 저장 확인창 — "새 달 5일이 지나 퇴실하면 그달 비용을 냅니다" 안내 (비용 계산 없음)', { sheet: true }, function (root) {
+  var m = frame(root, { title: '입퇴실·급식', who: '박선생', tabs: s4MoveTabs(), bar: [{ text: '닫기', kind: 'secondary' }, { text: '입퇴실 신청' }] });
+  s4MoveLeave(m);
+  UI.confirmSheet({ title: '입퇴실을 저장합니다', lead: '3월 12일(금)부터 학사 및 기숙사 퇴실', lines: ['박다솜 학생 (3-2 7번)', '자리 공석', '기숙사 3월 12일 퇴실', '조식 3월 12일 중단', '석식 3월 22일(월) 중단', '서류 미제출로 기록됩니다', '새 달 5일이 지나 퇴실하면 그달 비용을 냅니다'], confirmText: '입퇴실 저장', onconfirm: function () {} });
+});
+
 /* ═════════ 실행 ═════════ */
 function renderScreen(id) {
   var s = SCREENS[id];
