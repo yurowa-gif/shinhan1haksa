@@ -114,72 +114,87 @@ def('docs-type-edit', 'C27 서류', '서류 종류 추가·고치기 시트', { 
     actions: [{ text: '닫기', kind: 'secondary', onclick: function () {} }, { text: '추가', onclick: function () {} }], onclose: function () {} }).open();
 });
 
-/* ═════════ C28 프로그램 + 참가자 ═════════ */
+/* ═════════ C28 프로그램 + 참가자 (코딩B가 만든 실제 화면 #173에 맞춘 모양: [목록|새 프로그램] 탭, 카드 안 펼치기, 아래 바는 입력에서만) ═════════ */
 var SAT_BLOCKS = [{ seq: 1, start: '09:00', end: '12:00', label: '①' }, { seq: 2, start: '14:00', end: '15:30', label: '②' }, { seq: 3, start: '15:30', end: '17:00', label: '③' }];
 
-function progCard(name, date, blocks, n, state, kind, note) {
-  var c = card('', [row([el('b', { text: name }), UI.statusPill(kind, state)], 'justify-content:space-between;margin-bottom:4px'),
-    el('div', { class: 'muted', style: 'word-break:keep-all', text: date + ' · ' + blocks }), el('div', { class: 'muted', text: '참가자 ' + n + '명' + (note ? ' · ' + note : '') }),
-    row([el('button', { type: 'button', class: 'btn secondary row-btn', text: '열기' })], 'margin-top:8px')]);
+function programTabs(on) {
+  return card('', [UI.segmented({ options: [{ value: 'list', label: '목록' }, { value: 'entry', label: '새 프로그램' }], value: on, onchange: function () {} })]);
+}
+/** 학생 여러 명 고르기(입력과 [참가자 더하기] 시트가 같이 쓴다): 학년·반으로 한꺼번에 + 검색·체크로 한 명씩, 고른 수를 늘 보인다 */
+function studentMultiMock(count) {
+  var box = el('div');
+  box.appendChild(el('div', { class: 'chips', role: 'group', 'aria-label': '학년' }, ['1학년', '2학년', '3학년'].map(function (t, i) { return el('button', { type: 'button', class: 'chip' + (i === 1 ? ' on' : ''), text: t }); })));
+  box.appendChild(el('div', { class: 'chips', style: 'margin-top:8px', role: 'group', 'aria-label': '반' }, ['1반', '2반', '3반', '4반', '5반', '6반'].map(function (t, i) { return el('button', { type: 'button', class: 'chip' + (i === 2 ? ' on' : ''), text: t }); })));
+  box.appendChild(checkRow('기숙사생만', false));
+  box.appendChild(el('div', { class: 'muted', style: 'margin:6px 0;word-break:keep-all', text: '2학년 3반 학사생 9명 · 이미 담은 학생 2명은 빼고 7명이 새로 담깁니다.' }));
+  box.appendChild(el('button', { type: 'button', class: 'btn', text: '이 반 담기' }));
+  box.appendChild(UI.field('학생 찾기', el('input', { type: 'text', placeholder: '이름·학번으로 찾기' })));
+  box.appendChild(el('div', { class: 'muted', style: 'margin:4px 0', text: '고른 학생 ' + count + '명' }));
+  var list = el('div', { style: 'max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px 8px' });
+  [['2-3 1번', '박다솜'], ['2-3 2번', '이나래'], ['2-3 4번', '최하늘'], ['2-3 5번', '정하나']].forEach(function (r) { list.appendChild(checkRow(r[0] + ' ' + r[1], true)); });
+  box.appendChild(list);
+  box.appendChild(el('button', { type: 'button', class: 'btn secondary row-btn', style: 'margin-top:4px', text: '모두 비우기' }));
+  return box;
+}
+function progCard(name, dateBlocks, n, extra) {
+  var c = card('', []);
+  c.appendChild(el('div', { style: 'display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap' }, [el('h2', { style: 'margin:0', text: name }), extra && extra.canceled ? UI.statusPill('canceled', '취소됨') : null]));
+  c.appendChild(el('div', { class: 'muted', style: 'word-break:keep-all', text: dateBlocks + (extra && extra.canceled ? '' : ' · 참가자 ' + n + '명 · 사전 특이사항 ' + n + '건') }));
+  if (extra && extra.open) {
+    c.appendChild(el('button', { type: 'button', class: 'btn secondary row-btn', style: 'margin-top:8px', text: '참가자 접기' }));
+    var ul = el('ul', { class: 'list', style: 'margin-top:8px' });
+    [['1-3 5번', '김가온'], ['1-2 7번', '박도윤'], ['2-3 1번', '박다솜'], ['2-3 4번', '최하늘']].forEach(function (r) {
+      ul.appendChild(el('li', { style: 'display:flex;align-items:center;gap:8px;justify-content:space-between' }, [el('span', { style: 'flex:1 1 auto', text: r[0] + ' ' + r[1] }), el('button', { type: 'button', class: 'btn secondary row-btn', style: 'flex:0 0 auto;white-space:nowrap;margin-top:0', text: '빼기', 'aria-label': r[1] + ' 참가 빼기' })]));
+    });
+    c.appendChild(ul);
+  } else if (!(extra && extra.canceled)) c.appendChild(el('button', { type: 'button', class: 'btn secondary row-btn', style: 'margin-top:8px', text: '참가자 보기' }));
+  if (!(extra && extra.canceled)) c.appendChild(el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-top:8px' }, [el('button', { type: 'button', class: 'btn secondary row-btn', style: 'margin-top:0', text: '참가자 더하기' }), el('button', { type: 'button', class: 'btn secondary row-btn', style: 'margin-top:0', text: '프로그램 취소' })]));
   return c;
 }
-def('program-list', 'C28 프로그램', '프로그램 목록 (예정·지난·취소)', {}, function (root) {
-  var m = frame(root, { title: '학사 프로그램', who: '박선생', bar: [{ text: '+ 프로그램 추가' }],
-    note: '시안 · 학사 교사·관리자가 만들고, 출결 담당은 목록만 본다. 프로그램 하나 = 날짜 하나(여러 날이면 날짜마다 하나).' });
-  m.appendChild(UI.segmented({ options: [{ value: 'up', label: '예정' }, { value: 'past', label: '지난' }, { value: 'off', label: '취소' }], value: 'up', onchange: function () {} }));
-  m.appendChild(progCard('면접 특강', '4월 17일(토)', '②③ 14:00–17:00', 33, '유효', 'confirmed', '사전 특이사항 33건'));
-  m.appendChild(progCard('체험학습', '5월 8일(토)', '하루 종일', 124, '유효', 'confirmed', '사전 특이사항 124건'));
-  m.appendChild(el('div', { class: 'muted', text: '참가자를 넣으면 그 시간의 사전 특이사항("학사 내 프로그램")이 학생마다 자동으로 생깁니다.' }));
+function programList(root, open) {
+  var m = frame(root, { title: '학사 프로그램', who: '박선생',
+    note: '시안(실제 화면 #173에 맞춤) · 학사 교사·관리자는 [목록|새 프로그램] 탭, 출결 담당은 목록만(탭·[참가자 더하기]·[프로그램 취소]·[빼기]가 없다). 프로그램 하나 = 날짜 하나. 참가자는 카드 안에서 펼쳐 본다(따로 상세 화면이 없다).' });
+  m.appendChild(programTabs('list'));
+  m.appendChild(el('div', { class: 'muted', style: 'margin-bottom:8px', text: '2027 1학기' }));
+  m.appendChild(UI.segmented({ options: [{ value: 'up', label: '예정 2' }, { value: 'past', label: '지난 1' }, { value: 'off', label: '취소 1' }], value: 'up', onchange: function () {} }));
+  m.appendChild(progCard('면접 특강', '4월 17일(토) · ②③ 14:00–17:00', 33, { open: open }));
+  m.appendChild(progCard('체험학습', '5월 8일(토) · 전체 시간', 124));
+}
+def('program-list', 'C28 프로그램', '프로그램 목록 (탭·예정/지난/취소, 카드 안 참가자 보기)', {}, function (root) { programList(root, false); });
+def('program-card-open', 'C28 프로그램', '프로그램 카드 펼침 (참가자 줄마다 빼기)', {}, function (root) { programList(root, true); });
+
+def('program-add', 'C28 프로그램', '새 프로그램 (이름·날짜·시간·참가 학생)', {}, function (root) {
+  var m = frame(root, { title: '학사 프로그램', who: '박선생', bar: [{ text: '확인하고 저장' }],
+    note: '시안(실제 화면 #173에 맞춤) · 이름·날짜·시간(블록)을 정하고 참가 학생을 학년·반 단위로 담는다. 아래 바 [확인하고 저장]은 이름·참가 학생이 있어야 켜진다. 같은 시간에 이미 특이사항이 있는 학생은 확인창에서 알려 준다.' });
+  m.appendChild(programTabs('entry'));
+  m.appendChild(card('', [UI.field('프로그램 이름', el('input', { type: 'text', value: '면접 특강', maxlength: '60' }))]));
+  m.appendChild(card('', [UI.dateField({ label: '날짜', value: '2027-04-17', shortcuts: [{ label: '오늘', value: '2027-04-12' }], onchange: function () {} }),
+    UI.field('시간', el('div', {}, [UI.blockChips({ blocks: SAT_BLOCKS, value: { all: false, seqs: [2, 3] }, onchange: function () {} })]), { hint: '프로그램이 있는 시간입니다. 그 시간의 출석부 칸에 "내부"로 나옵니다.' })]));
+  m.appendChild(card('참가 학생', [studentMultiMock(33)]));
+  m.appendChild(card('', [UI.field('메모(선택)', el('input', { type: 'text', maxlength: '200' }))]));
 });
 
-def('program-add', 'C28 프로그램', '프로그램 입력 (이름·날짜·시간·참가자)', {}, function (root) {
-  var m = frame(root, { title: '프로그램 추가', who: '박선생', bar: [{ text: '취소', kind: 'secondary' }, { text: '저장' }],
-    note: '시안 · 이름·날짜·시간(블록)을 정하고 참가자를 담는다. [저장]하면 확인창에서 몇 명에게 특이사항이 생기는지 보여 준다. 미정: 같은 시간에 이미 특이사항이 있는 학생을 어떻게 할지(확인창 참고).' });
-  m.appendChild(card('', [UI.field('프로그램 이름', el('input', { type: 'text', value: '면접 특강' }), { hint: '출석부와 특이사항에 "학사 내 프로그램"으로 보입니다.' }),
-    UI.dateField({ label: '날짜', value: '2027-04-17', onchange: function () {} })]));
-  m.appendChild(card('시간(블록)', [UI.blockChips({ blocks: SAT_BLOCKS, value: { all: false, seqs: [2, 3] }, onchange: function () {} }), el('div', { class: 'muted', text: '4월 17일(토) ②③ 14:00–17:00' })]));
-  m.appendChild(card('참가자 33명', [
-    el('div', { class: 'muted', style: 'margin-bottom:8px', text: '1학년 12명 · 2학년 14명 · 3학년 7명' }),
-    row([el('button', { type: 'button', class: 'btn', text: '학년·반으로 담기' }), el('button', { type: 'button', class: 'btn secondary', text: '이름으로 찾기' })], 'margin-bottom:8px'),
-    el('div', { class: 'muted', text: '담은 학생을 빼려면 저장 뒤 프로그램을 열어 [빼기]를 누릅니다.' })]));
-  m.appendChild(card('', [UI.field('메모 (선택)', el('textarea', { rows: '3', style: 'min-height:96px', placeholder: '장소·준비물 등' }))]));
+def('program-add-more', 'C28 프로그램', '참가자 더하기 시트 (이미 담은 학생은 건너뜀)', { sheet: true }, function (root) {
+  programList(root, false);
+  UI.bottomSheet({ title: '참가자 더하기', content: studentMultiMock(7), actions: [{ text: '돌아가기', kind: 'secondary', onclick: function () {} }, { text: '더하기', onclick: function () {} }], onclose: function () {} }).open();
 });
 
-def('program-pick', 'C28 프로그램', '참가자 담기 시트 (학년·반으로 한꺼번에)', { sheet: true }, function (root) {
-  var m = frame(root, { title: '프로그램 추가', who: '박선생', bar: [{ text: '취소', kind: 'secondary' }, { text: '저장' }], note: '시안 · [학년·반으로 담기]를 누르면 열린다. 체험학습처럼 100명이 넘어도 반 단위로 담는다.' });
-  m.appendChild(card('참가자 33명', [el('div', { class: 'muted', text: '1학년 12명 · 2학년 14명 · 3학년 7명' })]));
-  var klass = el('div', { class: 'chips' }, ['1반', '2반', '3반', '4반', '5반', '6반'].map(function (t, i) { return el('button', { type: 'button', class: 'chip' + (i === 2 ? ' on' : ''), text: t }); }));
-  var sum = el('div', { class: 'notice info', text: '2학년 3반 학사생 9명을 담습니다. 이미 담은 학생 2명은 빼고 7명이 새로 담깁니다.' });
-  UI.bottomSheet({ title: '참가자 담기', content: el('div', {}, [
-    UI.segmented({ options: [{ value: '1', label: '1학년' }, { value: '2', label: '2학년' }, { value: '3', label: '3학년' }], value: '2', onchange: function () {} }), klass,
-    checkRow('기숙사생만', false), sum]),
-    actions: [{ text: '닫기', kind: 'secondary', onclick: function () {} }, { text: '7명 담기', onclick: function () {} }], onclose: function () {} }).open();
+def('program-confirm', 'C28 프로그램', '프로그램 저장 확인 (겹치는 특이사항 안내)', { sheet: true }, function (root) {
+  var m = frame(root, { title: '학사 프로그램', who: '박선생', bar: [{ text: '확인하고 저장' }], note: '시안 · [확인하고 저장]을 누르면 확인창(결정 75②). 같은 시간에 다른 특이사항이 있는 학생은 그대로 두고 프로그램 특이사항을 따로 만든다(경고만, 막지 않음).' });
+  m.appendChild(programTabs('entry'));
+  UI.confirmSheet({ title: '프로그램을 저장합니다', lead: '면접 특강',
+    lines: ['4월 17일(토) · 14:00-15:30;15:30-17:00', '참가 학생 33명에게 사전 특이사항(학사 내 프로그램)이 확정으로 만들어집니다.', '2명은 같은 시간에 다른 특이사항이 있습니다. 그대로 두고 프로그램 특이사항을 따로 만듭니다.'],
+    confirmText: '저장', onconfirm: function () {} });
 });
 
-def('program-confirm', 'C28 프로그램', '프로그램 저장 확인 (특이사항이 몇 건 생기는지)', { sheet: true }, function (root) {
-  var m = frame(root, { title: '프로그램 추가', who: '박선생', bar: [{ text: '취소', kind: 'secondary' }, { text: '저장' }], note: '시안 · 저장 전 확인. 미정: 같은 시간에 이미 특이사항이 있는 학생(여기서는 제안값 "그대로 두고 프로그램 특이사항을 따로 만듦")을 어떻게 처리할지.' });
-  m.appendChild(card('프로그램', [el('b', { text: '면접 특강' }), el('div', { class: 'muted', text: '4월 17일(토) ②③ 14:00–17:00 · 참가자 33명' })]));
-  UI.confirmSheet({ title: '프로그램을 저장할까요?', lead: '4월 17일(토) 14:00–17:00 · 면접 특강',
-    lines: ['참가자 33명에게 사전 특이사항("학사 내 프로그램")이 만들어집니다.', '그 시간에 이미 특이사항이 있는 학생 2명: 그대로 두고 프로그램 특이사항을 따로 만듭니다.', '출석부의 그 시간 칸에는 \'내부\'(학사 내 프로그램)로 표시됩니다.'],
-    confirmText: '프로그램 저장', onconfirm: function () {} });
-});
-
-def('program-detail', 'C28 프로그램', '프로그램 열기 (참가자 목록, 빼기·프로그램 취소)', {}, function (root) {
-  var m = frame(root, { title: '면접 특강', who: '박선생', bar: [{ text: '프로그램 취소', kind: 'danger' }],
-    note: '시안 · 참가자를 빼면 그 학생의 특이사항만 취소(기록은 남음). 프로그램 취소는 참가자 전체의 특이사항도 함께 취소한다(같은 저장 안에서).' });
-  m.appendChild(card('', [row([el('b', { text: '면접 특강' }), UI.statusPill('confirmed', '유효')], 'justify-content:space-between'),
-    el('div', { class: 'muted', text: '4월 17일(토) ②③ 14:00–17:00' }), el('div', { class: 'muted', text: '참가자 33명 · 사전 특이사항 33건(확정)' })]));
-  m.appendChild(studentPick('참가자 찾기', ''));
-  var ul = el('ul', { class: 'list' });
-  [['1', '김가온'], ['1', '박도윤'], ['2', '이나래'], ['2', '최하늘'], ['3', '박다솜']].forEach(function (s) {
-    ul.appendChild(el('li', { style: 'align-items:center' }, [el('div', { style: 'word-break:keep-all' }, [el('b', { text: lab(s[0], s[1]) }), el('div', { class: 'muted', text: '특이사항 확정' })]), el('button', { type: 'button', class: 'btn secondary row-btn', text: '빼기' })]));
-  });
-  m.appendChild(card('참가자 (33명 중 5명)', [ul, link('더 보기(28명)', 'secondary', 'margin-top:8px')]));
+def('program-remove', 'C28 프로그램', '참가에서 빼기 확인 (사유 입력)', { sheet: true }, function (root) {
+  programList(root, true);
+  UI.confirmWithReason({ title: '참가에서 뺍니다', message: '김가온 학생을 "면접 특강"에서 뺍니다. 그 학생의 사전 특이사항도 취소됩니다.', reasonLabel: '사유', confirmText: '빼기', onconfirm: function () {} });
 });
 
 def('program-cancel', 'C28 프로그램', '프로그램 취소 확인 (사유 입력, 특이사항도 함께 취소)', { sheet: true }, function (root) {
-  frame(root, { title: '면접 특강', who: '박선생', bar: [{ text: '프로그램 취소', kind: 'danger' }], note: '시안 · 사유를 적어야 [취소 처리]가 켜진다(rules 6절). 기록은 지우지 않고 "취소"로 남긴다.' });
-  UI.confirmWithReason({ title: '프로그램을 취소할까요?', message: '면접 특강(4월 17일) 참가자 33명의 사전 특이사항도 함께 "취소"로 바뀝니다. 기록은 지워지지 않고 남습니다.', reasonLabel: '사유', confirmText: '취소 처리', danger: true, onconfirm: function () {} });
+  programList(root, false);
+  UI.confirmWithReason({ title: '프로그램을 취소합니다', message: '면접 특강 · 4월 17일(토). 참가자 33명의 사전 특이사항도 함께 취소됩니다(기록은 남습니다).', reasonLabel: '사유', confirmText: '프로그램 취소', danger: true, onconfirm: function () {} });
 });
 
 /* ═════════ 실행 ═════════ */
