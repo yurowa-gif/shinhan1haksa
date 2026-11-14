@@ -317,7 +317,7 @@
       var ul = el('ul', { class: 'list', style: 'margin-top:8px' });
       rules.forEach(function (x) {
         var li = el('li', { class: 'out-item' }, [
-          el('div', { class: 'out-line' }, [el('b', { class: 'out-who', text: x.name }), x.isAuto ? UI.statusPill('mute', '자동') : null, x.active ? null : UI.statusPill('canceled', '꺼짐')]),
+          el('div', { class: 'out-line' }, [el('b', { class: 'out-who', text: x.name }), x.isAuto ? UI.statusPill('mute', '자동') : null, x.instant ? UI.statusPill('todo', '즉시 퇴실') : null, x.active ? null : UI.statusPill('canceled', '꺼짐')]),
           x.description ? el('div', { class: 'muted', text: x.description }) : null
         ]);
         var row = el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-top:8px' });
@@ -326,12 +326,29 @@
           onclick: function (e, btn) {
             var b = e && e.currentTarget; if (b) { if (b.disabled) return; b.disabled = true; }   // 저장 중에는 다시 누를 수 없게(두 번 눌러 변경 기록이 둘 생기지 않게)
             call('saveOutRule', { id: x.id, name: x.name, description: x.description, active: !x.active }).then(function (r) { if (!r.ok) UI.toast(r.errors[0].message, { kind: 'warn', ms: 5000 }); loadRules(r.ok ? (x.active ? '꺼졌습니다. 입력 목록에서 빠집니다.' : '켰습니다. 입력 목록에 나옵니다.') : ''); if (!r.ok && b) b.disabled = false; }).catch(function (err) { if (b) b.disabled = false; UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }); } }));
+        if (!x.isAuto) row.appendChild(el('button', { type: 'button', class: 'btn secondary row-btn', style: 'margin-top:0', text: x.instant ? '즉시 퇴실 해제' : '즉시 퇴실로 정하기', 'aria-label': x.name + (x.instant ? ' 즉시 퇴실 해제' : ' 즉시 퇴실로 정하기'),
+          onclick: function (e) { setInstant(x, e && e.currentTarget); } }));
         li.appendChild(row);
         ul.appendChild(li);
       });
       card.appendChild(ul);
       card.appendChild(el('button', { type: 'button', class: 'btn block', style: 'margin-top:12px', text: '항목 추가', onclick: function () { openRule(null); } }));
       listBox.appendChild(card);
+    }
+    /** 즉시 퇴실 항목(결정 69): 이 항목의 OUT 한 건이 한 번에 2OUT. 켤 때는 확인 시트로 먼저 알린다(이미 기록된 OUT에도 적용) */
+    function setInstant(x, btn) {
+      function send() {
+        if (btn) { if (btn.disabled) return; btn.disabled = true; }
+        call('setOutInstantRule', x.id, !x.instant).then(function (r) {
+          if (!r.ok) { if (btn) btn.disabled = false; UI.toast(r.errors[0].message, { kind: 'warn', ms: 5000 }); return; }
+          loadRules(r.instant ? '즉시 퇴실 항목으로 정했습니다.' + (r.affected ? ' 이번 기간 학생 ' + r.affected + '명이 퇴실 대상이 됩니다.' : '')
+            : '즉시 퇴실을 해제했습니다.' + (r.affected ? ' 이번 기간 학생 ' + r.affected + '명이 퇴실 대상에서 빠집니다.' : ''));
+        }).catch(function (err) { if (btn) btn.disabled = false; UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); });
+      }
+      if (x.instant) { send(); return; }
+      UI.confirmSheet({ title: '즉시 퇴실 항목으로 정합니다', lead: x.name,
+        lines: ['이 항목으로 OUT을 한 번 기록하면 바로 2OUT(퇴실 대상)이 됩니다.', '이번 기간에 이미 기록된 이 항목의 OUT에도 그대로 적용됩니다.', '퇴실 확정은 지금처럼 학부모 면담 기록 뒤 관리자가 합니다.'],
+        confirmText: '즉시 퇴실로 정하기', onconfirm: send });
     }
     function openRule(x) {
       var sheet = null, busy = false;

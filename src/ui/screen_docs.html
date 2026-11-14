@@ -1,0 +1,130 @@
+<style>
+  .doc-row { padding: 10px 0; border-bottom: 1px solid var(--line); word-break: keep-all; }
+  .doc-row:last-child { border-bottom: 0; }
+  .doc-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+  .doc-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+  .doc-btns button { min-height: 44px; }
+  .doc-btns button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+</style>
+<script>
+  /** 서류 체크리스트 화면(C27, 결정 75①): 미제출 목록 / 서류별 보기, 칸마다 [제출][미제출][해당없음], 관리자는 서류 종류 관리. */
+  function renderScreen(root) {
+    var data = null, seq = 0, busy = false, mode = 'missing', typeId = '';
+    var head = el('div', { class: 'card' });
+    var body = el('div', { class: 'card' });
+    var typesBox = el('div', { class: 'card' });
+    root.appendChild(head); root.appendChild(body); root.appendChild(typesBox);
+
+    function load() {
+      var mine = ++seq;
+      call('getDocData').then(function (r) { if (mine !== seq) return; data = r; if (!typeId || !r.types.some(function (t) { return t.id === typeId; })) typeId = r.types.length ? r.types[0].id : ''; draw(); })
+        .catch(function (err) { if (mine !== seq) return; clear(head); clear(body); clear(typesBox); showError(head, err); });
+    }
+    function typeName(id) { var t = data.types.filter(function (x) { return x.id === id; })[0]; return t ? t.name : ''; }
+
+    function draw() {
+      drawHead(); drawBody(); drawTypes();
+    }
+    function drawHead() {
+      clear(head);
+      head.appendChild(el('h2', { text: '서류 체크리스트' }));
+      head.appendChild(el('div', { class: 'muted', text: data.term + ' · 서류를 낸 학생을 표시합니다. 표시하지 않은 칸은 "미제출"입니다.' }));
+      if (data.missingTab) head.appendChild(el('div', { class: 'notice warn', text: '이 기간의 서류 탭이 아직 없습니다. 관리자가 편집기에서 setup()을 한 번 실행해야 표시할 수 있습니다.' }));
+      if (!data.types.length) { head.appendChild(el('div', { class: 'notice info', text: data.canTypes ? '서류 종류가 아직 없습니다. 아래에서 추가해 주세요.' : '서류 종류가 아직 없습니다. 관리자가 정하면 여기에 나타납니다.' })); return; }
+      head.appendChild(el('div', { class: 'notice ' + (data.missing.items ? 'warn' : 'ok'), text: data.missing.items ? '미제출 ' + data.missing.items + '건 (학생 ' + data.missing.students + '명)' : '모두 제출했습니다.' }));
+      head.appendChild(UI.segmented({ options: [{ value: 'missing', label: '미제출 목록' }, { value: 'type', label: '서류별' }], value: mode, onchange: function (v) { mode = v; drawBody(); } }));
+      if (mode === 'type') {
+        var sel = el('select', {}, data.types.map(function (t) { return el('option', { value: t.id, text: t.name }); }));
+        sel.value = typeId;
+        sel.addEventListener('change', function () { typeId = sel.value; drawBody(); });
+        head.appendChild(UI.field('서류 종류', sel, { name: 'type' }));
+      }
+    }
+
+    function stateButtons(student, tid) {
+      var cur = student.docs[tid];
+      var box = el('div', { class: 'doc-btns' });
+      ['제출', '미제출', '해당없음'].forEach(function (s) {
+        var b = el('button', { type: 'button', class: 'btn secondary' + (cur === s ? ' on' : ''), text: s });
+        b.setAttribute('aria-pressed', cur === s ? 'true' : 'false');
+        if (!data.canEdit) b.disabled = true;
+        b.addEventListener('click', function () { if (cur !== s) set(student, tid, s); });
+        box.appendChild(b);
+      });
+      return box;
+    }
+    function set(student, tid, state) {
+      if (busy) return; busy = true;
+      call('saveDocState', { studentId: student.id, docTypeId: tid, state: state, expect: student.docs[tid] }).then(function (r) {
+        busy = false;
+        if (r.stale) { UI.toast(r.error, { kind: 'warn', ms: 6000 }); load(); return; }
+        if (!r.ok) { UI.toast(r.error || '저장하지 못했습니다.', { kind: 'warn', ms: 5000 }); return; }
+        load();
+      }).catch(function (err) { busy = false; UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); });
+    }
+
+    function drawBody() {
+      clear(body);
+      if (!data.types.length) return;
+      if (!data.canEdit) body.appendChild(el('div', { class: 'muted', text: '보기만 할 수 있습니다. 표시는 담당 선생님·관리자가 합니다.' }));
+      if (mode === 'type') {
+        if (!data.students.length) { body.appendChild(UI.emptyState('볼 수 있는 학생이 없습니다.')); return; }
+        data.students.forEach(function (s) {
+          body.appendChild(el('div', { class: 'doc-row' }, [el('b', { text: s.display }), s.teacher ? el('span', { class: 'muted', text: ' · 담당 ' + s.teacher }) : null, stateButtons(s, typeId)]));
+        });
+        return;
+      }
+      var list = data.students.filter(function (s) { return data.types.some(function (t) { return s.docs[t.id] === '미제출'; }); });
+      if (!list.length) { body.appendChild(UI.emptyState(data.students.length ? '미제출 서류가 없습니다.' : '볼 수 있는 학생이 없습니다.')); return; }
+      list.forEach(function (s) {
+        var row = el('div', { class: 'doc-row' }, [el('b', { text: s.display }), s.teacher ? el('span', { class: 'muted', text: ' · 담당 ' + s.teacher }) : null]);
+        data.types.filter(function (t) { return s.docs[t.id] === '미제출'; }).forEach(function (t) {
+          row.appendChild(el('div', { class: 'doc-line' }, [el('span', { text: t.name }), stateButtons(s, t.id)]));
+        });
+        body.appendChild(row);
+      });
+    }
+
+    /* ───── 서류 종류 관리(관리자) ───── */
+    function drawTypes() {
+      clear(typesBox);
+      if (!data.canTypes) return;
+      typesBox.appendChild(el('h2', { text: '서류 종류 관리' }));
+      typesBox.appendChild(el('div', { class: 'muted', text: '입실 동의서, 개인정보 동의서 등. 끄면 목록에서 사라지지만 제출 기록은 남습니다.' }));
+      data.types.forEach(function (t) {
+        var name = el('input', { type: 'text', maxlength: '40', 'aria-label': '서류 이름' }); name.value = t.name;
+        var desc = el('input', { type: 'text', maxlength: '100', 'aria-label': '설명' }); desc.value = t.description;
+        var order = el('input', { type: 'text', inputmode: 'numeric', maxlength: '4', 'aria-label': '순서' }); order.value = String(t.sort_order);
+        var err = el('div', { class: 'error', style: 'display:none' });
+        var save = el('button', { type: 'button', class: 'btn secondary', text: '저장' });
+        save.addEventListener('click', function () {
+          if (busy) return; busy = true; err.style.display = 'none';
+          call('saveDocType', { id: t.id, name: name.value, description: desc.value, sort_order: order.value, token: t.token }).then(function (r) { busy = false; afterType(r, err, '저장했습니다.'); }).catch(function (e) { busy = false; err.textContent = (e && e.message) || String(e); err.style.display = ''; });
+        });
+        var off = el('button', { type: 'button', class: 'btn secondary', text: '끄기', onclick: function () {
+          UI.confirmSheet({ title: '"' + t.name + '"을(를) 끌까요?', lines: ['목록에서 사라집니다.', '이미 표시한 제출 기록은 지워지지 않습니다.'], confirmText: '끄기', danger: true, onconfirm: function () {
+            if (busy) return; busy = true;
+            call('cancelDocType', t.id, t.token).then(function (r) { busy = false; afterType(r, err, '껐습니다.'); }).catch(function (e) { busy = false; err.textContent = (e && e.message) || String(e); err.style.display = ''; });
+          } });
+        } });
+        typesBox.appendChild(el('div', { class: 'doc-row' }, [name, desc, order, err, el('div', { class: 'doc-line' }, [save, off])]));
+      });
+      var nn = el('input', { type: 'text', maxlength: '40', placeholder: '새 서류 이름', 'aria-label': '새 서류 이름' });
+      var nd = el('input', { type: 'text', maxlength: '100', placeholder: '설명(선택)', 'aria-label': '새 서류 설명' });
+      var nerr = el('div', { class: 'error', style: 'display:none' });
+      var add = el('button', { type: 'button', class: 'btn', text: '서류 추가' });
+      add.addEventListener('click', function () {
+        if (busy) return; busy = true; nerr.style.display = 'none';
+        call('saveDocType', { name: nn.value, description: nd.value }).then(function (r) { busy = false; afterType(r, nerr, '추가했습니다.'); }).catch(function (e) { busy = false; nerr.textContent = (e && e.message) || String(e); nerr.style.display = ''; });
+      });
+      typesBox.appendChild(el('div', { class: 'doc-row' }, [el('b', { text: '새 서류' }), nn, nd, nerr, el('div', { class: 'doc-line' }, [add])]));
+    }
+    function afterType(r, errBox, okMsg) {
+      if (r.stale) { UI.toast(r.error, { kind: 'warn', ms: 6000 }); load(); return; }
+      if (!r.ok) { errBox.textContent = (r.errors || [{ message: r.error }])[0].message; errBox.style.display = ''; return; }
+      UI.toast(okMsg, { kind: 'ok' }); load();
+    }
+
+    load();
+  }
+</script>

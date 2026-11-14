@@ -223,6 +223,9 @@ table('resolveCell_: 23:00 종료 "정상 종료"는 월~목 마지막 블록만
   // 특별 요일 유형은 실제 요일로 판정(가정): 월요일 exam → 표시, 금요일 exam → 표시 안 함
   ['exam', true, LAST, '23:00', 'END'],
   ['exam@금', true, LAST, '23:00', 'NONE'],
+  // 휴일(결정 72 보충, R21)은 그 자체가 기본 유형: 목요일 휴일도 mon_thu로 보지 않는다
+  ['holiday@목', true, LAST, '23:00', 'NONE'],
+  ['holiday@토', true, LAST, '23:00', 'NONE'],
   ['mon_thu', true, LAST, '23:00:00', 'END']
 ], ([dayType, isLast, block, endType, code]) => {
   const [dt, wk] = dayType.split('@');
@@ -234,6 +237,10 @@ table('resolveCell_: 23:00 종료 "정상 종료"는 월~목 마지막 블록만
 table('resolveCell_: 그날 종료(dayEnd)가 23:00 이하이면 23:00 종료 학생도 표시 안 함(가정)', [
   ['23:50', 'END'], ['23:01', 'END'], ['23:00', 'NONE'], ['22:30', 'NONE'], ['', 'END'], [undefined, 'END']
 ], ([dayEnd, code]) => assert.strictEqual(cell({ isLastBlock: true, block: LAST, endType: '23:00', dayEnd }).code, code));
+
+test('resolveCell_: 휴일도 endTypeDayTypes에 넣으면 END(설정으로 켤 수 있음)', () => {
+  assert.strictEqual(cell({ dayType: 'holiday', weekdayKo: '목', isLastBlock: true, block: LAST, endType: '23:00', opts: { endTypeDayTypes: ['mon_thu', 'holiday'] } }).code, 'END');
+});
 
 test('resolveCell_: 설정에서 쪼갠 요일 목록의 공백은 무시', () => {
   const opts = { endTypeDayTypes: 'mon_thu, fri'.split(',') };

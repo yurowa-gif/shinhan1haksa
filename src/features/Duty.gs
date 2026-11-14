@@ -93,7 +93,7 @@ function dtyMonthView_(m, user) {
   var canEditSwap = user.roles.some(function (r) { return permissions_()['duty.edit'].roles.indexOf(r) >= 0; });
   var emptyDays = 0, swapCount = 0, warnings = [];
   var days = plans.map(function (p) {
-    var frame = dutySlotsFor_(p), picked = dutyPick_(rows, p.date), on = dutyOn_(rows, p.date);
+    var frame = dutySlotsFor_(p), picked = dutyPick_(rows, p.date, p.dayType), on = dutyOn_(rows, p.date, p.dayType);
     warnings = warnings.concat(on.warnings);
     var slots = frame.map(function (f) {
       var r = picked.bySlot[f.slot];
@@ -249,9 +249,9 @@ function dtyRecordData_(month) {
   var m = dtyMonth_(month);
   var rows = readAll_('duty_slots');
   var plans = calMonthPlans_(m, calLoadCtx_());
-  var operatingByDate = {}, closedDates = [];
-  plans.forEach(function (p) { if (!p.operating) { operatingByDate[p.date] = false; closedDates.push(p.date); } });
-  var rec = dutyRecord_(rows, m, { operatingByDate: operatingByDate });
+  var operatingByDate = {}, closedDates = [], dayTypeByDate = {};
+  plans.forEach(function (p) { dayTypeByDate[p.date] = p.dayType; if (!p.operating) { operatingByDate[p.date] = false; closedDates.push(p.date); } });
+  var rec = dutyRecord_(rows, m, { operatingByDate: operatingByDate, dayTypeByDate: dayTypeByDate });
   var names = Object.create(null);
   readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = String(u.name || '').trim(); });
   // 사용자 목록에 없는 주소는 여러 명이어도 구분되게 번호를 붙이고, 이름이 빈 등록 사용자는 따로 적는다(이메일은 내보내지 않는다)

@@ -45,7 +45,7 @@ function cnsGateFor_(studentId) {
   if (!term) throw new Error('운영 기간이 없습니다.');
   var rows = vioViolations_(term);
   var changes = readAll_('status_changes');
-  var gate = outDismissalGate_(rows, cnsNotesForGate_(changes), changes, String(studentId || ''), term.id, today_());
+  var gate = outDismissalGate_(rows, cnsNotesForGate_(changes), changes, String(studentId || ''), term.id, today_(), vioOutOpts_());
   var trigger = gate.triggerOutId ? rows.filter(function (v) { return String(v.id) === gate.triggerOutId; })[0] || null : null;
   return { gate: gate, term: term, trigger: trigger };
 }
