@@ -93,7 +93,7 @@ function dtyMonthView_(m, user) {
   var canEditSwap = user.roles.some(function (r) { return permissions_()['duty.edit'].roles.indexOf(r) >= 0; });
   var emptyDays = 0, swapCount = 0, warnings = [];
   var days = plans.map(function (p) {
-    var frame = dutySlotsFor_(p), picked = dutyPick_(rows, p.date), on = dutyOn_(rows, p.date);
+    var frame = dutySlotsFor_(p), picked = dutyPick_(rows, p.date, p.dayType), on = dutyOn_(rows, p.date, p.dayType);
     warnings = warnings.concat(on.warnings);
     var slots = frame.map(function (f) {
       var r = picked.bySlot[f.slot];
@@ -249,9 +249,9 @@ function dtyRecordData_(month) {
   var m = dtyMonth_(month);
   var rows = readAll_('duty_slots');
   var plans = calMonthPlans_(m, calLoadCtx_());
-  var operatingByDate = {}, closedDates = [];
-  plans.forEach(function (p) { if (!p.operating) { operatingByDate[p.date] = false; closedDates.push(p.date); } });
-  var rec = dutyRecord_(rows, m, { operatingByDate: operatingByDate });
+  var operatingByDate = {}, closedDates = [], dayTypeByDate = {};
+  plans.forEach(function (p) { dayTypeByDate[p.date] = p.dayType; if (!p.operating) { operatingByDate[p.date] = false; closedDates.push(p.date); } });
+  var rec = dutyRecord_(rows, m, { operatingByDate: operatingByDate, dayTypeByDate: dayTypeByDate });
   var names = Object.create(null);
   readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = String(u.name || '').trim(); });
   // 사용자 목록에 없는 주소는 여러 명이어도 구분되게 번호를 붙이고, 이름이 빈 등록 사용자는 따로 적는다(이메일은 내보내지 않는다)
@@ -327,21 +327,56 @@ function dtyRecordModel_(d) {
   };
 }
 
+/** 그 달 날짜별 근무자(엑셀 시트1 달력용): {날짜: {closed, slots:[{label, name, from}], standby:[{name, from}]}}. 교사 이름만 — 이메일·학생 이름 없음 */
+function dtyRecordCalendar_(d) {
+  var rows = readAll_('duty_slots'), cal = {};
+  var label = function (slot) { var t = String(slot).trim(); return t === '21:30조' ? '21:30' : (t === '23:00조' ? '23:00' : (t === '단독' ? '' : t)); };
+  d.plans.forEach(function (p) {
+    var frame = dutySlotsFor_(p), on = dutyOn_(rows, p.date), day = { closed: !p.operating, slots: [], standby: [] };
+    var by = {};
+    on.duty.forEach(function (x) { by[x.slot] = x; });
+    var used = {};
+    frame.forEach(function (f) {
+      if (f.slot === '예비') return;
+      var x = by[f.slot];
+      used[f.slot] = true;
+      day.slots.push({ label: label(f.slot), name: x ? d.who(x.email) : '', from: x && x.swappedFrom ? d.who(x.swappedFrom) : '' });
+    });
+    on.duty.forEach(function (x) {   // 그날 틀 밖의 칸(운영 안 하는 날·요일 틀과 다른 칸)도 빼먹지 않는다
+      if (!used[x.slot]) day.slots.push({ label: label(x.slot), name: d.who(x.email), from: x.swappedFrom ? d.who(x.swappedFrom) : '' });
+    });
+    on.standby.forEach(function (x) { day.standby.push({ name: d.who(x.email), from: x.swappedFrom ? d.who(x.swappedFrom) : '' }); });
+    if (!day.standby.length && frame.some(function (f) { return f.slot === '예비'; })) day.standby.push({ name: '', from: '' });
+    cal[p.date] = day;
+  });
+  return cal;
+}
+
 /**
- * 월말 근무 기록표 파일(임시 양식 PDF, 결정 48의 엑셀은 학교 양식을 받은 뒤 C14b). 근무표 담당자·관리자(duty.record).
- * 공유·Drive 저장 없이 base64로 바로 내려준다(출석부 PDF와 같음).
+ * 월말 근무 기록표 파일. 근무표 담당자·관리자(duty.record). 공유·Drive 저장 없이 base64로 바로 내려준다(출석부 PDF와 같음).
+ * 'pdf'(기본) 또는 'xlsx'(결정 67: 시트1 월별 근무표, 시트2 교사별 합계·교대 목록). xlsx는 Utilities.zip으로 직접 만든다 —
+ * 권한을 더하지 않고 Drive에 임시 파일을 만들지 않는다. XML은 src/print의 순수 함수(printXlsxFiles_·printDutyRecordWorkbook_)가 만든다.
  */
 function getDutyRecordFile(month, format) {
   requirePermission_('duty.record');
   var fmt = format === undefined || format === null || format === '' ? 'pdf' : (typeof format === 'string' ? format.trim().toLowerCase() : '');
-  if (fmt !== 'pdf') return { ok: false, error: '지금은 PDF(임시 양식)만 받을 수 있습니다. 엑셀은 학교 양식을 받은 뒤에 붙습니다.' };
+  if (fmt !== 'pdf' && fmt !== 'xlsx') return { ok: false, error: '받을 수 있는 형식은 PDF와 엑셀(xlsx)입니다.' };
   var d = dtyRecordData_(month);
   var model = dtyRecordModel_(d);
+  if (fmt === 'xlsx') {
+    model.calendar = dtyRecordCalendar_(d);
+    var name = '근무기록표_' + d.month + '.xlsx';
+    var blobs = printXlsxFiles_(printDutyRecordWorkbook_(model)).map(function (f) { return Utilities.newBlob(f.text, 'application/xml', f.path); });
+    var zip = Utilities.zip(blobs, name);
+    zip.setContentType('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    var zb = zip.getBytes();
+    return { ok: true, name: name, base64: Utilities.base64Encode(zb), bytes: zb.length, mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', warnings: model.warnings };
+  }
   var html = printRenderDutyRecord_(model);
-  var name = '근무기록표_' + d.month + '.pdf';
-  var blob = sheetMakePdf_(html, name);
+  var pname = '근무기록표_' + d.month + '.pdf';
+  var blob = sheetMakePdf_(html, pname);
   var bytes = blob.getBytes();
-  return { ok: true, name: name, base64: Utilities.base64Encode(bytes), bytes: bytes.length, warnings: model.warnings };
+  return { ok: true, name: pname, base64: Utilities.base64Encode(bytes), bytes: bytes.length, warnings: model.warnings };
 }
 
 var DTY_STALE_MSG = '근무표가 바뀌었습니다. 새로 불러와 주세요.';

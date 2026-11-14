@@ -45,8 +45,8 @@ function hmNorm_(v)        // 'H:mm'·'HH:mm:00' → 'HH:mm', 빈칸 '', 시각 
 // src/rules/DutyRules.gs (R8)
 function dutySlotsFor_(plan)
         // resolveDayPlan_ 결과 → 운영 안 함 [] | 월~목 [{slot:'21:30조',end},{slot:'23:00조',end}] | 금·토·일 [{slot:'단독',end},{slot:'예비',end:''}]
-function dutyOn_(rows, ymd)                   // → {duty:[{slot, email, end, swappedFrom}], standby:[{email, swappedFrom}], warnings}
-function dutyPick_(rows, ymd)                 // → {bySlot:{slot: 그날 쓸 행}, warnings}(취소 제외, updated_at 최신, 같으면 아래 행 — dutyOn_·dutyRecord_가 쓴다)
+function dutyOn_(rows, ymd, dayType)          // → {duty:[{slot, email, end, swappedFrom}], standby:[{email, swappedFrom}], warnings}
+function dutyPick_(rows, ymd, dayType)        // → {bySlot:{slot: 그날 쓸 행}, warnings}(취소 제외, updated_at 최신, 같으면 아래 행 — dutyOn_·dutyRecord_가 쓴다)
 function dutyEmail_(v)                        // → 소문자·앞뒤 공백 없는 이메일
 function dutyIsOn_(rows, email, ymd, today, windowDays)   // → boolean(그날 실제 근무자 && ymd ≤ today ≤ ymd + windowDays, 기본 0)
 function dutyRecord_(rows, month, opts)
@@ -124,9 +124,9 @@ function reconcileAutoOuts_(exceptions, violations, opts)
         // opts = {autoTypes, ruleName:'무단 지각·결석·이탈', ruleId, per:'group'|'row', dutyByDate:{}, studentIds:[](선택),
         //         autoTypeSince:{유형:'yyyy-MM-ddTHH:mm:ss' 또는 [넓힌 시각…]}(선택, 설정을 넓혀 새로 자동 대상이 된 유형과 넓힌 시각 — 배열이면 넓힘 이력)}
         // → {toCreate, toCancel:[{violationId, reason}], toUpdate:[{violationId, patch}]}
-function outLevel_(violations, studentId, termId)   // {count, level:0|1|2, label:''|'1OUT'|'퇴실 대상'}
+function outLevel_(violations, studentId, termId, opts)   // {count, level:0|1|2, label:''|'1OUT'|'퇴실 대상'}, opts = {instantRuleIds:[]}(결정 69, 선택)
 function outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes)   // (R9) → {snapshot:{types, since, widened}, since, widened, changed}
-function outDismissalGate_(violations, notes, changes, studentId, termId, ymd)
+function outDismissalGate_(violations, notes, changes, studentId, termId, ymd, opts)   // opts = outLevel_과 같음
         // (R9) → {count, level, triggerOutId, meetingNote:{id,date,teacher_email}|null, alreadyLeft, ok, reason:''|'퇴실 대상 아님'|'면담 기록 필요'|'이미 퇴실'}
 
 // src/rules/MealRules.gs
@@ -136,12 +136,13 @@ function mealEffectiveDate_(kind, requestedAt, opts)
 function mealChangeKind_(item, fromValue, toValue)
         // → 'none'|'initial'|'start'|'to_general'|'stop'. fromValue = 새 행 적용일에 실제로 적용되는 값(R6)
 function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts)   // F7 신청 하나의 계획(R6 추가)
-        // opts = {cutoff, leaveDate, today(필수), effectiveDate, effectiveRule:'manual'|'entry_date'(R10), entry(재입실일 경계, Y)}
+        // opts = {cutoff, leaveDate, today(필수), effectiveDate, effectiveRule:'manual'|'entry_date'(R10), entry(재입실일 경계, Y),
+        //         vacation(item '중식'이면 필수: 그 방학 terms 행, R19)}
         //   → {kind, date, rule, autoDate(R10), from, blocked, superseded, supersededBy:[id], toCancel:[…], followUps:[…], warnings:[]}
 function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)     // 새 행이 덮어야 할 행(R6 추가)
         // opts = {source:'F7'|'F6', requestedAt, newValue} → [{id, effective_date, value}]
-function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId)
-        // (R12) → {groups:{'여1':{hall, dorm, nonDorm, breakfast, hallDinner, generalDinner}, …, '여 합계','남 합계','1학년'…'전체'},
+function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, vacation)
+        // (R12, vacation·lunch R19) → {groups:{'여1':{hall, dorm, nonDorm, breakfast, lunch, hallDinner, generalDinner}, …, '여 합계','남 합계','1학년'…'전체'},
         //    afterLeaveHallDinner, unknownGroup:[studentId], warnings}
 ```
 
@@ -208,7 +209,7 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId)
   - EXC가 여럿이면 가장 최근 확정(`confirmed_at` → `updated_at` → 나중 행) 1건의 약어 + `' 외 N'`, `more = N`, `exceptionId` = 그 건(가정 c).
   - 약어: `opts.typeShort`(설정 `exception.type_short`, 없으면 sheet-model 기본표). 행의 유형 그대로 찾고, 없으면 **양쪽(행의 유형과 약어표 키) 모두 끝의 괄호 설명을 뗀 이름끼리** 비교하고(관리자가 괄호 설명을 고쳐도 옛 행이 약어로 나오게), 그래도 없으면 괄호를 뗀 이름을 그대로 쓴다.
   - FIXED가 여럿이면 `teacher_confirmed_at` → `updated_at` 최신.
-  - END: `endType`(`'23:00:00'`도 읽음) `=== opts.endTime`(기본 `'23:00'`), `dayType`이 `opts.endTypeDayTypes`(기본 `['mon_thu']`, 항목 앞뒤 공백 무시)에 있음, 마지막 블록, **그 블록과 그날 종료(`dayEnd`)가 모두 종료 시각보다 늦게 끝남**. ASSUMPTION: 날짜별 종료를 23:00 이하로 당긴 날(22:00·22:30·23:00)은 모두 그 시각에 귀가하므로 표시하지 않는다. ASSUMPTION: 특별 요일 유형(`exam` 등)으로 바꾼 날은 실제 달력 요일의 기본 유형으로 판정한다(목요일 exam → 표시, 금요일 exam → 표시 안 함).
+  - END: `endType`(`'23:00:00'`도 읽음) `=== opts.endTime`(기본 `'23:00'`), `dayType`이 `opts.endTypeDayTypes`(기본 `['mon_thu']`, 항목 앞뒤 공백 무시)에 있음, 마지막 블록, **그 블록과 그날 종료(`dayEnd`)가 모두 종료 시각보다 늦게 끝남**. ASSUMPTION: 날짜별 종료를 23:00 이하로 당긴 날(22:00·22:30·23:00)은 모두 그 시각에 귀가하므로 표시하지 않는다. ASSUMPTION: 특별 요일 유형(`exam` 등)으로 바꾼 날은 실제 달력 요일의 기본 유형으로 판정한다(목요일 exam → 표시, 금요일 exam → 표시 안 함). 휴일(`holiday`, 결정 72 보충 R21)은 특별 유형이 아니라 그 자체가 기본 유형이다: 목요일 휴일도 `mon_thu`로 보지 않으므로 `endTypeDayTypes`에 `holiday`가 없으면 END가 없다. 휴일 칸은 `blocks`의 `day_type 'holiday'` 블록(오전 토요일 칸·오후·저녁 일요일 칸, C24가 기본값을 채움)을 `resolveDayPlan_`이 그대로 쓴다.
 - `resolveStudentDay_`: 운영 안 하는 날은 `[]`. `exceptions`는 `date === plan.date`인 행만 쓴다(**날짜가 빈 행은 쓰지 않는다** — 빈 날짜 하나가 모든 날에 찍히지 않게). `plan.end`를 `dayEnd`로 넘긴다. `fixedRows`는 `effectiveFixedRows_` 결과를 넘긴다. 고정 일정 요일은 요일 유형이 아니라 **실제 달력 요일**(`ymdWeekdayKo_`). C7은 결과에서 `seq·code·text`만 sheet-model `marks`로 옮긴다.
 
 ## 동작 메모(R5, 2026-11-07, 총괄 검토 3차 반영)
@@ -231,7 +232,10 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId)
 - 교사가 직접 입력한 OUT(`source`가 `F1자동`이 아님)은 건드리지 않는다.
 - ASSUMPTION: 관리자가 직접 취소한 자동 OUT(`cancel_reason`이 `'[자동] '`으로 시작하지 않음)이 가리키던 특이사항 행, 또는 같은 묶음(**취소된 OUT의 학생** + group_id)의 행이 들어 있는 단위는, 그 OUT과 **학생·기간이 같으면** 다시 만들지 않는다(`per`를 바꿔도 같음).
 - ASSUMPTION(결정 22 적용): 같은 학생·같은 날·겹치는 블록에 다른 묶음의 자동 유형 특이사항 두 건이 확정되면 OUT도 두 건(→ 퇴실 대상이 될 수 있다). C5는 저장·확정 때 겹침 경고 후 확인을 받는다(막지는 않음).
-- `outLevel_`: 같은 학생·같은 `term_id`(학기마다 초기화)에서 status 빈칸·`유효`인 OUT 수(직접·자동 모두). 2개 이상이면 `level:2`, `'퇴실 대상'`.
+- `outLevel_`: 같은 학생·같은 `term_id`(학기마다 초기화)에서 status 빈칸·`유효`인 OUT 수(직접·자동 모두). 2 이상이면 `level:2`, `'퇴실 대상'`.
+- **즉시 퇴실 항목(결정 69):** `opts.instantRuleIds`(violation_rules `id` 목록)에 `rule_id`가 있는 OUT 한 건은 **2로 센다** — `count`는 OUT 수의 합이라 그 한 건만으로 `level:2`. 취소된 OUT은 세지 않는다(다른 OUT과 같음). `outDismissalGate_`의 `triggerOutId`는 시간순으로 합이 처음 2가 되는 OUT(즉시 항목이면 그 한 건), 면담 날짜도 그 OUT 발생일 이후. opts를 주지 않으면 지금과 같다.
+  - **설정 계약(코딩B):** `settings` 탭(시트 구조 변경 없음) 키 `out.instant_rule_ids`, 값 = 즉시 퇴실 항목의 violation_rules `id`를 쉼표로(빈칸·없음 = 즉시 항목 없음). 관리자 설정 화면에서 violation_rules 이름을 골라 id로 저장한다. OUT 단계를 보이는 곳(`Outs.gs` getOutContext·listOuts·saveOut 결과, `AutoOuts.gs` 단계 알림, `Counsel.gs`·`Outs.gs`의 `outDismissalGate_`)은 모두 이 값을 읽어 `{instantRuleIds}`로 넘긴다 — 한 곳만 넘기면 화면마다 단계가 달라진다. `rule_id`가 빈 OUT(자동 OUT의 rule_id는 R-AUTO 행)은 1로 센다.
+  - ASSUMPTION(선생님 질문 후보): 설정은 **지금 값**으로 센다 — 이번 기간에 이미 있는 그 항목 OUT도 설정에 넣는 순간 2로 센다(소급). 자동 OUT 설정처럼 '넣은 뒤부터만'으로 하려면 저장 때 무게를 남길 칸이 필요하다(시트 구조 변경).
 - 이 파일은 DateRules(`ymdIsValid_`·`ruleStr_`·`ruleIso_`·`ruleRowLive_`)·AttendanceRules(`attTypeBase_`·`parseBlockSpec_`)를 부른다. 테스트는 세 파일을 함께 올린다.
 
 ## 동작 메모(R6, 2026-11-07, 총괄 검토 3차 반영)
@@ -242,7 +246,7 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId)
 
 - `mealEffectiveDate_(kind, requestedAt, opts)` → `{date, rule}`. `rule`: `same_day`·`next_day`·`next_monday`·`monday_after_next`·`entry_date`·`leave_date`·`initial`.
   - `start`·`to_general`: 신청 일시(KST)가 마감(`opts.cutoff`, 기본 `'11:30'`, `9:30`·`11:30:00` 표기도 읽음) **전**이면 당일, 마감 **정각부터** 다음 날(결정 23 ④).
-  - `stop`: 신청일이 월·화면 다음 주 월요일, 수~일이면 다다음 주 월요일. 일반 석식 → 미실시도 이 규칙(결정 23 ⑤).
+  - `stop`(결정 71): 신청 일시가 **수요일 마감(`opts.cutoff`, 기본 11:30) 전**(월·화 포함)이면 다음 주 월요일, 수요일 마감 **정각부터** 일요일까지면 다다음 주 월요일. 마감 경계는 `start`와 같다(11:29:59는 앞, 11:30:00은 뒤). 일반 석식 → 미실시도 이 규칙(결정 23 ⑤), 학사 퇴실의 석식 중단일(결정 35)도 이 규칙.
   - `with_dorm_entry`: `opts.entryDate`, `on_leave`: `opts.leaveDate`. `initial`: 신청일.
   - `start`·`to_general`·`stop`에 `opts.leaveDate`를 주면 적용일이 퇴실일보다 이르면 퇴실일로 미룬다(ASSUMPTION: 퇴실 전에는 학사 석식이 이어진다). 늦은 적용일은 그대로 — **결정 35**.
   - 잘못된 kind(`none` 포함)·일시·마감은 Error.
@@ -267,7 +271,8 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId)
 
 **DutyRules** — duty_slots 행(결정 41로 승인된 탭, stage2.md 5절 1번)을 그대로 받는다. DateRules·ScheduleRules(`baseDayType_`)를 부른다.
 
-- `dutySlotsFor_`: 끝 시각 = min(조 시각, 그날 종료), 단독 = 그날 종료, 예비 `''`. 방학도 같은 틀(4-2). ASSUMPTION: 특별 요일 유형(exam 등)은 실제 달력 요일의 틀(R3 END와 같은 방식).
+- `dutySlotsFor_`: 끝 시각 = min(조 시각, 그날 종료), 단독 = 그날 종료, 예비 `''`. 방학도 같은 틀(4-2). **휴일(`plan.dayType === 'holiday'`, 결정 72 보충 R21)은 달력 요일과 상관없이 단독 + 예비**(목요일 휴일도). ASSUMPTION: 그 밖의 특별 요일 유형(exam 등)은 실제 달력 요일의 틀(R3 END와 같은 방식).
+- `dutyOn_`·`dutyPick_`의 `dayType`(선택, R21) = 그날 `resolveDayPlan_`의 `dayType`. 틀 밖 칸 경고만 바꾼다(휴일이면 단독·예비가 틀). 주지 않으면 달력 요일(지금과 같음). `dutyRecord_`는 `opts.dayTypeByDate:{날짜: dayType}`로 받는다. 근무자 판정(`dutyIsOn_` 포함)은 틀과 상관없다.
 - `dutyOn_`: 취소 제외, (date, slot)마다 `updated_at` 최신 1행(같으면 아래 행) + 경고. 근무자 = `actual_email`(빈칸이면 `original_email` — ASSUMPTION: 교대 전에는 빈칸일 수 있다). 이메일은 소문자·공백 없이. 모르는 칸 이름·근무자 없는 칸은 빼고 경고. 그 요일 틀 밖의 칸(토요일 21:30조, 화요일 단독·예비 등)은 쓰되 경고. 예비 칸은 `standby`로만(`{email, swappedFrom}`).
 - `dutyIsOn_`(근무교사 시간 범위 권한): 그날 실제 근무자만 참. 예비 지정만·교대로 넘긴 원래 근무자는 거짓. `windowDays` 기본 0. 호출 쪽은 OUT 입력(`out.save`)에만 1을 쓰고 보기 권한에는 쓰지 않는다(#79 근무 창 정리). 잘못된 날짜·음수·소수 `windowDays`는 거짓(넓히지 않는다).
 - `dutyRecord_`(월말 근무 기록): 교사별 합계 = 실제 근무자(원래 근무자에게는 세지 않음). `swaps` = 칸마다 마지막 교대(원래 → 실제, **예비 칸 포함**, `at`·`by`는 그날 쓴 행의 `swapped_at`·`swapped_by`, `kind`는 실제 근무자(to)가 그날 예비였으면 `'대신 근무'`, 아니면 `'교대'` — 예비 칸 자체의 교대는 `'교대'`). 예비만 있는 교사도 `teachers`에 넣는다(total 0). 예비 지정은 `standby`로 근무 합계와 따로 센다(결정 46). `standby[].dates` = 예비로 센 날(날짜 순, 예비 칸 교대 뒤의 실제 예비 기준, 출력 표의 날짜별 칸용). 그날 대신 근무한 예비는 근무로만 세고 `standby`에서는 뺀다(두 번 세지 않음). `teachers[].dates[].slot`은 저장값(`'21:30조'` 등) 그대로다. ASSUMPTION: 운영 안 하는 날(`operatingByDate[date] === false`)의 행도 세고 경고. 금액은 계산하지 않는다(결정 47 — 두 조의 수당이 같아 합계를 크게, 조별은 참고). 잘못된 달은 Error.
@@ -302,9 +307,9 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId)
 - superseded 판정에서 재입실 급식 행(학사 입실 대표에 연결)은 그 재입실 직전 퇴실의 기록보다 먼저 낸, 재입실일보다 늦게 적용되는 신청을 가리지 않는다(재입실은 그런 대기 신청을 취소하지 않으므로 — 늦게 입력돼도 같게). 재입실일 당일 신청은 재입실이 정한다.
 - 되살림의 덮임(`moveRestorable_`·`moveUndoPlan_`)에서도 재입실 급식 행은 그 퇴실 기록 전에 낸, 재입실일 뒤에 적용되는 신청을 덮지 않는다(superseded 예외와 같은 `mealReentryKeeps_`).
 - 되살림의 덮임·순서는 신청 일시가 같으면 나중에 저장된 행(`created_at`)을 더 새 신청으로 본다(`moveNewer_`, `statusOn_` 동점 규칙과 같다).
-- **알려진 지름길(총괄, followups):** 퇴실 기록과 재입실 기록 사이에 신청한 신청이 퇴실 전 대기 신청을 취소·가린 효과는 입력 순서에 따라 남거나 사라질 수 있다(재입실 화면에서 대기 신청을 확인). 최소 재현은 `move.test.js` '(알려진 지름길)' 시험(지금 다름을 단언 — 고치면 같다로 바꾼다). 오라클 seed 1..6000 중 9개(884·1560·1698·3383·3459·3537·4583·4850·5246)가 이 경우다(기본 400은 통과).
+- **알려진 지름길(총괄, followups):** 퇴실 기록과 재입실 기록 사이에 신청한 신청이 퇴실 전 대기 신청을 취소·가린 효과는 입력 순서에 따라 남거나 사라질 수 있다(재입실 화면에서 대기 신청을 확인). 최소 재현은 `move.test.js` '(알려진 지름길)' 시험(지금 다름을 단언 — 고치면 같다로 바꾼다). 오라클 seed 1..6000 중 9개(884·1560·1698·3383·3459·3537·4583·4850·5246 — 결정 71 뒤에는 5246이 지름길 꼴을 만들지 않아 8개)가 이 경우다(기본 400은 통과).
 - **재입실일 경계(지름길 Y 고침, 결정 56 보충, 총괄 (A)):** (재)입실 급식 행 = F6 학사·기숙사 입실 대표에 연결된 조식·석식 행(`mealEntryRow_`). 재입실일 E보다 **먼저 적용되는** 신청은 신청 일시·입력 순서와 상관없이 이 행을 ① 가리지 않고(`movePlan_` 학사 입실 급식·기숙사 입실 조식이 `mealPlanChange_`에 `opts.entry: true` — 적용일 < E인 더 새 신청은 superseded 판정에서 뺀다) ② 취소하지 않고(`mealPendingToCancel_`이 이 행은 대기 신청으로 보지 않는다) ③ E 뒤로 이어 쓰지 않는다(`followUps`의 재입실일 이어 쓰기는 그 날 살아 있는 (재)입실 급식 행이 있으면 멈춘다 — 명단 업로드 입실처럼 급식 행이 없는 입실에는 지금처럼 이어 쓴다). 적용일 ≥ E인 신청은 지금 그대로(신청 일시가 늦으면 이긴다). 퇴실 기간 중 적용 신청도 같다(Q2). 기본값·명시값을 구분하지 않는다 — **전제: C18b가 재입실 저장 때 늘 `move.meals`를 명시한다**(Q4). 퇴실 취소(결정 59)는 재입실 행을 함께 취소하므로 걸치는 신청이 그대로 끝없이 적용된다.
-- **알려진 지름길 Y2(총괄 (A), followups):** 걸치는 신청(적용일 < E)도 학생 자신의 더 옛 대기 신청(적용일 ≥ E)은 지금처럼 '새 신청으로 대체'로 취소하거나 가린다(재입실 급식 행만 보호). 그래서 재입실 기록 뒤에 학생 신청 셋 이상이 대체·가림으로 얽히면 재입실 뒤 값이 입력 순서를 따를 수 있다 — 대체한 신청이 늦게 입력돼 superseded면 옛 신청이 살아남고(seed 2339), 먼저 입력돼 옛 신청을 취소한 뒤 그 자신이 취소되면 옛 신청은 돌아오지 않는다(seed 353 꼴). 오라클 seed 1..6000 실패 13개 = 지름길 Q 9개(884·1560·1698·3383·3459·3537·4583·4850·5246) + Y2 4개(2339·2588·4161·5374), 두 시간대 같음.
+- **알려진 지름길 Y2(총괄 (A), followups):** 걸치는 신청(적용일 < E)도 학생 자신의 더 옛 대기 신청(적용일 ≥ E)은 지금처럼 '새 신청으로 대체'로 취소하거나 가린다(재입실 급식 행만 보호). 그래서 재입실 기록 뒤에 학생 신청 셋 이상이 대체·가림으로 얽히면 재입실 뒤 값이 입력 순서를 따를 수 있다 — 대체한 신청이 늦게 입력돼 superseded면 옛 신청이 살아남고(seed 2339), 먼저 입력돼 옛 신청을 취소한 뒤 그 자신이 취소되면 옛 신청은 돌아오지 않는다(seed 353 꼴). 오라클 seed 1..6000 실패 13개 = 지름길 Q 9개(884·1560·1698·3383·3459·3537·4583·4850·5246) + Y2 4개(2339·2588·4161·5374), 두 시간대 같음. **결정 71(미실시 수요일 마감) 뒤 12개** — 5246은 바뀐 적용일 때문에 Q 꼴이 생기지 않는다(고친 것이 아님).
 - **알려진 한계:** 따로 입력한 '기숙사 퇴실'과 같은 날 따로 입력한 학사 퇴실이 있을 때 기숙사 퇴실만 취소하면, 학사 퇴실은 남고 기숙사는 입실로 돌아온다(경고 없음 — 학사 퇴실도 취소하거나 고쳐 입력한다). '학사 및 기숙사 퇴실'을 취소했는데 그 뒤에 따로 입력한 학사 퇴실이 있으면(재입실 없이) 기숙사만 입실로 돌아오는 구간(학사 퇴실·기숙사 입실)이 생길 수 있다 — 그 학사 퇴실도 취소하거나 고쳐 입력한다.
 - 재입실 기본 급식(`move.meals` 없음)은 직전 퇴실 전날 값 — 입력된 신청서만 반영한다(종이로만 있는 신청은 모른다). C18b는 늘 `meals`를 명시해 보낸다.
 - `mealReentryKeeps_`(superseded·되살림 덮임 예외)는 학사 재입실 급식 행과 기숙사 입실 조식 행 모두에 쓴다 — 그 입실 직전 **같은 항목** 퇴실의 기록 전에 낸 신청을 가리지 않는다(결정 W 보충).
@@ -319,6 +324,11 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId)
 ## 동작 메모(R12, 2026-11-07)
 
 - `mealCountsOn_`: termId 기간에 등록된 학생을 그날 상태 그대로 센다(결석·외박은 빼지 않는다, 같은 학생 두 번 등록은 한 번). 학사 = 학사 `입실`, 기숙 = 학사 입실이면서 기숙사 `입실`, 비기숙 = 학사 입실이면서 기숙 아님. **조식·석식은 학사 상태로 거르지 않는다**(결정 35 — 퇴실 학생도 석식 중단일 전까지 학사 석식, `afterLeaveHallDinner`로 따로 센다). 줄은 '여1'…'남3'(학년 3 밖도 있으면 줄을 만든다), '여 합계'·'남 합계', 'N학년', '전체'이고 합계 줄 = 부분 합. ASSUMPTION: 성별(남·여)·학년(숫자)이 비었거나 다른 학생, 학생 행이 없는 등록은 어느 줄에도 넣지 않고 `unknownGroup` + 경고. 잘못된 날짜는 Error.
+- **방학 중식(R19, 결정 73):** item `중식`, 값 `실시`·`미실시`(조식과 같은 값·같은 적용일 규칙 — 실시 11:30, 미실시 수 11:30). 학사생 값은 `실시`.
+  - `mealPlanChange_(…, '중식', …, {vacation})`: `vacation`(그 방학 terms 행, `start_date`·`end_date`)이 없거나 날짜가 아니면 Error. 방학 시작일 **전** 중식 행은 보지 않는다(지난 방학 값이 이어지지 않게 — 방학마다 새로 신청). 계산한 적용일이 시작일보다 이르면 시작일(rule `vacation_start`, 방학 전에 미리 낸 신청), 고친 날(manual)이 시작일보다 이르면 Error, 적용일이 끝날 뒤면 경고. 막힘은 조식과 같다(그날 퇴실 상태면 `실시` 불가). **퇴실 정리 followUps를 쓰지 않는다.**
+  - `mealCountsOn_(…, prevTermId, vacation)`: `vacation`을 주고 그날이 방학 안이면 `lunch` = 학사 `입실`이면서 시작일 이후 중식 행으로 본 값이 `실시`. 주지 않으면 `lunch`는 0. 저장 쪽은 termId 기간이 방학이면 그 terms 행을 넘긴다.
+  - `movePlan_`·퇴실 취소는 중식을 건드리지 않는다: 퇴실한 날부터 집계에서 빠지고(학사 입실인 날만 셈), 재입실하면 퇴실 전 값으로 이어진다. ASSUMPTION(결정 73 — 선생님 질문 후보): 중식은 퇴실일에 끝난다(조식처럼, 석식의 결정 35 미실시 규칙 아님).
+  - 저장 쪽(코딩): F7 신청 화면의 중식 버튼은 방학 기간에만, 식수 집계·xlsx·PDF에 `lunch` 열(방학일 때만), 명단 업로드의 중식 열은 이번 범위 밖.
 
 ## 동작 메모(R13, 2026-11-12)
 

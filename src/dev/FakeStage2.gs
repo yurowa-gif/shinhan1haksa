@@ -91,7 +91,7 @@ function buildFakeStage2Life_(fake, ruleRows) {
   };
   addMeal(FAKE2_NODOC[0], '석식', '일반 석식', '2027-03-08T10:00:00', 'FALSE');   // 11:30 전 → 당일
   addMeal(FAKE2_NODOC[1], '석식', '일반 석식', '2027-03-09T14:00:00', 'FALSE');   // 11:30 뒤 → 다음 날
-  addMeal(FAKE2_PENDING, '석식', '미실시', '2027-03-10T09:00:00', 'TRUE');        // 대기 행: 수요일 신청 → 다다음 주 월요일(3/22)
+  addMeal(FAKE2_PENDING, '석식', '미실시', '2027-03-10T13:00:00', 'TRUE');        // 대기 행: 수요일 오후(11:30 뒤) 신청 → 다다음 주 월요일(3/22, 결정 71)
 
 
   /* 퇴실 취소·재입실 예시(통학생, R11b). F6 화면과 같은 규칙 결과(movePlan_·moveUndoPlan_)를 그대로 쓴다. 서류는 제출함 */

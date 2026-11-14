@@ -366,7 +366,7 @@ function moveForm(m, prefill) {
   m.appendChild(card('날짜', [
     inputField('신청 일시', 'datetime-local', '2027-03-03T10:45', '신청서를 받은 날짜·시각. 기본값은 지금입니다.'),
     UI.dateField({ label: prefill ? '적용일(확정 다음 날)' : '적용일', value: prefill ? '2027-03-04' : '2027-03-05', shortcuts: [{ label: '오늘', value: '2027-03-03' }, { label: '내일', value: '2027-03-04' }], onchange: function () {} })]));
-  var dinner = UI.field('석식', UI.segmented({ options: [{ value: 'stop', label: '중단' }, { value: 'normal', label: '일반 석식으로' }], value: prefill ? '' : 'stop', onchange: function () {} }), { hint: '"중단"은 미실시 규칙(수~일 신청이면 다다음 주 월요일)을 따릅니다.' });
+  var dinner = UI.field('석식', UI.segmented({ options: [{ value: 'stop', label: '중단' }, { value: 'normal', label: '일반 석식으로' }], value: prefill ? '' : 'stop', onchange: function () {} }), { hint: '"중단"은 미실시 규칙(수요일 11:30 이후 신청이면 다다음 주 월요일)을 따릅니다.' });
   if (prefill) dinner.setError('석식을 골라 주세요. 기본값이 없습니다.');
   m.appendChild(card('급식 정리', [dinner, el('div', { class: 'notice info', text: '조식은 적용일부터 바로 중단됩니다.' })]));
   m.appendChild(card('사유·서류', [inputField('사유', 'text', prefill ? '2OUT 퇴실' : ''), checkRow('학교 서류 제출함', false), el('div', { class: 'notice warn', text: '서류 미제출로 기록됩니다. 담당교사 홈에 남습니다.' })]));
@@ -396,8 +396,8 @@ def('meal-change', 'F7 급식', 'F7-1 급식 변경 신청 (석식 미실시)', 
   m.appendChild(card('무엇을', [el('div', { class: 'chips' }, ['조식 실시', '조식 미실시', '석식 실시', '석식 미실시', '일반 석식으로 변경'].map(function (t) { return el('button', { type: 'button', class: 'chip' + (t === '석식 미실시' ? ' on' : ''), text: t }); }))]));
   m.appendChild(card('신청 일시', [inputField('', 'datetime-local', '2027-03-03T10:45', '기본값은 지금입니다. 11:30 규칙에 쓰이므로 서류의 시각과 다르면 고쳐 주세요.')]));
   m.appendChild(card('적용일', [
-    row([el('b', { text: '3월 15일(월)', style: 'font-size:var(--font-xl)' }), el('button', { type: 'button', class: 'btn secondary', text: '고치기' })], 'justify-content:space-between'),
-    el('div', { class: 'notice info', style: 'margin-top:12px', text: '수~일 신청이라 다다음 주 월요일부터 적용됩니다.' }),
+    row([el('b', { text: '3월 8일(월)', style: 'font-size:var(--font-xl)' }), el('button', { type: 'button', class: 'btn secondary', text: '고치기' })], 'justify-content:space-between'),
+    el('div', { class: 'notice info', style: 'margin-top:12px', text: '수요일 11:30 전 신청이라 다음 주 월요일부터 적용됩니다.' }),
     checkRow('학교 서류 제출함', false), el('div', { class: 'notice warn', text: '서류 미제출로 기록됩니다. 담당교사 홈에 남습니다.' })]));
 });
 def('meal-change-edit', 'F7 급식', 'F7-1 적용일을 손으로 고침 (사유 필수)', {}, function (root) {
@@ -408,21 +408,22 @@ def('meal-change-edit', 'F7 급식', 'F7-1 적용일을 손으로 고침 (사유
   var reason = UI.field('사유(꼭 적어 주세요)', el('input', { type: 'text', value: '' }));
   reason.setError('고친 적용일에는 사유가 필요합니다. 2자 이상 적어 주세요.');
   m.appendChild(card('적용일', [
-    UI.dateField({ label: '적용일(고침)', value: '2027-03-08', onchange: function () {} }),
-    el('div', { class: 'muted', text: '자동 계산: 3월 15일(월) · 수~일 신청이라 다다음 주 월요일' }),
+    UI.dateField({ label: '적용일(고침)', value: '2027-03-05', onchange: function () {} }),
+    el('div', { class: 'muted', text: '자동 계산: 3월 8일(월) · 수요일 11:30 전 신청이라 다음 주 월요일' }),
     el('div', { class: 'notice warn', style: 'margin-top:12px', text: '급식실 준비 기간(다음 주 월요일 규칙)보다 이른 날짜입니다. 그래도 저장하면 이 날짜로 적용됩니다.' }),
     reason]));
 });
 def('meal-confirm', 'F7 급식', 'F7-1 급식 변경 확인창', { sheet: true }, function (root) {
   var m = frame(root, { title: '입퇴실·급식', who: '박선생', tabs: moveTabs(1), bar: [{ text: '닫기', kind: 'secondary' }, { text: '변경 신청' }] });
   m.appendChild(card('학생', [studentPick('', 'ㄱㄱㅇ')]));
-  UI.confirmSheet({ title: '급식 변경을 저장합니다', lead: '3월 15일(월)부터 석식 미실시', lines: ['1. 김가온 · 석식(학사)', '수~일 신청이라 다다음 주 월요일부터 적용됩니다', '서류 미제출로 기록됩니다'], confirmText: '변경 신청' });
+  UI.confirmSheet({ title: '급식 변경을 저장합니다', lead: '3월 8일(월)부터 석식 미실시', lines: ['1. 김가온 · 석식(학사)', '수요일 11:30 전 신청이라 다음 주 월요일부터 적용됩니다', '서류 미제출로 기록됩니다'], confirmText: '변경 신청' });
 });
 function mealTable(split) {
   var heads = split ? ['학년·성별', '학사', '기숙', '비기숙', '조식', '석식 학사', '석식 일반'] : ['학년·성별', '학사', '기숙', '비기숙', '조식', '석식'];
   var rows = [
-    ['여1', 4, 3, 1, 3, 4, 0], ['여2', 3, 3, 0, 3, 3, 0], ['여3', 3, 2, 1, 2, 3, 0], ['여 합계', 10, 8, 2, 8, 10, 0, 1],
-    ['남1', 7, 5, 2, 5, 7, 0], ['남2', 7, 6, 1, 6, 5, 2], ['남3', 6, 5, 1, 4, 5, 1], ['남 합계', 20, 16, 4, 15, 17, 3, 1],
+    ['여1', 4, 3, 1, 3, 4, 0], ['여2', 3, 3, 0, 3, 3, 0], ['여3', 3, 2, 1, 2, 3, 0],
+    ['남1', 7, 5, 2, 5, 7, 0], ['남2', 7, 6, 1, 6, 5, 2], ['남3', 6, 5, 1, 4, 5, 1],
+    ['여 합계', 10, 8, 2, 8, 10, 0, 1], ['남 합계', 20, 16, 4, 15, 17, 3, 1],
     ['1학년', 11, 8, 3, 8, 11, 0], ['2학년', 10, 9, 1, 9, 8, 2], ['3학년', 9, 7, 2, 6, 8, 1], ['전체', 30, 24, 6, 23, 27, 3, 1]
   ];
   var thead = el('thead', {}, [el('tr', {}, heads.map(function (h) { return el('th', { scope: 'col', text: h }); }))]);

@@ -71,6 +71,22 @@
     "saveRoomAssignments": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getMealConfirmPdf": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getMoveConfirmPdf": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getMealCountsXlsx": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "setOutInstantRule": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }

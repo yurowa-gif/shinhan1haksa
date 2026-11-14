@@ -17,7 +17,7 @@ const btok = (s, tt, dt) => s.c.calRowsToken_(s.c.calBlockGroupRows_(s.c.readAll
 
 test('calDefaults_: 설정이 없으면 PRD 3.3 기본값, 있으면 설정값(금요일 study.fri.*)', () => {
   assert.deepStrictEqual(defaults, { mon_thu: { start: '18:30', end: '23:50' }, fri: { start: '18:30', end: '23:00' },
-    sat: { start: '09:00', end: '17:00' }, sun: { start: '14:00', end: '22:00' } });
+    sat: { start: '09:00', end: '17:00' }, sun: { start: '14:00', end: '22:00' }, holiday: { start: '09:00', end: '21:50' } });
   const d = plain(ctx.calDefaults_([{ key: 'study.fri.start', value: '18:00' }, { key: 'study.weekday.end', value: '23:30' }]));
   assert.strictEqual(d.fri.start, '18:00'); assert.strictEqual(d.mon_thu.end, '23:30'); assert.strictEqual(d.fri.end, '23:00');
 });

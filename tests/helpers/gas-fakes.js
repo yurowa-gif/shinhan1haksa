@@ -34,6 +34,7 @@
  *   env.strictLockRead = true(모든 실행) 또는 'call'(env.call — 화면 경계 — 실행만)이면 한 실행에서 락 밖에서 읽은 탭(머리글 아래)을, 지금 쥔 락 안에서 다시 읽지 않고 쓰는 순간 오류
  *   (readAll_ 메모가 락 밖에서 읽은 값을 그대로 주면 "읽고 검사하고 쓰기"가 한 덩어리가 아니다). 기본 꺼짐.
  * - Session: env.as(email)의 접속자 = email, 실행 계정 = 소유자("나로 실행"). email ''은 접속자 이메일을 못 받은 경우(PRD 6.1).
+ * - Utilities.newBlob·zip(결정 67 xlsx 최소): 바이트 블롭, 압축 없는 zip(이름의 '/'는 폴더). tests/helpers/zip.js의 unzipStored로 내용을 읽는다.
  * - DriveApp(O1 백업용 최소): getFileById·getFolderById·createFolder, 폴더 getFiles/createFile/getId/getName, 파일 makeCopy·setTrashed·isTrashed·
  *   getName·getId·getSharingAccess·setSharing·getEditors·getViewers, Access.PRIVATE/ANYONE_WITH_LINK, Permission.NONE/VIEW. 데이터는 env.drive({files, folders}).
  *   시험이 env.drive.addFile(name, {parent, sharing})로 파일을 만든다. 새 사본·파일이 공유된 채 생기는 상황: env.drive.copySharing = 'ANYONE_WITH_LINK'(링크),
@@ -284,6 +285,53 @@ class FakeSpreadsheet {
   }
 }
 
+/* ───────── Blob·zip(최소) ───────── */
+
+/** 바이트 배열(부호 있는 byte[] 흉내) 블롭. 이름에 '/'가 있으면 zip에서 폴더가 된다 */
+function makeBlob(buf, ct, name) {
+  const b = { _buf: Buffer.from(buf), _ct: ct || '', _name: name || '' };
+  b.getBytes = () => Array.from(b._buf).map((x) => (x > 127 ? x - 256 : x));
+  b.getName = () => b._name;
+  b.setName = (n) => { b._name = String(n); return b; };
+  b.getContentType = () => b._ct;
+  b.setContentType = (t) => { b._ct = String(t); return b; };
+  b.getDataAsString = () => b._buf.toString('utf8');
+  return b;
+}
+
+const CRC_TABLE = (() => {
+  const t = [];
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+  return t;
+})();
+function crc32(buf) {
+  let c = 0xFFFFFFFF;
+  for (const x of buf) c = CRC_TABLE[(c ^ x) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+/** 압축 없는(stored) zip. 실제 Utilities.zip은 deflate지만 내용을 읽는 시험에는 같다. 파일 이름은 블롭 이름(UTF-8) */
+function zipStored(blobs) {
+  const locals = [], centrals = [];
+  let offset = 0;
+  blobs.forEach((bl) => {
+    const name = Buffer.from(bl.getName(), 'utf8'), data = bl._buf, crc = crc32(data);
+    const lh = Buffer.alloc(30);
+    lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4); lh.writeUInt16LE(0x0800, 6); lh.writeUInt16LE(0, 8);
+    lh.writeUInt32LE(crc, 14); lh.writeUInt32LE(data.length, 18); lh.writeUInt32LE(data.length, 22); lh.writeUInt16LE(name.length, 26);
+    locals.push(lh, name, data);
+    const ch = Buffer.alloc(46);
+    ch.writeUInt32LE(0x02014b50, 0); ch.writeUInt16LE(20, 4); ch.writeUInt16LE(20, 6); ch.writeUInt16LE(0x0800, 8); ch.writeUInt16LE(0, 10);
+    ch.writeUInt32LE(crc, 16); ch.writeUInt32LE(data.length, 20); ch.writeUInt32LE(data.length, 24); ch.writeUInt16LE(name.length, 28); ch.writeUInt32LE(offset, 42);
+    centrals.push(ch, name);
+    offset += lh.length + name.length + data.length;
+  });
+  const cd = Buffer.concat(centrals);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(blobs.length, 8); end.writeUInt16LE(blobs.length, 10); end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(offset, 16);
+  return Buffer.concat(locals.concat([cd, end]));
+}
+
 /* ───────── 환경 ───────── */
 
 /**
@@ -469,7 +517,9 @@ function createGasEnv(opts) {
       base64Decode: (s) => Array.from(Buffer.from(s, 'base64')).map((b) => (b > 127 ? b - 256 : b)),
       base64DecodeWebSafe: (s) => Array.from(Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64')).map((b) => (b > 127 ? b - 256 : b)),
       sleep: () => {},
-      newBlob: notFaked('Utilities.newBlob')
+      newBlob: (data, ct, name) => makeBlob(typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(Array.from(data).map((b) => b & 255)), ct, name),
+      zip: (blobs, name) => makeBlob(zipStored(blobs), 'application/zip', name || 'archive.zip'),
+      gzip: notFaked('Utilities.gzip')
     },
     ScriptApp: {
       getService: () => ({ getUrl: () => 'https://script.google.com/macros/s/FAKE/exec' }),

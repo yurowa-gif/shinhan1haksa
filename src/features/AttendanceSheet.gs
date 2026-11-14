@@ -159,7 +159,7 @@ function sheetDutyNames_(ymd, plan) {
   if (!inFrame.length) return { hasSlots: false, dutyNames: [], standbyNames: [], warnings: warnings };
   var names = Object.create(null);
   readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = u.name; });
-  var day = dutyOn_(inFrame, ymd);
+  var day = dutyOn_(inFrame, ymd, plan.dayType);
   var who = function (email) { return names[email] || '(등록 안 된 교사)'; };
   var onDuty = {};
   day.duty.forEach(function (d) { onDuty[d.email] = true; });

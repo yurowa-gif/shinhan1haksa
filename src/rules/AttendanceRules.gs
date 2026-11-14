@@ -147,7 +147,7 @@ function attNewer_(a, b, confirmedKey) {
  *   겹치는 확정 특이사항이 여럿이면 가장 최근 확정(confirmed_at → updated_at) 1건의 약어 + ' 외 N'(more = N)(가정 c).
  * - fixedRows는 effectiveFixedRows_ 결과. status '확정', weekday === weekdayKo, 블록이 겹치는 행. 여럿이면 최근 확정.
  * - END: endType이 opts.endTime(기본 '23:00')이고 dayType이 endTypeDayTypes(기본 mon_thu)에 있고(특별 유형이면 실제
- *   요일로 판정) 마지막 블록이며, 그 블록과 그날 자습(dayEnd)이 모두 종료 시각보다 늦게 끝날 때.
+ *   요일로 판정, 휴일 holiday는 실제 요일로 보지 않음 — 결정 72) 마지막 블록이며, 그 블록과 그날 자습(dayEnd)이 모두 종료 시각보다 늦게 끝날 때.
  *   ASSUMPTION: 날짜별 종료를 23:00 이하로 당긴 날(22:30·23:00)은 모두 그 시각에 귀가하므로 표시하지 않는다.
  */
 function resolveCell_(c) {
@@ -181,7 +181,8 @@ function resolveCell_(c) {
   var dayTypes = (opts.endTypeDayTypes || ['mon_thu']).map(ruleStr_);
   var dt = ruleStr_(c.dayType);
   // ASSUMPTION: 특별 요일 유형(exam 등)으로 바꾼 날은 실제 달력 요일의 기본 유형으로 판정한다(목요일 exam → mon_thu).
-  var isBase = ['mon_thu', 'fri', 'sat', 'sun'].indexOf(dt) >= 0;
+  // 휴일(holiday, 결정 72)은 그 자체가 기본 유형이다 — 목요일 휴일도 mon_thu로 보지 않는다(endTypeDayTypes에 holiday가 없으면 END 없음)
+  var isBase = ['mon_thu', 'fri', 'sat', 'sun', 'holiday'].indexOf(dt) >= 0;
   var dayOk = dayTypes.indexOf(dt) >= 0 || (!isBase && dayTypes.indexOf(attWeekdayBaseType_(c.weekdayKo)) >= 0);
   var be = hmNorm_(block.end);
   var dayEnd = hmNorm_(c.dayEnd);

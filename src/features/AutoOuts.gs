@@ -85,11 +85,11 @@ function vioSyncAuto_(term, studentIds, actorEmail, since, touchedGroups) {
   invalidate_('db', vsheet);
   var all = readAll_(vsheet);
   var students = readAll_('students'), enr = readAll_('enrollments'), users = readAll_('users');
-  var sById = {};
+  var sById = {}, outOpts = vioOutOpts_();
   students.forEach(function (s) { sById[s.id] = s; });
   Object.keys(createdBy).forEach(function (sid) {
-    var after = outLevel_(all, sid, term.id).count, drafts = createdBy[sid];
-    res.level[sid] = outLevel_(all, sid, term.id);
+    var after = outLevel_(all, sid, term.id, outOpts).count, drafts = createdBy[sid];
+    res.level[sid] = outLevel_(all, sid, term.id, outOpts);
     var st = sById[sid], en = enr.filter(function (e) { return e.term_id === term.id && e.student_id === sid; })[0];
     if (!st || !en) return;
     var to = vioNotifyTo_(users, en, st, Math.max(0, after - drafts.length), after, actorEmail);

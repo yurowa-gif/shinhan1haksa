@@ -1,0 +1,56 @@
+<style>
+  .ct-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); word-break: keep-all; }
+  .ct-row a.btn { white-space: nowrap; }
+</style>
+<script>
+  /** 연락처 화면(C29, 결정 76): 내가 볼 수 있는 학생 목록 → 학생을 누르면 그 학생의 전화·보호자 연락처. 번호는 한 학생씩 서버가 권한을 확인해 준다. */
+  function renderScreen(root) {
+    var list = null, seq = 0;
+    var head = el('div', { class: 'card' });
+    var body = el('div', { class: 'card' });
+    root.appendChild(head); root.appendChild(body);
+    var query = el('input', { type: 'search', placeholder: '이름 또는 학번', autocomplete: 'off' });
+
+    call('getContactList').then(function (r) { list = r; drawList(); }).catch(function (err) { clear(head); showError(head, err); });
+
+    function drawList() {
+      clear(head); clear(body);
+      head.appendChild(el('h2', { text: '연락처' }));
+      head.appendChild(el('div', { class: 'muted', text: '담당 학생(그날 근무교사는 전체 학사생)의 연락처만 보입니다. 이 화면의 번호는 다른 곳에 옮겨 적지 말고 필요한 연락에만 써 주세요.' }));
+      head.appendChild(UI.field('찾기', query, { name: 'q' }));
+      query.oninput = drawRows;
+      drawRows();
+    }
+    function drawRows() {
+      clear(body);
+      var q = query.value.trim();
+      var rows = list.students.filter(function (s) { return !q || s.name.indexOf(q) >= 0 || String(s.student_no).indexOf(q) >= 0; });
+      if (!rows.length) { body.appendChild(UI.emptyState(list.students.length ? '찾는 학생이 없습니다.' : '연락처를 볼 수 있는 학생이 없습니다.')); return; }
+      rows.forEach(function (s) {
+        var slot = el('div');
+        var row = el('div', { class: 'ct-row' }, [
+          el('span', { text: s.display + (s.hasContact ? '' : ' (연락처 없음)') }),
+          el('button', { type: 'button', class: 'btn secondary row-btn', text: '연락처 보기', onclick: function () { show(s, slot); } })
+        ]);
+        body.appendChild(row); body.appendChild(slot);
+      });
+    }
+    function show(s, slot) {
+      var mine = ++seq;
+      clear(slot); slot.appendChild(el('div', { class: 'loading', text: '불러오는 중…' }));
+      call('getStudentContact', s.id).then(function (r) {
+        if (mine !== seq) return;
+        clear(slot);
+        var box = el('div', { class: 'notice info' });
+        box.appendChild(phoneLine('학생', r.phone));
+        r.guardians.forEach(function (g) { box.appendChild(phoneLine('보호자' + (g.relation ? '(' + g.relation + ')' : '') + (g.name ? ' ' + g.name : ''), g.phone)); });
+        if (!r.guardians.length) box.appendChild(el('div', { class: 'muted', text: '연결된 보호자가 없습니다.' }));
+        slot.appendChild(box);
+      }).catch(function (err) { if (mine !== seq) return; clear(slot); showError(slot, err); });
+    }
+    function phoneLine(label, phone) {
+      var tel = String(phone || '').replace(/[^0-9]/g, '');
+      return el('div', { style: 'padding:4px 0' }, [el('b', { text: label + ': ' }), phone ? el('a', { href: 'tel:' + tel, text: phone }) : el('span', { class: 'muted', text: '없음' })]);
+    }
+  }
+</script>

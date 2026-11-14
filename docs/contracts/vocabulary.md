@@ -8,9 +8,9 @@
 
 | 열 | 값 |
 | --- | --- |
-| item | `학사` · `기숙사` · `조식` · `석식` |
+| item | `학사` · `기숙사` · `조식` · `중식` · `석식` (`중식`은 방학 기간에만, 결정 73) |
 | value (학사·기숙사) | `입실` · `퇴실` |
-| value (조식) | `실시` · `미실시` |
+| value (조식·중식) | `실시` · `미실시` |
 | value (석식) | `학사 석식` · `일반 석식` · `미실시` |
 | status | `유효` · `취소` |
 | source | `명단업로드` · `F6` · `F7` |
@@ -90,7 +90,7 @@ Apps Script는 같은 전역 이름을 경고 없이 덮는다. 새 전역 이�
 | day_schedules | operating | `TRUE` · `FALSE` |
 | day_schedules, blocks, spaces, seats | status | `유효` · `취소` |
 | blocks | term_type | `학기` · `방학` |
-| blocks, day_schedules | day_type | `mon_thu` · `fri` · `sat` · `sun` (특별 코드는 관리자가 추가) |
+| blocks, day_schedules | day_type | `mon_thu` · `fri` · `sat` · `sun` · `holiday`(휴일: 공휴일·재량휴업일, 09:00~21:50, 결정 72) (특별 코드는 관리자가 추가) |
 | spaces | gender | `남` · `여` · `혼성` |
 | seats | kind | `좌석` · `기둥` · `비상문` · `창문` |
 | seat_assignments | status | `배정` · `취소` |
@@ -108,4 +108,10 @@ Apps Script는 같은 전역 이름을 경고 없이 덮는다. 새 전역 이�
 | enrollments | end_type | `23:00` · `23:50` |
 | students | gender | `남` · `여` |
 | students | track | `문` · `이` · `''` |
+| doc_types | status | `유효` · `취소` |
+| student_docs_<기간> | state | `제출` · `미제출` · `해당없음` (학생·서류 종류마다 최대 1행, 행이 없으면 미제출) |
+| programs | status | `유효` · `취소` (blocks는 exceptions와 같은 표기: `ALL` 또는 `HH:mm-HH:mm;…`) |
+| program_participants | status | `유효` · `취소` (exception_id = 그 참가로 만든 '학사 내 프로그램' 사전 특이사항, 프로그램 취소 시 함께 취소) |
+| students | phone | 학생 전화(개인 연락처, 결정 76) — `readAll_`에서 빠진다. `readContacts_`와 `contact.view` 통과 함수만 |
+| guardian_links | name · phone | 보호자 이름·전화(개인 연락처, 결정 76) — 위와 같다. 감사 기록에는 값을 남기지 않는다 |
 | users | roles | `admin` `duty_manager` `attendance` `hall_teacher` `homeroom` `student` `parent` (쉼표로 여러 개) |

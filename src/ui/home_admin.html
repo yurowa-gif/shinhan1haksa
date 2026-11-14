@@ -33,7 +33,7 @@
     root.appendChild(c);
     if (d.duty) root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '월말 근무 기록표' }),
-      el('div', { class: 'muted', text: '실제 근무자 기준 교사별 합계를 확인하고 PDF(임시 양식)로 받습니다.' }),
+      el('div', { class: 'muted', text: '실제 근무자 기준 교사별 합계를 확인하고 PDF·엑셀로 받습니다.' }),
       el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=duty&tab=record', text: '근무 기록표 열기' })
     ]));
   }
@@ -54,6 +54,14 @@
     root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '계정(활성)' }), roleStats]));
     try { renderStage2B(d, root); } catch (e) { showError(root, e); }   // 2단계 카드가 실패해도 나머지 카드는 그린다
     try { renderStage2A(d, root); } catch (e) { showError(root, e); }
+    if (d.docs && !d.docs.error) {
+      root.appendChild(el('div', { class: 'card' }, [
+        el('h2', { text: '서류 체크리스트' }),
+        el('div', { style: 'margin:8px 0' }, [d.docs.items ? UI.statusPill('todo', '미제출 ' + d.docs.items + '건 · 학생 ' + d.docs.students + '명') : UI.statusPill('confirmed', d.docs.types ? '모두 제출' : '서류 종류 없음')]),
+        el('div', { class: 'muted', text: '학기 초 서류(동의서 등)를 냈는지 표시합니다.' }),
+        el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=docs', text: '서류 체크리스트 열기' })
+      ]));
+    }
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '운영 기간' }),
       el('div', { class: 'muted', text: '학기·방학 기간을 추가하고 고칩니다.' }),
@@ -83,7 +91,8 @@
       el('h2', { text: '좌석표' }),
       el('div', { class: 'muted', text: '공간·좌석 격자를 그리고 학생을 자리에 앉힙니다.' }),
       el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=seats', text: '좌석표 열기' }),
-      el('a', { class: 'btn secondary', style: 'margin:12px 0 0 8px', href: d.appUrl + '?page=avoid', text: '떨어뜨릴 짝' })
+      el('a', { class: 'btn secondary', style: 'margin:12px 0 0 8px', href: d.appUrl + '?page=avoid', text: '떨어뜨릴 짝' }),
+      el('a', { class: 'btn secondary', style: 'margin:12px 0 0 8px', href: d.appUrl + '?page=contacts', text: '연락처' })
     ]));
     root.appendChild(soonCard('계정, 설정', '1단계부터 차례로 추가합니다.'));
   }

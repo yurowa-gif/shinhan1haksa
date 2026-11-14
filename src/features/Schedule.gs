@@ -12,7 +12,14 @@
  */
 
 var CAL_MAX_BLOCKS = 8;
-var CAL_BASE_DAY_TYPES = ['mon_thu', 'fri', 'sat', 'sun'];
+var CAL_BASE_DAY_TYPES = ['mon_thu', 'fri', 'sat', 'sun', 'holiday'];
+/**
+ * 휴일(공휴일·재량휴업일, 결정 72) 기본 틀: 09:00~21:50. 오전은 토요일 블록, 오후·저녁은 일요일 블록(마지막 블록 20:30–21:50).
+ * blocks 탭에는 넣어 두지 않았다(이미 운영 중인 시트의 기본 블록과 섞지 않기 위해). 관리자가 블록 편집에서 '휴일'을 고르면 이 값이 채워져 있고 저장하면 생긴다.
+ */
+var CAL_HOLIDAY_DEFAULT = { start: '09:00', end: '21:50' };
+var CAL_HOLIDAY_BLOCKS = [['09:00', '12:00'], ['14:00', '15:30'], ['15:30', '17:00'], ['19:00', '20:30'], ['20:30', '21:50']];
+var CAL_DAY_TYPE_KO = { mon_thu: '월~목', fri: '금', sat: '토', sun: '일', holiday: '휴일' };
 var CAL_DAY_TYPE_RE = /^[a-z0-9_]{1,20}$/;
 var CAL_MEMO_MAX = 100;
 
@@ -35,7 +42,8 @@ function calDefaults_(settingsRows) {
     mon_thu: pick('study.weekday', '18:30', '23:50'),
     fri: pick('study.fri', '18:30', '23:00'),
     sat: pick('study.sat', '09:00', '17:00'),
-    sun: pick('study.sun', '14:00', '22:00')
+    sun: pick('study.sun', '14:00', '22:00'),
+    holiday: pick('study.holiday', CAL_HOLIDAY_DEFAULT.start, CAL_HOLIDAY_DEFAULT.end)
   };
 }
 
@@ -211,6 +219,8 @@ function getScheduleData(month) {
     canEdit: hasAnyAllowedRole_(user.roles, permissions_()['schedule.edit'].roles),
     days: calMonthPlans_(m, ctx),
     blockGroups: groups,
+    dayTypeNames: CAL_DAY_TYPE_KO,
+    suggestedBlocks: { '학기|holiday': CAL_HOLIDAY_BLOCKS.map(function (b) { return { start: b[0], end: b[1] }; }) },
     dayTypes: CAL_BASE_DAY_TYPES.concat(calKnownDayTypes_(ctx.blocks).filter(function (t) { return CAL_BASE_DAY_TYPES.indexOf(t) < 0; })),
     defaults: ctx.defaults
   };

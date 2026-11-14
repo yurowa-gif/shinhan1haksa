@@ -343,3 +343,32 @@ function cancelMove(headId, reason, expect) {
     return { ok: true, cancelCount: c.plan.toCancel.length, restoreCount: c.plan.toRestore.length, warnings: c.plan.warnings.map(inoutKoShort_) };
   });
 }
+
+/* ───────────── 입퇴실 확인서(결정 68 같은 방식, 양식 구조 docs/reference/meal-confirm-form.md 2절) ───────────── */
+
+/**
+ * 기숙사 및 신한학사 입․퇴실 확인서 모델(순수). head = F6 대표 행, linked = 그 연결 행. 2025판 칸: 입실·퇴실, 구분(기숙사·신한학사 — 학사 및 기숙사 퇴실이면 둘 다),
+ * 입․퇴실일(적용일), 이름, 학년·반·번호, 비고(사유), 날짜(신청일), 확인자(담당교사).
+ * 비고는 2OUT 퇴실이면 비운다(행정실에 내는 종이에 징계 사유를 적지 않는다 — ASSUMPTION).
+ */
+function inoutConfirmModel_(head, linked, common) {
+  var items = [head].concat(linked || []).filter(function (r) { return r.value === head.value; }).map(function (r) { return r.item; });
+  return Object.assign({ form: 'move', direction: head.value, hall: items.indexOf('학사') >= 0, dorm: items.indexOf('기숙사') >= 0,
+    effectiveDate: String(head.effective_date), remark: inoutIsDismissRow_(head) ? '' : String(head.reason || '') }, common);
+}
+
+/**
+ * 입퇴실 확인서 PDF. 첫 줄은 역할만(status.list), 학생 범위는 신청 행의 기간(status.edit = 그 학생 담당교사·관리자). F6 대표 행(유효)만.
+ * 화면으로만 내려주고 Drive에 남기지 않는다. 파일 이름에 학생 이름이 없다.
+ */
+function getMoveConfirmPdf(headId) {
+  requirePermission_('status.list');
+  var c = foodConfirmLoad_(headId);
+  if (c.error) return { ok: false, error: c.error };
+  var head = c.row;
+  if (head.source !== 'F6' || String(head.linked_change_id || '') || (head.item !== '학사' && head.item !== '기숙사')) return { ok: false, error: '입퇴실 신청서만 확인서를 만들 수 있습니다.' };
+  if (String(head.status || '유효') !== '유효') return { ok: false, error: '취소된 신청서는 확인서를 만들 수 없습니다.' };
+  var linked = readAll_('status_changes').filter(function (x) { return x.linked_change_id === head.id && x.source === 'F6' && String(x.status || '유효') === '유효'; });
+  var model = inoutConfirmModel_(head, linked, foodConfirmCommon_(head, c.student, c.teacherName));
+  return foodConfirmPdfOut_(typeof printRenderMoveConfirm_ === 'function' ? printRenderMoveConfirm_ : null, model, '입퇴실확인서_' + (model.date || head.effective_date) + '.pdf');
+}

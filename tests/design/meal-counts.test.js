@@ -21,7 +21,7 @@ function readTable(html) {
 test('식수 집계 표: 줄 순서·숫자·석식 계가 모델과 같다(그려진 칸을 읽어 비교)', () => {
   const m = buildModel();
   const t = readTable(render(m));
-  assert.deepStrictEqual(t.map((r) => r.name), ['여1', '여2', '여3', '여 합계', '남1', '남2', '남3', '남 합계', '1학년', '2학년', '3학년', '전체']);
+  assert.deepStrictEqual(t.map((r) => r.name), ['여1', '여2', '여3', '남1', '남2', '남3', '여 합계', '남 합계', '1학년', '2학년', '3학년', '전체']);
   t.forEach((r) => {
     const g = m.counts.groups[r.name];
     assert.deepStrictEqual(r.v, COLS.map((c) => g[c]).concat([g.hallDinner + g.generalDinner]), r.name);
@@ -79,7 +79,7 @@ test('이상한 입력: 4학년·남4 줄도 순서대로 나오고, 숫자가 �
   assert.strictEqual(JSON.stringify(m), before);
   assert.strictEqual(html, ctx.printRenderMealCounts_(clone(m), {}));
   const names = readTable(html).map((r) => r.name);
-  assert.deepStrictEqual(names, ['여1', '여2', '여3', '여 합계', '남1', '남2', '남3', '남4', '남 합계', '1학년', '2학년', '3학년', '4학년', '전체', '기타']);
+  assert.deepStrictEqual(names, ['여1', '여2', '여3', '남1', '남2', '남3', '남4', '여 합계', '남 합계', '1학년', '2학년', '3학년', '4학년', '전체', '기타']);
   assert.strictEqual(readTable(html)[1].v[0], '?');
   assert.ok(html.indexOf('<script>') < 0 && html.indexOf('<img') < 0 && html.indexOf('<b>경고') < 0 && html.indexOf('&lt;b&gt;경고&lt;/b&gt;') > 0);
   assert.ok(html.indexOf('overflow:hidden') < 0 && !/flex|grid|@import|url\(|<script/.test(html));
@@ -153,7 +153,7 @@ test('숫자 읽기: 0 이상 정수와 숫자만 든 문자열만 받고 나머
   const one = buildModel();
   one.counts.groups['남1'].hallDinner = 'x';
   one.counts.groups['남1'].generalDinner = 2;
-  assert.deepStrictEqual(readTable(render(one))[4].v.slice(4), ['?', 2, '?'], '석식 한 칸만 잘못되면 석식 계도 ?');
+  assert.deepStrictEqual(readTable(render(one)).find((r) => r.name === '남1').v.slice(4), ['?', 2, '?'], '석식 한 칸만 잘못되면 석식 계도 ?');
   assert.ok(doc0('1.5').indexOf('서류 미제출 ?명') > 0, '소수 문자열은 ?');
   const doc = (v) => render(Object.assign(buildModel(), { docUnsubmitted: v }));
   assert.ok(doc('2').indexOf('서류 미제출 2명') > 0 && doc(' 5 ').indexOf('서류 미제출 5명') > 0);
