@@ -79,6 +79,10 @@
     "getMoveConfirmPdf": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getMealCountsXlsx": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }

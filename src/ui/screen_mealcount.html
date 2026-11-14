@@ -7,13 +7,14 @@
     root.appendChild(head); root.appendChild(tableBox); root.appendChild(notes);
     var pdfBtn = null;
     function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
-    var reqDate = date, loading = true, bar = null, pdfBtn = null;
+    var reqDate = date, loading = true, bar = null, pdfBtn = null, xlsxBtn = null;
     function shift(n) { if (!reqDate) return;   // 첫 불러오기 전(날짜 모름)에는 이동하지 않는다
       var d = new Date(reqDate + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); load(d.toISOString().slice(0, 10)); }
-    function b64Blob(b64) {
+    var XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    function b64Blob(b64, mime) {
       var bin = atob(b64); var arr = new Uint8Array(bin.length);
       for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-      return new Blob([arr], { type: 'application/pdf' });
+      return new Blob([arr], { type: mime || 'application/pdf' });
     }
 
     function load(d) {
@@ -24,7 +25,7 @@
         .catch(function (err) { if (mine !== seq) return; loading = false; data = null; draw(); showError(tableBox, err); if (!/권한/.test((err && err.message) || '')) tableBox.appendChild(el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:8px', text: '다시 불러오기', onclick: function () { load(reqDate); } })); });
     }
 
-    function syncBar() { if (pdfBtn) { pdfBtn.disabled = busy || loading || !data || !data.term; pdfBtn.textContent = busy ? 'PDF 만드는 중…' : '급식실 양식으로 출력'; } }
+    function syncBar() { var off = busy || loading || !data || !data.term; if (pdfBtn) { pdfBtn.disabled = off; pdfBtn.textContent = busy === 'pdf' ? 'PDF 만드는 중…' : '급식실 양식으로 출력'; } if (xlsxBtn) { xlsxBtn.disabled = off; xlsxBtn.textContent = busy === 'xlsx' ? '엑셀 만드는 중…' : '엑셀로 받기'; } }
 
     function draw() {
       clear(head); clear(tableBox); clear(notes);
@@ -32,7 +33,7 @@
       var title = loading || !data ? (UI.util.formatDateKo(reqDate, false) || (reqDate ? reqDate : '오늘')) : data.dateKo;
       head.appendChild(el('div', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:4px' }, [arrow('‹', -1),
         el('b', { style: 'flex:1;text-align:center', text: title }), arrow('›', 1)]));
-      if (!bar) { bar = UI.actionBar([{ text: '급식실 양식으로 출력', onclick: onPdf }], { mount: true }); pdfBtn = bar.querySelector('button'); }
+      if (!bar) { bar = UI.actionBar([{ text: '급식실 양식으로 출력', onclick: function () { onFile('getMealCountsPdf', 'application/pdf', 'PDF', 'pdf'); } }, { kind: 'secondary', text: '엑셀로 받기', onclick: function () { onFile('getMealCountsXlsx', XLSX_MIME, '엑셀', 'xlsx'); } }], { mount: true }); var bs = bar.querySelectorAll('button'); pdfBtn = bs[0]; xlsxBtn = bs[1]; }
       syncBar();
       if (loading || !data) { head.appendChild(el('div', { class: 'muted', style: 'text-align:center;margin-bottom:12px', text: loading ? '불러오는 중…' : '' })); return; }
       if (!data.term) {
@@ -75,18 +76,18 @@
       notes.appendChild(box);
     }
 
-    function onPdf() {
+    function onFile(fn, mime, ko, kind) {
       if (busy || loading || !data || !data.term) return;
-      busy = true; syncBar();
+      busy = kind; syncBar();
       var mine = seq;
-      call('getMealCountsPdf', data.date).then(function (r) {
+      call(fn, data.date).then(function (r) {
         busy = false; syncBar();
-        if (mine !== seq) { UI.toast('날짜가 바뀌어 이 PDF는 쓰지 않았습니다. 다시 눌러 주세요.', { kind: 'warn', ms: 5000 }); return; }
-        if (!r.ok) { UI.toast(r.error || 'PDF를 만들지 못했습니다.', { kind: 'warn', ms: 5000 }); return; }
-        var a = el('a', { class: 'btn', href: URL.createObjectURL(b64Blob(r.base64)), download: r.name, text: r.name + ' 열기' });
+        if (mine !== seq) { UI.toast('날짜가 바뀌어 이 ' + ko + ' 파일은 쓰지 않았습니다. 다시 눌러 주세요.', { kind: 'warn', ms: 5000 }); return; }
+        if (!r.ok) { UI.toast(r.error || ko + ' 파일을 만들지 못했습니다.', { kind: 'warn', ms: 5000 }); return; }
+        var a = el('a', { class: 'btn', href: URL.createObjectURL(b64Blob(r.base64, mime)), download: r.name, text: r.name + ' 열기' });
         var old = notes.querySelector('a.btn'); if (old) old.remove();
         notes.appendChild(a); a.click();
-        UI.toast('PDF를 만들었습니다. 받아지지 않으면 아래 링크를 누르세요.', { kind: 'ok', ms: 5000 });
+        UI.toast(ko + ' 파일을 만들었습니다. 받아지지 않으면 아래 링크를 누르세요.', { kind: 'ok', ms: 5000 });
       }).catch(function (err) { busy = false; syncBar(); fail(err); });
     }
     load(date);
