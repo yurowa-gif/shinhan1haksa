@@ -90,7 +90,7 @@ Apps Script는 같은 전역 이름을 경고 없이 덮는다. 새 전역 이�
 | day_schedules | operating | `TRUE` · `FALSE` |
 | day_schedules, blocks, spaces, seats | status | `유효` · `취소` |
 | blocks | term_type | `학기` · `방학` |
-| blocks, day_schedules | day_type | `mon_thu` · `fri` · `sat` · `sun` (특별 코드는 관리자가 추가) |
+| blocks, day_schedules | day_type | `mon_thu` · `fri` · `sat` · `sun` · `holiday`(휴일: 공휴일·재량휴업일, 09:00~21:50, 결정 72) (특별 코드는 관리자가 추가) |
 | spaces | gender | `남` · `여` · `혼성` |
 | seats | kind | `좌석` · `기둥` · `비상문` · `창문` |
 | seat_assignments | status | `배정` · `취소` |
