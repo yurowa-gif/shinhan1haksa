@@ -115,6 +115,14 @@
     "repairDuplicateIds": {
       "use": "편집기",
       "guard": "assertOwnerRun_"
+    },
+    "previewDayBatch": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveDayBatch": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }
