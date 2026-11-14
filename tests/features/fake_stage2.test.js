@@ -150,11 +150,11 @@ test('서류 미제출 F7 급식 신청 2건: 미제출이어도 적용(결정 3
   assert.strictEqual(new Set(ids).size, ids.length, 'id 고유');
 });
 
-test('F7 대기 행 1건: 수요일 미실시 신청 → 다다음 주 월요일(3/22), 그 전까지는 학사 석식', () => {
+test('F7 대기 행 1건: 수요일 오후 미실시 신청 → 다다음 주 월요일(3/22), 그 전까지는 학사 석식', () => {
   const p = life.statusChanges.filter((r) => r.doc_submitted !== 'FALSE' && r.source === 'F7' && r.student_id === life.pendingId);
   assert.strictEqual(p.length, 1);
   assert.deepStrictEqual([p[0].student_id, p[0].item, p[0].value, p[0].requested_at, p[0].effective_date, p[0].doc_submitted, p[0].source],
-    [life.pendingId, '석식', '미실시', '2027-03-10T09:00:00', '2027-03-22', 'TRUE', 'F7']);
+    [life.pendingId, '석식', '미실시', '2027-03-10T13:00:00', '2027-03-22', 'TRUE', 'F7']);
   const all = stage1.statusChanges.concat(life.statusChanges);
   assert.strictEqual(ctx.statusOn_(all, life.pendingId, '석식', '2027-03-21'), '학사 석식');
   assert.strictEqual(ctx.statusOn_(all, life.pendingId, '석식', '2027-03-22'), '미실시');
