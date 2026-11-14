@@ -84,7 +84,8 @@ test('학사 교사·출결 담당은 본인 행과 본인이 낀 교대만(전�
 function file(x, who, month, fmt) {
   return plain(x.env.as(who, (c) => {
     c.sheetMakePdf_ = (html) => { c.__html = html; return { getBytes: () => [1, 2, 3] }; };
-    c.Utilities = { base64Encode: () => 'AQID', formatDate: c.Utilities.formatDate, newBlob: c.Utilities.newBlob };
+    const U = c.Utilities;
+    c.Utilities = { base64Encode: fmt === 'xlsx' ? U.base64Encode : () => 'AQID', formatDate: U.formatDate, newBlob: U.newBlob, zip: U.zip };
     const r = c.getDutyRecordFile(month, fmt);
     return { r, html: c.__html || '' };
   }));
@@ -102,8 +103,7 @@ test('getDutyRecordFile: 근무표 담당자·관리자는 PDF(임시 양식)를
   }
   for (const who of [T1, ATT]) x.env.expectDenied(who, 'duty.record', 'getDutyRecordFile', MON, 'pdf');
   for (const who of [HOMEROOM, STUDENT, PARENT]) x.env.expectDenied(who, 'duty.record', 'getDutyRecordFile', MON, 'pdf');
-  const xl = file(x, DUTY, MON, 'xlsx').r;
-  assert.deepStrictEqual([xl.ok, /엑셀/.test(xl.error)], [false, true], '엑셀은 학교 양식을 받은 뒤(C14b)');
+  for (const who of [T1, ATT, HOMEROOM, STUDENT, PARENT]) x.env.expectDenied(who, 'duty.record', 'getDutyRecordFile', MON, 'xlsx');
   assert.throws(() => file(x, DUTY, '2027-13', 'pdf'), /yyyy-MM/);
 });
 
@@ -193,10 +193,10 @@ test('미등록 근무자가 여럿이면 번호로 구분하고, 이름이 빈 
   assert.strictEqual(rec(x, DUTY).lastChangedAt, '2027-02-01 10:00', '취소된 칸의 수정도 마지막 변경');
 });
 
-test('getDutyRecordFile 형식 인자: 대소문자·공백은 받고, 배열·숫자·엑셀은 입력 오류 문구, 경고는 PDF 모델과 같다', () => {
+test('getDutyRecordFile 형식 인자: 대소문자·공백은 받고, 배열·숫자·모르는 형식은 입력 오류 문구, 경고는 PDF 모델과 같다', () => {
   const x = makeEnv();
   for (const f of ['PDF', ' pdf ', undefined, '']) assert.strictEqual(file(x, DUTY, MON, f).r.ok, true, String(f));
-  for (const f of [['pdf'], 5, 'xlsx']) assert.strictEqual(file(x, DUTY, MON, f).r.ok, false, JSON.stringify(f));
+  for (const f of [['pdf'], 5, 'docx', 'csv']) assert.strictEqual(file(x, DUTY, MON, f).r.ok, false, JSON.stringify(f));
 });
 
 test('본인 행만 보는 학사 교사에게는 근무표 경고를 주지 않는다(손쓸 수 없다), 담당자·관리자에게는 준다', () => {
@@ -204,4 +204,60 @@ test('본인 행만 보는 학사 교사에게는 근무표 경고를 주지 않
   x.env.asOwner((c) => c.appendRecord_('duty_slots', { date: '2027-01-30', slot: '단독', end_time: '', original_email: 'fake.ghost@example.com', actual_email: 'fake.ghost@example.com', swapped_at: '', swapped_by: '', status: '유효', memo: '' }, ADMIN));
   assert.deepStrictEqual(rec(x, T1).warnings, []);
   assert.ok(rec(x, DUTY).warnings.length >= 1);
+});
+
+/* ───── 엑셀(xlsx, 결정 67) ───── */
+const { unzipStored } = require('../helpers/zip');
+function xlsxOf(x, who, month) {
+  const r = file(x, who, month || MON, 'xlsx').r;
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  const zip = unzipStored(Buffer.from(r.base64, 'base64'));
+  return { r, zip, text: (n) => zip[n].toString('utf8') };
+}
+const strip = (xml) => xml.replace(/<[^>]+>/g, '\n').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
+test('xlsx: 근무표 담당자·관리자는 엑셀 통합 문서(시트 2개)를 받고, 부품 파일이 모두 있고 XML이 닫혀 있다', () => {
+  const x = makeEnv();
+  for (const who of [DUTY, ADMIN]) {
+    const { r, zip, text } = xlsxOf(x, who);
+    assert.deepStrictEqual([r.name, r.mime, r.bytes > 500], ['근무기록표_2027-01.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', true]);
+    assert.deepStrictEqual(zip._order, ['[Content_Types].xml', '_rels/.rels', 'xl/workbook.xml', 'xl/_rels/workbook.xml.rels', 'xl/styles.xml', 'xl/worksheets/sheet1.xml', 'xl/worksheets/sheet2.xml']);
+    assert.ok(text('xl/workbook.xml').includes('name="월별 근무표"') && text('xl/workbook.xml').includes('name="합계·교대"'));
+    for (const n of zip._order) {
+      const t = text(n);
+      assert.ok(t.startsWith('<?xml'), n);
+      const stack = [];
+      for (const m of t.replace(/<\?[^>]*\?>/g, '').matchAll(/<(\/?)([A-Za-z][\w:]*)[^>]*?(\/?)>/g)) {
+        if (m[3]) continue;
+        if (m[1]) assert.strictEqual(stack.pop(), m[2], n + ' 태그 짝'); else stack.push(m[2]);
+      }
+      assert.deepStrictEqual(stack, [], n + ' 닫히지 않은 태그');
+    }
+  }
+});
+
+test('xlsx 시트2 합계 = 독립 계산(oracle)·PDF 모델 합계, 교대 3건 목록, 이메일·학생 이름 없음', () => {
+  const x = makeEnv();
+  const { text } = xlsxOf(x, DUTY);
+  const t1 = strip(text('xl/worksheets/sheet1.xml')), t2 = strip(text('xl/worksheets/sheet2.xml'));
+  const o = oracle(x.slots), m = rec(x, DUTY);
+  for (const e of Object.keys(o.work)) assert.ok(t2.includes(x.nameOf(e)), x.nameOf(e));
+  m.teachers.forEach((t) => {
+    // 이름 다음 칸이 합계
+    const cells = t2.split('\n').map((c) => c.trim()).filter(Boolean), i = cells.indexOf(t.name);
+    assert.ok(i >= 0, t.name);
+    assert.strictEqual(cells[i + 1], String(t.total), t.name + ' 합계');
+  });
+  assert.ok(/교대/.test(t2));
+  for (const s of m.swaps) { assert.ok(t2.includes(s.from) && t2.includes(s.to)); }
+  assert.ok(t1.includes('=>'), '시트1 교대는 원래=>바뀐');
+  for (const t of [t1, t2]) assert.ok(!/@[a-z0-9-]+\.[a-z]/i.test(t), '이메일 모양 없음');
+  const students = env => env.rows('students').map((s) => s.name).filter(Boolean);
+  for (const n of students(x.env)) assert.ok(!t1.includes(n) && !t2.includes(n), '학생 이름 없음');
+});
+
+test('xlsx: 근무 없는 달은 빈 달력 + 빈 합계로도 열린다', () => {
+  const x = makeEnv();
+  const { zip } = xlsxOf(x, DUTY, '2027-05');
+  assert.strictEqual(zip._order.length, 7);
 });

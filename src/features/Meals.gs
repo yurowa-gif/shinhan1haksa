@@ -113,6 +113,24 @@ function foodDateKo_(ymd) {
   return (+p[1]) + '월 ' + (+p[2]) + '일(' + ymdWeekdayKo_(ymd) + ')';
 }
 
+/**
+ * 확인서 사유 구분(결정 68, 2025판 양식의 전입·전출·장기결석·대회출전·기타). 시트 열을 늘리지 않고 reason 글 앞에 "[전입] "으로 붙여 저장한다.
+ * 신청 입력에서는 reasonKind(칩)와 reason(글, 적용일을 고쳤거나 '기타'일 때)을 따로 받는다.
+ */
+var FOOD_REASON_KINDS = ['전입', '전출', '장기결석', '대회출전', '기타'];
+
+/** 저장할 reason 글: 구분이 있으면 "[구분] 글", 없으면 글 그대로 */
+function foodComposeReason_(kind, text) {
+  var t = String(text || '').trim();
+  return kind ? ('[' + kind + ']' + (t ? ' ' + t : '')) : t;
+}
+
+/** 저장된 reason 글 → {kind, text}(구분 접두어가 없으면 kind ''). 순수 */
+function foodReasonParts_(reason) {
+  var m = /^\[(전입|전출|장기결석|대회출전|기타)\]\s*([\s\S]*)$/.exec(String(reason || ''));
+  return m ? { kind: m[1], text: m[2].trim() } : { kind: '', text: String(reason || '').trim() };
+}
+
 function foodChip_(id) {
   return FOOD_CHIPS.filter(function (c) { return c.id === id; })[0] || null;
 }
@@ -138,9 +156,12 @@ function foodValidate_(input, ctx) {
   else if (eff && at && eff < at.slice(0, 10)) err('effectiveDate', '적용일은 신청일 이후여야 합니다.');
   var reason = String(input.reason || '').trim();
   if (reason.length > EXC_REASON_MAX) err('reason', '사유는 ' + EXC_REASON_MAX + '자 안으로 적어 주세요.');
+  var kind = String(input.reasonKind || '').trim();
+  if (kind && FOOD_REASON_KINDS.indexOf(kind) < 0) err('reasonKind', '확인서 사유 구분을 목록에서 골라 주세요.');
+  else if (kind === '기타' && reason.length < 2) err('reason', "'기타'는 사유를 2자 이상 적어 주세요(확인서에 적힙니다).");
   return { errors: errors, rec: chip && at ? {
     studentId: studentId, item: chip.item, value: chip.value, chipLabel: chip.label, requestedAt: at, effectiveDate: eff,
-    reason: reason, doc: input.docSubmitted === true
+    reason: reason, reasonKind: kind, doc: input.docSubmitted === true
   } : null };
 }
 
@@ -484,13 +505,14 @@ function saveMealChange(input, expect) {
     var w = foodWrite_(Object.assign({
       student_id: rec.studentId, item: rec.item, value: rec.value, requested_at: rec.requestedAt,
       effective_date: plan.superseded ? c.eff : plan.date,
-      effective_date_auto: plan.autoDate, reason: c.manual ? rec.reason : '', doc_submitted: rec.doc ? 'TRUE' : 'FALSE', source: 'F7'
+      effective_date_auto: plan.autoDate, reason: foodComposeReason_(rec.reasonKind, c.manual || rec.reasonKind ? rec.reason : ''), doc_submitted: rec.doc ? 'TRUE' : 'FALSE', source: 'F7'
     }, dead), plan.followUps.map(function (f) {
       return { item: f.item, value: f.value, effective_date: f.effective_date, effective_date_auto: f.effective_date, source: f.source,
         reason: f.source === 'F6' ? '학사 퇴실 정리' : '재입실일부터 이어짐' };
     }), plan.toCancel.map(function (x) { return { id: x.id, cancel_reason: '새 신청으로 대체' }; }), user.email);
     return { ok: true, id: w.head.id, superseded: plan.superseded, date: plan.date, dateKo: plan.date ? foodDateKo_(plan.date) : '', label: rec.chipLabel,
-      cancelCount: plan.toCancel.length, followUpCount: w.linked.length, doc: rec.doc };
+      cancelCount: plan.toCancel.length, followUpCount: w.linked.length, doc: rec.doc,
+      confirmForm: !plan.superseded && foodMealConfirmApplies_(w.head, d.changes) };   // [확인서 인쇄] 안내를 보일 신청서인가(결정 68)
   });
 }
 
@@ -589,12 +611,26 @@ function listStudentStatus(studentId, ymd) {
   pendingRows.forEach(function (c) { pendingId[c.id] = true; });
   var enrAll = readAll_('enrollments'), termsAll = readAll_('terms'), isAdmin = user.roles.indexOf('admin') >= 0;
   /** [퇴실 취소] 버튼을 보일 행(보기 편의일 뿐 — cancelMove가 서버에서 다시 판정한다): F6 퇴실 대표, 적용일 전이면 책임 교사·관리자, 지난 뒤나 2OUT 퇴실이면 관리자 */
+  // 이 행의 담당교사(적용일이 속한 기간, 결정 60)·관리자인가(보기 편의 — 서버 함수가 다시 판정한다)
+  var canAct = function (c) {
+    if (isAdmin) return true;
+    if (user.roles.indexOf('hall_teacher') < 0) return false;
+    var term = ymdIsValid_(String(c.effective_date)) ? foodTermFor_(studentId, c.effective_date, termsAll, enrAll) : null;
+    return !!term && enrAll.some(function (e) { return e.term_id === term.id && e.student_id === studentId && normalizeEmail_(e.teacher_email) === user.email; });
+  };
   var canCancel = function (c) {
     if (c.source !== 'F6' || String(c.linked_change_id || '') || c.value !== '퇴실' || String(c.status || '유효') !== '유효') return false;
     if (isAdmin) return true;
-    if (c.effective_date < today || inoutIsDismissRow_(c) || user.roles.indexOf('hall_teacher') < 0) return false;
-    var term = ymdIsValid_(String(c.effective_date)) ? foodTermFor_(studentId, c.effective_date, termsAll, enrAll) : null;
-    return !!term && enrAll.some(function (e) { return e.term_id === term.id && e.student_id === studentId && normalizeEmail_(e.teacher_email) === user.email; });
+    if (c.effective_date < today || inoutIsDismissRow_(c)) return false;
+    return canAct(c);
+  };
+  /** [확인서 인쇄] 버튼을 보일 행(결정 68): F7 급식 변경 신청(실시·미실시가 바뀔 때)은 'meal', F6 입퇴실 대표 행은 'move'. 담당교사·관리자만 */
+  var confirmForm = function (c) {
+    if (String(c.linked_change_id || '') || String(c.status || '유효') !== '유효' || !ymdIsValid_(String(c.effective_date))) return '';
+    var kind = '';
+    if (c.source === 'F6' && (c.item === '학사' || c.item === '기숙사')) kind = 'move';
+    else if (c.source === 'F7' && (c.item === '조식' || c.item === '석식') && foodMealConfirmApplies_(c, rows)) kind = 'meal';
+    return kind && canAct(c) ? kind : '';
   };
   var view = function (c, noButton) {
     var head = !String(c.linked_change_id || '');
@@ -604,7 +640,7 @@ function listStudentStatus(studentId, ymd) {
       dateKo: ymdIsValid_(String(c.effective_date)) ? foodDateKoY_(c.effective_date, today) : '', edited: !!c.effective_date_auto && c.effective_date_auto !== c.effective_date,
       reason: c.reason, sourceLabel: foodSourceLabel_(c.source), status: String(c.status || '유효'), cancelText: foodCancelText_(c.cancel_reason),
       docState: m ? 'missing' : (head && c.source !== '명단업로드' && String(c.doc_submitted).toUpperCase() === 'TRUE' ? 'done' : ''),
-      head: head, canMarkDoc: mineDoc && !noButton, canCancelMove: !noButton && canCancel(c) };
+      head: head, canMarkDoc: mineDoc && !noButton, canCancelMove: !noButton && canCancel(c), confirmForm: confirmForm(c) };
   };
   return {
     student: { id: student.id, name: student.name, grade: +student.grade, classNo: student.class_no, number: student.number, studentNo: student.student_no },
@@ -634,4 +670,78 @@ function setDocSubmitted(changeId) {
     updateRecord_('status_changes', row.id, { doc_submitted: 'TRUE' }, user.email);
     return { ok: true };
   });
+}
+
+/* ───────────── 급식·입퇴실 확인서(결정 68, 양식 구조 docs/reference/meal-confirm-form.md) ───────────── */
+
+/**
+ * 확인서 대상 행의 모델에 들어갈 공통 칸(순수에 가까움: 시트를 읽지 않고 받은 행만 쓴다).
+ * → {date(신청일), name, grade, classNo, number, teacher(담당교사 이름, 모르면 '')}. 이름은 이 응답(PDF)에만 있고 Drive에 남기지 않는다.
+ */
+function foodConfirmCommon_(row, student, teacherName) {
+  return { date: String(row.requested_at || '').slice(0, 10), name: String((student && student.name) || ''), grade: student ? Number(student.grade) || String(student.grade || '') : '',
+    classNo: student ? String(student.class_no || '') : '', number: student ? String(student.number || '') : '', teacher: String(teacherName || '') };
+}
+
+/** 급식 값 → 구분: 실시('on'), 미실시('off'), 모르면 ''. 학사 석식·일반 석식은 둘 다 실시다 */
+function foodMealCat_(v) { return v === '실시' || v === '학사 석식' || v === '일반 석식' ? 'on' : (v === '미실시' ? 'off' : ''); }
+
+/** 이 F7 신청이 실시·미실시를 바꾸는가(학사 석식 ↔ 일반 석식만 바뀌는 신청은 확인서를 쓰지 않는다, 결정 68 ASSUMPTION). rows = 그 학생의 status_changes 행 */
+function foodMealConfirmApplies_(row, rows) {
+  var others = (rows || []).filter(function (c) { return c.id !== row.id && c.linked_change_id !== row.id; });
+  var prev = statusOn_(others, row.student_id, row.item, ymdAddDays_(String(row.effective_date), -1));
+  var now = foodMealCat_(row.value);
+  return !!now && now !== foodMealCat_(prev);
+}
+
+/**
+ * 급식(미)실시 확인서 모델(순수). 2025판 칸: 구분(실시·미실시), 이름, 학년·반·번호, 사유 구분(전입·전출·장기결석·대회출전·기타 + 기타 사유 글),
+ * 기간(적용일 ~), 조식·석식 × 실시·미실시 체크, 날짜(신청일), 확인자(담당교사). 한 신청서는 한 항목이라 체크는 하나다.
+ * ASSUMPTION: 조식 체크 옆 사유(기숙사 입실·퇴실 등)는 비워 둔다 — 급식 변경 신청에는 그 정보가 없고 종이에 ○한다.
+ */
+function foodMealConfirmModel_(row, common) {
+  var cat = foodMealCat_(row.value), parts = foodReasonParts_(row.reason);
+  var box = function (item) { return item === row.item ? { on: cat === 'on', off: cat === 'off' } : { on: false, off: false }; };
+  var b = box('조식'), d = box('석식');
+  b.reason = '';
+  return Object.assign({ form: 'meal', kind: cat === 'on' ? '실시' : '미실시', reasonKind: parts.kind, reasonText: parts.kind === '기타' ? parts.text : '',
+    periodFrom: String(row.effective_date), breakfast: b, dinner: d }, common);
+}
+
+/** 확인서 대상 행을 찾고 권한을 확인한다(setDocSubmitted와 같다: 그 학생(적용일이 속한 기간, 결정 60)의 담당교사·관리자). → {row, student, teacherName} | {error} */
+function foodConfirmLoad_(changeId) {
+  var row = typeof changeId === 'string' && changeId ? findById_('status_changes', changeId) : null;
+  if (!row) return { error: '기록을 찾을 수 없습니다.' };
+  var terms = readAll_('terms'), enrollments = readAll_('enrollments');
+  var term = ymdIsValid_(String(row.effective_date)) ? foodTermFor_(row.student_id, row.effective_date, terms, enrollments) : null;
+  requirePermission_('status.edit', { studentId: row.student_id, ymd: foodPermYmd_(term, row.effective_date) });
+  var en = term ? enrollments.filter(function (e) { return e.term_id === term.id && e.student_id === row.student_id; })[0] : null;
+  var tm = en ? normalizeEmail_(en.teacher_email) : '';
+  var teacher = tm ? readAll_('users').filter(function (u) { return normalizeEmail_(u.email) === tm; })[0] : null;
+  return { row: row, student: findById_('students', row.student_id), teacherName: teacher ? String(teacher.name || '') : '' };
+}
+
+/** HTML → PDF 응답(화면으로만 내려주고 Drive에 남기지 않는다). 양식 렌더러(src/print, 디자인)가 아직 없으면 안내 */
+function foodConfirmPdfOut_(renderFn, model, name) {
+  if (typeof renderFn !== 'function') return { ok: false, error: '확인서 양식이 아직 준비되지 않았습니다.' };
+  var blob = sheetMakePdf_(renderFn(model, {}), name);
+  var bytes = blob.getBytes();
+  return { ok: true, name: name, base64: Utilities.base64Encode(bytes), bytes: bytes.length };
+}
+
+/**
+ * 학교급식(미)실시 확인서 PDF(결정 68). 첫 줄은 역할만(status.list), 학생 범위는 신청 행의 기간으로 판정한다(status.edit = 그 학생 담당교사·관리자).
+ * 급식 변경 신청(F7 대표 행, 유효)만. 실시·미실시가 바뀌지 않는 신청(학사 석식 ↔ 일반 석식)은 만들지 않는다. 파일 이름에는 학생 이름이 없다.
+ */
+function getMealConfirmPdf(changeId) {
+  requirePermission_('status.list');
+  var c = foodConfirmLoad_(changeId);
+  if (c.error) return { ok: false, error: c.error };
+  var row = c.row;
+  if (row.source !== 'F7' || String(row.linked_change_id || '') || (row.item !== '조식' && row.item !== '석식')) return { ok: false, error: '급식 변경 신청서만 확인서를 만들 수 있습니다.' };
+  if (String(row.status || '유효') !== '유효') return { ok: false, error: '취소된 신청서는 확인서를 만들 수 없습니다.' };
+  var rows = readAll_('status_changes').filter(function (x) { return x.student_id === row.student_id; });
+  if (!foodMealConfirmApplies_(row, rows)) return { ok: false, error: '조식·석식이 실시에서 미실시로(또는 반대로) 바뀌는 신청서만 확인서를 씁니다.' };
+  var model = foodMealConfirmModel_(row, foodConfirmCommon_(row, c.student, c.teacherName));
+  return foodConfirmPdfOut_(typeof printRenderMealConfirm_ === 'function' ? printRenderMealConfirm_ : null, model, '급식확인서_' + (model.date || row.effective_date) + '.pdf');
 }
