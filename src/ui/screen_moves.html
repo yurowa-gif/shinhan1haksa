@@ -48,7 +48,7 @@
     function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
     function removeBar() { if (bar) { bar.remove(); bar = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); } }
 
-    call('getMealContext').then(function (c) { if (!alive) return; ctx = c; draw(); }).catch(function (err) { if (!alive) return; clear(body); showError(body, err); });
+    call('getMealContext').then(function (c) { if (!alive) return; ctx = c; lunchFlag(c); draw(); }).catch(function (err) { if (!alive) return; clear(body); showError(body, err); });
     return function () { alive = false; clearTimeout(timer); removeBar(); };   // 탭을 바꿀 때 아래 바를 치우고 늦은 응답을 버린다
 
     function draw() {
@@ -64,7 +64,7 @@
 
       var status = el('div', { class: 'muted' });
       var picker = UI.studentPicker({ students: ctx.students, label: '학생', onpick: function (s) {
-        picked = s; status.textContent = s ? '지금: ' + ['학사', '기숙사', '조식', '석식'].map(function (k) { return k + ' ' + (s.status[k] || '없음'); }).join(' · ') : '';
+        picked = s; status.textContent = s ? '지금: ' + mealKeys(s.status).map(function (k) { return k + ' ' + (s.status[k] || '없음'); }).join(' · ') : '';
         refresh();
       } });
       body.appendChild(el('div', { class: 'card' }, [picker, status]));
@@ -188,7 +188,7 @@
               resetState();   // 다음 학생에게 이전 학생의 선택·서류 체크가 남지 않게 모두 비운다
               window.scrollTo(0, 0);
               // 다시 불러오는 동안은 busy를 유지한다(그 사이 눌린 버튼이 빈 학생으로 저장되지 않게)
-              call('getMealContext').then(function (c) { if (alive) { busy = false; ctx = c; draw(); } })
+              call('getMealContext').then(function (c) { if (alive) { busy = false; ctx = c; lunchFlag(c); draw(); } })
                 .catch(function (err) { if (alive) { busy = false; draw(); UI.toast('저장했습니다. 화면을 다시 불러오지 못했습니다. 새로고침해 주세요.', { kind: 'warn', ms: 6000 }); } });
             }).catch(function (err) { if (!alive) return; busy = false; drawBar(); fail(err); });
           }
@@ -285,7 +285,7 @@
         clear(out);
         out.appendChild(el('div', { class: 'card' }, [
           el('h2', { text: name }),
-          el('div', { text: '오늘: ' + ['학사', '기숙사', '조식', '석식'].map(function (k) { return k + ' ' + (d.now[k] || '없음'); }).join(' · ') }),
+          el('div', { text: '오늘: ' + mealKeys(d.now).map(function (k) { return k + ' ' + (d.now[k] || '없음'); }).join(' · ') }),
           d.remark ? el('div', { class: 'muted', style: 'margin-top:8px', text: '비고: ' + d.remark }) : null
         ]));
         out.appendChild(el('div', { class: 'card' }, [el('h2', { text: '대기 중인 변경' })].concat(d.pending.length ? d.pending.map(function (h) { return line(h, name); }) : [el('div', { class: 'muted', text: '없습니다.' })])));
@@ -316,7 +316,7 @@
 
     call('getMealContext').then(function (c) {
       if (!alive) return;
-      ctx = c;
+      ctx = c; lunchFlag(c);
       if (!prefillId) { draw(); return; }
       var want = prefillId; prefillId = '';
       call('confirmOutDismissal', want).then(function (r) {
@@ -348,7 +348,7 @@
         call('getMoveContext', id, dateField.getValue()).then(function (m) {
           if (!alive || mine !== typeSeq || !picked || picked.id !== id) return;
           mctx = m;
-          var line = function (v) { return ['학사', '기숙사', '조식', '석식'].map(function (k) { return k + ' ' + (v[k] || '없음'); }).join(' · '); };
+          var line = function (v) { return mealKeys(v).map(function (k) { return k + ' ' + (v[k] || '없음'); }).join(' · '); };
           status.textContent = '지금 상태: ' + line(m.now) + (m.date !== m.today ? '\n' + U.formatDateKo(m.date, false) + ' 기준: ' + line(m.onDate) : '');
           status.style.whiteSpace = 'pre-line';
           if (type && !m.types.some(function (t) { return t.type === type && t.enabled; })) { type = ''; dinner = ''; meals = null; }
@@ -477,7 +477,7 @@
               savedMove = r.duplicate ? null : { id: r.id, text: '방금 저장한 입퇴실 신청서의 확인서(행정실 제출용)를 인쇄해 서명을 받으세요.' };
               resetState(); dismiss = null; dismissMsg = '';
               window.scrollTo(0, 0);
-              call('getMealContext').then(function (c) { if (alive) { busy = false; ctx = c; draw(); } })   // 다시 불러오는 동안은 busy 유지
+              call('getMealContext').then(function (c) { if (alive) { busy = false; ctx = c; lunchFlag(c); draw(); } })   // 다시 불러오는 동안은 busy 유지
                 .catch(function (err) { if (alive) { busy = false; draw(); UI.toast('저장했습니다. 화면을 다시 불러오지 못했습니다. 새로고침해 주세요.', { kind: 'warn', ms: 6000 }); } });
             }).catch(function (err) { if (!alive) return; busy = false; drawBar(); fail(err); });
           } });
@@ -490,6 +490,10 @@
     return function () { alive = false; seq++; typeSeq++; clearTimeout(timer); removeBar(); };
   }
 
+  /** 방학 중식(결정 73): 방학 기간이면(서버 lunchOn) 중식 줄을 보인다. 값이 있는 학생은 방학이 아니어도 값을 보인다 */
+  var LUNCH_ON = false;
+  function lunchFlag(c) { LUNCH_ON = !!(c && c.lunchOn); }
+  function mealKeys(st) { return ['학사', '기숙사', '조식'].concat(LUNCH_ON || (st && st['중식']) ? ['중식'] : [], ['석식']); }
   function renderScreen(root) {
     var prefillId = SCREEN_PARAMS.prefill === 'out2' && window.SCREEN_STUDENT ? window.SCREEN_STUDENT : '';   // 값은 서버가 confirmOutDismissal로 다시 받는다
     var tab = prefillId ? 'move' : window.SCREEN_TAB === 'history' || (window.SCREEN_STUDENT && window.SCREEN_TAB !== 'move') ? 'history' : window.SCREEN_TAB === 'meal' ? 'meal' : 'move';
