@@ -32,6 +32,13 @@ function foodVacationFor_(requestedAt, terms) {
   return next && next.type === '방학' && ymdDiffDays_(ymd, next.start_date) <= FOOD_LUNCH_ADVANCE_DAYS ? next : null;
 }
 
+/** 중식 값 판정(lunchOn_) 옵션: 그날의 기간(방학이 아니면 lunchOn_이 '')·마감 시각. 마감 설정이 틀려도 상태 표시는 막지 않는다(기본 11:30) */
+function foodLunchOpts_(ymd, terms) {
+  var cutoff = '';
+  try { cutoff = foodCutoff_(readAll_('settings', 'config')); } catch (e) { cutoff = ''; }
+  return { vacation: termOnDate_(ymd, terms || readAll_('terms')), cutoff: cutoff };
+}
+
 /** 오늘 중식을 신청할 수 있는 방학(진행 중이거나 곧 시작) → 그 terms 행 또는 null. 화면이 중식 버튼을 보일지 정한다 */
 function foodLunchTermOn_(ymd, terms) {
   return foodVacationFor_(ymd, terms);
@@ -486,6 +493,7 @@ function getMealContext() {
     term: term ? { id: term.id, name: term.name } : null, canEdit: false,
     lunchOn: !!foodLunchTermOn_(today, terms),   // 방학 기간이면 중식 버튼·상태 줄을 보인다(결정 73)
     chips: FOOD_CHIPS.filter(function (c) { return c.item !== '중식' || !!foodLunchTermOn_(today, terms); }).map(function (c) { return { id: c.id, label: c.label }; }), students: [], viewStudents: [] };
+  var lunchOpts = foodLunchOpts_(today, terms);
   if (!term) return out;
   var editRule = permissions_()['status.edit'], viewRule = permissions_()['status.view'];
   out.canEdit = user.roles.some(function (r) { return editRule.roles.indexOf(r) >= 0; });
@@ -506,7 +514,8 @@ function getMealContext() {
     if (!seenEdit[s.id] && out.canEdit && canAccessStudentByFacts_(user.roles, facts, editRule.roles)) {
       seenEdit[s.id] = true;
       var st = {};
-      ['학사', '기숙사', '조식', '중식', '석식'].forEach(function (it) { st[it] = statusOn_(changes, s.id, it, today); });
+      ['학사', '기숙사', '조식', '석식'].forEach(function (it) { st[it] = statusOn_(changes, s.id, it, today); });
+      st['중식'] = lunchOn_(changes, s.id, today, lunchOpts);   // 퇴실 뒤 중식은 행 없이 끊긴다(결정 79) — statusOn_이 아니라 lunchOn_
       out.students.push(Object.assign({ status: st }, item));
     }
   });
@@ -599,7 +608,7 @@ function foodCountsModel_(ymd, src) {
   // 결정 35 보충: 직전 운영 기간 id를 넘긴다(학기 막바지 퇴실 뒤 석식이 방학·다음 기간까지 이어지는 학생을 센다)
   var prev = terms.filter(function (t) { return t.end_date && t.end_date < term.start_date; }).sort(function (a, b) { return a.start_date < b.start_date ? 1 : -1; })[0];
   out.hasLunch = term.type === '방학';   // 방학 기간만 중식 열(결정 73). 렌더러는 이 값과 counts 줄의 lunch를 쓴다
-  out.counts = mealCountsOn_(students, enr, changes, term.id, ymd, prev ? prev.id : '', out.hasLunch ? term : undefined);
+  out.counts = mealCountsOn_(students, enr, changes, term.id, ymd, prev ? prev.id : '', out.hasLunch ? term : undefined, { cutoff: foodLunchOpts_(ymd, terms).cutoff });
   out.operating = resolveDayPlan_(ymd, { termType: calTermTypeOn_(terms, ymd), daySchedule: pickDaySchedule_(readAll_('day_schedules'), ymd),
     blocks: readAll_('blocks'), defaults: calDefaults_(readAll_('settings', 'config')) }).operating;
   return out;
@@ -688,7 +697,8 @@ function listStudentStatus(studentId, ymd) {
   foodMissingDocs_(rows, readAll_('enrollments'), readAll_('terms')).forEach(function (m) { miss[m.row.id] = m; });
   var live = rows.filter(function (c) { return String(c.status || '유효') === '유효' && ymdIsValid_(String(c.effective_date)); });
   var now = {};
-  ['학사', '기숙사', '조식', '중식', '석식'].forEach(function (it) { now[it] = statusOn_(rows, studentId, it, today); });
+  ['학사', '기숙사', '조식', '석식'].forEach(function (it) { now[it] = statusOn_(rows, studentId, it, today); });
+  now['중식'] = lunchOn_(rows, studentId, today, foodLunchOpts_(today));   // 결정 79: statusOn_이 아니라 lunchOn_
   var pendingRows = live.filter(function (c) { return c.effective_date > today; }).sort(function (a, b) { return a.effective_date < b.effective_date ? -1 : 1; });
   var pendingId = {};
   pendingRows.forEach(function (c) { pendingId[c.id] = true; });

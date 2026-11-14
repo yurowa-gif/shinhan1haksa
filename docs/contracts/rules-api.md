@@ -151,7 +151,8 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts)  
         //   → {kind, date, rule, autoDate(R10), from, blocked, superseded, supersededBy:[id], toCancel:[…], followUps:[…], warnings:[]}
 function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)     // 새 행이 덮어야 할 행(R6 추가)
         // opts = {source:'F7'|'F6', requestedAt, newValue} → [{id, effective_date, value}]
-function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, vacation)
+function lunchOn_(changes, studentId, ymd, opts)   // (결정 79 후속) 그날 중식 값 '실시'|'미실시'|'', opts = {vacation, cutoff}
+function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, vacation, opts)
         // (R12, vacation·lunch R19) → {groups:{'여1':{hall, dorm, nonDorm, breakfast, lunch, hallDinner, generalDinner}, …, '여 합계','남 합계','1학년'…'전체'},
         //    afterLeaveHallDinner, unknownGroup:[studentId], warnings}
 ```
@@ -340,7 +341,7 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, 
 - **방학 중식(R19, 결정 73):** item `중식`, 값 `실시`·`미실시`(조식과 같은 값·같은 적용일 규칙 — 실시 11:30, 미실시 수 11:30). 학사생 값은 `실시`.
   - `mealPlanChange_(…, '중식', …, {vacation})`: `vacation`(그 방학 terms 행, `start_date`·`end_date`)이 없거나 날짜가 아니면 Error. 방학 시작일 **전** 중식 행은 보지 않는다(지난 방학 값이 이어지지 않게 — 방학마다 새로 신청). 계산한 적용일이 시작일보다 이르면 시작일(rule `vacation_start`, 방학 전에 미리 낸 신청), 고친 날(manual)이 시작일보다 이르면 Error, 적용일이 끝날 뒤면 경고. 막힘은 석식과 같다(결정 79). **퇴실 정리 followUps를 쓰지 않는다.**
   - `mealCountsOn_(…, prevTermId, vacation)`: `vacation`을 주고 그날이 방학 안이면 `lunch` = 시작일 이후 중식 행으로 본 값이 `실시`이고, 학사 `입실`이거나 학사 퇴실 뒤 중단일 전(결정 79, 아래). 주지 않으면 `lunch`는 0. 저장 쪽은 termId 기간이 방학이면 그 terms 행을 넘긴다.
-  - `movePlan_`·퇴실 취소는 중식을 건드리지 않는다(퇴실 정리 행 없음). **결정 79:** 학사 퇴실 뒤 중식은 석식처럼 미실시 규칙의 중단일(`mealEffectiveDate_('stop', 퇴실 대표 행 requested_at, {leaveDate})`) 전날까지 집계에 센다 — 그날 학사 상태를 만든 행(`statusRowOn_`)이 퇴실이면 그 행으로 계산, 신청 일시가 틀리면 퇴실일에 끝난 것으로 본다. 재입실하면 퇴실 전 값으로 이어진다. `mealPlanChange_` 막힘도 석식과 같다(퇴실 기록 뒤 신청했거나 중단일 이후 적용이면 실시 불가, 먼저 신청한 것은 중단일 전까지 둔다).
+  - `movePlan_`·퇴실 취소는 중식을 건드리지 않는다(퇴실 정리 행 없음). **결정 79:** 학사 퇴실 뒤 중식은 석식처럼 미실시 규칙의 중단일(`mealEffectiveDate_('stop', 퇴실 대표 행 requested_at, {leaveDate})`) 전날까지 집계에 센다 — 그날 학사 상태를 만든 행(`statusRowOn_`)이 퇴실이면 그 행으로 계산, 신청 일시가 틀리면 퇴실일에 끝난 것으로 본다. 재입실하면 퇴실 전 값으로 이어진다. **중식 값은 `lunchOn_(changes, sid, ymd, {vacation, cutoff})`로만 본다**(`statusOn_(…,'중식')`은 퇴실 뒤에도 `실시`로 남는다): 방학(type `방학`) 밖이면 `''`, 이번 방학 행 값이 `실시`가 아니면 그 값, `실시`인데 학사 입실이 아니면 퇴실 행의 중단일 전 `실시`·그날부터 `미실시`. `mealCountsOn_` lunch(8번째 인자 `opts.cutoff`)와 학생 상태 표시(Meals.gs 학생 목록·기록 '오늘', Moves.gs `getMoveContext` now·onDate)가 모두 이것을 쓴다. `mealPlanChange_` 막힘도 석식과 같다(퇴실 기록 뒤 신청했거나 중단일 이후 적용이면 실시 불가, 먼저 신청한 것은 중단일 전까지 둔다).
   - 저장 쪽(코딩): F7 신청 화면의 중식 버튼은 방학 기간에만, 식수 집계·xlsx·PDF에 `lunch` 열(방학일 때만), 명단 업로드의 중식 열은 이번 범위 밖.
 
 ## 동작 메모(R13, 2026-11-12)

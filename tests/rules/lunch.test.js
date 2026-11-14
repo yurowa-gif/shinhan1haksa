@@ -113,3 +113,37 @@ test('집계 lunch: 지난 방학의 실시는 다음 방학에 세지 않는다
   assert.deepStrictEqual(lunchOn(ch.concat([CH('중식', '실시', '2027-12-27')]), '2027-12-28', W), [1, 1, 0]);
   assert.throws(() => ctx.mealCountsOn_(ST, EN, ch, 'V1', '2027-07-21', '', { start_date: '', end_date: '2027-08-20' }), /방학 기간/);
 });
+
+/* ───── 결정 79 후속: lunchOn_ — 학생 상태 표시와 식수 집계가 같은 판정 ───── */
+
+test('lunchOn_: 퇴실 전 실시, 퇴실 뒤 중단일 전날까지 실시·중단일부터 미실시, 재입실 뒤 다시 실시, 방학 밖·학기 기간은 ""', () => {
+  const B = (item, value, eff, extra) => Object.assign(CH(item, value, eff, extra), { student_id: 'b' });
+  const ch = [B('학사', '입실', '2027-03-01'), B('중식', '실시', '2027-07-21'),
+    B('학사', '퇴실', '2027-07-30', { source: 'F6', requested_at: '2027-07-27T09:00:00' }), B('학사', '입실', '2027-08-06', { source: 'F6', requested_at: '2027-08-05T09:00:00' })];
+  const on = (d, o) => ctx.lunchOn_(ch, 'b', d, o === undefined ? { vacation: V } : o);
+  assert.deepStrictEqual(['2027-07-20', '2027-07-21', '2027-07-29', '2027-07-30', '2027-08-01', '2027-08-02', '2027-08-05', '2027-08-06'].map((d) => on(d)),
+    ['', '실시', '실시', '실시', '실시', '미실시', '미실시', '실시']);
+  assert.strictEqual(ctx.statusOn_(ch, 'b', '중식', '2027-08-02'), '실시', 'statusOn_은 퇴실 뒤에도 실시(그래서 lunchOn_을 쓴다)');
+  assert.strictEqual(on('2027-07-21', {}), '', 'vacation 없음');
+  assert.strictEqual(on('2027-07-21', { vacation: Object.assign({}, V, { type: '학기' }) }), '', '학기 기간');
+  assert.strictEqual(on('2027-08-21'), '', '방학 끝난 뒤');
+  assert.strictEqual(ctx.lunchOn_(ch.concat([B('중식', '미실시', '2027-07-26')]), 'b', '2027-07-27', { vacation: V }), '미실시');
+  assert.strictEqual(ctx.lunchOn_([B('중식', '실시', '2027-07-21')], 'b', '2027-07-22', { vacation: V }), '미실시', '학사 기록이 없으면 미실시');
+  // 마감 시각 설정을 따른다: 수요일 12:00 기록 → 기본(11:30)이면 다다음 주, 마감 12:30이면 다음 주 월요일
+  const wed = ch.map((c) => c.value === '퇴실' ? Object.assign({}, c, { requested_at: '2027-07-28T12:00:00' }) : c);
+  assert.deepStrictEqual([ctx.lunchOn_(wed, 'b', '2027-08-02', { vacation: V }), ctx.lunchOn_(wed, 'b', '2027-08-02', { vacation: V, cutoff: '12:30' })], ['실시', '미실시']);
+});
+
+test('lunchOn_ = 식수 집계 lunch: 날마다(7/17~8/22) 두 학생의 값이 집계와 같다(cutoff 포함)', () => {
+  const B = (item, value, eff, extra) => Object.assign(CH(item, value, eff, extra), { student_id: 'b' });
+  const ch = HALL.concat([CH('중식', '실시', '2027-07-19'), CH('중식', '미실시', '2027-08-09'),
+    B('학사', '입실', '2027-03-01'), B('중식', '실시', '2027-07-21'),
+    B('학사', '퇴실', '2027-07-30', { source: 'F6', requested_at: '2027-07-28T12:00:00' }), B('학사', '입실', '2027-08-16', { source: 'F6', requested_at: '2027-08-15T09:00:00' })]);
+  for (const cutoff of [undefined, '12:30']) {
+    for (let d = new Date('2027-07-17T00:00:00Z'); d <= new Date('2027-08-22T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) {
+      const ymd = d.toISOString().slice(0, 10);
+      const g = plain(ctx.mealCountsOn_(ST, EN, ch, 'V1', ymd, '', V, { cutoff })).groups;
+      assert.deepStrictEqual([g['여2'].lunch, g['남1'].lunch], ['a', 'b'].map((s) => +(ctx.lunchOn_(ch, s, ymd, { vacation: V, cutoff }) === '실시')), ymd + ' ' + cutoff);
+    }
+  }
+});
