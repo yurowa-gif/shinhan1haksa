@@ -153,6 +153,21 @@ function rehearse(n) {
   const progCancel = ok(call(HALL, 'cancelProgram', prog.id, '가짜: 강사 사정'), '프로그램 취소');
   const progLeft = progEx().filter((e) => e.status !== '취소').length;
 
+  // 4d) 학년 일괄 퇴실(결정 74①, C26): 7/5에 3학년 전체를 7/7 퇴실로 저장 → 모두 퇴실 → 일괄 되돌리기 → 모두 원래대로(뒤 단계는 그대로). 걸린 시간을 남긴다
+  env.setNow('2027-07-05T10:00:00');
+  const bIn = { grade: '3', effectiveDate: '2027-07-07', requestedAt: '2027-07-05T10:00:00', dinner: '중단', docSubmitted: true, reason: '' };
+  const g3Ids = students.filter((s) => String(s.grade) === '3' && on(s.id, '학사', '2027-07-07') === '입실').map((s) => s.id);
+  const bp = ok(call(ADMIN, 'previewBatchLeave', bIn), '일괄 퇴실 미리보기');
+  const t0 = Date.now();
+  const bs = ok(call(ADMIN, 'saveBatchLeave', bIn, bp.expect), '일괄 퇴실 저장');
+  const batchSaveMs = Date.now() - t0;
+  const batchOut = g3Ids.filter((id) => on(id, '학사', '2027-07-07') === '퇴실').length;
+  const bu = ok(call(ADMIN, 'previewBatchUndo', bs.batchId), '일괄 되돌리기 미리보기');
+  const t1 = Date.now();
+  ok(call(ADMIN, 'undoBatchLeave', bs.batchId, '가짜: 리허설 되돌리기', bu.expect), '일괄 되돌리기');
+  const batchUndoMs = Date.now() - t1;
+  const batchBack = g3Ids.filter((id) => on(id, '학사', '2027-07-07') === '입실').length;
+
   // 5) 학기 전환. 여름방학은 이어받기가 없고(명단 올리기) — 1학기 끝 학사생 + 신규 1명 + 2OUT 퇴실 학생(막힘)을 올린다.
   //    2학기는 1학기 학사생을 이어받는다(퇴실 E·2OUT D 제외, 재입실 F 포함)
   env.setNow('2027-07-10T10:00:00');
@@ -201,7 +216,8 @@ function rehearse(n) {
       holiday: { changed: hol.changed, labels: holSheet.blockLabels, slots: holSlots, operating: holSheet.operating, names: students.filter((s) => holSheet.html.includes(s.name)).length },
       exam: { changed: exam.changed, operating: examSheet.operating },
       program: { asked: pIds.length, saved: prog.count, made: progMade, inner: progInner, canceled: progCancel.canceledExceptions, left: progLeft },
-      lunch: { on: lunchOn, all: lunchAll }
+      lunch: { on: lunchOn, all: lunchAll },
+      batch: { targets: g3Ids.length, preview: bp.count, saved: bs.count, out: batchOut, back: batchBack, saveMs: batchSaveMs, undoMs: batchUndoMs }
     }
   };
 }
@@ -209,7 +225,7 @@ function rehearse(n) {
 const big = rehearse(180);
 const small = rehearse(30);
 
-test('리허설 180명: 명단 → 좌석·방 초안 → 1주일 기록 → 식수 집계 → 휴일·시험 기간 일괄 설정 → 프로그램 126명 만들기·취소 → 여름방학 전환(신규 1명, 2OUT 퇴실 학생 막힘)·방학 중식', () => {
+test('리허설 180명: 명단 → 좌석·방 초안 → 1주일 기록 → 식수 집계 → 휴일·시험 기간 일괄 설정 → 프로그램 126명 만들기·취소 → 3학년 일괄 퇴실·되돌리기 → 여름방학 전환(신규 1명, 2OUT 퇴실 학생 막힘)·방학 중식', () => {
   const f = big.facts;
   assert.strictEqual(f.students, 180);
   assert.strictEqual(f.seated, 180, '좌석 초안이 180명 모두 앉힌다(1층 146 + SA 51)');
@@ -242,6 +258,10 @@ test('리허설 180명: 명단 → 좌석·방 초안 → 1주일 기록 → 식
   // 방학 중식(C30): 방학 전 신청은 방학 시작일부터, 식수 집계 중식 열
   f.lunch.on.forEach((x) => assert.deepStrictEqual(x, ['', '실시'], '중식은 방학 시작일(7/19)부터'));
   assert.strictEqual(f.lunch.all, 3, '식수 집계 7/20 중식 = 3');
+  // 학년 일괄 퇴실(C26): 3학년 전원 저장 → 모두 퇴실 → 되돌리기 → 모두 입실(뒤 학기 전환 단언이 그대로 통과하는 것도 이 확인)
+  assert.ok(f.batch.targets >= 50, '3학년 ' + f.batch.targets);
+  assert.deepStrictEqual([f.batch.preview, f.batch.saved, f.batch.out, f.batch.back], [f.batch.targets, f.batch.targets, f.batch.targets, f.batch.targets]);
+  console.log('    일괄 퇴실 ' + f.batch.targets + '명: 저장 ' + f.batch.saveMs + 'ms, 되돌리기 ' + f.batch.undoMs + 'ms (gas-fakes)');
 });
 
 test('같은 흐름 30명도 통과하고, 공개 함수마다 시트 읽기 횟수는 180명에서 늘지 않는다(학생 수에 비례하지 않음)', () => {
