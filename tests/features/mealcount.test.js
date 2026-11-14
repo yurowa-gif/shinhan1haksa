@@ -2,6 +2,7 @@
 const assert = require('assert');
 const { test } = require('../helpers/harness');
 const { createGasEnv } = require('../helpers/gas-fakes');
+const { unzipStored } = require('../helpers/zip');
 
 const ADMIN = 'owner@example.com';          // admin + hall_teacher
 const HALL = 'test.teacher@example.com';
@@ -170,4 +171,54 @@ test('PDF·홈·화면 문구: 퇴실 후 석식 유지 N명과 서류 "건" 기
   assert.ok(!html.includes('서류 미제출'), '명 기준 옛 문구가 없다');
   const f = env.call(ADMIN, 'getHomeData', 'admin').food;
   assert.strictEqual(typeof f.counts.afterLeaveHallDinner, 'number');
+});
+
+/* ───── 엑셀(결정 67 ①, C19b) ───── */
+const xlsxOf = (env, who, date) => env.as(who, (c) => {
+  const r = c.getMealCountsXlsx(date);
+  return r.ok ? Object.assign({ zip: unzipStored(Buffer.from(r.base64, 'base64')) }, r) : r;
+});
+const cellsOf = (xml) => [...xml.matchAll(/<row [^>]*>([\s\S]*?)<\/row>/g)].map((m) => [...m[1].matchAll(/<c [^>]*?(?:t="inlineStr")?[^>]*>(?:<is><t[^>]*>([\s\S]*?)<\/t><\/is>|<v>([\s\S]*?)<\/v>)<\/c>/g)].map((x) => (x[1] !== undefined ? x[1] : x[2])));
+
+test('xlsx 권한: 관리자만(denied:meal.count), 거부된 호출은 파일을 만들지 않는다', () => {
+  const env = makeEnv();
+  ['test.teacher@example.com', 'test.attendance@example.com', 'test.duty@example.com', 'test.homeroom@example.com', 'test.student@example.com', 'test.parent@example.com']
+    .forEach((who) => env.expectDenied(who, 'meal.count', 'getMealCountsXlsx', '2027-03-03'));
+  env.expectAllowed('test.admin@example.com', 'getMealCountsXlsx', '2027-03-03');
+  assert.throws(() => env.call(ADMIN, 'getMealCountsXlsx', '2027-13-45'), /날짜/);
+  const r = env.call(ADMIN, 'getMealCountsXlsx', '2030-01-01');
+  assert.strictEqual(r.ok, false); assert.match(r.error, /운영 기간이 아닌 날/);
+});
+
+test('xlsx: 행 순서는 결정 67(여1~3·남1~3 → 여·남 → 1~3학년 → 전체), 숫자는 getMealCounts와 같고 이름·이메일이 없다', () => {
+  const env = makeEnv();
+  const r = xlsxOf(env, ADMIN, '2027-03-03');
+  assert.strictEqual(r.ok, true);
+  assert.ok(r.name.startsWith('식수집계_2027-03-03') && r.name.endsWith('.xlsx'));
+  const xml = r.zip['xl/worksheets/sheet1.xml'].toString('utf8');
+  const rows = cellsOf(xml);
+  const head = rows.findIndex((x) => x[0] === '구분');
+  assert.ok(head >= 0, '머리 줄');
+  assert.deepStrictEqual(rows[head], ['구분', '학사', '기숙', '비기숙', '조식', '석식 학사', '석식 일반', '석식 계']);
+  const body = rows.slice(head + 1).filter((x) => x.length === 8).map((x) => x[0]);
+  const want = ['여1', '여2', '여3', '남1', '남2', '남3', '여 합계', '남 합계', '1학년', '2학년', '3학년', '전체'].filter((k) => row(counts(env, '2027-03-03'), k));
+  assert.deepStrictEqual(body, want, '행 순서');
+  assert.strictEqual(body[body.length - 1], '전체');
+  const c = counts(env, '2027-03-03');
+  rows.slice(head + 1).filter((x) => x.length === 8).forEach((x) => {
+    const v = row(c, x[0]);
+    assert.deepStrictEqual(x.slice(1, 7).map(Number), F.map((f) => Number(v[f])), x[0]);
+    assert.strictEqual(Number(x[7]), Number(v.hallDinner) + Number(v.generalDinner), x[0] + ' 석식 계');
+  });
+  const all = Object.values(r.zip).filter((b) => Buffer.isBuffer(b)).map((b) => b.toString('utf8')).join('\n');
+  assert.ok(!env.rows('students').some((s) => all.includes(s.name)), '학생 이름 없음');
+  assert.ok(!all.includes('example.com'), '이메일 없음');
+  assert.ok(all.includes('신청 기준 인원'));
+});
+
+test('xlsx: Drive·시트·audit에 아무것도 쓰지 않는다', () => {
+  const env = makeEnv();
+  const before = env.rows('audit_log').length;
+  assert.strictEqual(xlsxOf(env, ADMIN, '2027-03-03').ok, true);
+  assert.strictEqual(env.rows('audit_log').length, before);
 });

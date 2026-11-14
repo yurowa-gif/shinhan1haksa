@@ -579,6 +579,24 @@ function getMealCountsPdf(date) {
   return { ok: true, name: name, base64: Utilities.base64Encode(bytes), bytes: bytes.length };
 }
 
+/**
+ * 식수 집계 엑셀(결정 67 ①). PDF와 같은 모델을 xlsx로 — 숫자는 서버가 센 것 그대로, 학생 이름 없음. Utilities.zip으로 직접 만들어
+ * 권한을 더하지 않고 Drive에 임시 파일을 만들지 않는다(근무 기록표와 같은 방식). 공유·저장 없이 base64로 내려준다.
+ */
+function getMealCountsXlsx(date) {
+  var user = requirePermission_('meal.count');
+  var m = foodCountsModel_(foodCountsDate_(date));
+  if (!m.term) return { ok: false, error: '운영 기간이 아닌 날은 출력할 수 없습니다.' };
+  var name = '식수집계_' + m.date + '(' + ymdWeekdayKo_(m.date) + ').xlsx';
+  var model = { date: m.date, termName: m.term.name, operating: m.operating, counts: m.counts, docUnsubmitted: m.docUnsubmitted, docRows: m.docRows,
+    preparedBy: user.name, generatedAt: nowIso_().slice(0, 16).replace('T', ' ') };
+  var blobs = printXlsxFiles_(printMealCountsWorkbook_(model)).map(function (f) { return Utilities.newBlob(f.text, 'application/xml', f.path); });
+  var zip = Utilities.zip(blobs, name);
+  zip.setContentType('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  var bytes = zip.getBytes();
+  return { ok: true, name: name, base64: Utilities.base64Encode(bytes), bytes: bytes.length, mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
+}
+
 /** 기록 줄에 보일 말: 시스템 글자(F7·[자동] <id>) 대신 교사용 말 */
 function foodSourceLabel_(src) { return src === 'F7' ? '급식 변경' : src === 'F6' ? '입퇴실' : src === '명단업로드' ? '명단' : ''; }
 function foodCancelText_(reason) {
