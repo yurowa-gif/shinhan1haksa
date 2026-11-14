@@ -71,6 +71,14 @@
     "saveRoomAssignments": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getMealConfirmPdf": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getMoveConfirmPdf": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }
