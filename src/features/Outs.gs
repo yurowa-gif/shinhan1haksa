@@ -3,6 +3,18 @@
  * C11a: OUT 직접 입력(getOutContext·previewOut·saveOut). 목록·취소는 C11b, 면담은 C13.
  */
 
+/* ───── 즉시 퇴실 항목(결정 69) ───── */
+var VIO_INSTANT_KEY = 'out.instant_rule_ids';
+
+/** settings 키 out.instant_rule_ids(violation_rules id를 쉼표로)를 읽는다. 없거나 빈칸이면 즉시 항목 없음. */
+function vioInstantIds_() {
+  var row = readAll_('settings', 'config').filter(function (r) { return String(r.key || '').trim() === VIO_INSTANT_KEY; })[0];
+  return row ? String(row.value || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean) : [];
+}
+
+/** OUT 수를 세는 모든 곳이 같이 쓰는 규칙 옵션. 한 곳만 빠지면 화면마다 단계가 달라진다. */
+function vioOutOpts_() { return { instantRuleIds: vioInstantIds_() }; }
+
 /**
  * 교사 홈의 OUT 카드 데이터(getHomeData가 부른다). 아직 없으면 null.
  * 보고 있는 홈 역할(role)이 out.view를 가질 때만 불린다. 던진 오류는 getHomeData가 잡아 {error}로 바꾼다.
@@ -15,12 +27,13 @@ function vioHomeInfo_(user, role) {
   var vu = Object.assign({}, user, { roles: [role] });   // 보고 있는 홈 역할 하나로만 센다
   // 홈은 학사 교사에게 '내 담당 학생'만(면담할 사람이 자기 학생을 알아보게). 목록 화면의 넓은 보기(결정 45·53)와 다르다
   var visible = vioVisibleIds_(vu, readAll_('enrollments'), readAll_('students'), term.id, false);
+  var opts = vioOutOpts_();
   var live = vioViolations_(term).filter(function (v) { return ruleRowLive_(v) && visible[String(v.student_id)]; });
   var per = Object.create(null), today = today_();
   var changes0 = readAll_('status_changes');
   live.forEach(function (v) { if (String(v.occurred_at).slice(0, 10) === today) out.today++; });   // 오늘 건수는 [오늘] 탭과 같게 퇴실 학생 행도 센다
   live = live.filter(function (v) { return !vioIsLeft_(changes0, v.student_id, today); });   // 1OUT·퇴실 대상 학생 수에서만 퇴실 처리된 학생을 뺀다(목록과 같은 규칙)
-  live.forEach(function (v) { per[v.student_id] = (per[v.student_id] || 0) + 1; });
+  live.forEach(function (v) { per[v.student_id] = (per[v.student_id] || 0) + outWeight_(v, opts); });
   var byStu = {};
   readAll_('students').forEach(function (s) { byStu[s.id] = s; });
   Object.keys(per).forEach(function (id) {
@@ -167,8 +180,9 @@ function vioValidate_(input, user) {
   }
   if (errors.length) return out;
   var rows = vioViolations_(term);
-  var before = outLevel_(rows, student.id, term.id);
-  var n = before.count + 1, level = n >= 2 ? 2 : n;
+  var opts = vioOutOpts_();
+  var before = outLevel_(rows, student.id, term.id, opts);
+  var n = before.count + outWeight_({ rule_id: rule.id }, opts), level = n >= 2 ? 2 : n;
   Object.assign(out, { ok: true, term: term, student: student, enrollment: enrollment, rule: rule, detectedName: detectedName, detectedEmail: detectedEmail, memo: memo, rows: rows,
     before: before, after: { count: n, level: level, label: ['', '1OUT', '퇴실 대상'][level] },
     warnings: vioDupWarnings_(rows, student.id, when.ymd, rule.id) });
@@ -210,8 +224,8 @@ function getOutContext(date) {
   out.students = readAll_('students').filter(function (s) { return allowed[s.id]; })
     .sort(function (a, b) { return String(a.student_no).localeCompare(String(b.student_no)); })
     .map(function (s) { return { id: s.id, name: s.name, grade: +s.grade, classNo: s.class_no, number: s.number, studentNo: s.student_no }; });
-  var rows = vioViolations_(term);
-  out.students.forEach(function (s) { out.levels[s.id] = outLevel_(rows, s.id, term.id).count; });
+  var rows = vioViolations_(term), opts = vioOutOpts_();
+  out.students.forEach(function (s) { out.levels[s.id] = outLevel_(rows, s.id, term.id, opts).count; });
   return out;
 }
 
@@ -341,7 +355,8 @@ function listOuts(filter) {
     }).join('·');
   };
   var count = Object.create(null);
-  rows.forEach(function (v) { if (ruleRowLive_(v)) count[v.student_id] = (count[v.student_id] || 0) + 1; });
+  var opts = vioOutOpts_();
+  rows.forEach(function (v) { if (ruleRowLive_(v)) count[v.student_id] = (count[v.student_id] || 0) + outWeight_(v, opts); });
   var shown = rows.filter(function (v) {
     if (scope === 'targets') return ruleRowLive_(v) && count[v.student_id] >= 2;   // 퇴실 대상 학생의 살아 있는 OUT
     if (scope === 'student') return String(v.student_id) === String(filter.studentId);
@@ -407,7 +422,7 @@ function cancelOut(termId, id, reason) {
     if (!ruleRowLive_(row)) return err('id', '이미 취소된 OUT입니다.');
     updateRecord_(sheet, row.id, { status: '취소', cancel_reason: why }, user.email);
     var rows = vioViolations_(term);
-    return { ok: true, after: outLevel_(rows, row.student_id, term.id) };
+    return { ok: true, after: outLevel_(rows, row.student_id, term.id, vioOutOpts_()) };
   });
 }
 
@@ -432,11 +447,11 @@ function vioMeetingInfo_(user, term, studentIds, byId, rows) {
     if (canAccessStudentByFacts_(user.roles, f, allowedRoles, false)) { ok.push(id); facts[id] = f; }
   });
   if (!ok.length) return out;
-  var changes = readAll_('status_changes'), notes = cnsNotesForGate_(changes), names = {};
+  var changes = readAll_('status_changes'), notes = cnsNotesForGate_(changes), names = {}, opts = vioOutOpts_();
   readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = String(u.name || ''); });
   var isTeacher = hasRole_(user, 'hall_teacher'), isAdmin = hasRole_(user, 'admin');
   ok.forEach(function (id) {
-    var g = outDismissalGate_(rows, notes, changes, id, term.id, today_());
+    var g = outDismissalGate_(rows, notes, changes, id, term.id, today_(), opts);
     var state = g.alreadyLeft ? 'left' : g.meetingNote ? 'recorded' : 'need';
     var mine = g.meetingNote && normalizeEmail_(g.meetingNote.teacher_email) === user.email;
     out[id] = { state: state,
@@ -506,7 +521,48 @@ function vioRuleBase_(name) {
 /** 관리자: 항목 전체(꺼진 것 포함, sort_order 순). 자동 항목은 isAuto. */
 function getOutRules() {
   requirePermission_('out.rules');
-  return { ok: true, rules: readAll_('violation_rules').map(vioRuleView_).sort(function (a, b) { return a.sortOrder - b.sortOrder || (a.name < b.name ? -1 : 1); }) };
+  var instant = vioInstantIds_();
+  return { ok: true, rules: readAll_('violation_rules').map(function (r) { var v = vioRuleView_(r); v.instant = instant.indexOf(String(r.id)) >= 0; return v; }).sort(function (a, b) { return a.sortOrder - b.sortOrder || (a.name < b.name ? -1 : 1); }) };
+}
+
+/**
+ * 즉시 퇴실 항목 켜기·끄기(관리자, 결정 69). 이 항목의 OUT 한 건이 한 번에 2OUT(퇴실 대상)이 된다. 값은 settings 키 out.instant_rule_ids(id 쉼표)에 둔다.
+ * 자동 항목은 정할 수 없다(자동 1OUT이라 1로 센다). 지금 기간에 이미 기록된 OUT에도 그대로 적용된다(소급 — 규칙 기본값, 선생님 답을 기다리는 중).
+ * → {ok:true, instant, affected(이 항목 때문에 새로 퇴실 대상이 되는/되지 않게 되는 이번 기간 학생 수)} | {ok:false, errors}
+ */
+function setOutInstantRule(ruleId, instant) {
+  var user = requirePermission_('out.rules');
+  if (instant !== true && instant !== false) return { ok: false, errors: [{ field: 'instant', message: '켜기·끄기 값이 올바르지 않습니다.' }] };
+  return withLock_(function () {
+    ['violation_rules', 'settings'].forEach(function (n) { invalidate_(n === 'settings' ? 'config' : 'db', n); });
+    var rules = readAll_('violation_rules'), id = String(ruleId || '');
+    var rule = rules.filter(function (r) { return String(r.id) === id; })[0];
+    if (!rule) return { ok: false, errors: [{ field: 'id', message: '항목을 찾을 수 없습니다. 새로 고친 뒤 다시 해 주세요.' }] };
+    if (vioRuleView_(rule).isAuto) return { ok: false, errors: [{ field: 'id', message: '자동 항목은 즉시 퇴실로 정할 수 없습니다.' }] };
+    var known = {};
+    rules.forEach(function (r) { known[String(r.id)] = true; });
+    var before = vioInstantIds_();
+    var after = before.filter(function (x) { return known[x] && x !== id; });   // 지워진 항목 id는 이때 정리한다
+    if (instant) after.push(id);
+    var changed = after.join(',') !== before.join(',');
+    var affected = 0, term = getCurrentTerm_();
+    if (term) {
+      var rows = vioViolations_(term), a = { instantRuleIds: before }, b = { instantRuleIds: after }, seen = {};
+      rows.forEach(function (v) {
+        var sid = String(v.student_id);
+        if (!ruleRowLive_(v) || seen[sid] || String(v.rule_id) !== id) return;
+        seen[sid] = true;
+        if ((outLevel_(rows, sid, term.id, a).level === 2) !== (outLevel_(rows, sid, term.id, b).level === 2)) affected++;
+      });
+    }
+    if (changed) {
+      var row = readAll_('settings', 'config').filter(function (r) { return String(r.key || '').trim() === VIO_INSTANT_KEY; })[0];
+      if (row) updateRecord_('settings', row.id, { value: after.join(',') }, user.email, 'config');
+      else appendRecord_('settings', { key: VIO_INSTANT_KEY, value: after.join(','), description: '즉시 퇴실(한 번에 2OUT) 항목의 violation_rules id를 쉼표로' }, user.email, 'config');
+      invalidate_('config', 'settings');
+    }
+    return { ok: true, instant: after.indexOf(id) >= 0, changed: changed, affected: affected };
+  });
 }
 
 /**

@@ -83,6 +83,10 @@
     "getMealCountsXlsx": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "setOutInstantRule": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }
