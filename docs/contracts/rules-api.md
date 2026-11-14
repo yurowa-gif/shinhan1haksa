@@ -124,9 +124,9 @@ function reconcileAutoOuts_(exceptions, violations, opts)
         // opts = {autoTypes, ruleName:'무단 지각·결석·이탈', ruleId, per:'group'|'row', dutyByDate:{}, studentIds:[](선택),
         //         autoTypeSince:{유형:'yyyy-MM-ddTHH:mm:ss' 또는 [넓힌 시각…]}(선택, 설정을 넓혀 새로 자동 대상이 된 유형과 넓힌 시각 — 배열이면 넓힘 이력)}
         // → {toCreate, toCancel:[{violationId, reason}], toUpdate:[{violationId, patch}]}
-function outLevel_(violations, studentId, termId)   // {count, level:0|1|2, label:''|'1OUT'|'퇴실 대상'}
+function outLevel_(violations, studentId, termId, opts)   // {count, level:0|1|2, label:''|'1OUT'|'퇴실 대상'}, opts = {instantRuleIds:[]}(결정 69, 선택)
 function outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes)   // (R9) → {snapshot:{types, since, widened}, since, widened, changed}
-function outDismissalGate_(violations, notes, changes, studentId, termId, ymd)
+function outDismissalGate_(violations, notes, changes, studentId, termId, ymd, opts)   // opts = outLevel_과 같음
         // (R9) → {count, level, triggerOutId, meetingNote:{id,date,teacher_email}|null, alreadyLeft, ok, reason:''|'퇴실 대상 아님'|'면담 기록 필요'|'이미 퇴실'}
 
 // src/rules/MealRules.gs
@@ -231,7 +231,10 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId)
 - 교사가 직접 입력한 OUT(`source`가 `F1자동`이 아님)은 건드리지 않는다.
 - ASSUMPTION: 관리자가 직접 취소한 자동 OUT(`cancel_reason`이 `'[자동] '`으로 시작하지 않음)이 가리키던 특이사항 행, 또는 같은 묶음(**취소된 OUT의 학생** + group_id)의 행이 들어 있는 단위는, 그 OUT과 **학생·기간이 같으면** 다시 만들지 않는다(`per`를 바꿔도 같음).
 - ASSUMPTION(결정 22 적용): 같은 학생·같은 날·겹치는 블록에 다른 묶음의 자동 유형 특이사항 두 건이 확정되면 OUT도 두 건(→ 퇴실 대상이 될 수 있다). C5는 저장·확정 때 겹침 경고 후 확인을 받는다(막지는 않음).
-- `outLevel_`: 같은 학생·같은 `term_id`(학기마다 초기화)에서 status 빈칸·`유효`인 OUT 수(직접·자동 모두). 2개 이상이면 `level:2`, `'퇴실 대상'`.
+- `outLevel_`: 같은 학생·같은 `term_id`(학기마다 초기화)에서 status 빈칸·`유효`인 OUT 수(직접·자동 모두). 2 이상이면 `level:2`, `'퇴실 대상'`.
+- **즉시 퇴실 항목(결정 69):** `opts.instantRuleIds`(violation_rules `id` 목록)에 `rule_id`가 있는 OUT 한 건은 **2로 센다** — `count`는 OUT 수의 합이라 그 한 건만으로 `level:2`. 취소된 OUT은 세지 않는다(다른 OUT과 같음). `outDismissalGate_`의 `triggerOutId`는 시간순으로 합이 처음 2가 되는 OUT(즉시 항목이면 그 한 건), 면담 날짜도 그 OUT 발생일 이후. opts를 주지 않으면 지금과 같다.
+  - **설정 계약(코딩B):** `settings` 탭(시트 구조 변경 없음) 키 `out.instant_rule_ids`, 값 = 즉시 퇴실 항목의 violation_rules `id`를 쉼표로(빈칸·없음 = 즉시 항목 없음). 관리자 설정 화면에서 violation_rules 이름을 골라 id로 저장한다. OUT 단계를 보이는 곳(`Outs.gs` getOutContext·listOuts·saveOut 결과, `AutoOuts.gs` 단계 알림, `Counsel.gs`·`Outs.gs`의 `outDismissalGate_`)은 모두 이 값을 읽어 `{instantRuleIds}`로 넘긴다 — 한 곳만 넘기면 화면마다 단계가 달라진다. `rule_id`가 빈 OUT(자동 OUT의 rule_id는 R-AUTO 행)은 1로 센다.
+  - ASSUMPTION(선생님 질문 후보): 설정은 **지금 값**으로 센다 — 이번 기간에 이미 있는 그 항목 OUT도 설정에 넣는 순간 2로 센다(소급). 자동 OUT 설정처럼 '넣은 뒤부터만'으로 하려면 저장 때 무게를 남길 칸이 필요하다(시트 구조 변경).
 - 이 파일은 DateRules(`ymdIsValid_`·`ruleStr_`·`ruleIso_`·`ruleRowLive_`)·AttendanceRules(`attTypeBase_`·`parseBlockSpec_`)를 부른다. 테스트는 세 파일을 함께 올린다.
 
 ## 동작 메모(R6, 2026-11-07, 총괄 검토 3차 반영)
