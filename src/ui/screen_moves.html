@@ -1,6 +1,7 @@
 <style>
-  .mv-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .mv-row .mv-text { flex: 1 1 auto; min-width: 0; }
+  .mv-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+  .mv-row .mv-text { flex: 1 1 10em; min-width: 0; }   /* 글이 10em보다 좁아지면 버튼이 아래 줄로 내려간다(360px에서 버튼 여러 개) */
+  .mv-row > :last-child:not(.mv-text) { margin-left: auto; }
   .mv-row .btn { flex: 0 0 auto; white-space: nowrap; }
   .mv-date { font-size: var(--font-xl); font-weight: 700; }
 </style>
