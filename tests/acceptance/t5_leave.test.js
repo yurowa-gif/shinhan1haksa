@@ -205,6 +205,10 @@ test('학년 일괄 퇴실 흐름(결정 74①·79, 방학 중): 3학년 저장 
   assert.strictEqual(allAfter.hall, allBefore.hall - g3.length);
   const [g3Mon] = counts('2027-07-26');
   assert.deepStrictEqual([g3MonBefore.lunch > 0, g3Mon.lunch], [true, 0], '중단일(7/26)부터 중식 0');
+  // 학생 기록 화면(listStudentStatus)도 집계와 같다: 중단일 전날까지 실시, 중단일부터 미실시(#205 lunchOn_)
+  const L = g3.find((sid, i) => before.eff[i][4] === '실시');
+  const lunchSeen = (d) => { env.setNow(d + 'T15:00:00'); const v = h.call(ADMIN, 'listStudentStatus', L, d).now['중식']; env.setNow('2027-07-21T10:00:00'); return v; };   // now는 오늘 기준이라 시계를 그날로
+  assert.deepStrictEqual([lunchSeen('2027-07-25'), lunchSeen(stop)], ['실시', '미실시'], '학생 기록 중식: 7/25 실시, 7/26부터 미실시');
   uniq.forEach((sid) => assert.strictEqual(h.sheetHas(EFF, sid), false, h.stu[sid].name + ' 출석부에서 빠짐'));
   assert.deepStrictEqual(bannedIn(h, later.fall, '2027-09-01', g3).sort(), g3.map((sid) => h.stu[sid].student_no).sort(), '일괄 퇴실도 자진 퇴실: 2학기 명단에서 막힘(결정 77①)');
 
@@ -216,6 +220,7 @@ test('학년 일괄 퇴실 흐름(결정 74①·79, 방학 중): 3학년 저장 
   assert.deepStrictEqual({ eff: snapshot(EFF), mon: snapshot('2027-07-26') }, before, '학사·기숙사·조식·석식·중식 모두 원래대로');
   assert.deepStrictEqual(counts(EFF), [g3Before, allBefore], '식수 집계 원래대로');
   assert.strictEqual(counts('2027-07-26')[0].lunch, g3MonBefore.lunch, '7/26 중식도 원래대로');
+  assert.strictEqual(lunchSeen(stop), '실시', '되돌린 뒤 학생 기록 중식도 실시');
   uniq.forEach((sid) => assert.strictEqual(h.sheetHas(EFF, sid), true, h.stu[sid].name + ' 출석부에 다시'));
   assert.deepStrictEqual(bannedIn(h, later.fall, '2027-09-01', g3), [], '되돌린 뒤 막힘 없음');
   env.expectDenied(HALL, 'batch.leave', 'previewBatchLeave', input);
