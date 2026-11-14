@@ -117,7 +117,7 @@ test('권한 키: doc.view·doc.edit·doc.types·program.view·program.edit·con
   assert.deepStrictEqual(keys['doc.edit'], { roles: ['admin', 'hall_teacher'], scope: 'student' });
   assert.deepStrictEqual(keys['doc.types'].roles, ['admin']);
   assert.deepStrictEqual(keys['program.view'].roles, ['admin', 'attendance', 'hall_teacher']);
-  assert.deepStrictEqual(keys['program.edit'].roles, ['admin', 'hall_teacher'], '특강·체험학습은 학사 교사도 만든다(총괄 답)');
+  assert.deepStrictEqual(keys['program.edit'].roles, ['admin', 'attendance', 'hall_teacher'], '특강·체험학습은 학사 교사도 만든다(총괄 답)');
   assert.deepStrictEqual(keys['contact.view'], { roles: ['admin', 'hall_teacher'], scope: 'student' });
 
   const term = env.as(OWNER, (c) => c.getCurrentTerm_().id);
