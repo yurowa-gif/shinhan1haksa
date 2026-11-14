@@ -24,7 +24,7 @@
       state.ctx = ctx; build();
     }).catch(function (err) { clear(head); showError(head, err); });
 
-    function expectOf(p) { return state.tab === 'students' ? { counts: p.counts, termId: p.term.id, ymd: p.ymd } : { counts: p.counts, termId: p.termId }; }
+    function expectOf(p) { return state.tab === 'students' ? { counts: p.counts, termId: p.term.id, ymd: p.ymd } : { counts: p.counts, termId: p.termId || (p.term && p.term.id) }; }
     function opts() {
       return { termId: termSelect.value, ymd: state.tab === 'students' ? ymdField.getValue() : '' };
     }
@@ -35,7 +35,7 @@
       head.appendChild(el('h2', { text: '명단 올리기' }));
       head.appendChild(UI.segmented({
         label: '무엇을 올리나요', value: state.tab,
-        options: [{ value: 'students', label: '학생 명단' }, { value: 'guardians', label: '학부모 연결' }],
+        options: [{ value: 'students', label: '학생 명단' }, { value: 'guardians', label: '학부모 연결' }, { value: 'contacts', label: '연락처' }],
         onchange: function (v) { state.tab = v; state.preview = null; state.snapshot = ''; saveBtn.disabled = true; build(); }
       }));
       termSelect = el('select', {}, state.ctx.terms.map(function (t) { return el('option', { value: t.id, text: t.name + ' (' + t.start_date + ' ~ ' + t.end_date + ')' }); }));
@@ -60,11 +60,12 @@
       clear(inputCard);
       var cols = state.tab === 'students'
         ? '학번, 학년, 반, 번호, 이름, 성별, 계열, 학사, 기숙사, 베리타스, 조식, 석식, 통학구분, 담당교사이메일, 학생구글계정, 비고'
+        : state.tab === 'contacts' ? '학번, 학생전화, 학부모구글계정, 보호자이름, 보호자전화'
         : '학부모구글계정, 학번, 관계';
       textarea = el('textarea', { class: 'roster-text', placeholder: '첫 줄(머리글)부터 함께 붙여넣으세요.\n열 순서: ' + cols });
       textarea.addEventListener('input', onInputChanged);
-      textField = UI.field(state.tab === 'students' ? '학생 명단' : '학부모 연결 명단', textarea, { name: 'text',
-        hint: '구글 시트에서 복사해 붙이거나 CSV를 붙입니다. 이 단계에서는 아직 저장되지 않습니다.' });
+      textField = UI.field(state.tab === 'students' ? '학생 명단' : state.tab === 'contacts' ? '연락처 명단' : '학부모 연결 명단', textarea, { name: 'text',
+        hint: state.tab === 'contacts' ? '비운 칸은 바꾸지 않습니다. 학부모 연결을 먼저 올린 뒤 보호자 줄을 올려 주세요. 번호는 미리보기에 나오지 않습니다.' : '구글 시트에서 복사해 붙이거나 CSV를 붙입니다. 이 단계에서는 아직 저장되지 않습니다.' });
       inputCard.appendChild(textField);
       checkBtn = el('button', { type: 'button', class: 'btn secondary', text: '확인', onclick: onCheck });
       inputCard.appendChild(el('div', { class: 'roster-actions' }, [checkBtn]));
@@ -98,7 +99,7 @@
       checkBtn.disabled = true;
       clear(resultBox); resultBox.appendChild(el('div', { class: 'loading', text: '확인하는 중…' }));
       var snap = key();
-      var fn = state.tab === 'students' ? 'previewRoster' : 'previewGuardians';
+      var fn = state.tab === 'students' ? 'previewRoster' : state.tab === 'contacts' ? 'previewContacts' : 'previewGuardians';
       call(fn, textarea.value, opts()).then(function (p) {
         checkBtn.disabled = false;
         state.preview = p; state.snapshot = snap;
@@ -167,6 +168,10 @@
           card.appendChild(el('a', { class: 'btn secondary', style: 'margin:8px 0', href: (document.querySelector('a.back') || { href: '' }).href + '?page=moves', text: '입퇴실 화면 열기' }));
           card.appendChild(nameList(p.lists.leaving));
         }
+      } else if (state.tab === 'contacts') {
+        card.appendChild(kv([['학생 전화 변경', k.students + '명'], ['보호자 연락처 변경', k.guardians + '건'], ['이미 같음', k.same + '건']]));
+        if (p.lists.students.length) { card.appendChild(el('h2', { style: 'margin-top:12px', text: '학생 전화가 바뀌는 학생' })); var su = el('ul', { class: 'roster-list' }); p.lists.students.slice(0, 60).forEach(function (n) { su.appendChild(el('li', { text: n })); }); card.appendChild(su); }
+        if (p.lists.guardians.length) { card.appendChild(el('h2', { style: 'margin-top:12px', text: '보호자 연락처가 바뀌는 학생' })); var gu = el('ul', { class: 'roster-list' }); p.lists.guardians.slice(0, 60).forEach(function (n) { gu.appendChild(el('li', { text: n })); }); card.appendChild(gu); }
       } else {
         card.appendChild(kv([['새 연결', k.newLinks + '건'], ['건너뜀', k.skipped + '건'], ['새 계정', k.newUsers + '개'], ['역할 추가', k.updatedUsers + '개']]));
         card.appendChild(el('h2', { style: 'margin-top:12px', text: '연결 대상 확인' }));
@@ -194,15 +199,16 @@
         ? '새 학생 ' + p.counts.newStudents + '명, 정보 변경 ' + p.counts.updatedStudents + '명, 상태 기록 ' + p.counts.newChanges + '건, 새 계정 ' + p.counts.newUsers + '개를 저장합니다.' +
           (p.counts.leaving ? ' 퇴실 후보 ' + p.counts.leaving + '명은 저장하지 않고 표시만 합니다.' : '') +
           (p.counts.banned ? ' 2OUT 퇴실로 막힌 ' + p.counts.banned + '명은 빼고 저장합니다.' : '')
+        : state.tab === 'contacts' ? '학생 전화 ' + p.counts.students + '명, 보호자 연락처 ' + p.counts.guardians + '건을 저장합니다.'
         : '학부모 연결 ' + p.counts.newLinks + '건, 새 계정 ' + p.counts.newUsers + '개를 저장합니다.';
       UI.confirmSheet({ title: '저장할까요?', message: msg, confirmText: '저장', cancelText: '취소', onconfirm: function () {
         state.busy = true; saveBtn.disabled = true;
-        call(students ? 'commitRoster' : 'commitGuardians', textarea.value, opts(), expectOf(p)).then(function (r) {
+        call(students ? 'commitRoster' : state.tab === 'contacts' ? 'commitContacts' : 'commitGuardians', textarea.value, opts(), expectOf(p)).then(function (r) {
           state.busy = false;
           if (!r.ok) { setPreview(null); drawResult(r); UI.toast(r.stale ? '다시 확인해 주세요.' : '저장하지 못했습니다.', { kind: 'warn' }); return; }
           UI.toast(r.nothingToDo ? '변경 없음' : '저장했습니다.', { kind: 'ok' });
           textarea.value = ''; setPreview(null);
-          resultBox.appendChild(el('div', { class: 'notice ok', text: '저장했습니다. ' + (students ? '이어서 학부모 연결을 올려 주세요.' : '') }));
+          resultBox.appendChild(el('div', { class: 'notice ok', text: '저장했습니다. ' + (students ? '이어서 학부모 연결을 올려 주세요.' : state.tab === 'guardians' ? '이어서 연락처를 올릴 수 있습니다.' : '') }));
           if (students && r.banned && r.banned.length) resultBox.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: '2OUT 퇴실로 막혀 저장하지 않은 학생(학부모 연결 명단에서도 줄을 빼 주세요): ' + r.banned.map(function (b) { return b.name + '(' + b.message + ')'; }).join(', ') }));
         }).catch(function (err) { state.busy = false; clear(resultBox); showError(resultBox, err); });
       } });

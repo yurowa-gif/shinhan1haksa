@@ -145,6 +145,21 @@ test('D9 학교 양식 문서: 확인서 모델·근무 기록표 xlsx 칸 배�
   assert.ok(d('stage2-teacher-checks.md').indexOf('현황표 \'전체\' 탭 집계 표') >= 0 && d('stage2-teacher-checks.md').indexOf('(학교 양식이 오면)') < 0);
 });
 
+test('D12 4단계 시안(stage4-screens.js)의 화면 이름이 모두 screens.md 5-4 절에 백틱으로 적혀 있고 360px 사진 파일이 있으며, 권한 키·삭제 없음·미정 표시가 적혀 있다', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const src = css.readFile('design/preview/stage4-screens.js');
+  const doc = css.readFile('docs/design/screens.md');
+  const sec = doc.slice(doc.indexOf('## 5-4. 4단계 화면'), doc.indexOf('## 6. 권한별'));
+  const ids = [...src.matchAll(/^def\('([^']+)'/gm)].map((m) => m[1]);
+  assert.ok(ids.length >= 14, '시안 수 ' + ids.length);
+  ids.forEach((id) => {
+    assert.ok(sec.indexOf('`' + id + '`') >= 0, '5-4 절에 `' + id + '` 가 없다');
+    assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'docs', 'design', 'stage4-photos', id + '.png')), id + ' 사진이 없다');
+  });
+  ['`doc.edit`', '`doc.view`', '`doc.types`', '`program.edit`', '`program.view`', '삭제 버튼은 없다', '미정', '행이 없으면 미제출', '함께 \\"취소\\"로 바뀝니다'].forEach((t) => assert.ok(sec.indexOf(t) >= 0 || doc.indexOf(t) >= 0, t));
+});
+
 test('2단계 선생님 확인 체크리스트: 단계 번호(A1~E4)가 겹치지 않고 모든 줄이 7칸(번호·누가·누르는 것·통과 모습·사진·결과)이며, print-check 9·10절 번호(44~66)가 이어진다', () => {
   const doc = css.readFile('docs/design/stage2-teacher-checks.md');
   const rows = doc.split('\n').filter((l) => /^\| [A-E]\d+ \|/.test(l));
