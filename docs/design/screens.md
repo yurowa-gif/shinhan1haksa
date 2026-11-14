@@ -493,6 +493,10 @@ D12 시안(`design/preview/stage4-screens.js`, 실행 `node design/preview/stage
 | `program-confirm` | [확인하고 저장] 확인창(특이사항 건수·겹침 안내) | 관리자·출결 담당·학사 교사 |
 | `program-remove` | 참가에서 빼기 확인(사유 입력) | 관리자·출결 담당·학사 교사 |
 | `program-cancel` | 프로그램 취소 확인(사유 입력) | 관리자·출결 담당·학사 교사 |
+| `outs-instant` | OUT [항목] 탭: "즉시 퇴실" 표시와 [즉시 퇴실로 정하기]·[즉시 퇴실 해제](자동 항목에는 없음, 결정 69) | 관리자 |
+| `outs-instant-confirm` | [즉시 퇴실로 정하기] 확인창 | 관리자 |
+| `moves-enter-first` | 신규 입실: 적용일 기본값이 다음 달 1일(결정 74③) | 학사 교사·관리자 |
+| `moves-leave-5day` | 퇴실 저장 확인창: "새 달 5일이 지나 퇴실하면 그달 비용을 냅니다" 안내(결정 74④, 비용 계산 없음) | 학사 교사·관리자 |
 
 ### C27-1. 서류 체크리스트 (실제 화면 `screen_docs.html`에 맞춘 시안)
 
