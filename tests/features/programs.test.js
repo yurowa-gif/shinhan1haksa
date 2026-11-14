@@ -104,7 +104,8 @@ test('겹치는 확정 특이사항이 있으면 확인 없이는 저장하지 �
   const before = counts(x);
   const r = call(x, ADMIN, 'saveProgram', input(x));
   assert.deepStrictEqual([r.ok, r.needsConfirm], [false, true]);
-  assert.ok(r.warnings.some((w) => w.includes('겹치는')));
+  assert.deepStrictEqual(r.warnings, ['1명은 같은 시간에 다른 특이사항이 있습니다. 그대로 두고 프로그램 특이사항을 따로 만듭니다.']);
+  assert.deepStrictEqual([call(x, ADMIN, 'previewProgram', input(x)).overlap, call(x, ADMIN, 'previewProgram', input(x)).inactive], [1, 0]);
   assert.deepStrictEqual(counts(x), before);
   const ok = call(x, ADMIN, 'saveProgram', Object.assign(input(x), { confirmOverlap: true }));
   assert.strictEqual(ok.ok, true, JSON.stringify(ok));
@@ -163,7 +164,8 @@ test('입실 상태가 아닌 학생은 경고(막지 않음): 그날 학사 입
   const lateS = x.env.rows('students').find((s) => s.id === x.late);
   const r = call(x, ADMIN, 'saveProgram', input(x, { studentIds: [x.students[0].id, lateS.id] }));
   assert.deepStrictEqual([r.ok, r.needsConfirm], [false, true]);
-  assert.ok(r.warnings.some((w) => w.includes(lateS.name) && w.includes('입실 상태가 아닙니다')));
+  assert.deepStrictEqual(r.warnings, ['1명은 이 날 학사 입실 상태가 아닙니다.'], '학생 수로만 알리고 이름은 없다');
+  assert.ok(!JSON.stringify(r).includes(lateS.name));
   assert.strictEqual(call(x, ADMIN, 'saveProgram', Object.assign(input(x, { studentIds: [x.students[0].id, lateS.id] }), { confirmOverlap: true })).ok, true);
 });
 
@@ -191,6 +193,7 @@ test('listPrograms: 날짜순, 살아 있는 참가자만(학년·반·번호 �
   assert.ok(l.items.every((i) => i.canCancel === false));
   assert.deepStrictEqual([l.items[0].status, l.items[0].count, l.items[0].participants.length], ['취소', 0, 0]);
   assert.strictEqual(l.items[2].count, 3);
+  assert.deepStrictEqual([l.today, l.items[2].exceptionCount, l.items[0].exceptionCount], ['2027-03-03', 3, 0], '특이사항 건수(살아 있는 것만)');
   const ps = l.items[2].participants.map((q) => [q.student.grade, String(q.student.classNo), Number(q.student.number)]);
   assert.deepStrictEqual(ps, ps.slice().sort((p, q) => p[0] - q[0] || p[1].localeCompare(q[1]) || p[2] - q[2]));
   assert.strictEqual(call(x, ADMIN, 'listPrograms', {}).items.find((i) => i.name === 'B 특강').canCancel, true);
@@ -203,6 +206,7 @@ test('getProgramContext: 편집 권한이 있을 때만 학생 목록(그 기간
   assert.strictEqual(adm.canEdit, true);
   assert.ok(adm.students.length > 0 && !adm.students.some((s) => s.id === x.late), '3/15 입실 예정자는 3/8 목록에 없다');
   assert.ok(adm.blocks.length > 0 && adm.term.id === x.term.id);
+  assert.ok(adm.students.every((q) => typeof q.dorm === 'boolean') && adm.students.some((q) => q.dorm) && adm.students.some((q) => !q.dorm), '기숙사생 표시(반 단위 담기의 "기숙사생만")');
   const att = call(x, ATT, 'getProgramContext', DATE);
   assert.deepStrictEqual([att.canEdit, att.students.length], [false, 0]);
   assert.throws(() => x.env.call(ADMIN, 'getProgramContext', '2027-13-45'), /날짜/);

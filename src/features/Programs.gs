@@ -58,9 +58,12 @@ function prgLoad_() {
   return d;
 }
 
-/** 참가 학생 검사: 그 기간 명단에 있어야 한다. 그날 학사 입실이 아니면 경고만(막지 않는다). → {errors, warnings} */
+/**
+ * 참가 학생 검사: 그 기간 명단에 있어야 한다. 그날 학사 입실이 아니거나 같은 시간에 다른 특이사항이 있으면 경고만(막지 않고, 그대로 따로 만든다).
+ * 경고는 학생 수로 모아 한 줄씩 낸다(이름 없음). → {errors, warnings, overlap(같은 시간 특이사항이 있는 학생 수), inactive}
+ */
 function prgStudentChecks_(d, term, date, ids, rows, blocks) {
-  var errors = [], warnings = [];
+  var errors = [], warnings = [], overlap = 0, inactive = 0;
   var byId = {}, enr = {};
   d.students.forEach(function (s) { byId[s.id] = s; });
   d.enrollments.forEach(function (e) { if (e.term_id === term.id) enr[e.student_id] = e; });
@@ -68,10 +71,12 @@ function prgStudentChecks_(d, term, date, ids, rows, blocks) {
     var s = byId[id];
     if (!s) { errors.push({ field: 'studentIds', message: '찾을 수 없는 학생이 있습니다. 새로 고친 뒤 다시 해 주세요.' }); return; }
     if (!enr[id]) { errors.push({ field: 'studentIds', message: s.name + ' 학생은 "' + term.name + '" 명단에 없습니다. 명단 올리기에서 먼저 등록해 주세요.' }); return; }
-    if (!isActiveOn_(d.changes, enr[id], date)) warnings.push(s.name + ' 학생은 이 날 학사 입실 상태가 아닙니다.');
-    excOverlapWarnings_(rows, id, [date], blocks).forEach(function (w) { warnings.push(s.name + ': ' + w); });
+    if (!isActiveOn_(d.changes, enr[id], date)) inactive++;
+    if (excOverlapWarnings_(rows, id, [date], blocks).length) overlap++;
   });
-  return { errors: errors, warnings: warnings };
+  if (inactive) warnings.push(inactive + '명은 이 날 학사 입실 상태가 아닙니다.');
+  if (overlap) warnings.push(overlap + '명은 같은 시간에 다른 특이사항이 있습니다. 그대로 두고 프로그램 특이사항을 따로 만듭니다.');
+  return { errors: errors, warnings: warnings, overlap: overlap, inactive: inactive };
 }
 
 function prgExceptionRow_(term, p, studentId, type, user, now, id) {
@@ -114,7 +119,7 @@ function getProgramContext(date) {
     var base = ymd < term.start_date ? term.start_date : (ymd > term.end_date ? term.end_date : ymd);
     out.students = d.students.filter(function (s) { return enr[s.id] && isActiveOn_(d.changes, enr[s.id], base); })
       .sort(function (a, b) { return String(a.student_no).localeCompare(String(b.student_no)); })
-      .map(function (s) { return { id: s.id, name: s.name, grade: +s.grade, classNo: s.class_no, number: s.number, studentNo: s.student_no }; });
+      .map(function (s) { return { id: s.id, name: s.name, grade: +s.grade, classNo: s.class_no, number: s.number, studentNo: s.student_no, dorm: statusOn_(d.changes, s.id, '기숙사', base) === '입실' }; });
   }
   return out;
 }
@@ -140,9 +145,9 @@ function listPrograms(filter) {
         return { studentId: x.student_id, student: prgOne_(s), exceptionLive: !!ex && EXC_LIVE.indexOf(String(ex.status).trim()) >= 0 };
       }).sort(function (a, b) { return (a.student.grade - b.student.grade) || String(a.student.classNo).localeCompare(String(b.student.classNo)) || (Number(a.student.number) - Number(b.student.number)); });
       return { id: p.id, name: p.name, date: p.date, dateKo: foodDateKo_(p.date), blocks: p.blocks, blocksText: excBlocksText_(p.blocks), memo: p.memo || '', status: live ? '유효' : '취소',
-        participants: live ? people : [], count: live ? people.length : 0, canCancel: canEdit && live && !ended };
+        participants: live ? people : [], count: live ? people.length : 0, exceptionCount: live ? people.filter(function (q) { return q.exceptionLive; }).length : 0, canCancel: canEdit && live && !ended };
     });
-  return { term: { id: term.id, name: term.name, ended: ended }, canEdit: canEdit, items: items };
+  return { today: d.today, term: { id: term.id, name: term.name, ended: ended }, canEdit: canEdit, items: items };
 }
 
 /** 저장 전 확인: 검사 결과·경고. 아무것도 쓰지 않는다. */
@@ -150,10 +155,10 @@ function previewProgram(input) {
   requirePermission_('program.edit');
   var d = prgLoad_();
   var v = prgValidate_(input, { terms: d.terms, settings: d.settings, today: d.today, needStudents: true });
-  var out = { ok: false, errors: v.errors, warnings: [], count: v.rec.studentIds.length };
+  var out = { ok: false, errors: v.errors, warnings: [], count: v.rec.studentIds.length, overlap: 0, inactive: 0 };
   if (v.term && !v.errors.length) {
     var c = prgStudentChecks_(d, v.term, v.rec.date, v.rec.studentIds, excRows_(v.term).rows, v.rec.blocks);
-    out.errors = out.errors.concat(c.errors); out.warnings = c.warnings;
+    out.errors = out.errors.concat(c.errors); out.warnings = c.warnings; out.overlap = c.overlap; out.inactive = c.inactive;
     if (d.programs.some(function (p) { return prgLive_(p) && p.date === v.rec.date && p.name === v.rec.name; })) out.errors.push({ field: 'name', message: '같은 날짜에 같은 이름의 프로그램이 이미 있습니다.' });
   }
   out.ok = !out.errors.length;
