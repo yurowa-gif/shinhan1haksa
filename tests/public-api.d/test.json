@@ -5,6 +5,7 @@
   ],
   "functions": {
     "seedFakeStage2": { "use": "편집기", "guard": "assertOwnerRun_" },
-    "seedFakeStage3": { "use": "편집기", "guard": "assertOwnerRun_" }
+    "seedFakeStage3": { "use": "편집기", "guard": "assertOwnerRun_" },
+    "seedFakeStage4": { "use": "편집기", "guard": "assertOwnerRun_" }
   }
 }
