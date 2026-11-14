@@ -1,0 +1,240 @@
+<script>
+  /**
+   * 학사 프로그램 화면(C28, 결정 75②). 두 탭: [목록](program.view) · [새 프로그램](program.edit) — 둘 다 관리자·출결 담당·학사 교사.
+   * 프로그램(이름·날짜·시간)과 참가 학생을 한 번 넣으면 서버(Programs.gs)가 참가자마다 사전 특이사항('학사 내 프로그램', 확정)을 만든다.
+   * 프로그램을 취소하면 특이사항도 함께 취소된다. 숫자·권한은 서버가 정하고 화면은 보여 주기만 한다.
+   */
+  function renderScreen(root) {
+    var U = UI.util;
+    var tab = window.SCREEN_TAB === 'entry' ? 'entry' : 'list';
+    var body = el('div'), tabsBox = el('div'), bar = null, canEdit = false, seq = 0, alive = true;
+    root.appendChild(tabsBox); root.appendChild(body);
+    function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
+    function removeBar() { if (bar && bar.parentNode) bar.parentNode.removeChild(bar); bar = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); }
+
+    function draw() {
+      removeBar(); clear(body); clear(tabsBox);
+      if (canEdit) tabsBox.appendChild(el('div', { class: 'card' }, [UI.segmented({ label: '화면', value: tab, options: [{ value: 'list', label: '목록' }, { value: 'entry', label: '새 프로그램' }], onchange: function (v) { tab = v; draw(); } })]));
+      else tab = 'list';
+      if (tab === 'entry') renderEntry(body); else renderList(body);
+    }
+
+    /* ───────── 학생 여러 명 고르기: 학년·반으로 한꺼번에 담기 + 검색·체크로 한 명씩(고른 수를 늘 보인다) ───────── */
+    function studentMulti(students, onchange) {
+      var picked = {}, grade = 0, cls = '', dormOnly = false;
+      var q = el('input', { type: 'text', placeholder: '이름·학번으로 찾기', 'aria-label': '학생 찾기' });
+      var count = el('div', { class: 'muted', style: 'margin:4px 0' }), list = el('div', { style: 'max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px 8px' });
+      var bulk = el('div'), note = el('div', { class: 'muted', style: 'margin:6px 0;word-break:keep-all' });
+      function names() { return Object.keys(picked); }
+      var grades = []; students.forEach(function (s) { if (grades.indexOf(s.grade) < 0) grades.push(s.grade); }); grades.sort();
+      function classesOf(g) { var out = []; students.forEach(function (s) { if (s.grade === g && out.indexOf(String(s.classNo)) < 0) out.push(String(s.classNo)); }); return out.sort(function (a, b) { return Number(a) - Number(b); }); }
+      function target() { return students.filter(function (s) { return s.grade === grade && String(s.classNo) === cls && (!dormOnly || s.dorm); }); }
+      function chip(text, on, fn) { return el('button', { type: 'button', class: on ? 'chip on' : 'chip', 'aria-pressed': on ? 'true' : 'false', text: text, onclick: fn }); }
+      function drawBulk() {
+        clear(bulk); clear(note);
+        if (!grades.length) return;
+        bulk.appendChild(el('div', { class: 'chips', role: 'group', 'aria-label': '학년' }, grades.map(function (g) { return chip(g + '학년', g === grade, function () { grade = g; cls = ''; drawBulk(); }); })));
+        if (grade) {
+          bulk.appendChild(el('div', { class: 'chips', style: 'margin-top:8px', role: 'group', 'aria-label': '반' }, classesOf(grade).map(function (c) { return chip(c + '반', c === cls, function () { cls = c; drawBulk(); }); })));
+          var cb = el('input', { type: 'checkbox', style: 'flex:0 0 auto;width:22px;height:22px' }); cb.checked = dormOnly;
+          cb.addEventListener('change', function () { dormOnly = cb.checked; drawBulk(); });
+          bulk.appendChild(el('label', { style: 'display:flex;align-items:center;gap:10px;min-height:44px' }, [cb, el('span', { text: '기숙사생만' })]));
+        }
+        if (grade && cls) {
+          var t = target(), fresh = t.filter(function (s) { return !picked[s.id]; });
+          note.textContent = grade + '학년 ' + cls + '반 학사생 ' + t.length + '명을 담습니다.' + (t.length - fresh.length ? ' 이미 담은 학생 ' + (t.length - fresh.length) + '명은 빼고 ' + fresh.length + '명이 새로 담깁니다.' : '');
+          bulk.appendChild(note);
+          var add = el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:4px', text: '이 반 담기', onclick: function () {
+            fresh.forEach(function (s) { picked[s.id] = true; }); drawBulk(); drawList(); drawCount(); onchange(names());
+          } });
+          if (!fresh.length) add.disabled = true;   // el()은 null 값도 속성으로 적으므로 필요할 때만 켠다
+          bulk.appendChild(add);
+        }
+      }
+      function drawList() {
+        clear(list);
+        var key = q.value.trim().toLowerCase();
+        var shown = students.filter(function (s) { return (!key || (s.name + ' ' + s.studentNo).toLowerCase().indexOf(key) >= 0) && (!grade || s.grade === grade) && (!cls || String(s.classNo) === cls); });
+        if (!shown.length) list.appendChild(el('div', { class: 'muted', style: 'padding:8px 0', text: '찾는 학생이 없습니다.' }));
+        shown.forEach(function (s) {
+          var cb = el('input', { type: 'checkbox', style: 'flex:0 0 auto;width:22px;height:22px' });
+          cb.checked = !!picked[s.id];
+          cb.addEventListener('change', function () { if (cb.checked) picked[s.id] = true; else delete picked[s.id]; drawCount(); drawBulk(); onchange(names()); });
+          list.appendChild(el('label', { style: 'display:flex;align-items:center;gap:10px;min-height:44px' }, [cb, el('span', { text: s.grade + '-' + s.classNo + ' ' + s.number + '번 ' + s.name })]));
+        });
+      }
+      function drawCount() { count.textContent = '고른 학생 ' + names().length + '명'; }
+      q.addEventListener('input', drawList);
+      var clearBtn = el('button', { type: 'button', class: 'btn secondary row-btn', style: 'margin-top:4px', text: '모두 비우기', onclick: function () { picked = {}; drawList(); drawCount(); drawBulk(); onchange([]); } });
+      drawBulk(); drawCount(); drawList();
+      var box = el('div', {}, [bulk, UI.field('학생 찾기', q), count, list, clearBtn]);
+      box.getIds = names;
+      return box;
+    }
+
+    /* ───────── [새 프로그램] ───────── */
+    function renderEntry(root) {
+      var ctx = null, blocks = { all: true, spec: 'ALL', valid: true }, ids = [], busy = false, my = ++seq;
+      var name = el('input', { type: 'text', maxlength: '60', placeholder: '예: 파워클래스 특강' }), memo = el('input', { type: 'text', maxlength: '200' });
+      var nameField = UI.field('프로그램 이름', name), memoField = UI.field('메모(선택)', memo);
+      var chipsBox = el('div'), studentsBox = el('div'), dateField = null, dateErr = el('div'), blockNote = el('div', { class: 'muted' });
+      var datesCard = el('div', { class: 'card' }), studentCard = el('div', { class: 'card' }, [el('h2', { text: '참가 학생' }), studentsBox]);
+      root.appendChild(el('div', { class: 'card' }, [nameField]));
+      root.appendChild(datesCard);
+      root.appendChild(studentCard);
+      root.appendChild(el('div', { class: 'card' }, [memoField]));
+      function refreshBar() { if (bar) bar.querySelector('button').disabled = busy || !ctx || !blocks.valid || !ids.length || !name.value.trim(); }
+      name.addEventListener('input', function () { nameField.setError(''); refreshBar(); });
+      function loadDay(date) {
+        var m = ++seq; my = m;
+        call('getProgramContext', date).then(function (c) {
+          if (m !== seq || !alive) return;
+          ctx = c;
+          clear(chipsBox); blocks = { all: true, spec: 'ALL', valid: true };
+          blockNote.textContent = c.operating ? '' : '이 날은 자습을 운영하지 않는 날입니다. 그래도 프로그램을 넣을 수 있습니다.';
+          chipsBox.appendChild(UI.blockChips({ blocks: c.blocks, value: { all: true }, onchange: function (v) { blocks = v; refreshBar(); } }));
+          if (!studentsBox.firstChild || c.term.id !== studentsBox.termId) {
+            clear(studentsBox); studentsBox.termId = c.term.id; ids = [];
+            var multi = studentMulti(c.students, function (list) { ids = list; refreshBar(); });
+            studentsBox.appendChild(multi);
+          }
+          refreshBar();
+        }).catch(function (err) { if (m !== seq) return; fail(err); });
+      }
+      call('getProgramContext', '').then(function (c) {
+        if (!alive) return;
+        dateField = UI.dateField({ label: '날짜', value: c.date, shortcuts: [{ label: '오늘', value: c.today }], onchange: function (v) { dateErr.textContent = ''; if (v) loadDay(v); } });
+        datesCard.appendChild(dateField); datesCard.appendChild(UI.field('시간', chipsBox, { hint: '프로그램이 있는 시간입니다. 그 시간의 출석부 칸에 "내부"로 나옵니다.' })); datesCard.appendChild(blockNote);
+        ctx = null; loadDay(c.date);
+      }).catch(function (err) { clear(root); showError(root, err); });
+
+      bar = UI.actionBar([{ text: '확인하고 저장', kind: 'primary', disabled: true, onclick: onSave }], { mount: true });
+      function payload() { return { name: name.value, date: dateField ? dateField.getValue() : '', blocks: blocks.spec, memo: memo.value, studentIds: ids }; }
+      function showErrors(errors) {
+        var fields = { name: nameField, memo: memoField };
+        errors.forEach(function (e) { (fields[e.field] || nameField).setError(e.message); });
+        if (errors.some(function (e) { return !fields[e.field]; })) UI.toast(errors[0].message, { kind: 'warn', ms: 5000 });
+      }
+      function onSave() {
+        if (busy) return; busy = true; refreshBar();
+        call('previewProgram', payload()).then(function (p) {
+          busy = false; refreshBar();
+          if (!p.ok) { showErrors(p.errors); return; }
+          var pl = payload();
+          UI.confirmSheet({ title: '프로그램을 저장합니다', lead: pl.name.trim(),
+            lines: [U.formatDateKo(pl.date, false) + ' · ' + (blocks.all ? '전체 시간' : blocks.spec), '참가 학생 ' + p.count + '명에게 사전 특이사항(학사 내 프로그램)이 확정으로 만들어집니다.'].concat(p.warnings || []),
+            confirmText: '저장', onconfirm: function () { doSave(pl, (p.warnings || []).length > 0); } });
+        }).catch(function (err) { busy = false; refreshBar(); fail(err); });
+      }
+      function doSave(pl, confirmed) {
+        busy = true; refreshBar();
+        call('saveProgram', Object.assign({ confirmOverlap: confirmed }, pl)).then(function (r) {
+          busy = false;
+          if (!r.ok) { refreshBar(); if (r.errors) showErrors(r.errors); else UI.toast('확인 뒤 다시 저장해 주세요.', { kind: 'warn', ms: 5000 }); return; }
+          UI.toast('프로그램을 저장했습니다. 참가 ' + r.count + '명.', { kind: 'ok', ms: 4000 });
+          tab = 'list'; draw();
+        }).catch(function (err) { busy = false; refreshBar(); fail(err); });
+      }
+    }
+
+    /* ───────── [목록] ───────── */
+    function renderList(root) {
+      var box = el('div'), seg = null, data = null, which = 'upcoming', itemsBox = el('div'); root.appendChild(box);
+      var my = ++seq;
+      box.appendChild(el('div', { class: 'muted', text: '불러오는 중…' }));
+      function drawItems() {
+        clear(itemsBox);
+        var items = pick(data, which);
+        if (!items.length) { itemsBox.appendChild(UI.emptyState(which === 'upcoming' ? '예정된 프로그램이 없습니다.' + (data.canEdit ? ' [새 프로그램]에서 만들어 주세요.' : '') : which === 'past' ? '지난 프로그램이 없습니다.' : '취소된 프로그램이 없습니다.')); return; }
+        items.forEach(function (p) { itemsBox.appendChild(programCard(p, data.canEdit)); });
+      }
+      call('listPrograms', {}).then(function (r) {
+        if (my !== seq || !alive) return;
+        clear(box); data = r;
+        box.appendChild(el('div', { class: 'muted', style: 'margin-bottom:8px', text: r.term.name + (r.term.ended ? ' (끝난 기간 — 볼 수만 있습니다)' : '') }));
+        var n = function (k) { return pick(r, k).length; };
+        seg = UI.segmented({ label: '보기', value: which, options: [{ value: 'upcoming', label: '예정 ' + n('upcoming') }, { value: 'past', label: '지난 ' + n('past') }, { value: 'canceled', label: '취소 ' + n('canceled') }],
+          onchange: function (v) { which = v; drawItems(); } });
+        box.appendChild(seg); box.appendChild(itemsBox); drawItems();
+      }).catch(function (err) { if (my !== seq) return; clear(box); showError(box, err); });
+    }
+
+    function pick(r, k) {
+      return r.items.filter(function (p) { return k === 'canceled' ? p.status === '취소' : (p.status === '유효' && (k === 'upcoming' ? p.date >= r.today : p.date < r.today)); });
+    }
+
+    function programCard(p, editable) {
+      var live = p.status === '유효';
+      var card = el('div', { class: 'card', style: 'word-break:keep-all' });
+      card.appendChild(el('div', { style: 'display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap' }, [el('h2', { style: 'margin:0', text: p.name }), live ? null : UI.statusPill('canceled', '취소됨')]));
+      card.appendChild(el('div', { class: 'muted', text: p.dateKo + ' · ' + p.blocksText + (live ? ' · 참가자 ' + p.count + '명 · 사전 특이사항 ' + p.exceptionCount + '건' : '') }));
+      if (p.memo) card.appendChild(el('div', { style: 'margin-top:4px;white-space:pre-wrap', text: p.memo }));
+      if (live && p.participants.length) {
+        var open = false, people = el('ul', { class: 'list', style: 'margin-top:8px' });
+        var toggle = el('button', { type: 'button', class: 'btn secondary row-btn', style: 'margin-top:8px', text: '참가자 보기', onclick: function () {
+          open = !open; toggle.textContent = open ? '참가자 접기' : '참가자 보기'; clear(people);
+          if (open) p.participants.forEach(function (q) {
+            var li = el('li', { style: 'display:flex;align-items:center;gap:8px;justify-content:space-between' }, [el('span', { style: 'flex:1 1 auto', text: q.student.grade + '-' + q.student.classNo + ' ' + q.student.number + '번 ' + q.student.name + (q.exceptionLive ? '' : ' (특이사항 따로 취소됨)') })]);
+            if (editable && p.canCancel) li.appendChild(el('button', { type: 'button', class: 'btn secondary row-btn', style: 'flex:0 0 auto;white-space:nowrap;margin-top:0', text: '빼기', 'aria-label': q.student.name + ' 참가 빼기', onclick: function () { removeOne(p, q); } }));
+            people.appendChild(li);
+          });
+        } });
+        card.appendChild(toggle); card.appendChild(people);
+      }
+      if (live && editable && p.canCancel) {
+        var row = el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-top:8px' });
+        row.appendChild(el('button', { type: 'button', class: 'btn secondary row-btn', style: 'margin-top:0', text: '참가자 더하기', onclick: function () { addMore(p); } }));
+        row.appendChild(el('button', { type: 'button', class: 'btn secondary row-btn', style: 'margin-top:0', text: '프로그램 취소', onclick: function () { cancelWhole(p); } }));
+        card.appendChild(row);
+      }
+      return card;
+    }
+
+    function cancelWhole(p) {
+      UI.confirmWithReason({ title: '프로그램을 취소합니다', message: p.name + ' · ' + p.dateKo + '. 참가자 ' + p.count + '명의 사전 특이사항도 함께 취소됩니다(기록은 남습니다).', confirmText: '프로그램 취소', onconfirm: function (reason) {
+        call('cancelProgram', p.id, reason).then(function (r) {
+          if (!r.ok) { UI.toast(r.error, { kind: 'warn', ms: 5000 }); draw(); return; }
+          UI.toast('취소했습니다. 특이사항 ' + r.canceledExceptions + '건도 함께 취소되었습니다.', { kind: 'ok', ms: 4000 }); draw();
+        }).catch(fail);
+      } });
+    }
+
+    function removeOne(p, q) {
+      UI.confirmWithReason({ title: '참가에서 뺍니다', message: q.student.name + ' 학생을 "' + p.name + '"에서 뺍니다. 그 학생의 사전 특이사항도 취소됩니다.', confirmText: '빼기', onconfirm: function (reason) {
+        call('removeProgramStudent', p.id, q.studentId, reason).then(function (r) {
+          if (!r.ok) { UI.toast(r.error, { kind: 'warn', ms: 5000 }); draw(); return; }
+          UI.toast('뺐습니다.', { kind: 'ok', ms: 3000 }); draw();
+        }).catch(fail);
+      } });
+    }
+
+    function addMore(p) {
+      var sheet = null, ids = [], busy = false;
+      var holder = el('div', {}, [el('div', { class: 'muted', text: '불러오는 중…' })]);
+      sheet = UI.bottomSheet({ title: '참가자 더하기', content: holder, actions: [
+        { text: '돌아가기', kind: 'secondary', onclick: function () { sheet.close(); } },
+        { text: '더하기', kind: 'primary', disabled: true, onclick: function () { send(false); } }] });
+      sheet.open();
+      call('getProgramContext', p.date).then(function (c) {
+        clear(holder); holder.appendChild(studentMulti(c.students, function (list) { ids = list; sheet.buttons[1].disabled = busy || !list.length; }));
+      }).catch(function (err) { sheet.close(); fail(err); });
+      function send(confirmed) {
+        if (busy) return; busy = true; sheet.buttons[1].disabled = true;
+        call('addProgramStudents', p.id, ids, confirmed).then(function (r) {
+          busy = false;
+          if (r.needsConfirm) {
+            sheet.close();
+            UI.confirmSheet({ title: '확인해 주세요', lead: p.name, lines: r.warnings, confirmText: '그래도 더하기', onconfirm: function () {
+              call('addProgramStudents', p.id, ids, true).then(function (r2) { if (!r2.ok) { UI.toast((r2.errors && r2.errors[0].message) || r2.error || '더하지 못했습니다.', { kind: 'warn', ms: 5000 }); } else UI.toast(r2.count + '명을 더했습니다.', { kind: 'ok', ms: 3000 }); draw(); }).catch(fail);
+            } });
+            return;
+          }
+          if (!r.ok) { sheet.buttons[1].disabled = !ids.length; UI.toast((r.errors && r.errors[0].message) || r.error || '더하지 못했습니다.', { kind: 'warn', ms: 5000 }); return; }
+          sheet.close(); UI.toast(r.count + '명을 더했습니다.' + (r.skipped ? ' (이미 참가 중 ' + r.skipped + '명은 건너뜀)' : ''), { kind: 'ok', ms: 3000 }); draw();
+        }).catch(function (err) { busy = false; sheet.buttons[1].disabled = !ids.length; fail(err); });
+      }
+    }
+
+    call('getProgramContext', '').then(function (c) { canEdit = !!c.canEdit; draw(); }).catch(function (err) { clear(body); showError(body, err); });
+  }
+</script>

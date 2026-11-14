@@ -8,8 +8,10 @@
  * - (S4-0, 결정 75·76) 서류 종류 6가지 + 2027 1학기 학생별 제출 표시(일부 미제출·해당없음),
  *   프로그램 1개(4/7 '가짜 파워클래스', 그날 학사생 전원 = 30명대) + 참가자 + 참가자마다 '학사 내 프로그램' 사전 특이사항,
  *   가짜 전화번호(학생 010-0000-1xxx, 보호자 010-0000-2xxx)와 보호자 이름. 실제와 겹치지 않는 형식만.
- *   ASSUMPTION: 프로그램 특이사항의 모양(group_id = 프로그램 id, 확정, 요청자 = 출결 담당)은 C28이 정하면 맞춘다.
- * 방학 중식은 R19 뒤. 120명대 프로그램은 리허설(학생 100명 이상)에서 만든다.
+ *   프로그램 특이사항의 모양은 C28(#173)과 같다: 묶음 id는 참가자마다 새로, 사유 '프로그램: 이름', 확정, 만든 사람 = 요청·확정자.
+ * - (R19, 결정 73) 2027 여름방학(테스트) 기간 + 등록(1학기 끝날 학사생 그대로) + 중식 신청: 셋 중 둘은 방학 시작일부터 실시,
+ *   그중 한 명은 방학 중(7/21 수 10:00) 미실시 신청 → 다음 주 월요일. 적용일은 mealPlanChange_로 계산한다.
+ * 120명대 프로그램은 리허설(학생 100명 이상)에서 만든다.
  */
 var FAKE4_MEMO = '가짜 데이터(4단계 추가 입실)';
 var FAKE4_HOLIDAYS = ['2027-05-05', '2027-06-03'];
@@ -19,6 +21,34 @@ var FAKE4_DOC_TYPES = ['입실 동의서', '학부모 개인정보 동의', '자
 var FAKE4_PROGRAM = { name: '가짜 파워클래스', date: '2027-04-07', blocks: '20:00-22:00' };
 var FAKE4_EX_TYPE = '학사 내 프로그램(파워클래스·면접특강 등)';
 var FAKE4_BY = 'fake.teacher3@example.com';   // 출결 담당(FakeData의 가짜교사3)
+var FAKE4_VACATION = { id: 'a3a3a3a3-0000-4000-8000-000000000003', name: '2027 여름방학(테스트)', type: '방학',
+  start_date: '2027-07-19', end_date: '2027-08-13', memo: '가짜 데이터' };
+
+/**
+ * 순수: 방학 기간·등록·중식 행(R19). changes = 지금 status_changes(학사 상태 판정·중식 계획에 쓴다),
+ * termEnrollments = 1학기 등록 행(정렬) → {term, enrollments, lunch}
+ */
+function buildFakeStage4Vacation_(term1, termEnrollments, changes) {
+  var v = FAKE4_VACATION;
+  var stay = termEnrollments.filter(function (e) { return statusOn_(changes, e.student_id, '학사', term1.end_date) === '입실'; });
+  var enrollments = stay.map(function (e, i) {
+    return { id: fakeId_('f9c00000', i + 1), term_id: v.id, student_id: e.student_id, teacher_email: e.teacher_email, veritas: e.veritas,
+      commute_type: e.commute_type, end_type: '', memo: '가짜 데이터' };
+  });
+  var lunch = [], all = changes.slice();
+  var add = function (sid, value, at, today) {
+    var plan = mealPlanChange_(all, sid, '중식', value, at, { today: today, vacation: v });
+    if (!plan.date) throw new Error('가짜 중식 계획 오류: ' + sid + ' ' + value);
+    var row = { id: fakeId_('f9d00000', lunch.length + 1), student_id: sid, item: '중식', value: value, requested_at: at,
+      effective_date: plan.date, effective_date_auto: plan.date, reason: '가짜: 방학 중식', doc_submitted: 'TRUE',
+      linked_change_id: '', source: 'F7', status: '유효', memo: '가짜 데이터', cancel_reason: '' };
+    lunch.push(row); all.push(row);
+  };
+  var eaters = stay.filter(function (e, i) { return i % 3 !== 2; }).map(function (e) { return e.student_id; });
+  eaters.forEach(function (sid) { add(sid, '실시', '2027-07-12T10:00:00', '2027-07-12'); });
+  add(eaters[0], '미실시', '2027-07-21T10:00:00', '2027-07-21');
+  return { term: v, enrollments: enrollments, lunch: lunch, eaters: eaters };
+}
 
 /**
  * 순수: 서류·프로그램·전화(S4-0). termStudentIds = 이번 기간 등록 학생 id(정렬), programIds = 프로그램 날 학사생 id(정렬),
@@ -43,8 +73,8 @@ function buildFakeStage4Contacts_(term, termStudentIds, programIds, students, gu
   var participants = [], exceptions = [];
   programIds.forEach(function (sid, i) {
     var eid = fakeId_('f9b00000', i + 1);
-    exceptions.push({ id: eid, term_id: term.id, group_id: pid, student_id: sid, date: FAKE4_PROGRAM.date, blocks: FAKE4_PROGRAM.blocks,
-      type: FAKE4_EX_TYPE, reason: FAKE4_PROGRAM.name, status: '확정', requested_by: FAKE4_BY, requested_at: '2027-04-05T09:00:00',
+    exceptions.push({ id: eid, term_id: term.id, group_id: fakeId_('f9e00000', i + 1), student_id: sid, date: FAKE4_PROGRAM.date, blocks: FAKE4_PROGRAM.blocks,
+      type: FAKE4_EX_TYPE, reason: '프로그램: ' + FAKE4_PROGRAM.name, status: '확정', requested_by: FAKE4_BY, requested_at: '2027-04-05T09:00:00',
       confirmed_by: FAKE4_BY, confirmed_at: '2027-04-05T09:00:00', cancel_reason: '' });
     participants.push({ id: fakeId_('f9a00000', i + 1), program_id: pid, student_id: sid, exception_id: eid, status: '유효' });
   });
@@ -151,6 +181,22 @@ function seedFakeStage4() {
       bulkUpdateRecords_(pair[0], todo, owner);
       lines.push(pair[0] + ' 연락처 ' + todo.length);
     });
+    // 방학 중식(R19): 방학 기간과 겹치는 다른 운영 기간이 있으면 쓰지 않는다
+    invalidate_('db', 'terms');
+    var v = FAKE4_VACATION;
+    var overlap = readAll_('terms').filter(function (t) { return t.id !== v.id && t.start_date <= v.end_date && t.end_date >= v.start_date; });
+    if (overlap.length) throw new Error('가짜 여름방학 날짜에 다른 운영 기간이 있어 쓰지 않습니다: ' + overlap.map(function (t) { return t.name; }).join(', '));
+    ['enrollments', 'status_changes'].forEach(function (t) { invalidate_('db', t); });
+    var vac = buildFakeStage4Vacation_(data.term,
+      readAll_('enrollments').filter(function (e) { return e.term_id === data.term.id; }).sort(function (a, b) { return a.student_id < b.student_id ? -1 : 1; }),
+      readAll_('status_changes').filter(function (c) { return c.item !== '중식' || c.memo !== '가짜 데이터'; }));
+    [['terms', [vac.term]], ['enrollments', vac.enrollments], ['status_changes', vac.lunch]].forEach(function (pair) {
+      invalidate_('db', pair[0]);
+      var fresh = fake1OnlyNew_(pair[1], readAll_(pair[0]));
+      bulkAppend_(pair[0], fresh, owner);
+      lines.push((pair[0] === 'status_changes' ? '중식' : pair[0] === 'terms' ? '방학' : '방학 등록') + ' +' + fresh.length);
+    });
+    ensureTermSheets_([]);
     var msg = '가짜 4단계 데이터: ' + lines.join(', ') + (hasHoliday ? ' (휴일 블록은 이미 있어 그대로)' : '');
     console.log(msg);
     return msg;

@@ -418,8 +418,10 @@ def('meal-confirm', 'F7 급식', 'F7-1 급식 변경 확인창', { sheet: true }
   m.appendChild(card('학생', [studentPick('', 'ㄱㄱㅇ')]));
   UI.confirmSheet({ title: '급식 변경을 저장합니다', lead: '3월 8일(월)부터 석식 미실시', lines: ['1. 김가온 · 석식(학사)', '수요일 11:30 전 신청이라 다음 주 월요일부터 적용됩니다', '서류 미제출로 기록됩니다'], confirmText: '변경 신청' });
 });
-function mealTable(split) {
+var LUNCH_V = { '여1': 3, '여2': 3, '여3': 2, '여 합계': 8, '남1': 5, '남2': 6, '남3': 4, '남 합계': 15, '1학년': 8, '2학년': 9, '3학년': 6, '전체': 23 };   // 방학 날짜의 중식(D8 픽스처와 같다)
+function mealTable(split, lunch) {
   var heads = split ? ['학년·성별', '학사', '기숙', '비기숙', '조식', '석식 학사', '석식 일반'] : ['학년·성별', '학사', '기숙', '비기숙', '조식', '석식'];
+  if (lunch) heads.splice(5, 0, '중식');   // 조식 다음
   var rows = [
     ['여1', 4, 3, 1, 3, 4, 0], ['여2', 3, 3, 0, 3, 3, 0], ['여3', 3, 2, 1, 2, 3, 0],
     ['남1', 7, 5, 2, 5, 7, 0], ['남2', 7, 6, 1, 6, 5, 2], ['남3', 6, 5, 1, 4, 5, 1],
@@ -432,26 +434,28 @@ function mealTable(split) {
     var cells = [el('th', { scope: 'row', text: r[0] })];
     var vals = r.slice(1, 7);
     var show = split ? vals : vals.slice(0, 4).concat([vals[4] + vals[5]]);
+    if (lunch) show = show.slice(0, 4).concat([LUNCH_V[r[0]]]).concat(show.slice(4));
     show.forEach(function (v) { cells.push(el('td', { text: String(v) })); });
     return el('tr', { class: total ? 'total' : '' }, cells);
   }));
-  return el('div', { class: 'tablewrap' }, [el('table', { class: 'data' }, [thead, tbody])]);
+  return el('div', { class: 'tablewrap' }, [el('table', { class: lunch ? 'data compact' : 'data' }, [thead, tbody])]);
 }
-function mealCount(root, split) {
+function mealCount(root, split, lunch) {
   var m = frame(root, { title: '식수 집계', who: '관리자', bar: [{ text: '급식실 양식으로 출력' }],
     note: '시안 · 합계 줄은 굵은 글씨 + 회색 바탕(색만으로 구분하지 않음). 휴대폰에서는 표 안에서만 가로로 밀고 첫 열은 고정. 숫자는 가짜.' });
-  m.appendChild(row([el('button', { type: 'button', class: 'btn secondary', text: '‹' }), el('b', { text: '3월 3일(수)', style: 'flex:1;text-align:center' }), el('button', { type: 'button', class: 'btn secondary', text: '›' })], 'margin-bottom:4px'));
-  m.appendChild(el('div', { class: 'muted', style: 'text-align:center;margin-bottom:12px', text: '2027 1학기 · 이 날 자습 운영' }));
+  m.appendChild(row([el('button', { type: 'button', class: 'btn secondary', text: '‹' }), el('b', { text: lunch ? '7월 21일(수)' : '3월 3일(수)', style: 'flex:1;text-align:center' }), el('button', { type: 'button', class: 'btn secondary', text: '›' })], 'margin-bottom:4px'));
+  m.appendChild(el('div', { class: 'muted', style: 'text-align:center;margin-bottom:12px', text: (lunch ? '2027 여름방학' : '2027 1학기') + ' · 이 날 자습 운영' }));
   m.appendChild(UI.segmented({ options: [{ value: 'sum', label: '석식 합계' }, { value: 'split', label: '석식 나눠 보기' }], value: split ? 'split' : 'sum', onchange: function () {} }));
-  m.appendChild(mealTable(split));
+  m.appendChild(mealTable(split, lunch));
   m.appendChild(el('div', { class: 'muted', style: 'margin:-4px 0 12px', text: '표는 옆으로 밀 수 있습니다(첫 열은 고정).' }));
-  m.appendChild(el('div', { class: 'notice info', text: '신청 기준 인원입니다(결석·외박은 반영하지 않습니다).' }));
+  m.appendChild(el('div', { class: 'notice info', text: '신청 기준 인원입니다(결석·외박은 반영하지 않습니다).' + (lunch ? ' 중식은 방학 기간에만 집계합니다.' : '') }));
   m.appendChild(card('', [
     row([el('span', { text: '퇴실 후 석식 유지' }), el('b', { text: '1명' })], 'justify-content:space-between'),
     el('div', { class: 'muted', text: '학사 퇴실했지만 석식 중단일 전이라 학사 석식에 포함됩니다.' }),
     row([el('a', { href: '#', class: 'btn secondary', text: '서류 미제출 2명 ▸' })], 'margin-top:8px')]));
 }
 def('mealcount', 'F7 급식', 'F7-2 식수 집계 (석식 합계)', {}, function (root) { mealCount(root, false); });
+def('mealcount-vacation', 'F7 급식', 'F7-2 식수 집계 (방학 날짜: 중식 열)', {}, function (root) { mealCount(root, false, true); });
 def('mealcount-split', 'F7 급식', 'F7-2 식수 집계 (석식 나눠 보기)', {}, function (root) { mealCount(root, true); });
 
 /* ═════════ 실행 ═════════ */

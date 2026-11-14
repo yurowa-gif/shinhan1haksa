@@ -78,6 +78,7 @@ var SCREENS = {
   moves: { file: 'ui/screen_moves', title: '입퇴실·급식', view: 'status.list' },
   mealcount: { file: 'ui/screen_mealcount', title: '식수 집계', view: 'meal.count' },
   rooms: { file: 'ui/screen_rooms', title: '방 배정', view: 'room.view' },
+  programs: { file: 'ui/screen_programs', title: '학사 프로그램', view: 'program.view' },
   docs: { file: 'ui/screen_docs', title: '서류 체크리스트', view: 'doc.view' },
   contacts: { file: 'ui/screen_contacts', title: '연락처', view: 'contact.list' }
 };
