@@ -126,3 +126,22 @@ test('식수 집계 xlsx: 방학이면 조식 뒤에 중식 열(값 = 화면과 
   const screenAll = call(s.env, OWNER, 'getMealCounts', '2027-07-20').rows.find((r) => r.key === '전체');
   assert.ok(new RegExp('\\|전체\\|[^\\n]*\\|' + Number(screenAll.breakfast) + '\\|' + Number(screenAll.lunch) + '\\|').test(vac), '전체 줄 조식·중식');
 });
+
+test('식수 집계 PDF: 방학 날짜의 렌더 HTML에는 중식 열이 있고 학기 날짜에는 없다(화면·xlsx와 같은 기준 hasLunch)', () => {
+  const s = seeded();
+  const sid = s.mine[0];
+  const p = call(s.env, HALL, 'previewMealChange', input(sid, 'l_on'));
+  call(s.env, HALL, 'saveMealChange', input(sid, 'l_on'), p.expect);
+  const html = (date) => s.env.as(OWNER, (c) => {
+    c.sheetMakePdf_ = (h) => { c.__h = h; return { getBytes: () => [1, 2, 3] }; };
+    const r = c.getMealCountsPdf(date);
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+    return c.__h;
+  });
+  const vac = html('2027-07-20'), sem = html('2027-04-05');
+  assert.ok(/>중식</.test(vac) && vac.includes('중식은 방학 기간에만 집계합니다'), '방학 PDF에 중식 열·안내');
+  assert.ok(!/중식/.test(sem), '학기 PDF에는 없다');
+  // 화면·xlsx와 같은 기준
+  assert.strictEqual(call(s.env, OWNER, 'getMealCounts', '2027-07-20').hasLunch, true);
+  assert.strictEqual(call(s.env, OWNER, 'getMealCounts', '2027-04-05').hasLunch, false);
+});
