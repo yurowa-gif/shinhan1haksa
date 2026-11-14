@@ -71,15 +71,21 @@ function batPlan_(rec, d, batchId) {
   return { term: d.term, all: all, targets: targets, plan: plan };
 }
 
+/** 긴 서명(대상·계획 전체)을 SHA-256 16진수 64자로 줄인다 — 180명이어도 화면과 서버 사이에 짧은 expect만 오간다(비교 방식은 같다). */
+function batDigest_(text) {
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, text, Utilities.Charset.UTF_8);
+  return bytes.map(function (b) { return ('0' + (b < 0 ? b + 256 : b).toString(16)).slice(-2); }).join('');
+}
+
 function batSignature_(batchId, c) {
-  return JSON.stringify({ b: batchId, t: c.targets.slice().sort(),
+  return batDigest_(JSON.stringify({ b: batchId, t: c.targets.slice().sort(),
     p: c.plan.plans.map(function (p) { return [p.studentId, p.type, p.rows.map(function (r) { return [r.item, r.value, r.effective_date, r.source]; }), p.toCancel.map(function (x) { return x.id; }).sort(), p.toRestore.map(function (x) { return x.id; }).sort()]; }),
-    s: c.plan.skipped.map(function (x) { return [x.studentId, x.reason]; }) });
+    s: c.plan.skipped.map(function (x) { return [x.studentId, x.reason]; }) }));
 }
 
 function batExpect_(batchId, sig) { return JSON.stringify({ b: batchId, s: sig }); }
 function batParseExpect_(expect) {
-  try { var o = JSON.parse(String(expect || '')); if (o && /^[0-9a-fA-F-]{8,64}$/.test(String(o.b || '')) && typeof o.s === 'string') return o; } catch (e) { /* 아래 */ }
+  try { var o = JSON.parse(String(expect || '')); if (o && /^[0-9a-fA-F-]{8,64}$/.test(String(o.b || '')) && /^[0-9a-f]{64}$/.test(String(o.s || ''))) return o; } catch (e) { /* 아래 */ }
   return null;
 }
 
@@ -213,7 +219,7 @@ function batUndoCheck_(batchId) {
 }
 
 function batUndoSignature_(c) {
-  return JSON.stringify({ b: c.id, p: c.undo.plans.map(function (p) { return [p.studentId, p.headId, p.toCancel.map(function (x) { return x.id; }).sort(), p.toRestore.map(function (x) { return x.id; }).sort()]; }) });
+  return batDigest_(JSON.stringify({ b: c.id, p: c.undo.plans.map(function (p) { return [p.studentId, p.headId, p.toCancel.map(function (x) { return x.id; }).sort(), p.toRestore.map(function (x) { return x.id; }).sort()]; }) }));
 }
 
 /** 되돌리기 확인: 몇 명이 되돌아가는지와 경고(재입실 기록도 함께 취소되는 학생 등). 아무것도 쓰지 않는다. */

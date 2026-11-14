@@ -516,6 +516,10 @@ function createGasEnv(opts) {
       base64EncodeWebSafe: (s) => Buffer.from(typeof s === 'string' ? s : Buffer.from(s)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_'),
       base64Decode: (s) => Array.from(Buffer.from(s, 'base64')).map((b) => (b > 127 ? b - 256 : b)),
       base64DecodeWebSafe: (s) => Array.from(Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64')).map((b) => (b > 127 ? b - 256 : b)),
+      // 해시(C26 일괄 퇴실 서명): 실제 Utilities.computeDigest처럼 부호 있는 byte[]를 돌려준다. 시험은 SHA_256·UTF_8만 쓴다
+      DigestAlgorithm: { MD5: 'md5', SHA_1: 'sha1', SHA_256: 'sha256', SHA_512: 'sha512' },
+      Charset: { UTF_8: 'UTF_8' },
+      computeDigest: (alg, value) => Array.from(require('crypto').createHash(alg).update(typeof value === 'string' ? Buffer.from(value, 'utf8') : Buffer.from(Array.from(value).map((b) => b & 255))).digest()).map((b) => (b > 127 ? b - 256 : b)),
       sleep: () => {},
       newBlob: (data, ct, name) => makeBlob(typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(Array.from(data).map((b) => b & 255)), ct, name),
       zip: (blobs, name) => makeBlob(zipStored(blobs), 'application/zip', name || 'archive.zip'),

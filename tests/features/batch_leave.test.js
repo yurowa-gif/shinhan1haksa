@@ -79,6 +79,9 @@ test('미리보기: 대상 목록(기숙사생은 학사 및 기숙사 퇴실)·
   assert.strictEqual(rowsAll(x).length, n);
   assert.strictEqual(x.env.rows('audit_log').length, audits, '미리보기는 audit도 쓰지 않는다');
   assert.notStrictEqual(preview(x).expect, p.expect, '미리보기마다 새 batchId');
+  const ex2 = JSON.parse(p.expect);
+  assert.ok(p.expect.length < 160 && /^[0-9a-f]{64}$/.test(ex2.s), 'expect는 batchId와 SHA-256 해시뿐이다(대상 목록·계획 전체가 화면을 오가지 않는다): ' + p.expect.length + '자');
+  assert.ok(!p.list.some((l) => p.expect.includes(l.id)), 'expect에 학생 id가 없다');
 });
 
 test('저장: 학생마다 대표 행 1개(학사 퇴실, memo [일괄] id, 서류 표시·사유)와 연결 행, 기숙사생은 기숙사 퇴실도, 석식 정리, 다른 학년은 그대로, 쓰기는 한 번(bulk_create 1줄)', () => {
@@ -135,6 +138,7 @@ test('stale: 미리보기 뒤에 대상 학생이 따로 퇴실 처리되면 저
   assert.strictEqual(p2.count, p.count - 1, '이미 퇴실한 학생은 대상에서 빠진다');
   assert.strictEqual(call(x, ADMIN, 'saveBatchLeave', input(), p2.expect).ok, true);
   assert.strictEqual(call(x, ADMIN, 'saveBatchLeave', input(), 'broken').stale, true, '깨진 expect');
+  assert.strictEqual(call(x, ADMIN, 'saveBatchLeave', input(), JSON.stringify({ b: JSON.parse(p2.expect).b, s: 'x'.repeat(64) })).stale, true, '해시 모양이 아닌 expect');
   assert.strictEqual(call(x, ADMIN, 'saveBatchLeave', input(), '').stale, true);
 });
 
