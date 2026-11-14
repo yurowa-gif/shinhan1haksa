@@ -14,19 +14,23 @@ function table(name, rows, fn) {
 const eff = (kind, at, opts) => plain(ctx.mealEffectiveDate_(kind, at, opts || {}));
 
 // plan 2절 R6 시험 표(2027-03-01은 월요일) — 시각은 아무 때나(미실시는 시각과 무관)
-table('미실시: 월·화 신청 → 다음 주 월요일, 수~일 → 다다음 주 월요일(요일 7개 + 연말)', [
+table('미실시(결정 71): 수요일 11:30 전 신청 → 다음 주 월요일, 수요일 11:30부터 일요일까지 → 다다음 주 월요일(요일 7개 + 수요일 경계 + 연말)', [
   ['2027-03-01T09:00:00', '2027-03-08', 'next_monday'],       // 월
   ['2027-03-02T23:59:59', '2027-03-08', 'next_monday'],       // 화
-  ['2027-03-03T00:00:00', '2027-03-15', 'monday_after_next'], // 수
+  ['2027-03-03T00:00:00', '2027-03-08', 'next_monday'],       // 수 마감 전
+  ['2027-03-03T11:29:59', '2027-03-08', 'next_monday'],       // 수 마감 1초 전
+  ['2027-03-03T11:30:00', '2027-03-15', 'monday_after_next'], // 수 마감 정각 = 뒤
+  ['2027-03-03T18:00:00', '2027-03-15', 'monday_after_next'], // 수 오후
   ['2027-03-04T11:29:59', '2027-03-15', 'monday_after_next'], // 목
   ['2027-03-05T11:30:00', '2027-03-15', 'monday_after_next'], // 금
   ['2027-03-06T15:00:00', '2027-03-15', 'monday_after_next'], // 토
   ['2027-03-07T21:00:00', '2027-03-15', 'monday_after_next'], // 일(월~일 주의 마지막 날)
-  ['2026-12-30T10:00:00', '2027-01-11', 'monday_after_next'], // 수, 연말을 넘김
+  ['2026-12-30T10:00:00', '2027-01-04', 'next_monday'],       // 수 마감 전, 연말을 넘김
+  ['2026-12-30T12:00:00', '2027-01-11', 'monday_after_next'], // 수 마감 뒤, 연말을 넘김
   ['2026-12-29T10:00:00', '2027-01-04', 'next_monday'],       // 화, 연말을 넘김
   ['2027-01-03T10:00:00', '2027-01-11', 'monday_after_next'], // 일 → 그 주 월요일(2026-12-28) + 14
   ['2028-02-21T10:00:00', '2028-02-28', 'next_monday'],       // 윤년 2월
-  ['2028-02-23T10:00:00', '2028-03-06', 'monday_after_next'], // 2월 29일을 넘김
+  ['2028-02-23T13:00:00', '2028-03-06', 'monday_after_next'], // 수 마감 뒤, 2월 29일을 넘김
   ['2028-02-29T10:00:00', '2028-03-06', 'next_monday']        // 윤일(화)
 ], ([at, date, rule]) => assert.deepStrictEqual(eff('stop', at), { date, rule }));
 
@@ -48,10 +52,11 @@ table('실시·일반 석식으로 변경: 11:30 전 당일, 11:30:00부터 다�
   ['to_general', '2027-03-06T13:00:00', '2027-03-07', 'next_day'] // 토요일 신청도 같은 규칙
 ], ([kind, at, date, rule]) => assert.deepStrictEqual(eff(kind, at), { date, rule }));
 
-test('마감 시각 설정을 바꿀 수 있다(meal.morning_cutoff), 잘못된 마감은 Error', () => {
+test('마감 시각 설정을 바꿀 수 있다(meal.morning_cutoff — 실시 마감과 미실시 수요일 마감 모두), 잘못된 마감은 Error', () => {
   assert.deepStrictEqual(eff('start', '2027-03-03T11:45:00', { cutoff: '12:00' }), { date: '2027-03-03', rule: 'same_day' });
   assert.deepStrictEqual(eff('start', '2027-03-03T12:00:00', { cutoff: '12:00' }), { date: '2027-03-04', rule: 'next_day' });
   assert.deepStrictEqual(eff('start', '2027-03-03T11:29:59', { cutoff: '' }), { date: '2027-03-03', rule: 'same_day' });
+  assert.deepStrictEqual(eff('stop', '2027-03-03T11:45:00', { cutoff: '12:00' }), { date: '2027-03-08', rule: 'next_monday' });   // 미실시 수요일 마감도 같은 설정(결정 71)
   for (const bad of ['11시', '24:00', '11:60', 1130, '11:30:15']) assert.throws(() => eff('start', '2027-03-03T10:00:00', { cutoff: bad }), String(bad));
   // 설정을 손으로 고친 흔한 표기도 읽는다
   assert.deepStrictEqual(eff('start', '2027-03-03T09:29:59', { cutoff: '9:30' }), { date: '2027-03-03', rule: 'same_day' });
@@ -158,11 +163,11 @@ test('흐름: 퇴실(3/15) 미리 입력 → 3/5 조식 실시 신청 — F6 중
   assert.strictEqual(ctx.statusOn_(rows, 's1', '조식', '2027-03-16'), '미실시');
 });
 
-test('흐름: 수요일 미실시 신청(다다음 주 월요일 대기) 뒤 목요일에 학사 석식으로 되돌리면 대기 행을 취소해 되돌리기가 이긴다', () => {
+test('흐름: 수요일 오후 미실시 신청(다다음 주 월요일 대기, 결정 71) 뒤 목요일에 학사 석식으로 되돌리면 대기 행을 취소해 되돌리기가 이긴다', () => {
   let rows = [CH('석식', '학사 석식', '2027-03-02')];
-  const r1 = plan(rows, '석식', '미실시', '2027-03-03T10:00:00', { today: '2027-03-03' });
+  const r1 = plan(rows, '석식', '미실시', '2027-03-03T13:00:00', { today: '2027-03-03' });
   assert.deepStrictEqual([r1.kind, r1.date], ['stop', '2027-03-15']);
-  rows = rows.concat([CH('석식', '미실시', r1.date, { source: 'F7', requested_at: '2027-03-03T10:00:00' })]);
+  rows = rows.concat([CH('석식', '미실시', r1.date, { source: 'F7', requested_at: '2027-03-03T13:00:00' })]);
   // 목요일: 그날(3/4) 실제 값은 아직 '학사 석식'이라 'none' — 되돌리기는 대기 행 취소로 한다
   const r2 = plan(rows, '석식', '학사 석식', '2027-03-04T10:00:00', { today: '2027-03-04' });
   assert.strictEqual(r2.kind, 'none');
@@ -194,7 +199,7 @@ test('학사 퇴실과 함께 만드는 석식 변경: 퇴실일보다 이르지
   assert.deepStrictEqual(eff('to_general', '2027-03-03T10:00:00', { leaveDate: '2027-03-15' }), { date: '2027-03-15', rule: 'leave_date' });
   assert.deepStrictEqual(eff('stop', '2027-03-01T10:00:00', { leaveDate: '2027-03-15' }), { date: '2027-03-15', rule: 'leave_date' });
   // 퇴실일이 계산값보다 이르면 계산값(미실시 규칙) 그대로 — 결정 35: 조식만 퇴실일에 끝나고 학사 석식은 미실시 규칙대로
-  assert.deepStrictEqual(eff('stop', '2027-03-03T10:00:00', { leaveDate: '2027-03-05' }), { date: '2027-03-15', rule: 'monday_after_next' });
+  assert.deepStrictEqual(eff('stop', '2027-03-03T13:00:00', { leaveDate: '2027-03-05' }), { date: '2027-03-15', rule: 'monday_after_next' });
   assert.deepStrictEqual(eff('to_general', '2027-03-03T13:00:00', { leaveDate: '2027-03-03' }), { date: '2027-03-04', rule: 'next_day' });
   assert.throws(() => eff('stop', '2027-03-03T10:00:00', { leaveDate: '2027-02-30' }));
 });
@@ -328,7 +333,7 @@ test('퇴실 기록보다 뒤에 신청한 학사 석식은 막는다', () => {
 
 test('퇴실 정리(F6) 행은 superseded 판정의 "더 새 신청"이 아니다', () => {
   const rows = saveLeave([CH('학사', '입실', '2027-03-01'), CH('조식', '실시', '2027-03-01')], '2027-03-10', '2027-03-08T10:00:00');
-  const p = plan(rows, '조식', '미실시', '2027-03-03T09:00:00', { today: '2027-03-09' });   // 늦게 입력한 3/3(수) 미실시 → 3/15
+  const p = plan(rows, '조식', '미실시', '2027-03-03T13:00:00', { today: '2027-03-09' });   // 늦게 입력한 3/3(수) 오후 미실시 → 3/15(결정 71)
   assert.strictEqual(p.superseded, false);
   assert.strictEqual(p.date, '2027-03-15');
 });
@@ -389,8 +394,8 @@ test('statusOn_: 달력에 없는 적용일(2027-02-30)은 무시', () => {
 
 table('수동 적용일: 자동보다 이른 날·늦은 날·오늘 이전 모두 받고, autoDate는 규칙 계산값', [
   // [신청 일시, 오늘, 수동 날짜, 자동 날짜]
-  ['2027-03-03T09:00:00', '2027-03-03', '2027-03-03', '2027-03-15'],   // 미실시 자동 3/15보다 이름
-  ['2027-03-03T09:00:00', '2027-03-03', '2027-03-20', '2027-03-15'],   // 늦음
+  ['2027-03-03T13:00:00', '2027-03-03', '2027-03-03', '2027-03-15'],   // 미실시 자동 3/15보다 이름
+  ['2027-03-03T13:00:00', '2027-03-03', '2027-03-20', '2027-03-15'],   // 늦음
   ['2027-03-01T09:00:00', '2027-03-05', '2027-03-02', '2027-03-08']    // 오늘(3/5) 이전 날짜(늦은 입력)
 ], ([at, today, manual, auto]) => {
   const rows = [CH('조식', '실시', '2027-03-01')];
@@ -434,7 +439,7 @@ test('수동 적용일 기준으로 toCancel·followUps·blocked를 계산한다
 
 test('autoDate는 늘 들어 있다: 고친 날이 없으면 date와 같고, blocked·superseded여도 규칙 계산값', () => {
   const rows = [CH('학사', '입실', '2027-03-01'), CH('조식', '실시', '2027-03-01')];
-  const p = plan(rows, '조식', '미실시', '2027-03-03T09:00:00', { today: '2027-03-03' });
+  const p = plan(rows, '조식', '미실시', '2027-03-03T13:00:00', { today: '2027-03-03' });
   assert.deepStrictEqual([p.date, p.autoDate], ['2027-03-15', '2027-03-15']);
   const newer = rows.concat([CH('조식', '실시', '2027-03-08', { requested_at: '2027-03-05T09:00:00' })]);   // 다른 값의 더 새 신청
   const sup = plan(newer, '조식', '미실시', '2027-03-02T09:00:00', { today: '2027-03-06' });
@@ -453,7 +458,7 @@ test('고친 일반 석식 날짜가 퇴실 정리 행(미실시@중단일)과 �
 });
 
 test('고친 날과 자동 날 사이에 있는 퇴실 정리 행도 취소한다(일반 석식 3/14 12:00 신청 → 자동 3/15, 고친 날 3/14, F6 미실시@3/15)', () => {
-  const left = saveLeave([CH('학사', '입실', '2027-03-01'), CH('석식', '학사 석식', '2027-03-01')], '2027-03-10', '2027-03-03T10:00:00');
+  const left = saveLeave([CH('학사', '입실', '2027-03-01'), CH('석식', '학사 석식', '2027-03-01')], '2027-03-10', '2027-03-03T13:00:00');
   const f6 = left.find((r) => r.item === '석식' && r.source === 'F6');
   assert.strictEqual(f6.effective_date, '2027-03-15');
   const p = plan(left, '석식', '일반 석식', '2027-03-14T12:00:00', { today: '2027-03-14', effectiveDate: '2027-03-14' });
@@ -471,15 +476,15 @@ test('P6: 퇴실 3/10 → 재입실 3/20 → 퇴실 4/5, 조식 실시(3/2 신�
 
 test('결정 52: 고친 미실시 날짜가 미실시 규칙의 날보다 이르거나 오늘보다 이르면 경고(허용)', () => {
   const rows = [CH('조식', '실시', '2027-03-01')];
-  const early = plan(rows, '조식', '미실시', '2027-03-03T09:00:00', { today: '2027-03-03', effectiveDate: '2027-03-05' });
+  const early = plan(rows, '조식', '미실시', '2027-03-03T13:00:00', { today: '2027-03-03', effectiveDate: '2027-03-05' });
   assert.ok(early.warnings.some((w) => /미실시 규칙의 날\(2027-03-15\)보다 이릅니다/.test(w)));
   const past = plan(rows, '조식', '미실시', '2027-03-01T09:00:00', { today: '2027-03-05', effectiveDate: '2027-03-02' });
   assert.ok(past.warnings.some((w) => /오늘보다 이릅니다/.test(w)));
-  assert.ok(!plan(rows, '조식', '미실시', '2027-03-03T09:00:00', { today: '2027-03-03', effectiveDate: '2027-03-20' }).warnings.some((w) => /이릅니다/.test(w)));
+  assert.ok(!plan(rows, '조식', '미실시', '2027-03-03T13:00:00', { today: '2027-03-03', effectiveDate: '2027-03-20' }).warnings.some((w) => /이릅니다/.test(w)));
 });
 
 test('R10 경계: 먼저 신청한 학사 석식도 고친 날 = 결정 35 중단일(3/15)이면 막힘, 하루 전(3/14)은 안 막힘', () => {
-  const left = saveLeave([CH('학사', '입실', '2027-03-01'), CH('석식', '미실시', '2027-03-01')], '2027-03-10', '2027-03-03T10:00:00');
+  const left = saveLeave([CH('학사', '입실', '2027-03-01'), CH('석식', '미실시', '2027-03-01')], '2027-03-10', '2027-03-03T13:00:00');
   assert.ok(plan(left, '석식', '학사 석식', '2027-03-02T09:00:00', { today: '2027-03-09', effectiveDate: '2027-03-15' }).blocked);
   assert.ok(!plan(left, '석식', '학사 석식', '2027-03-02T09:00:00', { today: '2027-03-09', effectiveDate: '2027-03-14' }).blocked);
 });
@@ -487,7 +492,7 @@ test('R10 경계: 먼저 신청한 학사 석식도 고친 날 = 결정 35 중�
 test('결정 52 경계: 고친 날 = 자동 날, 고친 날 = 오늘, 일반 석식인데 고친 날 < 자동 날이면 "이릅니다" 경고 없음', () => {
   const none = (p) => !p.warnings.some((w) => /이릅니다/.test(w));
   const rows = [CH('조식', '실시', '2027-03-01'), CH('석식', '미실시', '2027-03-01')];
-  const sameAuto = plan(rows, '조식', '미실시', '2027-03-03T09:00:00', { today: '2027-03-03', effectiveDate: '2027-03-15' });
+  const sameAuto = plan(rows, '조식', '미실시', '2027-03-03T13:00:00', { today: '2027-03-03', effectiveDate: '2027-03-15' });
   assert.deepStrictEqual([sameAuto.autoDate, none(sameAuto)], ['2027-03-15', true]);
   const today = plan([CH('조식', '미실시', '2027-03-01')], '조식', '실시', '2027-03-01T09:00:00', { today: '2027-03-05', effectiveDate: '2027-03-05' });   // 늦은 입력, 자동 3/1
   assert.deepStrictEqual([today.autoDate, none(today)], ['2027-03-01', true]);

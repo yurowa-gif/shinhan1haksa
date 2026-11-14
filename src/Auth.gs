@@ -51,6 +51,15 @@ function permissions_() {
     'room.view': { roles: ['admin', 'hall_teacher', 'attendance', 'duty_manager'] },
     'room.edit': { roles: ['admin', 'hall_teacher'] },
     'room.layout': { roles: ['admin'] },
+    // ── 4단계(결정 75·76, S4-0). 서류 체크리스트·프로그램·연락처. 학생·학부모·담임에게는 내보내지 않는다 ──
+    'doc.view': { roles: ['admin', 'hall_teacher', 'attendance'] },
+    'doc.edit': { roles: ['admin', 'hall_teacher'], scope: 'student' },
+    'doc.types': { roles: ['admin'] },
+    // 프로그램: 특강·체험학습은 학사 교사가 운영한다. 만든 사람과 상관없이 생기는 특이사항은 '확정'(학교가 정한 일정), 만든 이는 감사 기록에. 출결 담당은 목록에서 본다
+    'program.view': { roles: ['admin', 'attendance', 'hall_teacher'] },
+    'program.edit': { roles: ['admin', 'hall_teacher'] },
+    // 연락처(전화·보호자 이름): 그 학생의 담당교사·관리자·그날 근무교사만(hall_teacher + scope student). 출결·담임·근무표 담당자는 안 된다
+    'contact.view': { roles: ['admin', 'hall_teacher'], scope: 'student' },
     // ── 2단계(docs/plan/stage2.md 2절 "2단계 권한 키"). 학생·학부모는 3단계(F14)에서 연다 ──
     // 근무표(F3): 보기는 1학사 교사(담임만인 계정 제외), 편성은 관리자·근무표 담당자, 교대는 본인 칸(함수 안에서 확인), 기록표 파일은 관리자·근무표 담당자
     'duty.view': { roles: ['admin', 'duty_manager', 'hall_teacher', 'attendance'] },

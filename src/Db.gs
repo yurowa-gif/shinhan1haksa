@@ -51,12 +51,33 @@ function cellToString_(v) {
 }
 
 /**
+ * 개인 연락처 열(결정 76). readAll_는 이 열을 지운 행만 돌려준다 — 기존·새 코드가 응답·출력물·메일에 실수로 담을 수 없다.
+ * 값이 필요한 곳은 readContacts_ 하나뿐이고, 그것을 부르는 서버 함수는 contact.view를 첫 줄에서 통과한 뒤 학생별로 내보낸다.
+ * 감사 기록(writeAudit_)도 이 열의 값은 '(생략)'으로만 남긴다.
+ */
+var SENSITIVE_COLS = { students: ['phone'], guardian_links: ['name', 'phone'] };
+
+function sensitiveCols_(sheetName, kind) {
+  return (kind || 'db') === 'db' && Object.prototype.hasOwnProperty.call(SENSITIVE_COLS, sheetName) ? SENSITIVE_COLS[sheetName] : [];
+}
+
+/**
  * 탭 전체를 객체 배열로 읽는다. 키는 1행 헤더.
- * 각 객체에 _row(시트 행 번호)를 붙인다.
+ * 각 객체에 _row(시트 행 번호)를 붙인다. 개인 연락처 열(SENSITIVE_COLS)은 빠진다.
  */
 function readAll_(sheetName, kind) {
+  return readTab_(sheetName, kind, false);
+}
+
+/** 연락처 열을 포함한 행(내부 전용: 쓰기 함수·contact.view를 통과한 함수만). 이름 끝 _ — 브라우저에서 부를 수 없다 */
+function readContacts_(sheetName) {
+  return readTab_(sheetName, 'db', true);
+}
+
+function readTab_(sheetName, kind, withContacts) {
   kind = kind || 'db';
-  var key = kind + '/' + sheetName;
+  var hide = withContacts ? [] : sensitiveCols_(sheetName, kind);
+  var key = (withContacts ? 'raw:' : '') + kind + '/' + sheetName;
   if (_dbMemo.rows[key]) return _dbMemo.rows[key];
   var sh = getSheet_(kind, sheetName);
   var values = sh.getDataRange().getValues();
@@ -68,7 +89,7 @@ function readAll_(sheetName, kind) {
     if (row.every(function (c) { return c === '' || c === null; })) continue;
     var obj = { _row: r + 1 };
     for (var c = 0; c < headers.length; c++) {
-      if (headers[c]) obj[headers[c]] = cellToString_(row[c]);
+      if (headers[c] && hide.indexOf(headers[c]) < 0) obj[headers[c]] = cellToString_(row[c]);
     }
     out.push(obj);
   }
@@ -85,6 +106,7 @@ function findById_(sheetName, id, kind) {
 
 function invalidate_(kind, sheetName) {
   delete _dbMemo.rows[(kind || 'db') + '/' + sheetName];
+  delete _dbMemo.rows['raw:' + (kind || 'db') + '/' + sheetName];
 }
 
 /** 이 실행이 지금 스크립트 락을 갖고 있는지(중첩 호출 시 다시 잡거나 먼저 풀지 않도록) */
@@ -173,6 +195,11 @@ function updateRecord_(sheetName, id, patch, actorEmail, kind) {
     var before = findById_(sheetName, id, kind);
     if (!before) throw new Error('기록을 찾을 수 없습니다: ' + id);
     assertUniqueId_(sheetName, id, kind);
+    // 연락처 열은 readAll_에서 빠지므로, 줄 전체를 다시 쓸 때 지워지지 않게 그 줄의 원래 값을 쓴다
+    if (sensitiveCols_(sheetName, kind).length) {
+      var rawRow = readTab_(sheetName, kind, true).filter(function (r) { return r.id === id; })[0];
+      if (rawRow) before = rawRow;
+    }
     var sh = getSheet_(kind, sheetName);
     var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(cellToString_);
     var after = {};
@@ -201,8 +228,11 @@ function updateRecord_(sheetName, id, patch, actorEmail, kind) {
  * 그래서 옛 상담 글은 어디에도 남지 않는다: 상담 content·agreement는 제자리에서 고치지 말고 '취소' + 새 행으로 바로잡는다(결정 42).
  */
 function writeAudit_(sheetName, rowId, action, before, after, actorEmail, kind, detail) {
+  var hidden = sensitiveCols_(sheetName, kind);   // 개인 연락처 열은 값을 남기지 않는다(결정 76) — 바뀌었다는 표시만
   var mask = kind === 'counsel' ? function (k, v) {
     return (k === 'content' || k === 'agreement') && v ? '(내용 생략, ' + String(v).length + '자)' : v;
+  } : hidden.length ? function (k, v) {
+    return hidden.indexOf(k) >= 0 && v ? '(연락처 생략)' : v;
   } : null;
   appendRecord_('audit_log', {
     sheet: (kind && kind !== 'db' ? kind + '/' : '') + sheetName,

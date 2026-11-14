@@ -124,9 +124,9 @@ function reconcileAutoOuts_(exceptions, violations, opts)
         // opts = {autoTypes, ruleName:'무단 지각·결석·이탈', ruleId, per:'group'|'row', dutyByDate:{}, studentIds:[](선택),
         //         autoTypeSince:{유형:'yyyy-MM-ddTHH:mm:ss' 또는 [넓힌 시각…]}(선택, 설정을 넓혀 새로 자동 대상이 된 유형과 넓힌 시각 — 배열이면 넓힘 이력)}
         // → {toCreate, toCancel:[{violationId, reason}], toUpdate:[{violationId, patch}]}
-function outLevel_(violations, studentId, termId)   // {count, level:0|1|2, label:''|'1OUT'|'퇴실 대상'}
+function outLevel_(violations, studentId, termId, opts)   // {count, level:0|1|2, label:''|'1OUT'|'퇴실 대상'}, opts = {instantRuleIds:[]}(결정 69, 선택)
 function outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes)   // (R9) → {snapshot:{types, since, widened}, since, widened, changed}
-function outDismissalGate_(violations, notes, changes, studentId, termId, ymd)
+function outDismissalGate_(violations, notes, changes, studentId, termId, ymd, opts)   // opts = outLevel_과 같음
         // (R9) → {count, level, triggerOutId, meetingNote:{id,date,teacher_email}|null, alreadyLeft, ok, reason:''|'퇴실 대상 아님'|'면담 기록 필요'|'이미 퇴실'}
 
 // src/rules/MealRules.gs
@@ -232,7 +232,10 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, 
 - 교사가 직접 입력한 OUT(`source`가 `F1자동`이 아님)은 건드리지 않는다.
 - ASSUMPTION: 관리자가 직접 취소한 자동 OUT(`cancel_reason`이 `'[자동] '`으로 시작하지 않음)이 가리키던 특이사항 행, 또는 같은 묶음(**취소된 OUT의 학생** + group_id)의 행이 들어 있는 단위는, 그 OUT과 **학생·기간이 같으면** 다시 만들지 않는다(`per`를 바꿔도 같음).
 - ASSUMPTION(결정 22 적용): 같은 학생·같은 날·겹치는 블록에 다른 묶음의 자동 유형 특이사항 두 건이 확정되면 OUT도 두 건(→ 퇴실 대상이 될 수 있다). C5는 저장·확정 때 겹침 경고 후 확인을 받는다(막지는 않음).
-- `outLevel_`: 같은 학생·같은 `term_id`(학기마다 초기화)에서 status 빈칸·`유효`인 OUT 수(직접·자동 모두). 2개 이상이면 `level:2`, `'퇴실 대상'`.
+- `outLevel_`: 같은 학생·같은 `term_id`(학기마다 초기화)에서 status 빈칸·`유효`인 OUT 수(직접·자동 모두). 2 이상이면 `level:2`, `'퇴실 대상'`.
+- **즉시 퇴실 항목(결정 69):** `opts.instantRuleIds`(violation_rules `id` 목록)에 `rule_id`가 있는 OUT 한 건은 **2로 센다** — `count`는 OUT 수의 합이라 그 한 건만으로 `level:2`. 취소된 OUT은 세지 않는다(다른 OUT과 같음). `outDismissalGate_`의 `triggerOutId`는 시간순으로 합이 처음 2가 되는 OUT(즉시 항목이면 그 한 건), 면담 날짜도 그 OUT 발생일 이후. opts를 주지 않으면 지금과 같다.
+  - **설정 계약(코딩B):** `settings` 탭(시트 구조 변경 없음) 키 `out.instant_rule_ids`, 값 = 즉시 퇴실 항목의 violation_rules `id`를 쉼표로(빈칸·없음 = 즉시 항목 없음). 관리자 설정 화면에서 violation_rules 이름을 골라 id로 저장한다. OUT 단계를 보이는 곳(`Outs.gs` getOutContext·listOuts·saveOut 결과, `AutoOuts.gs` 단계 알림, `Counsel.gs`·`Outs.gs`의 `outDismissalGate_`)은 모두 이 값을 읽어 `{instantRuleIds}`로 넘긴다 — 한 곳만 넘기면 화면마다 단계가 달라진다. `rule_id`가 빈 OUT(자동 OUT의 rule_id는 R-AUTO 행)은 1로 센다.
+  - ASSUMPTION(선생님 질문 후보): 설정은 **지금 값**으로 센다 — 이번 기간에 이미 있는 그 항목 OUT도 설정에 넣는 순간 2로 센다(소급). 자동 OUT 설정처럼 '넣은 뒤부터만'으로 하려면 저장 때 무게를 남길 칸이 필요하다(시트 구조 변경).
 - 이 파일은 DateRules(`ymdIsValid_`·`ruleStr_`·`ruleIso_`·`ruleRowLive_`)·AttendanceRules(`attTypeBase_`·`parseBlockSpec_`)를 부른다. 테스트는 세 파일을 함께 올린다.
 
 ## 동작 메모(R6, 2026-11-07, 총괄 검토 3차 반영)
@@ -243,7 +246,7 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, 
 
 - `mealEffectiveDate_(kind, requestedAt, opts)` → `{date, rule}`. `rule`: `same_day`·`next_day`·`next_monday`·`monday_after_next`·`entry_date`·`leave_date`·`initial`.
   - `start`·`to_general`: 신청 일시(KST)가 마감(`opts.cutoff`, 기본 `'11:30'`, `9:30`·`11:30:00` 표기도 읽음) **전**이면 당일, 마감 **정각부터** 다음 날(결정 23 ④).
-  - `stop`: 신청일이 월·화면 다음 주 월요일, 수~일이면 다다음 주 월요일. 일반 석식 → 미실시도 이 규칙(결정 23 ⑤).
+  - `stop`(결정 71): 신청 일시가 **수요일 마감(`opts.cutoff`, 기본 11:30) 전**(월·화 포함)이면 다음 주 월요일, 수요일 마감 **정각부터** 일요일까지면 다다음 주 월요일. 마감 경계는 `start`와 같다(11:29:59는 앞, 11:30:00은 뒤). 일반 석식 → 미실시도 이 규칙(결정 23 ⑤), 학사 퇴실의 석식 중단일(결정 35)도 이 규칙.
   - `with_dorm_entry`: `opts.entryDate`, `on_leave`: `opts.leaveDate`. `initial`: 신청일.
   - `start`·`to_general`·`stop`에 `opts.leaveDate`를 주면 적용일이 퇴실일보다 이르면 퇴실일로 미룬다(ASSUMPTION: 퇴실 전에는 학사 석식이 이어진다). 늦은 적용일은 그대로 — **결정 35**.
   - 잘못된 kind(`none` 포함)·일시·마감은 Error.
@@ -303,9 +306,9 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, 
 - superseded 판정에서 재입실 급식 행(학사 입실 대표에 연결)은 그 재입실 직전 퇴실의 기록보다 먼저 낸, 재입실일보다 늦게 적용되는 신청을 가리지 않는다(재입실은 그런 대기 신청을 취소하지 않으므로 — 늦게 입력돼도 같게). 재입실일 당일 신청은 재입실이 정한다.
 - 되살림의 덮임(`moveRestorable_`·`moveUndoPlan_`)에서도 재입실 급식 행은 그 퇴실 기록 전에 낸, 재입실일 뒤에 적용되는 신청을 덮지 않는다(superseded 예외와 같은 `mealReentryKeeps_`).
 - 되살림의 덮임·순서는 신청 일시가 같으면 나중에 저장된 행(`created_at`)을 더 새 신청으로 본다(`moveNewer_`, `statusOn_` 동점 규칙과 같다).
-- **알려진 지름길(총괄, followups):** 퇴실 기록과 재입실 기록 사이에 신청한 신청이 퇴실 전 대기 신청을 취소·가린 효과는 입력 순서에 따라 남거나 사라질 수 있다(재입실 화면에서 대기 신청을 확인). 최소 재현은 `move.test.js` '(알려진 지름길)' 시험(지금 다름을 단언 — 고치면 같다로 바꾼다). 오라클 seed 1..6000 중 9개(884·1560·1698·3383·3459·3537·4583·4850·5246)가 이 경우다(기본 400은 통과).
+- **알려진 지름길(총괄, followups):** 퇴실 기록과 재입실 기록 사이에 신청한 신청이 퇴실 전 대기 신청을 취소·가린 효과는 입력 순서에 따라 남거나 사라질 수 있다(재입실 화면에서 대기 신청을 확인). 최소 재현은 `move.test.js` '(알려진 지름길)' 시험(지금 다름을 단언 — 고치면 같다로 바꾼다). 오라클 seed 1..6000 중 9개(884·1560·1698·3383·3459·3537·4583·4850·5246 — 결정 71 뒤에는 5246이 지름길 꼴을 만들지 않아 8개)가 이 경우다(기본 400은 통과).
 - **재입실일 경계(지름길 Y 고침, 결정 56 보충, 총괄 (A)):** (재)입실 급식 행 = F6 학사·기숙사 입실 대표에 연결된 조식·석식 행(`mealEntryRow_`). 재입실일 E보다 **먼저 적용되는** 신청은 신청 일시·입력 순서와 상관없이 이 행을 ① 가리지 않고(`movePlan_` 학사 입실 급식·기숙사 입실 조식이 `mealPlanChange_`에 `opts.entry: true` — 적용일 < E인 더 새 신청은 superseded 판정에서 뺀다) ② 취소하지 않고(`mealPendingToCancel_`이 이 행은 대기 신청으로 보지 않는다) ③ E 뒤로 이어 쓰지 않는다(`followUps`의 재입실일 이어 쓰기는 그 날 살아 있는 (재)입실 급식 행이 있으면 멈춘다 — 명단 업로드 입실처럼 급식 행이 없는 입실에는 지금처럼 이어 쓴다). 적용일 ≥ E인 신청은 지금 그대로(신청 일시가 늦으면 이긴다). 퇴실 기간 중 적용 신청도 같다(Q2). 기본값·명시값을 구분하지 않는다 — **전제: C18b가 재입실 저장 때 늘 `move.meals`를 명시한다**(Q4). 퇴실 취소(결정 59)는 재입실 행을 함께 취소하므로 걸치는 신청이 그대로 끝없이 적용된다.
-- **알려진 지름길 Y2(총괄 (A), followups):** 걸치는 신청(적용일 < E)도 학생 자신의 더 옛 대기 신청(적용일 ≥ E)은 지금처럼 '새 신청으로 대체'로 취소하거나 가린다(재입실 급식 행만 보호). 그래서 재입실 기록 뒤에 학생 신청 셋 이상이 대체·가림으로 얽히면 재입실 뒤 값이 입력 순서를 따를 수 있다 — 대체한 신청이 늦게 입력돼 superseded면 옛 신청이 살아남고(seed 2339), 먼저 입력돼 옛 신청을 취소한 뒤 그 자신이 취소되면 옛 신청은 돌아오지 않는다(seed 353 꼴). 오라클 seed 1..6000 실패 13개 = 지름길 Q 9개(884·1560·1698·3383·3459·3537·4583·4850·5246) + Y2 4개(2339·2588·4161·5374), 두 시간대 같음.
+- **알려진 지름길 Y2(총괄 (A), followups):** 걸치는 신청(적용일 < E)도 학생 자신의 더 옛 대기 신청(적용일 ≥ E)은 지금처럼 '새 신청으로 대체'로 취소하거나 가린다(재입실 급식 행만 보호). 그래서 재입실 기록 뒤에 학생 신청 셋 이상이 대체·가림으로 얽히면 재입실 뒤 값이 입력 순서를 따를 수 있다 — 대체한 신청이 늦게 입력돼 superseded면 옛 신청이 살아남고(seed 2339), 먼저 입력돼 옛 신청을 취소한 뒤 그 자신이 취소되면 옛 신청은 돌아오지 않는다(seed 353 꼴). 오라클 seed 1..6000 실패 13개 = 지름길 Q 9개(884·1560·1698·3383·3459·3537·4583·4850·5246) + Y2 4개(2339·2588·4161·5374), 두 시간대 같음. **결정 71(미실시 수요일 마감) 뒤 12개** — 5246은 바뀐 적용일 때문에 Q 꼴이 생기지 않는다(고친 것이 아님).
 - **알려진 한계:** 따로 입력한 '기숙사 퇴실'과 같은 날 따로 입력한 학사 퇴실이 있을 때 기숙사 퇴실만 취소하면, 학사 퇴실은 남고 기숙사는 입실로 돌아온다(경고 없음 — 학사 퇴실도 취소하거나 고쳐 입력한다). '학사 및 기숙사 퇴실'을 취소했는데 그 뒤에 따로 입력한 학사 퇴실이 있으면(재입실 없이) 기숙사만 입실로 돌아오는 구간(학사 퇴실·기숙사 입실)이 생길 수 있다 — 그 학사 퇴실도 취소하거나 고쳐 입력한다.
 - 재입실 기본 급식(`move.meals` 없음)은 직전 퇴실 전날 값 — 입력된 신청서만 반영한다(종이로만 있는 신청은 모른다). C18b는 늘 `meals`를 명시해 보낸다.
 - `mealReentryKeeps_`(superseded·되살림 덮임 예외)는 학사 재입실 급식 행과 기숙사 입실 조식 행 모두에 쓴다 — 그 입실 직전 **같은 항목** 퇴실의 기록 전에 낸 신청을 가리지 않는다(결정 W 보충).

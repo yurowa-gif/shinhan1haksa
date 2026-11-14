@@ -108,4 +108,10 @@ Apps Script는 같은 전역 이름을 경고 없이 덮는다. 새 전역 이�
 | enrollments | end_type | `23:00` · `23:50` |
 | students | gender | `남` · `여` |
 | students | track | `문` · `이` · `''` |
+| doc_types | status | `유효` · `취소` |
+| student_docs_<기간> | state | `제출` · `미제출` · `해당없음` (학생·서류 종류마다 최대 1행, 행이 없으면 미제출) |
+| programs | status | `유효` · `취소` (blocks는 exceptions와 같은 표기: `ALL` 또는 `HH:mm-HH:mm;…`) |
+| program_participants | status | `유효` · `취소` (exception_id = 그 참가로 만든 '학사 내 프로그램' 사전 특이사항, 프로그램 취소 시 함께 취소) |
+| students | phone | 학생 전화(개인 연락처, 결정 76) — `readAll_`에서 빠진다. `readContacts_`와 `contact.view` 통과 함수만 |
+| guardian_links | name · phone | 보호자 이름·전화(개인 연락처, 결정 76) — 위와 같다. 감사 기록에는 값을 남기지 않는다 |
 | users | roles | `admin` `duty_manager` `attendance` `hall_teacher` `homeroom` `student` `parent` (쉼표로 여러 개) |

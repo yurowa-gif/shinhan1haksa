@@ -66,6 +66,7 @@ function seededEnv() {
   env.asOwner((c) => c.seedFakeStage1());
   env.asOwner((c) => c.seedFakeStage2());
   env.asOwner((c) => c.seedFakeStage3());
+  env.asOwner((c) => c.seedFakeStage4());   // 휴일·시험 기간·추가 입실(T5)
   env.asOwner((c) => { c.addUser(ATT, '시험 출결', 'attendance'); c.addUser(DUTYM, '시험 근무표', 'duty_manager'); });
   return env;
 }
