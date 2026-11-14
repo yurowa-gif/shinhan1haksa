@@ -59,6 +59,8 @@ function permissions_() {
     'program.view': { roles: ['admin', 'attendance', 'hall_teacher'] },
     'program.edit': { roles: ['admin', 'hall_teacher'] },
     // 연락처(전화·보호자 이름): 그 학생의 담당교사·관리자·그날 근무교사만(hall_teacher + scope student). 출결·담임·근무표 담당자는 안 된다
+    // 연락처를 볼 수 있는 학생 목록(번호 없음): 학사 교사는 담당 학생, 관리자·오늘 근무교사는 이번 기간 학사생 전체
+    'contact.list': { roles: ['admin', 'hall_teacher'] },
     'contact.view': { roles: ['admin', 'hall_teacher'], scope: 'student' },
     // ── 2단계(docs/plan/stage2.md 2절 "2단계 권한 키"). 학생·학부모는 3단계(F14)에서 연다 ──
     // 근무표(F3): 보기는 1학사 교사(담임만인 계정 제외), 편성은 관리자·근무표 담당자, 교대는 본인 칸(함수 안에서 확인), 기록표 파일은 관리자·근무표 담당자
