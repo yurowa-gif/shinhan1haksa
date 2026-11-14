@@ -125,6 +125,26 @@ test('D11 상담 신청 예시: UI 프롬프트 틀 칸이 모두 채워져 있�
   ['[화면]', '[목적]', '[머리줄]', '[위 안내]', '[본문 카드]', '[탭]', '[아래 바]', '[확인 시트]', '[상태]', '[권한]', '[참고]', '[받을 것]'].forEach((t) => assert.ok(tpl.indexOf(t) >= 0, '용어집 틀에 ' + t + ' 가 없다'));
 });
 
+test('D9 학교 양식 문서: 확인서 모델·근무 기록표 xlsx 칸 배치·확인표 11절(67~82번)이 있고, 사진 파일이 실제로 있으며, 식수 집계 행 순서가 결정 67과 같다', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const d = (f) => css.readFile('docs/design/' + f);
+  const check = d('print-check.md');
+  const nums = check.split('\n').filter((l) => /^\| \d+ \|/.test(l)).map((l) => l.split('|')[1].trim());
+  for (let n = 44; n <= 82; n++) assert.ok(nums.indexOf(String(n)) >= 0, '확인표에 ' + n + '번이 없다');
+  assert.ok(check.indexOf('## 11. 확인서 두 종') >= 0 && check.indexOf('임시 양식') < 0, '임시 양식 문구가 남아 있다');
+  const duty = d('duty-record.md');
+  ['시트 1 "근무표"', '시트 2 "근무 합계"', '원래 근무자=>실제 근무자', 'Utilities.zip', '수식 없음', '결정 47', '결정 46', 'A4 가로', '학생 이름은 어디에도 넣지 않는다'].forEach((t) => assert.ok(duty.indexOf(t) >= 0, t));
+  const model = d('confirm-forms-model.md');
+  ['printRenderMealConfirm_', 'printRenderMoveConfirm_', '위 20mm · 아래 15mm · 좌우 30mm', '425pt', 'Drive에 남기지 않는다', '둘 다 ○'].forEach((t) => assert.ok(model.indexOf(t) >= 0, t));
+  const imgs = [];
+  [duty, model].forEach((doc) => [...doc.matchAll(/!\[[^\]]*\]\(([^)]+\.png)\)/g)].forEach((m) => imgs.push(m[1])));
+  assert.ok(imgs.length >= 4, '사진 수 ' + imgs.length);
+  imgs.forEach((f) => assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'docs', 'design', f)), f + ' 파일이 없다'));
+  assert.ok(d('meal-counts-model.md').indexOf('여1·여2·여3·남1·남2·남3 → 여·남 → 1·2·3학년 → 전체') >= 0);
+  assert.ok(d('stage2-teacher-checks.md').indexOf('현황표 \'전체\' 탭 집계 표') >= 0 && d('stage2-teacher-checks.md').indexOf('(학교 양식이 오면)') < 0);
+});
+
 test('2단계 선생님 확인 체크리스트: 단계 번호(A1~E4)가 겹치지 않고 모든 줄이 7칸(번호·누가·누르는 것·통과 모습·사진·결과)이며, print-check 9·10절 번호(44~66)가 이어진다', () => {
   const doc = css.readFile('docs/design/stage2-teacher-checks.md');
   const rows = doc.split('\n').filter((l) => /^\| [A-E]\d+ \|/.test(l));

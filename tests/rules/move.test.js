@@ -252,9 +252,9 @@ test('퇴실 취소: 중단일이 아닌 연결 행(일반 석식 F7)도 취소'
 });
 
 test('퇴실 취소: 남은 다른 학사 퇴실이 같은 날을 석식 중단일로 쓰면 그 정리 행은 둔다', () => {
-  // A: 3/9 퇴실을 3/3(수)에 입력 → 석식 3/15. B: 3/5 퇴실(3/4 목 입력) → 석식 중단일도 3/15(A의 행이 이미 있음).
+  // A: 3/9 퇴실을 3/3(수) 오후에 입력 → 석식 3/15. B: 3/5 퇴실(3/4 목 입력) → 석식 중단일도 3/15(A의 행이 이미 있음).
   // movePlan_은 이제 A 뒤에 B를 막으므로(이후 입퇴실 기록) B는 직접 쓴 행으로 만든다(손으로 고친 시트 등에서도 지켜야 하는 규칙)
-  const a = saveMove(HALL(), { type: '학사 퇴실', effectiveDate: '2027-03-09', requestedAt: '2027-03-03T10:00:00' }, '2027-03-03');
+  const a = saveMove(HALL(), { type: '학사 퇴실', effectiveDate: '2027-03-09', requestedAt: '2027-03-03T13:00:00' }, '2027-03-03');
   const f6b = { source: 'F6', requested_at: '2027-03-04T10:00:00' };
   const b = { head: 'HB', rows: a.rows.concat([CH('학사', '퇴실', '2027-03-05', Object.assign({ id: 'HB' }, f6b)),
     CH('조식', '미실시', '2027-03-05', Object.assign({ linked_change_id: 'HB' }, f6b))]) };

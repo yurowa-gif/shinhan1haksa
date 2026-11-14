@@ -592,3 +592,33 @@ test('outDismissalGate_: ymd에 퇴실 상태면 뒤에 재입실이 잡혀 있�
   const r = gate(TWO(), [NOTE()], rows);
   assert.deepStrictEqual([r.alreadyLeft, r.ok, r.reason], [true, false, '이미 퇴실']);
 });
+
+/* ───── 결정 69: 즉시 퇴실 항목(한 건 = 2OUT) ───── */
+
+const OUTR = (id, rule_id, occurred_at, extra) => Object.assign({ id, term_id: 'T1', student_id: 's1', rule_id, occurred_at, created_at: occurred_at, status: '유효', source: '직접' }, extra || {});
+const INST = { instantRuleIds: ['R-SMOKE', 'R-DELIVERY'] };
+
+test('결정 69: 즉시 퇴실 항목 OUT 한 건은 2로 세어 바로 퇴실 대상, 보통 항목은 1, 취소·다른 기간은 세지 않음, opts가 없으면 지금처럼', () => {
+  const one = [OUTR('o1', 'R-SMOKE', '2027-03-05T21:00:00')];
+  assert.deepStrictEqual(plain(ctx.outLevel_(one, 's1', 'T1', INST)), { count: 2, level: 2, label: '퇴실 대상' });
+  assert.deepStrictEqual(plain(ctx.outLevel_(one, 's1', 'T1')), { count: 1, level: 1, label: '1OUT' });   // 설정 없음
+  assert.deepStrictEqual(plain(ctx.outLevel_([OUTR('o2', 'R-LATE', '2027-03-05T21:00:00')], 's1', 'T1', INST)), { count: 1, level: 1, label: '1OUT' });
+  assert.deepStrictEqual(plain(ctx.outLevel_([OUTR('o3', 'R-SMOKE', '2027-03-05T21:00:00', { status: '취소' }), OUTR('o4', 'R-SMOKE', '2027-03-05T21:00:00', { term_id: 'T0' }),
+    OUTR('o5', '', '2027-03-05T21:00:00')], 's1', 'T1', INST)), { count: 1, level: 1, label: '1OUT' });
+  assert.deepStrictEqual(plain(ctx.outLevel_([OUTR('o6', 'R-LATE', '2027-03-02T21:00:00'), OUTR('o7', 'R-DELIVERY', '2027-03-09T21:00:00')], 's1', 'T1', INST)).count, 3);
+  assert.strictEqual(plain(ctx.outLevel_([OUTR('o8', '', '2027-03-02T21:00:00')], 's1', 'T1', { instantRuleIds: ['R-SMOKE', ''] })).count, 1);   // 설정 값의 빈 항목('a,,b')이 rule_id 빈 OUT을 즉시 항목으로 만들지 않는다
+});
+
+test('결정 69: 퇴실 관문의 triggerOutId는 합이 처음 2가 되는 OUT — 즉시 항목 한 건이면 그 OUT, 면담은 그 발생일 이후·그 OUT에 연결', () => {
+  const rows = [OUTR('o1', 'R-LATE', '2027-03-02T21:00:00'), OUTR('o2', 'R-SMOKE', '2027-03-04T21:00:00'), OUTR('o3', 'R-LATE', '2027-03-08T21:00:00')];
+  const note = (d) => [{ id: 'n1', student_id: 's1', type: '2OUT 학부모 면담', linked_violation_id: 'o2', status: '유효', date: d, teacher_email: 'hr@example.com' }];
+  const g = plain(ctx.outDismissalGate_(rows, note('2027-03-05'), HALL_IN, 's1', 'T1', '2027-03-10', INST));
+  assert.deepStrictEqual([g.count, g.triggerOutId, g.ok], [4, 'o2', true]);
+  assert.strictEqual(plain(ctx.outDismissalGate_(rows, note('2027-03-05'), HALL_IN, 's1', 'T1', '2027-03-10')).triggerOutId, 'o2');   // 보통이면 둘째(o2)
+  const only = plain(ctx.outDismissalGate_([OUTR('o9', 'R-SMOKE', '2027-03-04T21:00:00')], [], HALL_IN, 's1', 'T1', '2027-03-10', INST));
+  assert.deepStrictEqual([only.count, only.triggerOutId, only.reason], [2, 'o9', '면담 기록 필요']);
+  assert.strictEqual(plain(ctx.outDismissalGate_([OUTR('o9', 'R-SMOKE', '2027-03-04T21:00:00')], [], HALL_IN, 's1', 'T1', '2027-03-10')).reason, '퇴실 대상 아님');
+  const late = [OUTR('o1', 'R-LATE', '2027-03-02T21:00:00'), OUTR('o2', 'R-LATE', '2027-03-03T21:00:00'), OUTR('o3', 'R-SMOKE', '2027-03-04T21:00:00')];
+  assert.strictEqual(plain(ctx.outDismissalGate_(late, [], HALL_IN, 's1', 'T1', '2027-03-10', INST)).triggerOutId, 'o2');   // 보통 둘째가 먼저 2
+});
+

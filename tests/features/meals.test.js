@@ -61,9 +61,9 @@ test('급식 변경 저장 표(PRD F7 1·3·4줄): 11:29:59 → 당일, 11:30:00
   });
 });
 
-test('급식 변경 저장 표(PRD F7 미실시): 3/1·3/2 신청 → 3/8, 3/3~3/7 신청 → 3/15, 2026-12-30 신청 → 2027-01-11이고 저장된 행도 같다', () => {
-  const cases = [['2027-03-01', '2027-03-08'], ['2027-03-02', '2027-03-08'], ['2027-03-03', '2027-03-15'], ['2027-03-04', '2027-03-15'],
-    ['2027-03-05', '2027-03-15'], ['2027-03-06', '2027-03-15'], ['2027-03-07', '2027-03-15'], ['2026-12-30', '2027-01-11']];
+test('급식 변경 저장 표(PRD F7 미실시, 결정 71 — 오전 10시 신청): 3/1~3/3(수 마감 전) → 3/8, 3/4~3/7 → 3/15, 2026-12-30(수) → 2027-01-04이고 저장된 행도 같다', () => {
+  const cases = [['2027-03-01', '2027-03-08'], ['2027-03-02', '2027-03-08'], ['2027-03-03', '2027-03-08'], ['2027-03-04', '2027-03-15'],
+    ['2027-03-05', '2027-03-15'], ['2027-03-06', '2027-03-15'], ['2027-03-07', '2027-03-15'], ['2026-12-30', '2027-01-04']];
   cases.forEach(([day, want]) => {
     const env = makeEnv(day + 'T23:00:00');
     const { a } = pick(env);
@@ -86,10 +86,10 @@ test('급식 변경 저장 표(PRD F7 미실시): 3/1·3/2 신청 → 3/8, 3/3~3
 test('저장 뒤 statusOn_: 적용일 전날은 옛 값, 당일은 새 값. 서류 체크는 대표 행에만 TRUE/FALSE', () => {
   const env = makeEnv();
   const { a } = pick(env);
-  const r = saveOk(env, HALL, input(a, 'd_off', '2027-03-03T10:00:00', { docSubmitted: true }));
-  assert.strictEqual(r.date, '2027-03-15');
-  assert.strictEqual(valueOn(env, a, '석식', '2027-03-14'), '학사 석식');
-  assert.strictEqual(valueOn(env, a, '석식', '2027-03-15'), '미실시');
+  const r = saveOk(env, HALL, input(a, 'd_off', '2027-03-03T10:00:00', { docSubmitted: true }));   // 수 마감 전 → 다음 주 월요일(결정 71)
+  assert.strictEqual(r.date, '2027-03-08');
+  assert.strictEqual(valueOn(env, a, '석식', '2027-03-07'), '학사 석식');
+  assert.strictEqual(valueOn(env, a, '석식', '2027-03-08'), '미실시');
   assert.strictEqual(rowsOf(env, a).find((x) => x.id === r.id).doc_submitted, 'TRUE');
   const r2 = saveOk(env, HALL, input(pick(env).b, 'd_off', '2027-03-03T10:00:00'));
   assert.strictEqual(rowsOf(env, pick(env).b).find((x) => x.id === r2.id).doc_submitted, 'FALSE');
@@ -99,22 +99,22 @@ test('적용일 고치기: 자동값과 다르면 사유 2자 필요(없으면 �
   const env = makeEnv();
   const { a } = pick(env);
   const before = env.rows('status_changes').length;
-  const noReason = save(env, HALL, input(a, 'd_off', '2027-03-03T10:00:00', { effectiveDate: '2027-03-08' }), prev(env, HALL, input(a, 'd_off', '2027-03-03T10:00:00', { effectiveDate: '2027-03-08' })).expect);
+  const noReason = save(env, HALL, input(a, 'd_off', '2027-03-03T10:00:00', { effectiveDate: '2027-03-05' }), prev(env, HALL, input(a, 'd_off', '2027-03-03T10:00:00', { effectiveDate: '2027-03-05' })).expect);   // 자동 3/8(결정 71)
   assert.strictEqual(noReason.ok, false);
   assert.ok(noReason.errors.some((e) => e.field === 'reason'));
   const early = prev(env, HALL, input(a, 'd_off', '2027-03-03T10:00:00', { effectiveDate: '2027-03-02', reason: '급식실 요청' }));
   assert.strictEqual(early.ok, false);
   assert.ok(early.errors.some((e) => e.field === 'effectiveDate'));
   assert.strictEqual(env.rows('status_changes').length, before, '거부된 저장은 쓰지 않는다');
-  const p = prev(env, HALL, input(a, 'd_off', '2027-03-03T10:00:00', { effectiveDate: '2027-03-08', reason: '급식실 요청' }));
+  const p = prev(env, HALL, input(a, 'd_off', '2027-03-03T10:00:00', { effectiveDate: '2027-03-05', reason: '급식실 요청' }));
   assert.strictEqual(p.manual, true);
   assert.ok(p.warnings.some((w) => w.includes('급식실 준비 기간')), '준비 기간보다 이르면 경고');
   assert.ok(![].concat(p.warnings, [p.reasonText]).some((t) => /\d{4}-\d{2}-\d{2}/.test(t)), '교사에게 숫자 날짜 원문을 보이지 않는다');
-  const r = save(env, HALL, input(a, 'd_off', '2027-03-03T10:00:00', { effectiveDate: '2027-03-08', reason: '급식실 요청' }), p.expect);
+  const r = save(env, HALL, input(a, 'd_off', '2027-03-03T10:00:00', { effectiveDate: '2027-03-05', reason: '급식실 요청' }), p.expect);
   const row = rowsOf(env, a).find((x) => x.id === r.id);
-  assert.deepStrictEqual([row.effective_date, row.effective_date_auto, row.reason], ['2027-03-08', '2027-03-15', '급식실 요청']);
+  assert.deepStrictEqual([row.effective_date, row.effective_date_auto, row.reason], ['2027-03-05', '2027-03-08', '급식실 요청']);
   // 자동값과 같은 날짜를 적으면 고친 것이 아니다(사유 불필요)
-  const same = prev(env, HALL, input(pick(env).b, 'd_off', '2027-03-03T10:00:00', { effectiveDate: '2027-03-15' }));
+  const same = prev(env, HALL, input(pick(env).b, 'd_off', '2027-03-03T10:00:00', { effectiveDate: '2027-03-08' }));
   assert.strictEqual(same.ok, true); assert.strictEqual(same.manual, false);
 });
 
@@ -175,8 +175,9 @@ test('퇴실 전에 켠 학사 석식 → 규칙이 준 source(F6) 이어 쓰기
   const r = save(env, HALL, input(a, 'd_hall', '2027-03-03T10:00:00'), p.expect);
   assert.strictEqual(r.followUpCount, 1);
   const f = rowsOf(env, a).find((x) => x.linked_change_id === r.id);
-  assert.deepStrictEqual([f.item, f.value, f.effective_date, f.source, f.doc_submitted, f.status], ['석식', '미실시', '2027-03-15', 'F6', '', '유효']);
-  assert.strictEqual(valueOn(env, a, '석식', '2027-03-15'), '미실시');
+  // 퇴실 기록 3/3(수) 08:00 = 마감 전 → 중단일 다음 주 월요일 3/8이 퇴실일 3/10보다 이르므로 퇴실일(결정 35·71)
+  assert.deepStrictEqual([f.item, f.value, f.effective_date, f.source, f.doc_submitted, f.status], ['석식', '미실시', '2027-03-10', 'F6', '', '유효']);
+  assert.strictEqual(valueOn(env, a, '석식', '2027-03-10'), '미실시');
 });
 
 test('stale: 확인한 뒤 다른 변경이 있었으면 {stale:true}이고 쓰지 않는다. expect가 없어도 거부', () => {
@@ -283,7 +284,7 @@ function inClass(env, klass, yes) {
 test('listStudentStatus: 오늘 값·대기·기록·비고 문장이 나오고 memo·이메일은 없다', () => {
   const env = makeEnv('2027-03-03T12:00:00');
   const { a } = pick(env);
-  const r = saveOk(env, HALL, input(a, 'd_off', '2027-03-03T10:00:00'));
+  const r = saveOk(env, HALL, input(a, 'd_off', '2027-03-03T11:45:00'));   // 수 마감 뒤 → 3/15(결정 71)
   const row = rowsOf(env, a).find((x) => x.id === r.id);
   env.asOwner((c) => c.updateRecord_('status_changes', row.id, { memo: '[2OUT] out:ZZ-메모-표식' }, env.owner));
   const d = env.expectAllowed(HALL, 'listStudentStatus', a);
@@ -459,7 +460,7 @@ test('서류 미제출의 담당은 "적용일이 속한 기간의 담당교사"
   env.asOwner((c) => c.bulkUpdateRecords_('status_changes', env.rows('status_changes').filter((r) => r.source === '명단업로드').map((r) => ({ id: r.id, patch: { requested_at: '' } })), env.owner));
   const home = (who) => env.call(who, 'getHomeData', 'hall_teacher').food.docMissing;
   const base = { hall: home(HALL), old: home('fake.teacher1@example.com') };
-  const r = saveOk(env, ADMIN, input(a, 'd_off', '2027-02-24T10:00:00'));   // 2/24 수 → 3/8: 새 기간(1학기)
+  const r = saveOk(env, ADMIN, input(a, 'd_off', '2027-02-24T13:00:00'));   // 2/24 수 오후 → 3/8(결정 71): 새 기간(1학기)
   assert.strictEqual(r.date, '2027-03-08');
   assert.strictEqual(home(HALL), base.hall + 1, '1학기 담당 홈에 1건');
   assert.strictEqual(home('fake.teacher1@example.com'), base.old, '2학기 담당 홈에는 없다');

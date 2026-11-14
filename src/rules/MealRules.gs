@@ -6,7 +6,7 @@
  * | kind            | 언제                                   | 적용일                                         |
  * | start           | 실시 신청(조식 실시, 석식 학사 실시)     | 마감(11:30) 전 신청 → 당일, 마감 이후 → 다음 날   |
  * | to_general      | 일반 석식으로 변경                     | start와 같음(결정 1)                            |
- * | stop            | 미실시                                 | 월·화 신청 → 다음 주 월요일, 수~일 → 다다음 주 월요일 |
+ * | stop            | 미실시                                 | 수요일 마감(11:30) 전 신청 → 다음 주 월요일, 그 뒤(수 마감~일) → 다다음 주 월요일(결정 71) |
  * | with_dorm_entry | 기숙사 입실과 함께 조식 실시            | 입실일(opts.entryDate)                          |
  * | on_leave        | 학사 퇴실에 따른 조식 중단              | 퇴실일(opts.leaveDate) 즉시                     |
  * | initial         | 그 항목 기록이 아직 없는 학생의 첫 미실시 | 신청일(그만둘 급식이 없으므로 바로 기록)          |
@@ -19,6 +19,7 @@
  * start·to_general·stop에 leaveDate를 함께 주면(학사 퇴실과 함께 만드는 석식 변경) 적용일이 퇴실일보다 이르지 않게 한다.
  * rule: 'same_day'|'next_day'|'next_monday'|'monday_after_next'|'entry_date'|'leave_date'|'initial'
  * 마감 시각 정각(11:30:00)에 낸 신청은 마감 이후로 본다(다음 날, 결정 23 ④). 11:29:59는 당일.
+ * stop(결정 71): 월·화·수 마감 전 → 다음 주 월요일, 수 마감 정각부터 일요일까지 → 다다음 주 월요일(마감 경계는 start와 같다).
  * 잘못된 kind·일시·마감 시각, 필요한 날짜가 없으면 Error.
  */
 function mealEffectiveDate_(kind, requestedAt, opts) {
@@ -40,7 +41,7 @@ function mealEffectiveDate_(kind, requestedAt, opts) {
   if (k === 'stop') {
     var w = ymdWeekday_(at.date);           // 0=일 … 6=토
     var monday = ymdMondayOf_(at.date);      // 월~일 주의 월요일
-    if (w === 1 || w === 2) return mealNotBeforeLeave_({ date: ymdAddDays_(monday, 7), rule: 'next_monday' }, opts);
+    if (w === 1 || w === 2 || (w === 3 && at.sec < hmToMin_(mealCutoffHm_(opts.cutoff)) * 60)) return mealNotBeforeLeave_({ date: ymdAddDays_(monday, 7), rule: 'next_monday' }, opts);
     return mealNotBeforeLeave_({ date: ymdAddDays_(monday, 14), rule: 'monday_after_next' }, opts);
   }
   throw new Error('알 수 없는 급식 변경 종류: ' + kind);
