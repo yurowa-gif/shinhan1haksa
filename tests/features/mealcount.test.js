@@ -57,9 +57,9 @@ test('saveMealChange 직후 다시 부르면 바뀐 수가 나온다(캐시 없�
   const env = makeEnv();
   const sid = mineOf(env).find((s) => stat(env, s, '석식', '2027-03-20') === '학사 석식');
   const before = { d10: Number(row(counts(env, '2027-03-10'), '전체').hallDinner), d20: Number(row(counts(env, '2027-03-20'), '전체').hallDinner) };
-  const i = { studentId: sid, chip: 'd_off', requestedAt: '2027-03-03T10:00:00', docSubmitted: false };
+  const i = { studentId: sid, chip: 'd_off', requestedAt: '2027-03-03T11:30:00', docSubmitted: false };
   const p = env.call(HALL, 'previewMealChange', i);
-  assert.strictEqual(env.call(HALL, 'saveMealChange', i, p.expect).ok, true);   // 적용일 3/15
+  assert.strictEqual(env.call(HALL, 'saveMealChange', i, p.expect).ok, true);   // 적용일 3/15(수 11:30 정각 = 마감 뒤, 결정 71)
   assert.strictEqual(Number(row(counts(env, '2027-03-10'), '전체').hallDinner), before.d10, '적용일 전');
   assert.strictEqual(Number(row(counts(env, '2027-03-20'), '전체').hallDinner), before.d20 - 1, '적용일 뒤');
   assert.strictEqual(Number(row(counts(env, '2027-03-20'), '전체').generalDinner) >= 0, true);
