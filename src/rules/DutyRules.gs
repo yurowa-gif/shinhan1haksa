@@ -12,14 +12,20 @@
  * 그날 근무 칸 틀. plan = resolveDayPlan_ 결과.
  * → 운영 안 함 [] | 월~목 [{slot:'21:30조',end},{slot:'23:00조',end}] | 금·토·일 [{slot:'단독',end},{slot:'예비',end:''}]
  * end = min(조 시각, 그날 종료), 단독 = 그날 종료. 방학도 같은 틀(4-2).
- * ASSUMPTION: 특별 요일 유형(exam 등)은 실제 달력 요일의 틀로 본다(R3 END와 같은 방식).
+ * 휴일(plan.dayType 'holiday', 결정 72 보충)은 달력 요일과 상관없이 금·토·일 틀(단독 + 예비).
+ * ASSUMPTION: 그 밖의 특별 요일 유형(exam 등)은 실제 달력 요일의 틀로 본다(R3 END와 같은 방식).
  */
 function dutySlotsFor_(plan) {
   if (!plan || !plan.operating) return [];
   var end = hmNorm_(plan.end) || '';
   var cap = function (hm) { return end && end < hm ? end : hm; };
-  if (baseDayType_(plan.date) === 'mon_thu') return [{ slot: '21:30조', end: cap('21:30') }, { slot: '23:00조', end: cap('23:00') }];
+  if (dutyTwoShift_(plan.date, plan.dayType)) return [{ slot: '21:30조', end: cap('21:30') }, { slot: '23:00조', end: cap('23:00') }];
   return [{ slot: '단독', end: end }, { slot: '예비', end: '' }];
+}
+
+/** 그날이 두 조(21:30조·23:00조) 틀인지: 휴일 유형이면 아니고, 그 밖에는 달력 요일이 월~목이면. */
+function dutyTwoShift_(ymd, dayType) {
+  return ruleStr_(dayType) !== 'holiday' && baseDayType_(ymd) === 'mon_thu';
 }
 
 /** 근무자 이메일(소문자·공백 없음). */
@@ -28,13 +34,14 @@ function dutyEmail_(v) {
 }
 
 /**
- * 그날 근무자. → {duty:[{slot, email, end, swappedFrom}], standby:[{email, swappedFrom}], warnings}
+ * 그날 근무자. dayType(선택) = 그날 요일 유형(resolveDayPlan_의 dayType — 'holiday'면 단독·예비 틀로 틀 밖 경고를 판정).
+ * → {duty:[{slot, email, end, swappedFrom}], standby:[{email, swappedFrom}], warnings}
  * 취소 제외, (date, slot)마다 updated_at 최신 1행(같으면 아래 행) + 경고. 그 요일 틀 밖의 칸(토요일 21:30조, 화요일 단독·예비 등)도 쓰되 경고. email = actual_email(빈칸이면 original_email).
  * swappedFrom = 실제 근무자가 원래 근무자와 다르면 원래 근무자. 순서 21:30조 → 23:00조 → 단독.
  * ASSUMPTION: 교대 전에는 actual_email이 빈칸일 수 있다(그때는 original_email이 근무자).
  */
-function dutyOn_(rows, ymd) {
-  var p = dutyPick_(rows, ymd), warnings = p.warnings;
+function dutyOn_(rows, ymd, dayType) {
+  var p = dutyPick_(rows, ymd, dayType), warnings = p.warnings;
   var duty = [], standby = [];
   ['21:30조', '23:00조', '단독', '예비'].forEach(function (slot) {
     var r = p.bySlot[slot];
@@ -48,10 +55,10 @@ function dutyOn_(rows, ymd) {
   return { duty: duty, standby: standby, warnings: warnings };
 }
 
-/** 그날 칸마다 쓸 행: 취소 제외, updated_at 최신(같으면 아래 행). → {bySlot:{slot:row}, warnings} */
-function dutyPick_(rows, ymd) {
+/** 그날 칸마다 쓸 행: 취소 제외, updated_at 최신(같으면 아래 행). dayType은 dutyOn_과 같다. → {bySlot:{slot:row}, warnings} */
+function dutyPick_(rows, ymd, dayType) {
   var bySlot = {}, warnings = [];
-  var frame = ymdIsValid_(ymd) && baseDayType_(ymd) === 'mon_thu' ? ['21:30조', '23:00조'] : ['단독', '예비'];   // 그 요일의 칸 틀(dutySlotsFor_와 같음)
+  var frame = ymdIsValid_(ymd) && dutyTwoShift_(ymd, dayType) ? ['21:30조', '23:00조'] : ['단독', '예비'];   // 그 요일의 칸 틀(dutySlotsFor_와 같음)
   (rows || []).forEach(function (r) {
     if (!r || !ruleRowLive_(r) || ruleStr_(r.date) !== ymd) return;
     var slot = ruleStr_(r.slot);
@@ -77,7 +84,7 @@ function dutyIsOn_(rows, email, ymd, today, windowDays) {
 }
 
 /**
- * 월말 근무 기록(수당 근거, PRD F3). month 'yyyy-MM', opts = {operatingByDate:{date:false}}
+ * 월말 근무 기록(수당 근거, PRD F3). month 'yyyy-MM', opts = {operatingByDate:{date:false}, dayTypeByDate:{date:dayType}(선택, 휴일 틀 경고용)}
  * → {teachers:[{email, total, bySlot:{'21:30조','23:00조','단독'}, dates:[{date,slot,end,swappedFrom}]}],
  *    standby:[{email, count, dates:[yyyy-MM-dd]}], swaps:[{date, slot, from, to, at, by, kind:'교대'|'대신 근무'}], warnings}   금액은 계산하지 않는다(결정 47).
  * 교사별 합계 = 그날 칸의 실제 근무자(원래 근무자에게는 세지 않음). swaps = 칸마다 마지막 교대(예비 칸 포함). 예비만 있는 교사도 teachers에(total 0).
@@ -98,7 +105,7 @@ function dutyRecord_(rows, month, opts) {
     return teachers[email] = teachers[email] || { email: email, total: 0, bySlot: { '21:30조': 0, '23:00조': 0, '단독': 0 }, dates: [] };
   };
   Object.keys(byDate).sort().forEach(function (date) {
-    var day = dutyOn_(byDate[date], date);
+    var day = dutyOn_(byDate[date], date, (opts.dayTypeByDate || {})[date]);
     warnings = warnings.concat(day.warnings);
     if ((opts.operatingByDate || {})[date] === false && (day.duty.length || day.standby.length)) warnings.push(date + ' 운영 안 하는 날의 근무 행을 셌습니다');
     day.duty.forEach(function (d) {

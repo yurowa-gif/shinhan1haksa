@@ -45,8 +45,8 @@ function hmNorm_(v)        // 'H:mm'·'HH:mm:00' → 'HH:mm', 빈칸 '', 시각 
 // src/rules/DutyRules.gs (R8)
 function dutySlotsFor_(plan)
         // resolveDayPlan_ 결과 → 운영 안 함 [] | 월~목 [{slot:'21:30조',end},{slot:'23:00조',end}] | 금·토·일 [{slot:'단독',end},{slot:'예비',end:''}]
-function dutyOn_(rows, ymd)                   // → {duty:[{slot, email, end, swappedFrom}], standby:[{email, swappedFrom}], warnings}
-function dutyPick_(rows, ymd)                 // → {bySlot:{slot: 그날 쓸 행}, warnings}(취소 제외, updated_at 최신, 같으면 아래 행 — dutyOn_·dutyRecord_가 쓴다)
+function dutyOn_(rows, ymd, dayType)          // → {duty:[{slot, email, end, swappedFrom}], standby:[{email, swappedFrom}], warnings}
+function dutyPick_(rows, ymd, dayType)        // → {bySlot:{slot: 그날 쓸 행}, warnings}(취소 제외, updated_at 최신, 같으면 아래 행 — dutyOn_·dutyRecord_가 쓴다)
 function dutyEmail_(v)                        // → 소문자·앞뒤 공백 없는 이메일
 function dutyIsOn_(rows, email, ymd, today, windowDays)   // → boolean(그날 실제 근무자 && ymd ≤ today ≤ ymd + windowDays, 기본 0)
 function dutyRecord_(rows, month, opts)
@@ -208,7 +208,7 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId)
   - EXC가 여럿이면 가장 최근 확정(`confirmed_at` → `updated_at` → 나중 행) 1건의 약어 + `' 외 N'`, `more = N`, `exceptionId` = 그 건(가정 c).
   - 약어: `opts.typeShort`(설정 `exception.type_short`, 없으면 sheet-model 기본표). 행의 유형 그대로 찾고, 없으면 **양쪽(행의 유형과 약어표 키) 모두 끝의 괄호 설명을 뗀 이름끼리** 비교하고(관리자가 괄호 설명을 고쳐도 옛 행이 약어로 나오게), 그래도 없으면 괄호를 뗀 이름을 그대로 쓴다.
   - FIXED가 여럿이면 `teacher_confirmed_at` → `updated_at` 최신.
-  - END: `endType`(`'23:00:00'`도 읽음) `=== opts.endTime`(기본 `'23:00'`), `dayType`이 `opts.endTypeDayTypes`(기본 `['mon_thu']`, 항목 앞뒤 공백 무시)에 있음, 마지막 블록, **그 블록과 그날 종료(`dayEnd`)가 모두 종료 시각보다 늦게 끝남**. ASSUMPTION: 날짜별 종료를 23:00 이하로 당긴 날(22:00·22:30·23:00)은 모두 그 시각에 귀가하므로 표시하지 않는다. ASSUMPTION: 특별 요일 유형(`exam` 등)으로 바꾼 날은 실제 달력 요일의 기본 유형으로 판정한다(목요일 exam → 표시, 금요일 exam → 표시 안 함).
+  - END: `endType`(`'23:00:00'`도 읽음) `=== opts.endTime`(기본 `'23:00'`), `dayType`이 `opts.endTypeDayTypes`(기본 `['mon_thu']`, 항목 앞뒤 공백 무시)에 있음, 마지막 블록, **그 블록과 그날 종료(`dayEnd`)가 모두 종료 시각보다 늦게 끝남**. ASSUMPTION: 날짜별 종료를 23:00 이하로 당긴 날(22:00·22:30·23:00)은 모두 그 시각에 귀가하므로 표시하지 않는다. ASSUMPTION: 특별 요일 유형(`exam` 등)으로 바꾼 날은 실제 달력 요일의 기본 유형으로 판정한다(목요일 exam → 표시, 금요일 exam → 표시 안 함). 휴일(`holiday`, 결정 72 보충 R21)은 특별 유형이 아니라 그 자체가 기본 유형이다: 목요일 휴일도 `mon_thu`로 보지 않으므로 `endTypeDayTypes`에 `holiday`가 없으면 END가 없다. 휴일 칸은 `blocks`의 `day_type 'holiday'` 블록(오전 토요일 칸·오후·저녁 일요일 칸, C24가 기본값을 채움)을 `resolveDayPlan_`이 그대로 쓴다.
 - `resolveStudentDay_`: 운영 안 하는 날은 `[]`. `exceptions`는 `date === plan.date`인 행만 쓴다(**날짜가 빈 행은 쓰지 않는다** — 빈 날짜 하나가 모든 날에 찍히지 않게). `plan.end`를 `dayEnd`로 넘긴다. `fixedRows`는 `effectiveFixedRows_` 결과를 넘긴다. 고정 일정 요일은 요일 유형이 아니라 **실제 달력 요일**(`ymdWeekdayKo_`). C7은 결과에서 `seq·code·text`만 sheet-model `marks`로 옮긴다.
 
 ## 동작 메모(R5, 2026-11-07, 총괄 검토 3차 반영)
@@ -267,7 +267,8 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId)
 
 **DutyRules** — duty_slots 행(결정 41로 승인된 탭, stage2.md 5절 1번)을 그대로 받는다. DateRules·ScheduleRules(`baseDayType_`)를 부른다.
 
-- `dutySlotsFor_`: 끝 시각 = min(조 시각, 그날 종료), 단독 = 그날 종료, 예비 `''`. 방학도 같은 틀(4-2). ASSUMPTION: 특별 요일 유형(exam 등)은 실제 달력 요일의 틀(R3 END와 같은 방식).
+- `dutySlotsFor_`: 끝 시각 = min(조 시각, 그날 종료), 단독 = 그날 종료, 예비 `''`. 방학도 같은 틀(4-2). **휴일(`plan.dayType === 'holiday'`, 결정 72 보충 R21)은 달력 요일과 상관없이 단독 + 예비**(목요일 휴일도). ASSUMPTION: 그 밖의 특별 요일 유형(exam 등)은 실제 달력 요일의 틀(R3 END와 같은 방식).
+- `dutyOn_`·`dutyPick_`의 `dayType`(선택, R21) = 그날 `resolveDayPlan_`의 `dayType`. 틀 밖 칸 경고만 바꾼다(휴일이면 단독·예비가 틀). 주지 않으면 달력 요일(지금과 같음). `dutyRecord_`는 `opts.dayTypeByDate:{날짜: dayType}`로 받는다. 근무자 판정(`dutyIsOn_` 포함)은 틀과 상관없다.
 - `dutyOn_`: 취소 제외, (date, slot)마다 `updated_at` 최신 1행(같으면 아래 행) + 경고. 근무자 = `actual_email`(빈칸이면 `original_email` — ASSUMPTION: 교대 전에는 빈칸일 수 있다). 이메일은 소문자·공백 없이. 모르는 칸 이름·근무자 없는 칸은 빼고 경고. 그 요일 틀 밖의 칸(토요일 21:30조, 화요일 단독·예비 등)은 쓰되 경고. 예비 칸은 `standby`로만(`{email, swappedFrom}`).
 - `dutyIsOn_`(근무교사 시간 범위 권한): 그날 실제 근무자만 참. 예비 지정만·교대로 넘긴 원래 근무자는 거짓. `windowDays` 기본 0. 호출 쪽은 OUT 입력(`out.save`)에만 1을 쓰고 보기 권한에는 쓰지 않는다(#79 근무 창 정리). 잘못된 날짜·음수·소수 `windowDays`는 거짓(넓히지 않는다).
 - `dutyRecord_`(월말 근무 기록): 교사별 합계 = 실제 근무자(원래 근무자에게는 세지 않음). `swaps` = 칸마다 마지막 교대(원래 → 실제, **예비 칸 포함**, `at`·`by`는 그날 쓴 행의 `swapped_at`·`swapped_by`, `kind`는 실제 근무자(to)가 그날 예비였으면 `'대신 근무'`, 아니면 `'교대'` — 예비 칸 자체의 교대는 `'교대'`). 예비만 있는 교사도 `teachers`에 넣는다(total 0). 예비 지정은 `standby`로 근무 합계와 따로 센다(결정 46). `standby[].dates` = 예비로 센 날(날짜 순, 예비 칸 교대 뒤의 실제 예비 기준, 출력 표의 날짜별 칸용). 그날 대신 근무한 예비는 근무로만 세고 `standby`에서는 뺀다(두 번 세지 않음). `teachers[].dates[].slot`은 저장값(`'21:30조'` 등) 그대로다. ASSUMPTION: 운영 안 하는 날(`operatingByDate[date] === false`)의 행도 세고 경고. 금액은 계산하지 않는다(결정 47 — 두 조의 수당이 같아 합계를 크게, 조별은 참고). 잘못된 달은 Error.

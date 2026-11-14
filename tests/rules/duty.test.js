@@ -34,7 +34,12 @@ table('dutySlotsFor_: 끝 시각 = min(조 시각, 그날 종료) — 22:00으�
   [PLAN('2027-07-30', { end: '21:00' }), [['단독', '21:00'], ['예비', '']]],                // 방학 금요일
   [PLAN('2027-03-04', { dayType: 'exam' }), [['21:30조', '21:30'], ['23:00조', '23:00']]], // exam 목 → 월~목 틀
   [PLAN('2027-03-05', { dayType: 'exam' }), [['단독', '23:00'], ['예비', '']]],            // exam 금 → 금 틀
-  [PLAN('2027-03-05', { end: '22:30:00' }), [['단독', '22:30'], ['예비', '']]]              // 시트 시각 표기
+  [PLAN('2027-03-05', { end: '22:30:00' }), [['단독', '22:30'], ['예비', '']]],             // 시트 시각 표기
+  // 결정 72 보충(R21): 휴일은 달력 요일과 상관없이 단독 + 예비, 단독 끝 = 그날 종료(기본 21:50)
+  [PLAN('2027-03-04', { dayType: 'holiday', end: '21:50' }), [['단독', '21:50'], ['예비', '']]],   // 목요일 휴일
+  [PLAN('2027-03-01', { dayType: 'holiday', end: '21:50' }), [['단독', '21:50'], ['예비', '']]],   // 월요일 휴일
+  [PLAN('2027-03-06', { dayType: 'holiday', end: '21:50' }), [['단독', '21:50'], ['예비', '']]],   // 토요일 휴일
+  [PLAN('2027-07-29', { dayType: 'holiday', end: '21:50' }), [['단독', '21:50'], ['예비', '']]]    // 방학 목요일 휴일
 ], ([plan, want]) => assert.deepStrictEqual(slots(plan).map((s) => [s.slot, s.end]), want));
 
 test('dutySlotsFor_: 운영 안 하는 날·plan 없음은 []', () => {
@@ -177,4 +182,19 @@ table('그 요일 틀 밖의 칸은 쓰되 경고(토요일 21:30조, 일요일 
   const r = on([ROW(date, slot, 'a@example.com')], date);
   assert.ok(r.warnings.some((w) => /그 요일에 없는 근무 칸/.test(w)), JSON.stringify(r.warnings));
   assert.strictEqual(r.duty.length + r.standby.length, 1);
+});
+
+test('휴일(dayType holiday, R21): 목요일 단독·예비는 틀 안(경고 없음), 21:30조는 틀 밖 경고. dayType을 주지 않으면 지금처럼 달력 요일', () => {
+  const rows = [ROW('2027-03-04', '단독', 'a@x.kr'), ROW('2027-03-04', '예비', 'b@x.kr')];
+  const h = plain(ctx.dutyOn_(rows, '2027-03-04', 'holiday'));
+  assert.deepStrictEqual([h.duty.map((d) => [d.slot, d.email]), h.standby.map((d) => d.email), h.warnings], [[['단독', 'a@x.kr']], ['b@x.kr'], []]);
+  assert.strictEqual(on(rows, '2027-03-04').warnings.length, 2);   // 목요일 틀(두 조) 밖
+  const wrong = plain(ctx.dutyOn_([ROW('2027-03-04', '21:30조', 'a@x.kr')], '2027-03-04', 'holiday'));
+  assert.deepStrictEqual(wrong.warnings, ['2027-03-04 그 요일에 없는 근무 칸입니다: 21:30조']);
+  assert.deepStrictEqual(plain(ctx.dutyOn_(rows, '2027-03-04', 'exam')).warnings.length, 2);   // 특별 유형은 달력 요일(가정 그대로)
+  const rec = plain(ctx.dutyRecord_(rows, '2027-03', { dayTypeByDate: { '2027-03-04': 'holiday' } }));
+  assert.deepStrictEqual([rec.warnings, rec.teachers.map((t) => [t.email, t.total, t.bySlot['단독']]), rec.standby.map((x) => x.email)],
+    [[], [['a@x.kr', 1, 1], ['b@x.kr', 0, 0]], ['b@x.kr']]);
+  assert.strictEqual(plain(ctx.dutyRecord_(rows, '2027-03')).warnings.length, 2);
+  assert.strictEqual(ctx.dutyIsOn_(rows, 'a@x.kr', '2027-03-04', '2027-03-04'), true);   // 근무자 판정은 틀과 상관없다
 });
