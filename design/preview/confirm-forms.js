@@ -6,7 +6,7 @@ const path = require('path');
 const { loadGs } = require('../../tests/helpers/harness');
 const fx = require('./confirm-forms-fixture');
 const OUT = path.join(__dirname, 'out');
-const CASES = [['meal-stop', 'printRenderMealConfirm_', fx.mealStop], ['meal-serve', 'printRenderMealConfirm_', fx.mealServe],
+const CASES = [['meal-stop', 'printRenderMealConfirm_', fx.mealStop], ['meal-serve', 'printRenderMealConfirm_', fx.mealServe], ['meal-breakfast-stop', 'printRenderMealConfirm_', fx.mealBreakfastStop],
   ['move-leave', 'printRenderMoveConfirm_', fx.moveLeave], ['move-enter', 'printRenderMoveConfirm_', fx.moveEnter]];
 
 async function main() {

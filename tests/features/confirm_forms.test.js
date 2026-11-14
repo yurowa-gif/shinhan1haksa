@@ -33,6 +33,7 @@ function pdf(env, who, fn, id, noRenderer) {
   const seen = { model: null, html: '', name: '' };
   const res = env.as(who, (c) => {
     if (!noRenderer) { c.printRenderMealConfirm_ = (m) => { seen.model = m; return '<html>meal</html>'; }; c.printRenderMoveConfirm_ = (m) => { seen.model = m; return '<html>move</html>'; }; }
+    else { c.printRenderMealConfirm_ = undefined; c.printRenderMoveConfirm_ = undefined; }   // 진짜 렌더러(src/print/ConfirmFormsHtml.gs)가 생겼으니 '없는 경우'는 직접 지운다
     c.sheetMakePdf_ = (h, name) => { seen.html = h; seen.name = name; return { getBytes: () => [37, 80, 68, 70] }; };
     return c[fn](id);
   });
