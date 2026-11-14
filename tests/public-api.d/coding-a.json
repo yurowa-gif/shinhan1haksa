@@ -123,6 +123,22 @@
     "saveDayBatch": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getDocData": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveDocState": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveDocType": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "cancelDocType": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }

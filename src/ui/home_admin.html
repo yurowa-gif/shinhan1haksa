@@ -54,6 +54,14 @@
     root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '계정(활성)' }), roleStats]));
     try { renderStage2B(d, root); } catch (e) { showError(root, e); }   // 2단계 카드가 실패해도 나머지 카드는 그린다
     try { renderStage2A(d, root); } catch (e) { showError(root, e); }
+    if (d.docs && !d.docs.error) {
+      root.appendChild(el('div', { class: 'card' }, [
+        el('h2', { text: '서류 체크리스트' }),
+        el('div', { style: 'margin:8px 0' }, [d.docs.items ? UI.statusPill('todo', '미제출 ' + d.docs.items + '건 · 학생 ' + d.docs.students + '명') : UI.statusPill('confirmed', d.docs.types ? '모두 제출' : '서류 종류 없음')]),
+        el('div', { class: 'muted', text: '학기 초 서류(동의서 등)를 냈는지 표시합니다.' }),
+        el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=docs', text: '서류 체크리스트 열기' })
+      ]));
+    }
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '운영 기간' }),
       el('div', { class: 'muted', text: '학기·방학 기간을 추가하고 고칩니다.' }),
