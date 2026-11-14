@@ -385,6 +385,7 @@
       else if (x.staleMeeting) msg = '이전 면담은 연결된 OUT이 취소되어 인정되지 않습니다. ' + (x.canMeeting ? '면담을 새로 기록해 주세요.' : '담당교사가 면담을 새로 기록해야 합니다.');
       else if (st === 'need') msg = x.canMeeting ? '학부모 면담을 하고 기록해 주세요. 기록이 있어야 관리자가 퇴실을 확정할 수 있습니다.' : '담당교사가 학부모 면담을 기록하면 관리자가 퇴실을 확정합니다.';
       else if (st === 'recorded') msg = '면담 ' + dayKo(x.meeting.date) + ' · ' + x.meeting.teacher + (x.canConfirm ? '' : ' — 관리자가 퇴실을 확정합니다.');
+      if (x.tempLeave && !x.left) msg = (msg ? msg + ' ' : '') + '임시 퇴실 중이라 복귀 뒤에 확정합니다' + (x.tempLeave.returnKo ? '(복귀 예정 ' + x.tempLeave.returnKo + (x.tempLeave.overdue ? ', 예정일이 지났습니다' : '') + ').' : '.');   // 결정 77③
       if (msg) card.appendChild(el('div', { style: 'margin:8px 0', text: msg }));
       if (x.prevExit) card.appendChild(el('div', { class: 'muted', text: '이전 퇴실 처리됨(' + dayKo(x.prevExit) + ')' }));
       if (x.canMeeting) card.appendChild(el('button', { type: 'button', class: 'btn block', text: '면담 기록하기', onclick: function () { openMeeting(x); } }));

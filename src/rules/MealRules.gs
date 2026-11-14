@@ -15,8 +15,9 @@
  * 방학 중식(결정 73, R19): item '중식'(값 실시·미실시)은 방학 운영 기간에만 있다. 적용일은 조식과 같은 규칙(실시 11:30, 미실시 수 11:30).
  * - 그 방학 안의 행만 본다: mealPlanChange_·mealCountsOn_은 방학(terms 행 {start_date, end_date})을 받아 시작일 전 중식 행(지난 방학)을
  *   보지 않는다. 방학 시작 전에 낸 신청의 적용일은 방학 시작일(rule 'vacation_start').
- * - 학사생만(실시는 학사생 값). 학사 퇴실 정리(F6) 행을 따로 쓰지 않고 집계에서 학사 '입실'인 날만 센다 → 퇴실하면 그날 끝나고,
- *   재입실하면 퇴실 전 값으로 이어진다(재입실 급식 기본값과 같다). ASSUMPTION(결정 73): 퇴실 시 중식은 조식처럼 퇴실일에 끝난다(석식의 결정 35 아님).
+ * - 학사생만(실시는 학사생 값). 학사 퇴실 정리(F6) 행을 따로 쓰지 않고 집계가 정한다: 학사 '입실'인 날, 그리고 결정 79 —
+ *   학사 퇴실 뒤에는 석식처럼 미실시 규칙의 중단일(mealEffectiveDate_('stop', 퇴실 신청 일시, {leaveDate})) 전날까지 센다.
+ *   재입실하면 퇴실 전 값으로 이어진다(재입실 급식 기본값과 같다). 막힘(퇴실 뒤 실시 신청)도 석식과 같다.
  */
 
 /**
@@ -113,7 +114,7 @@ function mealIsHallOnly_(item, value) {
  *         entry(true면 이 신청은 (재)입실 급식 행 — movePlan_ 학사·기숙사 입실, 재입실일 경계 규칙),
  *         vacation(item '중식'이면 필수: 그 방학 terms 행 {start_date, end_date} — 결정 73)}
  * 중식: 방학 시작일 전 중식 행은 보지 않고, 적용일이 방학 시작일보다 이르면 시작일(rule 'vacation_start' — 고친 날이면 Error),
- *   방학 끝날 뒤면 경고. 퇴실 정리 followUps는 쓰지 않는다(집계가 학사 입실인 날만 센다). 막힘은 조식과 같다(퇴실 상태면 실시 불가).
+ *   방학 끝날 뒤면 경고. 퇴실 정리 followUps는 쓰지 않는다(집계가 중단일을 정한다, 결정 79). 막힘은 석식과 같다.
  * → {kind, date, rule, autoDate, from, blocked:''|사유, superseded:boolean, supersededBy:[id], toCancel:[{id, effective_date, value}],
  *    followUps:[{item, value, effective_date, source}], warnings:[]}   source: 미실시 중단 행 'F6', 재입실일 값 행 'F7'(R11b) — 저장 쪽은 그대로 쓴다
  *
@@ -322,11 +323,20 @@ function mealLeaveFor_(rows, sid, item, date, req) {
   if (!row) return null;
   var at = ruleIso_(row.requested_at);
   try {
-    return { date: e0, at: at, stop: item !== '석식' ? e0 : mealEffectiveDate_('stop', at, { leaveDate: e0 }).date };
+    return { date: e0, at: at, stop: item === '조식' ? e0 : mealEffectiveDate_('stop', at, { leaveDate: e0 }).date };
   } catch (err) {
     // shortcut: 퇴실 기록의 신청 일시가 비었거나 형식이 틀리면 이 신청 일시로 본다(막힘·중단일이 입력 순서를 따른다), F6 아닌 경로로 퇴실을 쓰게 되면 고친다
-    return { date: e0, at: req, stop: item !== '석식' ? e0 : mealEffectiveDate_('stop', req, { leaveDate: e0 }).date };
+    return { date: e0, at: req, stop: item === '조식' ? e0 : mealEffectiveDate_('stop', req, { leaveDate: e0 }).date };
   }
+}
+
+/** 그날 중식을 세는지(mealCountsOn_): 실시이고, 학사 입실이거나 학사 퇴실 뒤 결정 79 중단일 전. lunchRows가 없으면(방학 밖) false. */
+function mealLunchOn_(lunchRows, changes, sid, day, hall) {
+  if (!lunchRows || statusOn_(lunchRows, sid, '중식', day) !== '실시') return false;
+  if (hall) return true;
+  var lv = statusRowOn_(changes, sid, '학사', day);   // 그날 학사 상태를 만든 행(statusOn_ 순서)
+  if (!lv) return false;   // hall이 아니면 그날 행은 퇴실이다
+  try { return day < mealEffectiveDate_('stop', lv.requested_at, { leaveDate: ruleStr_(lv.effective_date) }).date; } catch (e) { return false; }   // 퇴실 신청 일시가 틀리면 퇴실일에 끝난 것으로 본다
 }
 
 /** 방학 terms 행 → 시작일. 시작일·끝날이 날짜가 아니면 Error(중식은 방학 기간에만 — 결정 73). */
@@ -384,8 +394,9 @@ function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts) {
  * - 조식·석식은 학사 상태로 거르지 않는다(결정 35: 퇴실한 학생도 석식 중단일 전까지 학사 석식). afterLeaveHallDinner = 학사 석식인데 학사 입실 아님.
  * - 줄: 성별+학년('여1'…'남3'), '여 합계'·'남 합계', 'N학년', '전체'. 합계 줄 = 부분 합.
  * ASSUMPTION: 성별(남·여)이나 학년이 비었거나 다른 학생은 어느 줄에도 넣지 않고 unknownGroup + 경고(합계 줄이 부분 합과 맞게).
- * - vacation(선택, 결정 73) = termId가 방학이면 그 terms 행. lunch(중식) = 그날이 방학 안이고 학사 '입실'이며, 방학 시작일 이후 중식 행으로
- *   본 값이 '실시'. 주지 않으면(학기) lunch는 늘 0.
+ * - vacation(선택, 결정 73) = termId가 방학이면 그 terms 행. lunch(중식) = 그날이 방학 안이고, 방학 시작일 이후 중식 행으로 본 값이
+ *   '실시'이며, 학사 '입실'이거나 학사 퇴실 뒤 중단일 전(결정 79 — 퇴실 신청 일시의 미실시 규칙, 신청 일시가 틀리면 퇴실일에 끝남).
+ *   주지 않으면(학기) lunch는 늘 0.
  */
 function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, vacation) {
   var tid = ruleStr_(termId), day = ruleStr_(ymd), pid = ruleStr_(prevTermId);
@@ -417,7 +428,7 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, 
     var dinner = statusOn_(changes, sid, '석식', day);
     if (dinner === '학사 석식' && !hall) out.afterLeaveHallDinner++;
     rows.push({ keys: [g + gr, g + ' 합계', gr + '학년', '전체'], v: { hall: +hall, dorm: +dorm, nonDorm: +(hall && !dorm),
-      breakfast: +(statusOn_(changes, sid, '조식', day) === '실시'), lunch: +(!!lunchRows && hall && statusOn_(lunchRows, sid, '중식', day) === '실시'), hallDinner: +(dinner === '학사 석식'), generalDinner: +(dinner === '일반 석식') } });
+      breakfast: +(statusOn_(changes, sid, '조식', day) === '실시'), lunch: +mealLunchOn_(lunchRows, changes, sid, day, hall), hallDinner: +(dinner === '학사 석식'), generalDinner: +(dinner === '일반 석식') } });
   });
   var gl = Object.keys(grades).sort(function (a, b) { return a - b; });
   ['여', '남'].forEach(function (g) { gl.forEach(function (gr) { groups[g + gr] = zero(); }); groups[g + ' 합계'] = zero(); });

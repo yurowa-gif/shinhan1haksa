@@ -402,12 +402,15 @@ function outAutoSinceNext_(snapshot, currentTypes, nowIso, defaultTypes) {
 /**
  * 2OUT 퇴실 확정 관문(결정 4, PRD F12·F6). 면담 기록 전에는 막는다.
  * notes = counsel_notes 행 중 id·student_id·type·linked_violation_id·status·date·teacher_email만(내용은 넘기지 않는다).
- * → {count, level, triggerOutId, meetingNote:{id, date, teacher_email}|null, alreadyLeft, ok, reason:''|'퇴실 대상 아님'|'면담 기록 필요'|'이미 퇴실'}
+ * → {count, level, triggerOutId, meetingNote:{id, date, teacher_email}|null, alreadyLeft, tempLeave:{id, leaveDate, returnDate}|null, ok,
+ *    reason:''|'퇴실 대상 아님'|'면담 기록 필요'|'이미 퇴실'|'임시 퇴실 중'}
  * - 이번 기간 살아 있는 OUT(outLevel_과 같음)을 occurred_at → created_at → id 순으로 놓았을 때 합이 처음 2가 되는 OUT이 triggerOutId
  *   (보통은 둘째, opts.instantRuleIds의 즉시 퇴실 항목이면 그 한 건 — 결정 69).
  * - 면담 = status 빈칸·유효, 같은 학생, type '2OUT 학부모 면담', 이번 기간 살아 있는 OUT에 연결, 날짜 ≥ triggerOut 발생일.
  * - alreadyLeft = ymd에 학사 퇴실 상태이거나 앞으로 2OUT 퇴실(memo '[2OUT]…' 또는 reason '2OUT 퇴실')이 잡혀 있음. 보통 미래 퇴실은
- *   막지 않는다(그 뒤 movePlan_이 '이후 날짜에 입퇴실 기록'으로 그 퇴실을 가리킨다, 총괄 결정). 순서: 이미 퇴실 → 퇴실 대상 아님(2건 미만) → 면담 기록 필요 → ok.
+ *   막지 않는다(그 뒤 movePlan_이 '이후 날짜에 입퇴실 기록'으로 그 퇴실을 가리킨다, 총괄 결정).
+ * - tempLeave(결정 77③) = ymd에 건강상 임시 퇴실 중(tempLeaveOn_)이면 그 퇴실. 그때는 alreadyLeft가 아니고(면담은 할 수 있다) 퇴실 확정만
+ *   막는다(reason '임시 퇴실 중' — 복귀 뒤에 진행). 순서: 이미 퇴실 → 퇴실 대상 아님(2건 미만) → 임시 퇴실 중 → 면담 기록 필요 → ok.
  * 결정 51: 연결한 OUT이 나중에 취소되면 그 면담은 세지 않는다(다른 2건이 남아도 다시 면담), 둘째 OUT보다 앞선 날짜의 면담도.
  */
 function outDismissalGate_(violations, notes, changes, studentId, termId, ymd, opts) {
@@ -428,11 +431,12 @@ function outDismissalGate_(violations, notes, changes, studentId, termId, ymd, o
   var out = { count: lv.count, level: lv.level, triggerOutId: trigger ? ruleStr_(trigger.id) : '',
     meetingNote: n ? { id: ruleStr_(n.id), date: ruleStr_(n.date), teacher_email: ruleStr_(n.teacher_email) } : null,
     // 이미 퇴실했거나 앞으로 2OUT 퇴실이 잡혀 있으면(2OUT 퇴실을 두 번 만들지 않게) 이미 퇴실
-    alreadyLeft: statusOn_(changes, sid, '학사', ymd) === '퇴실' || (changes || []).some(function (c) {
+    tempLeave: tempLeaveOn_(changes, sid, ymd),
+    alreadyLeft: (statusOn_(changes, sid, '학사', ymd) === '퇴실' && !tempLeaveOn_(changes, sid, ymd)) || (changes || []).some(function (c) {
       return c && ruleRowLive_(c) && ruleStr_(c.student_id) === sid && ruleStr_(c.item) === '학사' && ruleStr_(c.value) === '퇴실' &&
         ymdIsValid_(ruleStr_(c.effective_date)) && ruleStr_(c.effective_date) > ymd && (ruleStr_(c.memo).indexOf('[2OUT]') === 0 || ruleStr_(c.reason) === '2OUT 퇴실');
     }), ok: false, reason: '' };
-  out.reason = out.alreadyLeft ? '이미 퇴실' : lv.count < 2 ? '퇴실 대상 아님' : !n ? '면담 기록 필요' : '';
+  out.reason = out.alreadyLeft ? '이미 퇴실' : lv.count < 2 ? '퇴실 대상 아님' : out.tempLeave ? '임시 퇴실 중' : !n ? '면담 기록 필요' : '';
   out.ok = !out.reason;
   return out;
 }

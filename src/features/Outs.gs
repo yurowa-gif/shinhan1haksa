@@ -87,7 +87,7 @@ var VIO_MEMO_MAX = 200;
  */
 function vioIsLeft_(changes, studentId, ymd) {
   var sid = ruleStr_(studentId);
-  if (statusOn_(changes, sid, '학사', ymd) === '퇴실') return true;
+  if (statusOn_(changes, sid, '학사', ymd) === '퇴실') return !tempLeaveOn_(changes, sid, ymd);   // 건강상 임시 퇴실 중(결정 77③)은 '이미 퇴실'이 아니다(R9 alreadyLeft와 같게)
   return (changes || []).some(function (c) {
     return c && ruleRowLive_(c) && ruleStr_(c.student_id) === sid && ruleStr_(c.item) === '학사' && ruleStr_(c.value) === '퇴실' &&
       ruleStr_(c.effective_date) > ymd && (ruleStr_(c.memo).indexOf('[2OUT]') === 0 || ruleStr_(c.reason) === '2OUT 퇴실');
@@ -486,7 +486,10 @@ function vioMeetingInfo_(user, term, studentIds, byId, rows) {
       staleMeeting: state === 'need' && notes.some(function (n) { return n.student_id === id && ruleRowLive_(n) && String(n.type).trim() === CNS_TYPE_OUT2 && rows.some(function (v) { return String(v.id) === String(n.linked_violation_id); }); }),
       prevExit: state === 'left' ? '' : cnsLastOut2Exit_(changes, id),   // 재입실 학생에 '이전 퇴실 처리됨(M월 D일)'
       trigger: g.triggerOutId ? (function () { var t = rows.filter(function (v) { return String(v.id) === g.triggerOutId; })[0]; return t ? { occurredAt: String(t.occurred_at), ruleName: t.rule_name } : null; })() : null,
-      canMeeting: isTeacher && !!facts[id].isAssigned && state === 'need', canConfirm: isAdmin && state === 'recorded' };
+      canMeeting: isTeacher && !!facts[id].isAssigned && state === 'need',
+      // 임시 퇴실 중이면 면담은 하되 퇴실 확정은 복귀 뒤에(결정 77③). 카드가 '임시 퇴실 중이라 복귀 뒤에 확정합니다'를 보인다
+      tempLeave: g.tempLeave ? { returnKo: g.tempLeave.returnDate ? foodDateKo_(g.tempLeave.returnDate) : '', overdue: !!g.tempLeave.returnDate && g.tempLeave.returnDate < today_() } : null,
+      canConfirm: isAdmin && state === 'recorded' && !g.tempLeave };
   });
   return out;
 }
@@ -501,7 +504,7 @@ function confirmOutDismissal(studentId) {
   var student = findById_('students', String(studentId || ''));
   if (!student) return { ok: false, reason: '학생을 찾을 수 없습니다.' };
   var g = cnsGateFor_(student.id);
-  if (!g.gate.ok) return { ok: false, reason: g.gate.reason };
+  if (!g.gate.ok) return g.gate.tempLeave ? { ok: false, reason: inoutGateReason_(g.gate), tempLeave: true } : { ok: false, reason: g.gate.reason };
   var names = {};
   readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = String(u.name || ''); });
   var m = g.gate.meetingNote;

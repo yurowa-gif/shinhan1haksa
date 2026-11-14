@@ -1,6 +1,7 @@
 <style>
-  .mv-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .mv-row .mv-text { flex: 1 1 auto; min-width: 0; }
+  .mv-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+  .mv-row .mv-text { flex: 1 1 10em; min-width: 0; }   /* 글이 10em보다 좁아지면 버튼이 아래 줄로 내려간다(360px에서 버튼 여러 개) */
+  .mv-row > :last-child:not(.mv-text) { margin-left: auto; }
   .mv-row .btn { flex: 0 0 auto; white-space: nowrap; }
   .mv-date { font-size: var(--font-xl); font-weight: 700; }
 </style>
@@ -221,6 +222,7 @@
         el('div', { class: 'muted', text: [h.requestedKo ? '신청 ' + h.requestedKo : '', h.sourceLabel, h.edited ? '적용일 고침' + (h.reason ? '(' + h.reason + ')' : '') : h.reason].filter(function (x) { return x; }).join(' · ') }),
         h.status === '취소' && h.cancelText ? el('div', { class: 'muted', text: h.cancelText }) : null
       ]);
+      if (h.tempLeave) left.appendChild(el('div', { class: h.tempLeave.overdue ? 'notice warn' : 'muted', style: 'word-break:keep-all', text: '임시 퇴실 중' + (h.tempLeave.returnKo ? ' · 복귀 예정 ' + h.tempLeave.returnKo : '') + (h.tempLeave.overdue ? ' (예정일이 지났습니다)' : '') }));
       var right = null;
       if (h.canMarkDoc) {
         right = el('button', { type: 'button', class: 'btn secondary', text: '제출 표시', onclick: function (e) {
@@ -242,7 +244,29 @@
         var cb = el('button', { type: 'button', class: 'btn secondary', style: 'flex:0 0 auto;white-space:nowrap', text: '퇴실 취소', onclick: function (e) { cancelSheet(h, name, e.currentTarget); } });
         right = right ? el('div', { style: 'display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:0 0 auto' }, [right, cb]) : cb;
       }
+      if (h.tempLeave && h.tempLeave.canConvert) {   // 일반 퇴실로 바꾸기(결정 77④): 확인 시트에 '막힘은 처음 임시 퇴실한 날부터'를 서버가 계산해 보인다
+        var vb = el('button', { type: 'button', class: 'btn secondary', style: 'flex:0 0 auto;white-space:nowrap', text: '일반 퇴실로 바꾸기', onclick: function (e) { convertSheet(h, name, e.currentTarget); } });
+        right = right ? el('div', { style: 'display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:0 0 auto' }, [right, vb]) : vb;
+      }
       return el('div', { class: 'mv-row', style: 'padding:8px 0;border-bottom:1px solid var(--line)' }, [left, right]);
+    }
+    function convertSheet(h, name, btn) {
+      if (saving) { UI.toast('저장 중입니다. 잠시 기다려 주세요.', { kind: 'info' }); return; }
+      btn.disabled = true;
+      call('previewConvertTempLeave', h.id).then(function (p) {
+        btn.disabled = false;
+        if (!alive) return;
+        if (!p.ok) { UI.toast((p.errors && p.errors[0] && p.errors[0].message) || '바꿀 수 없습니다.', { kind: 'warn', ms: 5000 }); if (current) load(current, currentYmd); return; }
+        UI.confirmSheet({ title: '일반 퇴실로 바꿉니다', lead: p.lead, lines: [name].concat(p.lines).concat((p.warnings || []).map(function (w) { return '※ ' + w; })), confirmText: '일반 퇴실로 바꾸기', danger: true, onconfirm: function () {
+          if (saving) { UI.toast('저장 중입니다. 잠시 기다려 주세요.', { kind: 'info' }); return; }
+          saving = true;
+          call('convertTempLeave', h.id, p.expect).then(function (r) {
+            saving = false;
+            if (r.stale) { UI.toast(r.error, { kind: 'warn', ms: 5000 }); } else if (!r.ok) { UI.toast((r.errors && r.errors[0] && r.errors[0].message) || '바꾸지 못했습니다.', { kind: 'warn', ms: 5000 }); } else UI.toast('일반 퇴실로 바꿨습니다.');
+            if (alive && current) load(current, currentYmd);
+          }).catch(function (err) { saving = false; fail(err); });
+        } });
+      }).catch(function (err) { btn.disabled = false; fail(err); });
     }
     function cancelSheet(h, name, btn) {
       if (saving) { UI.toast('저장 중입니다. 잠시 기다려 주세요.', { kind: 'info' }); return; }
@@ -302,7 +326,7 @@
   function renderMoveTab(root, prefillId) {
     var U = UI.util;
     var alive = true, typeSeq = 0;   // 탭을 떠난 뒤 늦게 온 응답·예약이 화면·아래 바를 다시 만들지 않게
-    var ctx = null, picked = null, mctx = null, type = '', dinner = '', doc = false, breakfastOn = true, last = null, seq = 0, timer = null, busy = false, atTouched = false, meals = null, dateField = null, dateTouched = false;   // meals = 재입실 급식 선택(학사 입실일 때만)
+    var ctx = null, picked = null, mctx = null, type = '', dinner = '', doc = false, breakfastOn = true, last = null, seq = 0, timer = null, busy = false, atTouched = false, meals = null, dateField = null, dateTouched = false, returnYmd = '';   // meals = 재입실 급식 선택(학사 입실일 때만)
     var dismiss = null, dismissMsg = '', savedMove = null;   // savedMove = 방금 저장한 신청서(확인서 안내)
        // 2OUT 퇴실 확정에서 넘어온 신청서(서버가 다시 확인한 값만, 주소 값은 믿지 않는다)
     var body = el('div');
@@ -312,7 +336,8 @@
     function removeBar() { if (bar) { bar.remove(); bar = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); } }
     function plusDay(ymd) { var d = new Date(ymd + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); }
     function nextMonthFirst(ymd) { var y = +ymd.slice(0, 4), m = +ymd.slice(5, 7); return (m === 12 ? y + 1 : y) + '-' + String(m === 12 ? 1 : m + 1).padStart(2, '0') + '-01'; }   // 결정 74: 신규 입실일 기본값
-    function hallLeave() { return type === '학사 퇴실' || type === '학사 및 기숙사 퇴실'; }
+    function isTemp() { return type === '학사 임시 퇴실' || type === '학사 및 기숙사 임시 퇴실'; }   // 건강상 임시 퇴실(결정 70·77): 복귀 예정일 필수
+    function hallLeave() { return type === '학사 퇴실' || type === '학사 및 기숙사 퇴실' || isTemp(); }   // 석식 정리는 일반 퇴실과 같다
 
     call('getMealContext').then(function (c) {
       if (!alive) return;
@@ -337,7 +362,7 @@
       if (dismissMsg) body.appendChild(el('div', { class: 'notice warn', text: dismissMsg }));
       var status = el('div', { class: 'muted' });
       var picker = UI.studentPicker({ students: ctx.students, label: '학생', onpick: function (s) {
-        picked = s; type = ''; dinner = ''; meals = null; mctx = null; status.textContent = '';
+        picked = s; type = ''; dinner = ''; meals = null; returnYmd = ''; mctx = null; status.textContent = '';
         doc = false; docBox.checked = false; drawDoc(); breakfastOn = true; reason.value = '';   // 이전 학생의 서류 체크·조식 선택·사유가 남지 않게
         drawTypes(); drawExtras();
         if (!s) { refresh(); return; }
@@ -388,6 +413,13 @@
       var dinnerSeg = null, dinnerField = null;
       function drawExtras() {
         clear(extra);
+        if (isTemp()) {   // 복귀 예정일(필수)과 '건강상 사유만' 안내(결정 77⑤)
+          var rf = UI.dateField({ label: '복귀 예정일', value: returnYmd, onchange: function (v) { returnYmd = v; refresh(); } });
+          extra.appendChild(el('div', { class: 'card' }, [el('h2', { text: '임시 퇴실' }), rf,
+            el('div', { class: 'notice info', style: 'word-break:keep-all', text: '임시 퇴실은 건강상 사유만 씁니다. 사유 칸에는 건강상 이유(예: 독감 입원)만 적어 주세요. 가정 사정·대회 출전 같은 짧은 부재는 사전 특이사항으로 적습니다.' }),
+            el('a', { href: (function () { var b = document.querySelector('a.back'); return b ? b.href.split('#')[0] + '?page=exceptions' : '#'; })(), style: 'display:inline-flex;align-items:center;min-height:44px;color:var(--accent)', text: '사전 특이사항 입력으로 가기' }),
+            el('div', { class: 'muted', style: 'word-break:keep-all', text: '임시 퇴실도 일반 퇴실처럼 급식을 끊고 자리를 비웁니다. 다른 점은 다시 들어오는 것을 막지 않는 것뿐입니다.' })]));
+        }
         if (hallLeave()) {
           dinnerSeg = UI.segmented({ label: '석식', value: dinner, options: [{ value: '중단', label: '중단' }, { value: '일반 석식', label: '일반 석식으로' }], onchange: function (v) { dinner = v; dinnerField.setError(''); refresh(); } });
           dinnerField = UI.field('석식', dinnerSeg, { hint: '"중단"은 미실시 규칙(수요일 11:30이 지나 신청하면 다다음 주 월요일)을 따릅니다.' });
@@ -427,11 +459,11 @@
       function payload() {
         var pl = { studentId: picked ? picked.id : '', type: type, requestedAt: at.value ? at.value + ':00' : '', effectiveDate: dateField.getValue(), dinner: dinner,
           breakfastWithDorm: type === '기숙사 입실' ? breakfastOn : true, breakfastStopWithDorm: type === '기숙사 퇴실' ? breakfastOn : true,
-          reason: dismiss ? '' : reason.value.trim(), docSubmitted: doc, outDismissal: !!dismiss };
+          reason: dismiss ? '' : reason.value.trim(), docSubmitted: doc, outDismissal: !!dismiss, returnDate: isTemp() ? returnYmd : '' };
         if (type === '학사 입실' && mctx && mctx.reentry && meals) pl.meals = { '조식': meals['조식'], '석식': meals['석식'] };   // 재입실 급식은 늘 명시해서 보낸다
         return pl;
       }
-      function ready() { return !!(picked && type && (!hallLeave() || dinner) && last && last.ok && !busy); }
+      function ready() { return !!(picked && type && (!hallLeave() || dinner) && (!isTemp() || returnYmd) && last && last.ok && !busy); }
       function drawResult() {
         clear(result);
         if (!last) { result.appendChild(el('div', { class: 'muted', text: picked && type && (!hallLeave() || dinner) ? '바뀌는 내용을 계산하는 중…' : '학생·유형' + (hallLeave() ? '·석식' : '') + '을 고르면 바뀌는 내용이 나옵니다.' })); return; }
@@ -446,7 +478,7 @@
       function refresh(retried) {
         var mine = ++seq; clearTimeout(timer);   // 학생을 비우는 경우에도 진행 중인 미리보기를 무효로 한다
         last = null; drawResult(); drawBar();
-        if (!picked || !type || (hallLeave() && !dinner)) return;
+        if (!picked || !type || (hallLeave() && !dinner) || (isTemp() && !returnYmd)) return;
         timer = setTimeout(function () {
           call('previewMove', payload()).then(function (p) {
             if (!alive || mine !== seq) return;
@@ -482,7 +514,7 @@
             }).catch(function (err) { if (!alive) return; busy = false; drawBar(); fail(err); });
           } });
       }
-      function resetState() { picked = null; mctx = null; type = ''; dinner = ''; meals = null; doc = false; breakfastOn = true; last = null; atTouched = false; seq++; clearTimeout(timer); }
+      function resetState() { picked = null; mctx = null; type = ''; dinner = ''; meals = null; returnYmd = ''; doc = false; breakfastOn = true; last = null; atTouched = false; seq++; clearTimeout(timer); }
       function reset() { resetState(); dismiss = null; dismissMsg = ''; draw(); }
       drawResult(); drawBar();
       if (dismiss) { picked = { id: dismiss.studentId, name: ps.name, grade: ps.grade, classNo: ps.classNo, number: ps.number }; loadTypes(picked.id); }

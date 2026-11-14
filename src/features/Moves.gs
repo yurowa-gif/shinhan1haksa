@@ -5,7 +5,10 @@
  */
 
 var INOUT_DISMISS_REASON = '2OUT 퇴실';
-var INOUT_TYPES = ['학사 입실', '학사 퇴실', '기숙사 입실', '기숙사 퇴실', '학사 및 기숙사 퇴실'];
+var INOUT_TYPES = ['학사 입실', '학사 퇴실', '기숙사 입실', '기숙사 퇴실', '학사 및 기숙사 퇴실', '학사 임시 퇴실', '학사 및 기숙사 임시 퇴실'];
+var INOUT_TEMP_REASON = '임시 퇴실';   // 대표 행 reason(규칙이 정한다, R18). 예약어: 사람이 쓴 사유로는 거부한다
+function inoutIsTempType_(type) { return type === '학사 임시 퇴실' || type === '학사 및 기숙사 임시 퇴실'; }
+function inoutReservedReason_(reason) { var t = String(reason || '').replace(/\s+/g, ' ').trim(); return t === INOUT_TEMP_REASON || t.indexOf('[임시]') === 0; }
 
 /** 규칙·검사가 준 문장 속 숫자 날짜(yyyy-MM-dd)를 "3월 5일(금)"로 바꿔 교사에게 보인다 */
 function inoutKo_(text) {
@@ -21,6 +24,9 @@ function inoutTypeChips_(hall, dorm) {
   out.push({ type: '학사 퇴실', enabled: inHall && !inDorm, hint: inHall && inDorm ? "기숙사생은 '학사 퇴실'만 할 수 없습니다. '학사 및 기숙사 퇴실'로 신청해 주세요." : (inHall ? '' : '이미 학사 퇴실 상태입니다.') });
   out.push({ type: '기숙사 퇴실', enabled: inDorm, hint: inDorm ? '' : '기숙사에 입실한 학생이 아닙니다.' });
   out.push({ type: '학사 및 기숙사 퇴실', enabled: inHall && inDorm, hint: inHall && inDorm ? '' : '학사·기숙사에 모두 입실한 학생만 고를 수 있습니다.' });
+  // 건강상 임시 퇴실(결정 70·77): 재입실을 막지 않는다. 일반 퇴실과 같은 상태에서만 고를 수 있다
+  out.push({ type: '학사 임시 퇴실', enabled: inHall && !inDorm, hint: inHall && !inDorm ? '' : (inHall ? "기숙사생은 '학사 및 기숙사 임시 퇴실'로 신청해 주세요." : '학사 입실 상태인 학생만 고를 수 있습니다.') });
+  out.push({ type: '학사 및 기숙사 임시 퇴실', enabled: inHall && inDorm, hint: inHall && inDorm ? '' : '학사·기숙사에 모두 입실한 학생만 고를 수 있습니다.' });
   return out;
 }
 
@@ -40,9 +46,15 @@ function inoutValidate_(input, ctx) {
   else if (at > ctx.now) err('requestedAt', '신청 일시가 지금보다 늦습니다. 서류를 받은 날짜·시각을 입력해 주세요.');
   var eff = String(input.effectiveDate || '').trim();
   if (!ymdIsValid_(eff)) err('effectiveDate', '적용일을 날짜로 입력해 주세요.');
+  var temp = inoutIsTempType_(type);
   var hallLeave = type === '학사 퇴실' || type === '학사 및 기숙사 퇴실';
   var dinner = String(input.dinner || '');
-  if (hallLeave && dinner !== '중단' && dinner !== '일반 석식') err('dinner', '석식을 골라 주세요(중단 또는 일반 석식으로).');
+  var returnDate = String(input.returnDate || '').trim();
+  if (temp) {   // 복귀 예정일은 필수(퇴실일 뒤). 날짜 형식·순서는 규칙(movePlan_)도 다시 본다
+    if (!ymdIsValid_(returnDate)) err('returnDate', '복귀 예정일을 날짜로 입력해 주세요.');
+    else if (ymdIsValid_(eff) && returnDate <= eff) err('returnDate', '복귀 예정일은 퇴실일 뒤여야 합니다.');
+  }
+  if ((hallLeave || temp) && dinner !== '중단' && dinner !== '일반 석식') err('dinner', '석식을 골라 주세요(중단 또는 일반 석식으로).');
   // 재입실 급식(학사 입실): 조식·석식 값. 화면이 늘 명시해서 보낸다(기본값 = 퇴실 전 값은 확인 시트에 보인다)
   var meals = null;
   if (type === '학사 입실' && input.meals && typeof input.meals === 'object') {
@@ -60,8 +72,11 @@ function inoutValidate_(input, ctx) {
     reason = INOUT_DISMISS_REASON;
     if (!hallLeave && INOUT_TYPES.indexOf(type) >= 0) err('type', "2OUT 퇴실은 '학사 퇴실' 또는 '학사 및 기숙사 퇴실'로 신청합니다.");
   } else if (/^2OUT\s*퇴실$/.test(reason.replace(/\s+/g, ' ')) || reason.indexOf('[2OUT]') === 0) err('reason', "'2OUT 퇴실' 사유는 OUT 화면의 퇴실 확정에서만 씁니다. 다른 사유를 적어 주세요.");
+  // '임시 퇴실'·'[임시]…'도 예약어다: 임시 퇴실 표시(재입실을 막지 않는 표시)를 사유 칸으로 흉내 내지 못하게 한다(결정 77)
+  if (!ctx.dismiss && inoutReservedReason_(reason)) err('reason', "'임시 퇴실' 글자는 임시 퇴실 유형에서만 쓰입니다. 다른 사유를 적어 주세요.");
   return { errors: errors, rec: errors.length ? null : {
     studentId: studentId, type: type, requestedAt: at, effectiveDate: eff, dinner: dinner, reason: reason, doc: input.docSubmitted === true, meals: meals,
+    temp: temp, returnDate: temp ? returnDate : '',
     breakfastWithDorm: input.breakfastWithDorm !== false, breakfastStopWithDorm: input.breakfastStopWithDorm !== false
   } };
 }
@@ -88,7 +103,8 @@ function inoutReentryDefaults_(changes, studentId, ymd) {
 function inoutSummary_(rec, plan, changes) {
   var lead = foodDateKo_(rec.effectiveDate) + '부터 ' + rec.type;
   var lines = [];
-  if (rec.type === '학사 퇴실' || rec.type === '학사 및 기숙사 퇴실') lines.push('자리 공석');
+  if (rec.type === '학사 퇴실' || rec.type === '학사 및 기숙사 퇴실' || rec.temp) lines.push('자리 공석');
+  if (rec.temp) lines.push('복귀 예정일 ' + foodDateKo_(rec.returnDate) + ' · 건강상 임시 퇴실은 재입실을 막지 않습니다');
   plan.rows.slice(1).forEach(function (r) {
     var d = foodDateKo_(r.effective_date);
     if (r.item === '기숙사') lines.push('기숙사 ' + d + ' ' + r.value);
@@ -106,7 +122,7 @@ function inoutSummary_(rec, plan, changes) {
 
 function inoutSignature_(plan) {
   return JSON.stringify({
-    r: plan.rows.map(function (r) { return [r.item, r.value, r.effective_date, r.source]; }),
+    r: plan.rows.map(function (r) { return [r.item, r.value, r.effective_date, r.source, r.memo || '']; }),
     c: plan.toCancel.map(function (c) { return c.id; }).sort(), s: plan.toRestore.map(function (c) { return c.id; }).sort(),
     e: plan.errors, w: plan.warnings
   });
@@ -118,7 +134,7 @@ function inoutSignature_(plan) {
  */
 function inoutPlan_(rec, changes, d) {
   var plan = movePlan_(changes, rec.studentId, { type: rec.type, effectiveDate: rec.effectiveDate, requestedAt: rec.requestedAt, dinner: rec.dinner,
-    breakfastWithDorm: rec.breakfastWithDorm, breakfastStopWithDorm: rec.breakfastStopWithDorm, meals: rec.meals || undefined }, { today: today_(), cutoff: d.cutoff, terms: d.terms });   // terms: 결정 63(2OUT 퇴실 뒤 재입실 금지)을 규칙이 판정할 때 쓴다(규칙 함수가 오기 전에는 무시됨)
+    breakfastWithDorm: rec.breakfastWithDorm, breakfastStopWithDorm: rec.breakfastStopWithDorm, meals: rec.meals || undefined, returnDate: rec.returnDate || undefined }, { today: today_(), cutoff: d.cutoff, terms: d.terms });   // terms: 결정 63(2OUT 퇴실 뒤 재입실 금지)을 규칙이 판정할 때 쓴다(규칙 함수가 오기 전에는 무시됨)
   plan.errors = plan.errors.map(inoutKo_);
   plan.warnings = plan.warnings.map(inoutKo_);
   return plan;
@@ -153,6 +169,11 @@ function inoutFinish_(c, d) {
 
 function inoutAuthorize_(input, c) { return foodAuthorize_(input, c); }   // 다른 기간 담당교사 안내 포함
 
+/** 관문이 막은 이유를 교사용 말로(임시 퇴실 중이면 복귀 뒤에 확정한다는 안내, 결정 77③) */
+function inoutGateReason_(gate) {
+  return gate.tempLeave ? '임시 퇴실 중이라 복귀 뒤에 확정합니다' + (gate.tempLeave.returnDate ? '(복귀 예정 ' + foodDateKo_(gate.tempLeave.returnDate) + ')' : '') : gate.reason;
+}
+
 /**
  * 2OUT 퇴실 확정 신청의 면담 관문(락 안에서 부른다, 읽기만). 통과 못 하면 errors, 통과하면 memo(UUID만: 둘째 OUT·면담 기록 id).
  * 적용일이 이번 운영 기간 밖이면 거부(관문은 이번 기간 기준이다). 면담 날짜·내용은 어디에도 쓰지 않는다.
@@ -160,7 +181,7 @@ function inoutAuthorize_(input, c) { return foodAuthorize_(input, c); }   // 다
 function inoutDismissGate_(c) {
   if (!c.rec || c.errors.length) return c;
   var g = cnsGateFor_(c.rec.studentId);
-  if (!g.gate.ok) { c.errors = [{ field: 'gate', message: g.gate.reason }]; return c; }
+  if (!g.gate.ok) { c.errors = [{ field: 'gate', message: inoutGateReason_(g.gate) }]; return c; }
   // 적용일: 면담 날짜 이후(아래), 이번 기간 끝 다음 날까지(끝나는 날 확정하면 기본 적용일이 다음 날이라 일반 퇴실처럼 방학 첫날도 된다)
   var eff = c.rec.effectiveDate;
   if (eff > ymdAddDays_(g.term.end_date, 1)) { c.errors = [{ field: 'effectiveDate', message: '2OUT 퇴실의 적용일은 이번 운영 기간이 끝난 다음 날까지만 정할 수 있습니다.' }]; return c; }
@@ -174,15 +195,18 @@ function inoutIsDismissRow_(c) { return String(c.reason || '') === INOUT_DISMISS
 
 /** 유형 → 대표 행의 항목·값·적용일 */
 function inoutHeadOf_(type, eff) {
-  var m = /^(학사|기숙사)( 및 기숙사)? (입실|퇴실)$/.exec(type);
-  return { item: m[1], value: m[3], effective_date: eff };
+  var m = /^(학사|기숙사)( 및 기숙사)?( 임시)? (입실|퇴실)$/.exec(type);
+  return { item: m[1], value: m[4], effective_date: eff };
 }
+
+/** 같은 임시 퇴실인데 복귀 예정일이 다르면 true(다시 눌러도 한 번만 쓰되, 다른 내용은 조용히 넘기지 않는다) */
+function inoutTempDiffers_(rec, dup) { return !!rec.temp && tempLeaveReturnDate_(dup) !== rec.returnDate; }
 
 /** 같은 입퇴실 신청서(학생·항목·값·적용일·신청 일시, F6 대표 행)가 이미 있나 — 다시 눌러도 한 번만 쓴다 */
 function inoutFindDuplicate_(rec, head, changes, dismiss) {
   return changes.filter(function (c) {
     return c.item === head.item && c.value === head.value && c.effective_date === head.effective_date && c.requested_at === rec.requestedAt &&
-      c.source === 'F6' && !String(c.linked_change_id || '') && String(c.status || '유효') === '유효' && inoutIsDismissRow_(c) === !!dismiss;
+      c.source === 'F6' && !String(c.linked_change_id || '') && String(c.status || '유효') === '유효' && inoutIsDismissRow_(c) === !!dismiss && isTempLeaveRow_(c) === !!rec.temp;
   })[0] || null;
 }
 
@@ -245,6 +269,7 @@ function saveMove(input, expect) {
       // 같은 신청서인데 급식 정리 선택(석식 등)이 다르면 조용히 "이미 저장"이라 하지 않는다 — 저장된 연결 행과 이번 계획의 연결 행을 견준다
       var key = function (r) { return [r.item, r.value, r.effective_date].join('|'); };
       var saved = d.changes.filter(function (x) { return x.linked_change_id === dup.id; }).map(key).sort().join(',');
+      if (inoutTempDiffers_(c.rec, dup)) return { ok: false, errors: [{ field: '', message: '복귀 예정일이 다른 임시 퇴실이 이미 저장되어 있습니다. 학생 기록을 확인해 주세요.' }] };
       if (!before.errors.length && before.rows.slice(1).map(key).sort().join(',') !== saved) return { ok: false, errors: [{ field: '', message: '다른 내용으로 이미 저장되어 있습니다. 학생 기록을 확인해 주세요.' }] };
       if (foodUnfinished_(before, d.changes, dup.id)) return { ok: false, errors: [{ field: '', message: FOOD_UNFINISHED }] };
       return { ok: true, duplicate: true, id: dup.id, lead: foodDateKo_(c.rec.effectiveDate) + '부터 ' + c.rec.type, doc: String(dup.doc_submitted).toUpperCase() === 'TRUE' };
@@ -258,7 +283,8 @@ function saveMove(input, expect) {
     if (String(expect || '') !== inoutSignature_(plan)) return { ok: false, stale: true, error: '확인한 뒤 다른 변경이 있었습니다. 다시 확인해 주세요.' };
     var w = foodWrite_({
       student_id: rec.studentId, item: head.item, value: head.value, requested_at: head.requested_at, effective_date: head.effective_date,
-      effective_date_auto: head.effective_date_auto, reason: rec.reason, doc_submitted: rec.doc ? 'TRUE' : 'FALSE', source: 'F6', memo: dismiss ? c.memo : ''
+      effective_date_auto: head.effective_date_auto, reason: rec.temp ? head.reason : rec.reason, doc_submitted: rec.doc ? 'TRUE' : 'FALSE', source: 'F6',
+      memo: dismiss ? c.memo : rec.temp ? head.memo + (rec.reason ? ' ' + rec.reason : '') : ''   // 임시 퇴실: 규칙이 준 '[임시] return:…' 뒤에 사람이 쓴 사유(건강상)
     }, plan.rows.slice(1).map(function (r) {
       return { item: r.item, value: r.value, effective_date: r.effective_date, effective_date_auto: r.effective_date_auto, requested_at: r.requested_at,
         reason: r.reason, source: r.source };
@@ -344,6 +370,96 @@ function cancelMove(headId, reason, expect) {
   });
 }
 
+/* ───────────── 임시 퇴실 → 일반 퇴실로 바꾸기(결정 77④) ───────────── */
+
+/**
+ * 지금 임시 퇴실 중인 학생의 대표 행을 일반 퇴실로 바꾸는 계획(순수에 가깝다: 시트를 읽기만 한다. 첫 줄 권한은 부르는 쪽).
+ * 규칙 계약 R18 ⑥: moveUndoPlan_로 임시 퇴실을 걷어 내고, 같은 적용일·**같은 신청 일시**로 일반 퇴실을 다시 계획한다 —
+ * 그러면 재입실 막힘이 처음 임시 퇴실한 날부터 세어지고 석식 중단일도 그대로다. 급식·자리는 임시 퇴실도 일반 퇴실과 같이 비웠으므로 그대로다.
+ * 지금(오늘) 이 임시 퇴실 중이 아니면(이미 복귀했거나 다른 기록이 더 늦게 적용됨) 거부한다. 담당교사·관리자만(status.edit, 적용일이 속한 기간).
+ * 적용일이 지난 뒤에도 담당교사가 바꿀 수 있다(퇴실 취소와 달리 관리자 제한 없음 — 복귀 예정일이 지난 임시 퇴실이 바로 이 경우다).
+ * → {error} | {head, user, d, undo, plan, changes}
+ */
+function inoutConvertCheck_(headId) {
+  var head = typeof headId === 'string' && headId ? findById_('status_changes', headId) : null;
+  if (!head) return { error: '기록을 찾을 수 없습니다.' };
+  var d = foodLoad_(head.student_id);
+  var term = ymdIsValid_(String(head.effective_date)) ? foodTermFor_(head.student_id, head.effective_date, d.terms, d.enrollments) : null;
+  var user = foodAuthorize_({ studentId: head.student_id }, { permYmd: foodPermYmd_(term, head.effective_date), term: term, eff: head.effective_date });
+  var today = today_();
+  if (head.source !== 'F6' || String(head.linked_change_id || '') || head.item !== '학사' || !isTempLeaveRow_(head) || String(head.status || '유효') !== '유효') {
+    return { error: '임시 퇴실 신청서가 아닙니다. 목록을 새로 불러와 주세요.' };
+  }
+  var cur = tempLeaveOn_(d.changes, head.student_id, today > head.effective_date ? today : head.effective_date);   // 아직 적용 전(대기)인 임시 퇴실도 바꿀 수 있다
+  if (!cur || cur.id !== head.id) return { error: '지금 이 임시 퇴실 중이 아닙니다(이미 복귀했거나 기록이 바뀌었습니다). 학생 기록을 확인해 주세요.' };
+  var undo = moveUndoPlan_(d.changes, head.id, { today: today });
+  if (!undo.toCancel.length) return { error: inoutKo_(undo.warnings[0] || '바꿀 내용이 없습니다.') };
+  var linked = d.changes.filter(function (c) { return c.linked_change_id === head.id && String(c.status || '유효') === '유효'; });
+  var type = linked.some(function (c) { return c.item === '기숙사' && c.value === '퇴실'; }) ? '학사 및 기숙사 퇴실' : '학사 퇴실';
+  var dn = linked.filter(function (c) { return c.item === '석식'; })[0];
+  var cancelled = {}, restored = {};
+  undo.toCancel.forEach(function (x) { cancelled[x.id] = true; });
+  undo.toRestore.forEach(function (x) { restored[x.id] = true; });
+  cancelled[head.id] = true;
+  var after = d.changes.map(function (c) {
+    return cancelled[c.id] ? Object.assign({}, c, { status: '취소' }) : restored[c.id] ? Object.assign({}, c, { status: '유효', cancel_reason: '' }) : c;
+  });
+  var plan = movePlan_(after, head.student_id, { type: type, effectiveDate: head.effective_date, requestedAt: head.requested_at,
+    dinner: dn && dn.value === '일반 석식' ? '일반 석식' : '중단' }, { today: today, cutoff: d.cutoff, terms: d.terms });
+  plan.errors = plan.errors.map(inoutKo_);
+  plan.warnings = plan.warnings.map(inoutKo_);
+  return { head: head, user: user, d: d, undo: undo, plan: plan, type: type, after: after };
+}
+
+function inoutConvertSignature_(c) {
+  return JSON.stringify({ h: c.head.id, u: [c.undo.toCancel.map(function (x) { return x.id; }).sort(), c.undo.toRestore.map(function (x) { return x.id; }).sort()],
+    r: c.plan.rows.map(function (r) { return [r.item, r.value, r.effective_date]; }), e: c.plan.errors, w: c.plan.warnings });
+}
+
+/** 일반 퇴실로 바꾸기 확인: 막힘이 처음 임시 퇴실한 날부터 센다는 안내와 경고. 아무것도 쓰지 않는다. */
+function previewConvertTempLeave(headId) {
+  requirePermission_('status.list');
+  var c = inoutConvertCheck_(headId);
+  if (c.error) return { ok: false, errors: [{ field: '', message: c.error }] };
+  if (c.plan.errors.length) return { ok: false, errors: c.plan.errors.map(function (m) { return { field: '', message: m }; }) };
+  // 바꾼 뒤의 재입실 막힘(처음 임시 퇴실한 날부터): 새 일반 퇴실 행을 흉내 내 규칙에 물어본다
+  var sim = c.after.concat([{ id: 'sim', student_id: c.head.student_id, item: '학사', value: '퇴실', effective_date: c.head.effective_date, requested_at: c.head.requested_at, source: 'F6', status: '유효', reason: '', memo: '', linked_change_id: '' }]);
+  var ban = moveReentryBan_(sim, c.head.student_id, c.d.terms, today_() > c.head.effective_date ? today_() : c.head.effective_date);
+  var until = ban.until ? foodDateKo_(ban.until) + '까지 다시 들어올 수 없습니다.' : '다음 학기가 끝날 때까지 다시 들어올 수 없습니다(다음 학기가 아직 등록되지 않았습니다).';
+  return { ok: true, errors: [], lead: foodDateKo_(c.head.effective_date) + ' 임시 퇴실을 일반 퇴실로 바꿉니다',
+    lines: ['재입실 제한은 처음 임시 퇴실한 날(' + foodDateKo_(c.head.effective_date) + ')부터 셉니다.' + (ban.banned ? ' ' + until : ''),
+      '급식·자리는 임시 퇴실 때와 같이 이미 정리되어 있어 그대로입니다.', '기록은 지우지 않고 임시 퇴실 신청서를 취소 처리합니다.'],
+    warnings: c.plan.warnings, expect: inoutConvertSignature_(c) };
+}
+
+/**
+ * 임시 퇴실을 일반 퇴실로 바꾼다(대표 행 id만 받는다). 락 안에서 다시 읽고 다시 계획해 한 번에 쓴다: 새 일반 퇴실 대표 행(같은 적용일·같은 신청 일시·
+ * 같은 서류 표시, 사람이 쓴 사유는 memo에서 옮김) + 연결 행 + 옛 임시 퇴실 대표·연결 행 취소(사유 '[자동] <새 대표 id> …') + 되살림. expect와 다르면 {stale:true}.
+ */
+function convertTempLeave(headId, expect) {
+  requirePermission_('status.list');
+  return withLock_(function () {
+    ['terms', 'students', 'enrollments', 'status_changes'].forEach(function (n) { invalidate_('db', n); });
+    invalidate_('config', 'settings');
+    var c = inoutConvertCheck_(headId);
+    if (c.error) return { ok: false, errors: [{ field: '', message: c.error }] };
+    if (c.plan.errors.length) return { ok: false, errors: c.plan.errors.map(function (m) { return { field: '', message: m }; }) };
+    if (String(expect || '') !== inoutConvertSignature_(c)) return { ok: false, stale: true, error: '확인한 뒤 다른 변경이 있었습니다. 다시 확인해 주세요.' };
+    var head = c.plan.rows[0], old = c.head;
+    var human = String(old.memo || '').replace(/^\[임시\] return:\d{4}-\d{2}-\d{2}\s*/, '');
+    var cancels = [{ id: old.id, cancel_reason: '일반 퇴실로 바꿈' }], seen = {};
+    seen[old.id] = true;
+    c.undo.toCancel.concat(c.plan.toCancel).forEach(function (x) { if (!seen[x.id]) { seen[x.id] = true; cancels.push({ id: x.id, cancel_reason: x.cancel_reason || '일반 퇴실로 바꿈' }); } });
+    var restores = [], rseen = {};
+    c.undo.toRestore.concat(c.plan.toRestore).forEach(function (x) { if (!seen[x.id] && !rseen[x.id]) { rseen[x.id] = true; restores.push({ id: x.id }); } });
+    var w = foodWrite_({ student_id: old.student_id, item: head.item, value: head.value, requested_at: head.requested_at, effective_date: head.effective_date,
+      effective_date_auto: head.effective_date_auto, reason: human, doc_submitted: String(old.doc_submitted).toUpperCase() === 'TRUE' ? 'TRUE' : 'FALSE', source: 'F6', memo: '' },
+      c.plan.rows.slice(1).map(function (r) { return { item: r.item, value: r.value, effective_date: r.effective_date, effective_date_auto: r.effective_date_auto, requested_at: r.requested_at, reason: r.reason, source: r.source }; }),
+      cancels, c.user.email, restores);
+    return { ok: true, id: w.head.id, lead: foodDateKo_(old.effective_date) + ' 일반 퇴실', canceled: cancels.length };
+  });
+}
+
 /* ───────────── 입퇴실 확인서(결정 68 같은 방식, 양식 구조 docs/reference/meal-confirm-form.md 2절) ───────────── */
 
 /**
@@ -354,7 +470,7 @@ function cancelMove(headId, reason, expect) {
 function inoutConfirmModel_(head, linked, common) {
   var items = [head].concat(linked || []).filter(function (r) { return r.value === head.value; }).map(function (r) { return r.item; });
   return Object.assign({ form: 'move', direction: head.value, hall: items.indexOf('학사') >= 0, dorm: items.indexOf('기숙사') >= 0,
-    effectiveDate: String(head.effective_date), remark: inoutIsDismissRow_(head) ? '' : String(head.reason || '') }, common);
+    effectiveDate: String(head.effective_date), remark: inoutIsDismissRow_(head) ? '' : isTempLeaveRow_(head) ? '임시 퇴실(복귀 예정 ' + foodDateKo_(tempLeaveReturnDate_(head)) + ')' : String(head.reason || '') }, common);
 }
 
 /**

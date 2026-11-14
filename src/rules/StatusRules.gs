@@ -18,6 +18,12 @@
  * 적용일이 날짜 형식이 아닌 행은 무시한다.
  */
 function statusOn_(changes, studentId, item, ymd) {
+  var row = statusRowOn_(changes, studentId, item, ymd);
+  return row ? ruleStr_(row.value) : '';
+}
+
+/** statusOn_이 고른 행 자체(없으면 null) — 그날 상태를 만든 기록(예: 임시 퇴실인지)을 볼 때. */
+function statusRowOn_(changes, studentId, item, ymd) {
   var sid = ruleStr_(studentId), it = ruleStr_(item);
   var best = null;
   (changes || []).forEach(function (c, i) {
@@ -25,11 +31,32 @@ function statusOn_(changes, studentId, item, ymd) {
     if (ruleStr_(c.student_id) !== sid || ruleStr_(c.item) !== it) return;
     var eff = ruleStr_(c.effective_date);
     if (!ymdIsValid_(eff) || eff > ymd) return;
-    var cand = { eff: eff, req: ruleIso_(c.requested_at), created: ruleIso_(c.created_at), value: ruleStr_(c.value) };
+    var cand = { eff: eff, req: ruleIso_(c.requested_at), created: ruleIso_(c.created_at), row: c };
     if (!best || cand.eff > best.eff || (cand.eff === best.eff &&
         (cand.req > best.req || (cand.req === best.req && cand.created >= best.created)))) best = cand;
   });
-  return best ? best.value : '';
+  return best ? best.row : null;
+}
+
+/**
+ * 건강상 임시 퇴실 행인지(결정 70·77): 학사 '퇴실'이고 reason '임시 퇴실', memo가 '[임시] '로 시작(둘 다 — 재입실을 막지 않는 표시라
+ * 엄격하게 본다). movePlan_ '학사 임시 퇴실'이 대표 행에 쓴다.
+ */
+function isTempLeaveRow_(row) {
+  return !!row && ruleStr_(row.item) === '학사' && ruleStr_(row.value) === '퇴실' && ruleStr_(row.reason) === '임시 퇴실' &&
+    ruleStr_(row.memo).indexOf('[임시] ') === 0;
+}
+
+/** 임시 퇴실 행의 복귀 예정일(memo '[임시] return:yyyy-MM-dd'), 없거나 틀리면 ''. */
+function tempLeaveReturnDate_(row) {
+  var m = /^\[임시\] return:(\d{4}-\d{2}-\d{2})/.exec(ruleStr_(row && row.memo));
+  return m && ymdIsValid_(m[1]) ? m[1] : '';
+}
+
+/** ymd에 학사 상태를 만든 행이 임시 퇴실이면 {id, leaveDate, returnDate}, 아니면 null(입실·일반 퇴실·기록 없음). */
+function tempLeaveOn_(changes, studentId, ymd) {
+  var row = statusRowOn_(changes, studentId, '학사', ymd);
+  return isTempLeaveRow_(row) ? { id: ruleStr_(row.id), leaveDate: ruleStr_(row.effective_date), returnDate: tempLeaveReturnDate_(row) } : null;
 }
 
 /**

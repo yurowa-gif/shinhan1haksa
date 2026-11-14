@@ -108,7 +108,9 @@ function rehearse(n) {
     return ok(call(ADMIN, 'saveMove', i, ok(call(ADMIN, 'previewMove', i), type + ' 미리보기').expect), type + ' 저장');
   };
   move(E, '학사 퇴실', '2027-03-03T15:00:00', '2027-03-05');
-  move(F, '학사 퇴실', '2027-03-03T15:00:00', '2027-03-04');
+  const fLeave = move(F, '학사 퇴실', '2027-03-03T15:00:00', '2027-03-04');
+  // 결정 70·77: 일반 퇴실 뒤에는 그 학기에 다시 들어올 수 없다 — 재입실하는 F는 건강상 임시 퇴실(저장 화면이 받기 전까지 행을 고쳐 만든다)
+  env.asOwner((c) => c.updateRecord_('status_changes', fLeave.id, { reason: '임시 퇴실', memo: '[임시] return:2027-03-08' }, env.owner));
   const phone = env.rows('violation_rules').find((r) => r.name.startsWith('휴대폰'));
   ['2027-03-02T21:00', '2027-03-03T19:00'].forEach((at) => ok(call(ADMIN, 'saveOut', { studentId: D, occurredAt: at, ruleId: phone.id, detectedBy: '', memo: '가짜' }), 'OUT'));
   const dTeacher = env.rows('enrollments').find((e) => e.term_id === term.id && e.student_id === D).teacher_email;

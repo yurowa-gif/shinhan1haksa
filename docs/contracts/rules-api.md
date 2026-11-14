@@ -75,6 +75,10 @@ function resolveStudentDay_(plan, s, opts)  // s = {exceptions, fixedRows, endTy
 
 // src/rules/StatusRules.gs
 function statusOn_(changes, studentId, item, ymd)   // item '학사'|'기숙사'|'조식'|'석식' → 값 또는 ''
+function statusRowOn_(changes, studentId, item, ymd)   // (R18) statusOn_이 고른 행 자체 또는 null
+function isTempLeaveRow_(row)                          // (R18, 결정 70·77) 학사 퇴실 + reason '임시 퇴실' + memo '[임시] …'
+function tempLeaveReturnDate_(row)                     // (R18) memo '[임시] return:yyyy-MM-dd'의 날짜 또는 ''
+function tempLeaveOn_(changes, studentId, ymd)          // (R18) ymd 학사 상태를 만든 행이 임시 퇴실이면 {id, leaveDate, returnDate}, 아니면 null
 function isActiveOn_(changes, enrollment, ymd)      // 등록 + 학사 '입실'
 function assignmentOn_(assignments, seatId, termId, ymd)
 function seatMapOn_(seats, assignments, enrollments, changes, termId, ymd)
@@ -100,7 +104,8 @@ function movePlan_(changes, studentId, move, opts)
         //    toCancel:[{id, cancel_reason}], toRestore:[{id}], summary:{date, breakfast:{value,from}|null, dinner:{value,from}|null}}
         //   move.meals:{조식, 석식}(학사 입실 때 시작할 급식, R11b)
 function moveUndoPlan_(changes, headId, opts)   // (R11b) opts = {today} → {toCancel:[{id, cancel_reason?}], toRestore:[{id}], warnings}
-function move2OutBan_(changes, studentId, terms, ymd)   // (R13, 결정 63) → {banned, until, leaveDate}
+function moveReentryBan_(changes, studentId, terms, ymd)   // (R18, 결정 63·70·77) → {banned, until, leaveDate, kind:'2OUT'|'자진'|''}
+function move2OutBan_(changes, studentId, terms, ymd)   // (R13) 옛 이름 = moveReentryBan_(명단 업로드가 부른다)
 
 // src/rules/SeatRules.gs (R14, stage3.md 1절)
 function seatDraft_(spaces, seats, students, prev, fixed, avoids, seed)   // → {assignments:[{seat_id, student_id}], unplaced:[studentId], violations, warnings}
@@ -329,9 +334,9 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, 
 
 - `mealCountsOn_`: termId 기간에 등록된 학생을 그날 상태 그대로 센다(결석·외박은 빼지 않는다, 같은 학생 두 번 등록은 한 번). 학사 = 학사 `입실`, 기숙 = 학사 입실이면서 기숙사 `입실`, 비기숙 = 학사 입실이면서 기숙 아님. **조식·석식은 학사 상태로 거르지 않는다**(결정 35 — 퇴실 학생도 석식 중단일 전까지 학사 석식, `afterLeaveHallDinner`로 따로 센다). 줄은 '여1'…'남3'(학년 3 밖도 있으면 줄을 만든다), '여 합계'·'남 합계', 'N학년', '전체'이고 합계 줄 = 부분 합. ASSUMPTION: 성별(남·여)·학년(숫자)이 비었거나 다른 학생, 학생 행이 없는 등록은 어느 줄에도 넣지 않고 `unknownGroup` + 경고. 잘못된 날짜는 Error.
 - **방학 중식(R19, 결정 73):** item `중식`, 값 `실시`·`미실시`(조식과 같은 값·같은 적용일 규칙 — 실시 11:30, 미실시 수 11:30). 학사생 값은 `실시`.
-  - `mealPlanChange_(…, '중식', …, {vacation})`: `vacation`(그 방학 terms 행, `start_date`·`end_date`)이 없거나 날짜가 아니면 Error. 방학 시작일 **전** 중식 행은 보지 않는다(지난 방학 값이 이어지지 않게 — 방학마다 새로 신청). 계산한 적용일이 시작일보다 이르면 시작일(rule `vacation_start`, 방학 전에 미리 낸 신청), 고친 날(manual)이 시작일보다 이르면 Error, 적용일이 끝날 뒤면 경고. 막힘은 조식과 같다(그날 퇴실 상태면 `실시` 불가). **퇴실 정리 followUps를 쓰지 않는다.**
-  - `mealCountsOn_(…, prevTermId, vacation)`: `vacation`을 주고 그날이 방학 안이면 `lunch` = 학사 `입실`이면서 시작일 이후 중식 행으로 본 값이 `실시`. 주지 않으면 `lunch`는 0. 저장 쪽은 termId 기간이 방학이면 그 terms 행을 넘긴다.
-  - `movePlan_`·퇴실 취소는 중식을 건드리지 않는다: 퇴실한 날부터 집계에서 빠지고(학사 입실인 날만 셈), 재입실하면 퇴실 전 값으로 이어진다. ASSUMPTION(결정 73 — 선생님 질문 후보): 중식은 퇴실일에 끝난다(조식처럼, 석식의 결정 35 미실시 규칙 아님).
+  - `mealPlanChange_(…, '중식', …, {vacation})`: `vacation`(그 방학 terms 행, `start_date`·`end_date`)이 없거나 날짜가 아니면 Error. 방학 시작일 **전** 중식 행은 보지 않는다(지난 방학 값이 이어지지 않게 — 방학마다 새로 신청). 계산한 적용일이 시작일보다 이르면 시작일(rule `vacation_start`, 방학 전에 미리 낸 신청), 고친 날(manual)이 시작일보다 이르면 Error, 적용일이 끝날 뒤면 경고. 막힘은 석식과 같다(결정 79). **퇴실 정리 followUps를 쓰지 않는다.**
+  - `mealCountsOn_(…, prevTermId, vacation)`: `vacation`을 주고 그날이 방학 안이면 `lunch` = 시작일 이후 중식 행으로 본 값이 `실시`이고, 학사 `입실`이거나 학사 퇴실 뒤 중단일 전(결정 79, 아래). 주지 않으면 `lunch`는 0. 저장 쪽은 termId 기간이 방학이면 그 terms 행을 넘긴다.
+  - `movePlan_`·퇴실 취소는 중식을 건드리지 않는다(퇴실 정리 행 없음). **결정 79:** 학사 퇴실 뒤 중식은 석식처럼 미실시 규칙의 중단일(`mealEffectiveDate_('stop', 퇴실 대표 행 requested_at, {leaveDate})`) 전날까지 집계에 센다 — 그날 학사 상태를 만든 행(`statusRowOn_`)이 퇴실이면 그 행으로 계산, 신청 일시가 틀리면 퇴실일에 끝난 것으로 본다. 재입실하면 퇴실 전 값으로 이어진다. `mealPlanChange_` 막힘도 석식과 같다(퇴실 기록 뒤 신청했거나 중단일 이후 적용이면 실시 불가, 먼저 신청한 것은 중단일 전까지 둔다).
   - 저장 쪽(코딩): F7 신청 화면의 중식 버튼은 방학 기간에만, 식수 집계·xlsx·PDF에 `lunch` 열(방학일 때만), 명단 업로드의 중식 열은 이번 범위 밖.
 
 ## 동작 메모(R13, 2026-11-12)
@@ -339,6 +344,11 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, 
 **결정 63(2OUT 퇴실 뒤 다시 들어오기)** — MoveRules.
 
 - `move2OutBan_(changes, studentId, terms, ymd)` → `{banned, until, leaveDate}`. 기준 퇴실 = 살아 있는 학사 퇴실 중 reason `2OUT 퇴실` 또는 memo가 `[2OUT]`로 시작하고 적용일 ≤ ymd인 것 가운데 가장 늦은 것(없으면 `{banned:false, until:'', leaveDate:''}`). 퇴실 취소(결정 59)로 그 행이 취소되면 막힘도 풀린다. 막는 기간(결정 63 보충) = 퇴실일부터 '다음 학기 뒤 처음 오는 학기'의 시작 전날까지(그 학기 남은 날·다음 학기·사이의 방학 포함). 다음 학기 = 퇴실일 뒤에 시작하는 첫 `type '학기'`. 그 뒤 학기가 terms에 없으면 다음 학기 끝날 뒤 처음 시작하는 `방학`의 끝날(ASSUMPTION: 사이에 빈 날이 있어도), 그것도 없으면 다음 학기 끝날. 다음 학기가 terms에 아직 없으면 `until ''`이고 막는다(다음 학기 등록 전까지). terms 순서는 상관없다. `banned` = ymd ≤ until(또는 until이 없음). 잘못된 ymd는 Error. ASSUMPTION(결정 63): '학기'는 terms.type `학기`, 방학은 사이에 끼면 함께 막는다. 방학 중 퇴실이면 그 뒤 첫 학기를 '다음 학기'로 본다.
+- **R18(결정 70·77) 재입실 막힘·임시 퇴실:**
+  - `moveReentryBan_`: 기준 퇴실 = 살아 있는 **기록된** 학사 퇴실(source `명단업로드` 제외, 77①) 중 적용일 ≤ ymd이고 `statusOn_` 순서로 가장 늦은 것. 그것이 **임시 퇴실이면 막지 않는다**(그 전 퇴실의 막힘은 이미 지나고 다시 들어온 것). 2OUT 퇴실(reason `2OUT 퇴실` 또는 memo `[2OUT]…`) → `kind '2OUT'`, 그 밖(일괄 퇴실·전학 포함) → `'자진'`. 막는 기간은 위 `move2OutBan_`과 같다. 기숙사 퇴실은 보지 않는다(총괄 가정 — 기숙사 재입실은 막지 않음). `move2OutBan_`은 같은 함수(옛 이름)라 명단 업로드도 자진 퇴실 학생을 뺀다. 메시지: `movePlan_` 학사 입실 = `'2OUT 퇴실로 …까지'` / `'퇴실(M월 D일)로 …까지 다시 들어올 수 없습니다'`.
+  - `movePlan_` `move.type` `'학사 임시 퇴실'`·`'학사 및 기숙사 임시 퇴실'` + `move.returnDate`(필수, 퇴실일 뒤 — 없거나 틀리거나 퇴실일 이하면 오류): 쓰는 행·급식 정리·상태 검사·경고·summary는 일반 퇴실과 **같다**(77② — 급식을 끊고, 자리·침대도 일반 퇴실처럼 빈다). 다른 것은 대표 행(학사 퇴실)·연결 기숙사 퇴실 행의 `reason`이 `'임시 퇴실'`, **대표 행에만** `memo` = `'[임시] return:<복귀 예정일>'`인 것뿐이다.
+  - 저장 쪽(코딩): ① 대표 행 `reason`은 계획 값(`'임시 퇴실'`)을 쓰고, 사람이 쓴 사유는 `memo`에 `'[임시] return:… '` 뒤 공백으로 잇는다. ② `'임시 퇴실'` 사유·`[임시]`로 시작하는 memo는 `2OUT 퇴실`처럼 **예약어**(일반 입력 거부). ③ 사유는 건강상만(77⑤ — 화면 안내). ④ 복귀는 지금의 학사 입실(재입실) 그대로. ⑤ 복귀 예정일이 지나면 담당교사 홈에 '복귀 예정일 지남'(`tempLeaveOn_(…, 오늘)`의 `returnDate < 오늘`). ⑥ **일반 퇴실로 바꾸기(77④)** = `moveUndoPlan_`(임시 퇴실 대표) 저장 + 같은 적용일·**같은 신청 일시**(원래 행의 `requested_at` — 석식 중단일이 같게)로 `movePlan_` 일반 퇴실 저장을 한 락 안에서. 그러면 막힘이 처음 임시 퇴실한 날부터 센다(적용일이 오늘보다 이르다는 경고는 그대로 보인다).
+  - `outDismissalGate_` 결과에 `tempLeave`(= `tempLeaveOn_(changes, sid, ymd)`)를 더한다. 임시 퇴실 중이면 `alreadyLeft`가 **아니고**(면담은 할 수 있다) `reason '임시 퇴실 중'`, `ok:false`(77③ — 복귀 뒤 확정). 순서: 이미 퇴실 → 퇴실 대상 아님 → 임시 퇴실 중 → 면담 기록 필요 → ok.
 - `movePlan_` 학사 입실: `opts.terms`가 있고 막혀 있으면 errors `2OUT 퇴실로 M월 D일까지 다시 들어올 수 없습니다`(해가 다르면 `yyyy년 M월 D일`, until이 없으면 `…다음 학기 끝날까지 다시 들어올 수 없습니다(다음 학기가 아직 등록되지 않았습니다)`). `opts.terms`가 없거나 빈 배열이면 검사하지 않는다(호환 — 빈 terms로 무기한 막지 않게). 명단 업로드의 등록 막힘(결정 63 두 번째)은 R4 명단 쪽이 이 함수를 불러 정한다.
 - **결정 35 보충(mealCountsOn_):** 선택 인자 `prevTermId`(직전 운영 기간 id)를 주면 이번 기간에 등록이 없는 그 기간 등록생 가운데 그날 학사가 `입실`이 아니면서 석식이 `학사 석식`인 학생도 센다(학기 막바지 퇴실 뒤 석식이 다음 기간까지 이어지는 학생 — 학사 0). 이번 기간에 신청하지 않고 상태만 이어진 학생(학사 입실 그대로)·더 옛 기간·term_id 빈 등록은 세지 않는다. 주지 않으면 지금처럼 이번 기간 등록생만. C19(Meals.gs)는 직전 기간 id를 넘긴다(후속).
 
