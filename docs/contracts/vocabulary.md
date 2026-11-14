@@ -117,3 +117,44 @@ Apps Script는 같은 전역 이름을 경고 없이 덮는다. 새 전역 이�
 | students | phone | 학생 전화(개인 연락처, 결정 76) — `readAll_`에서 빠진다. `readContacts_`와 `contact.view` 통과 함수만 |
 | guardian_links | name · phone | 보호자 이름·전화(개인 연락처, 결정 76) — 위와 같다. 감사 기록에는 값을 남기지 않는다 |
 | users | roles | `admin` `duty_manager` `attendance` `hall_teacher` `homeroom` `student` `parent` (쉼표로 여러 개) |
+
+## settings 키(설정 스프레드시트 `settings` 탭)
+
+`key` 열의 이름과 `value` 형식. 앞뒤 공백은 무시한다. **값이 빈칸이거나 행이 없으면 '기본값'대로 동작한다.**
+`tests/core/settings_keys.test.js`가 코드가 읽는 키가 이 표에 모두 있는지 검사한다(새 키를 쓰면 여기에 줄을 더한다).
+'누가 고치나'가 시트이면 소유자가 설정 시트를 손으로 고친다(데이터 시트가 아니라 설정 시트라 손편집 대상이다). 기본값 행은 `setup()`이 `Schema.gs DEFAULT_SETTINGS`로 처음 한 번 만든다.
+
+| 키 | 값 형식 | 쓰는 곳 | 기본값(없을 때) | 누가 고치나 |
+| --- | --- | --- | --- | --- |
+| `study.weekday.start` · `study.weekday.end` | `HH:mm` | Schedule.gs `calDefaults_` → `resolveDayPlan_` defaults(월~목) | `18:30` · `23:50` | 시트 |
+| `study.fri.start` · `study.fri.end` | `HH:mm` | 같음(금) | `18:30` · `23:00` | 시트 |
+| `study.sat.start` · `study.sat.end` | `HH:mm` | 같음(토) | `09:00` · `17:00` | 시트 |
+| `study.sun.start` · `study.sun.end` | `HH:mm` | 같음(일) | `14:00` · `22:00` | 시트 |
+| `study.holiday.start` · `study.holiday.end` | `HH:mm` | 같음(휴일, 결정 72) | `09:00` · `21:50`(`CAL_HOLIDAY_DEFAULT` — DEFAULT_SETTINGS 행 없음) | 시트 |
+| `meal.morning_cutoff` | `HH:mm` | Meals.gs → `mealCutoffHm_`·`mealEffectiveDate_`(실시·일반 석식 당일 마감, 미실시 수요일 마감, 결정 2·71) | `11:30`. 시각이 아니면 오류(다른 마감으로 조용히 계산하지 않음) | 시트 |
+| `exception.types` | 유형 이름 쉼표 목록 | Exceptions.gs `excSettings_`(F1 칩), 자동 OUT | DEFAULT_SETTINGS 11개 유형 | 시트 |
+| `exception.auto_out_types` | 유형 이름 쉼표 목록 | `excSettings_` → `reconcileAutoOuts_` autoTypes, `AUTO_OUT_SINCE` 넓힘 이력(결정 40) | `미인정지각,미인정조퇴,미인정결석` | 시트 |
+| `exception.type_short` | `유형:약어` 쉼표 목록 | `excSettings_`·AttendanceSheet.gs `sheetSettings_` → `resolveCell_` typeShort | DEFAULT_SETTINGS 약어표 | 시트 |
+| `attendance.end_type_day_types` | 요일 유형 쉼표 목록(`mon_thu`·`holiday` 등) | `sheetSettings_` → `resolveCell_` endTypeDayTypes(R3 END) | `mon_thu` | 시트 |
+| `attendance.end_label` | 글자 | `sheetSettings_` → END 칸 글자 | `정상 종료` | 시트 |
+| `attendance.legend` | 글자 | (아직 쓰지 않음 — 범례는 PRD F2 기본값) | — | 시트 |
+| `print.title` | 글자 | `sheetSettings_` → 출석부 머리말 | `신한학사 출석부` | 시트 |
+| `print.vacant_label` | 글자 | `sheetSettings_` → 빈 좌석 표기 | `공석` | 시트 |
+| `timetable.submit_start_day` · `timetable.submit_end_day` | 날짜 숫자 · 숫자 또는 `last` | (아직 쓰지 않음 — F9 시간표 제출 기간) | `25` · `last` | 시트 |
+| `out.instant_rule_ids` | violation_rules `id` 쉼표 목록 | Outs.gs `vioInstantIds_` → `outInstantNext_`·`vioOutOpts_`(결정 69·78) | 즉시 퇴실 항목 없음 | **화면**(OUT 항목 설정, `setOutInstantRule` — 지정 이력 `OUT_INSTANT_SINCE`와 함께 바뀌므로 시트로 고치지 않는다) |
+
+### 스크립트 속성(Script Properties)
+
+코드가 쓰는 이름 전부. 값이 비밀(파일·폴더 ID, 시험 계정)인 것은 코드·문서·백업 값에 적지 않는다. **백업**은 `Backup.gs BAK_STATE_VALUES`(앱상태.json에 값까지 남김) 여부 — 나머지는 이름만 남는다.
+
+| 이름 | 값 | 쓰는 곳 | 백업 값 |
+| --- | --- | --- | --- |
+| `DB_ID` · `COUNSEL_ID` · `CONFIG_ID` | 스프레드시트 ID(비밀) | Schema.gs `DB_FILES` → Db.gs·Setup.gs·Backup.gs·RepairIds.gs | 아니오 |
+| `AUTO_OUT_SINCE` | JSON `{types, since, widened}` | AutoOuts.gs `vioAutoSince_` ↔ `outAutoSinceNext_`(결정 40) | 예 |
+| `OUT_INSTANT_SINCE` | JSON `{ids, periods}` | Outs.gs ↔ `outInstantNext_`(결정 78) | 예 |
+| `MAIL_ENABLED` | `true`일 때만 메일 | Notify.gs·AutoOuts.gs·Outs.gs | 예 |
+| `DIAG_ENABLED` | `true`일 때만 진단 화면(`diagPing`) | Code.gs·Setup.gs(처음 setup 때 `true`) — 시범 운영 전 `false`(pilot-guide 1절) | 예 |
+| `BACKUP_FOLDER_ID` | Drive 폴더 ID(비밀) | Backup.gs | 아니오 |
+| `BACKUP_RUNNING` | 시작 시각(ms) — 겹친 실행 막기, 30분 뒤 저절로 풀림 | Backup.gs | 아니오 |
+| `TEST_STUDENT_EMAIL` · `TEST_PARENT_EMAIL` · `TEST_TEACHER_EMAIL` · `TEST_HOMEROOM_EMAIL` | 시험 계정(비밀, 개발용) | src/dev FakeData.gs·FakeStage2.gs | 아니오 |
+| `SPIKE_TEMPLATE_ID` | 인쇄 시험 템플릿 ID(개발용) | src/dev PrintSpike.gs | 아니오 |
