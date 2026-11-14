@@ -30,7 +30,7 @@ test('세 날짜에서 합계 줄 = 부분 합, 학사 = 기숙 + 비기숙, 행
   const env = makeEnv();
   ['2027-03-03', '2027-03-20', '2027-04-15'].forEach((d) => {
     const c = counts(env, d);
-    assert.deepStrictEqual(c.rows.map((r) => r.key).slice(0, 5), ['여1', '여2', '여3', '여 합계', '남1'], d);
+    assert.deepStrictEqual(c.rows.map((r) => r.key).slice(0, 5), ['여1', '여2', '여3', '남1', '남2'], d);
     assert.strictEqual(c.rows[c.rows.length - 1].key, '전체');
     const part = (g, ks) => sum(ks.map((k) => row(c, k)).filter(Boolean));
     assert.deepStrictEqual(row(c, '여 합계') && F.map((f) => row(c, '여 합계')[f]), F.map((f) => part('여', ['여1', '여2', '여3'])[f]), d + ' 여 합계');
