@@ -196,7 +196,7 @@ test('접속자 이메일을 받지 못하면(빈 값) 거부, 임시 사용자 
 test('흉내 내지 않는 서비스는 [gas-fakes] 오류', () => {
   const env = createGasEnv({ files: ['src/Db.gs'] });
   assert.throws(() => env.asOwner((c) => c.DriveApp.searchFiles('x')), /gas-fakes/);
-  assert.throws(() => env.asOwner((c) => c.Utilities.newBlob('x')), /gas-fakes/);
+  assert.throws(() => env.asOwner((c) => c.Utilities.gzip('x')), /gas-fakes/);
 });
 
 test('실행마다 전역 전체를 새로 만든다(let·const·이름 규칙과 무관, RegExp·Map도 그대로)', () => {
