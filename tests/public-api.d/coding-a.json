@@ -167,6 +167,34 @@
     "cancelEvent": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getResultGrid": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getResultCell": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "previewResults": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveResults": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "cancelResult": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getResultTotals": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getResultRecords": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }
