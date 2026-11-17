@@ -1,0 +1,174 @@
+<script>
+  /**
+   * 학년 일괄 퇴실 화면(C26, 결정 74①, 관리자만). 두 탭: [일괄 퇴실](학년·퇴실일·석식 → 미리보기 → 저장) · [지난 기록](일괄 단위로 되돌리기, 결정 59).
+   * 대상·유형(기숙사생은 학사 및 기숙사 퇴실)·건너뜀 이유는 서버(BatchLeave.gs → R20 규칙)가 정한다. 화면은 보여 주고 제외할 학생을 고르게만 한다.
+   */
+  function renderScreen(root) {
+    var U = UI.util;
+    var tab = window.SCREEN_TAB === 'undo' ? 'undo' : 'new';
+    var body = el('div'), tabsBox = el('div'), bar = null, seq = 0, ctx = null;
+    root.appendChild(tabsBox); root.appendChild(body);
+    function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
+    function removeBar() { if (bar && bar.parentNode) bar.parentNode.removeChild(bar); bar = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); }
+
+    function draw() {
+      removeBar(); clear(body); clear(tabsBox);
+      tabsBox.appendChild(el('div', { class: 'card' }, [UI.segmented({ label: '화면', value: tab, options: [{ value: 'new', label: '일괄 퇴실' }, { value: 'undo', label: '지난 기록' }], onchange: function (v) { tab = v; draw(); } })]));
+      if (tab === 'undo') renderUndo(body); else renderNew(body);
+    }
+
+    /* ───────── [일괄 퇴실] ───────── */
+    function renderNew(root) {
+      var my = ++seq;
+      root.appendChild(el('div', { class: 'muted', text: '불러오는 중…' }));
+      call('getBatchLeaveContext').then(function (c) {
+        if (my !== seq) return;
+        ctx = c; clear(root); form(root);
+      }).catch(function (err) { if (my !== seq) return; clear(root); showError(root, err); });
+    }
+
+    function form(root) {
+      var grade = '', dinner = '', excluded = {}, last = null, busy = false, timer = null, doc = false;
+      var gradeChips = el('div', { class: 'chips', role: 'group', 'aria-label': '학년' });
+      var gradeField = UI.field('학년', gradeChips);
+      var dateField = UI.dateField({ label: '퇴실일', value: ctx.today, shortcuts: [{ label: '오늘', value: ctx.today }, { label: '내일', value: addDay(ctx.today) }], onchange: function () { refresh(); } });
+      var at = el('input', { type: 'datetime-local', value: ctx.now.slice(0, 16), max: ctx.now.slice(0, 16) });
+      at.addEventListener('change', refresh);
+      var reason = el('input', { type: 'text', maxlength: '100', placeholder: '예: 3학년 수능 뒤 일괄 퇴실' });
+      reason.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(refresh, 400); });
+      var docBox = el('input', { type: 'checkbox' });
+      docBox.addEventListener('change', function () { doc = docBox.checked; });
+      var dinnerSeg = UI.segmented({ label: '석식', value: dinner, options: [{ value: '중단', label: '중단' }, { value: '일반 석식', label: '일반 석식으로' }], onchange: function (v) { dinner = v; dinnerField.setError(''); refresh(); } });
+      var dinnerField = UI.field('석식', dinnerSeg, { hint: '"중단"은 미실시 규칙(수요일 11:30이 지나 신청하면 다다음 주 월요일)을 따릅니다. 조식은 퇴실일부터 바로 중단됩니다.' });
+      var result = el('div');
+
+      function addDay(ymd) { var d = new Date(ymd + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); }
+      function drawGrades() {
+        clear(gradeChips);
+        ctx.grades.forEach(function (g) {
+          gradeChips.appendChild(el('button', { type: 'button', class: g.grade === grade ? 'chip on' : 'chip', 'aria-pressed': g.grade === grade ? 'true' : 'false',
+            text: g.grade + '학년 ' + g.count + '명', onclick: function () { grade = g.grade; excluded = {}; drawGrades(); refresh(); } }));
+        });
+      }
+      drawGrades();
+      root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '무엇을' }),
+        el('div', { class: 'muted', style: 'word-break:keep-all;margin-bottom:8px', text: ctx.term.name + ' · 오늘 학사 입실 학생 수입니다. 퇴실일에 입실 상태인 학생만 대상이 됩니다.' }), gradeField, dateField,
+        UI.field('신청 일시', at, { hint: '서류를 받은 날짜·시각입니다. 기본값은 지금입니다.' })]));
+      root.appendChild(el('div', { class: 'card' }, [dinnerField, UI.field('사유(선택)', reason, { hint: '모든 학생의 기록에 같은 사유로 남습니다.' }),
+        el('label', { class: 'check' }, [docBox, el('span', { text: '학교 서류 제출함' })])]));
+      root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '확인' }), result]));
+
+      function payload() {
+        return { grade: grade, effectiveDate: dateField.getValue(), requestedAt: at.value ? at.value + ':00' : '', dinner: dinner, reason: reason.value.trim(), docSubmitted: doc, excludeIds: Object.keys(excluded) };
+      }
+      function ready() { return !!(grade && dinner && last && last.ok && !busy); }
+      function drawResult() {
+        clear(result);
+        if (!grade || !dinner) { result.appendChild(el('div', { class: 'muted', text: '학년과 석식을 고르면 대상 학생이 나옵니다.' })); return; }
+        if (!last) { result.appendChild(el('div', { class: 'muted', text: '대상을 계산하는 중…' })); return; }
+        (last.errors || []).forEach(function (e) { result.appendChild(el('div', { class: 'notice warn', text: e.message })); });
+        if (!last.list) return;
+        if (last.lead) result.appendChild(el('div', { style: 'font-size:var(--font-xl);font-weight:700;margin-bottom:8px', text: last.lead }));
+        if (last.lines && last.lines.length) result.appendChild(el('ul', { class: 'list' }, last.lines.map(function (t) { return el('li', { text: t }); })));
+        (last.warnings || []).forEach(function (w) { result.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: w })); });
+        if (last.skipped && last.skipped.length) {
+          result.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: '퇴실시키지 않고 건너뛰는 학생 ' + last.skipped.length + '명(이유는 아래 목록)' }));
+        }
+        result.appendChild(el('div', { class: 'muted', style: 'margin:8px 0 4px', text: '퇴실시키지 않을 학생은 체크를 풀어 주세요. 체크한 ' + last.count + '명이 퇴실합니다.' }));
+        var list = el('div', { style: 'max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px 8px' });
+        last.list.forEach(function (l) {
+          var cb = el('input', { type: 'checkbox', style: 'flex:0 0 auto;width:22px;height:22px' });
+          cb.checked = !l.excluded && !l.skipped;
+          if (l.skipped) cb.disabled = true;
+          cb.addEventListener('change', function () { if (cb.checked) delete excluded[l.id]; else excluded[l.id] = true; refresh(); });
+          list.appendChild(el('label', { style: 'display:flex;align-items:flex-start;gap:10px;min-height:44px;padding:6px 0' }, [cb, el('span', { style: 'word-break:keep-all' }, [
+            el('span', { text: l.label + (l.dorm ? ' · 기숙사생' : '') }), l.skipped ? el('div', { class: 'muted', text: '건너뜀: ' + l.skipped }) : null])]));
+        });
+        result.appendChild(list);
+      }
+      function drawBar() {
+        removeBar();
+        bar = UI.actionBar([{ text: '비우기', kind: 'secondary', onclick: function () { draw(); } }, { text: '일괄 퇴실 저장', kind: 'danger', disabled: !ready(), onclick: confirmSave }], { mount: true });
+      }
+      function refresh() {
+        var mine = ++seq; clearTimeout(timer);
+        last = null; drawResult(); drawBar();
+        if (!grade || !dinner) return;
+        timer = setTimeout(function () {
+          call('previewBatchLeave', payload()).then(function (p) {
+            if (mine !== seq) return;
+            last = p; drawResult(); drawBar();
+          }).catch(function (err) { if (mine === seq) { last = { ok: false, errors: [{ message: (err && err.message) || String(err) }] }; drawResult(); drawBar(); } });
+        }, 150);
+      }
+      function confirmSave() {
+        var p = last, pl = payload();
+        var lines = ['대상 ' + p.count + '명' + (p.dormCount ? '(기숙사생 ' + p.dormCount + '명은 학사 및 기숙사 퇴실)' : '')];
+        if (p.skipped && p.skipped.length) lines.push('빠지는 학생: ' + p.skipped.map(function (x) { return x.label + '(' + x.reason + ')'; }).join(' / '));
+        var exc = p.list.filter(function (l) { return l.excluded; });
+        if (exc.length) lines.push('직접 뺀 학생: ' + exc.map(function (l) { return l.label; }).join(', '));
+        lines.push('일괄 퇴실도 다시 들어오는 것이 막힙니다(결정 77).');
+        lines.push('저장하면 [지난 기록] 탭에서 한 번에 되돌릴 수 있습니다.');
+        lines = lines.concat(p.warnings || []);
+        UI.confirmSheet({ title: '학년 일괄 퇴실을 저장합니다', lead: p.lead + ' · ' + U.formatDateKo(pl.effectiveDate, false) + '부터', lines: lines, confirmText: '일괄 퇴실 저장', danger: true, onconfirm: function () {
+          busy = true; drawBar();
+          call('saveBatchLeave', pl, p.expect).then(function (r) {
+            busy = false;
+            if (r.stale) { UI.toast(r.error, { kind: 'warn', ms: 5000 }); refresh(); return; }
+            if (!r.ok) { UI.toast((r.errors && r.errors[0] && r.errors[0].message) || '저장하지 못했습니다.', { kind: 'warn', ms: 5000 }); refresh(); return; }
+            UI.toast(r.duplicate ? '이미 저장된 일괄 퇴실입니다.' : (r.lead || '일괄 퇴실') + '을 저장했습니다.', { kind: 'ok', ms: 5000 });
+            tab = 'undo'; draw();
+          }).catch(function (err) { busy = false; drawBar(); fail(err); });
+        } });
+      }
+      drawResult(); drawBar();
+    }
+
+    /* ───────── [지난 기록] ───────── */
+    function renderUndo(root) {
+      var my = ++seq, box = el('div');
+      root.appendChild(box);
+      box.appendChild(el('div', { class: 'muted', text: '불러오는 중…' }));
+      call('listBatchLeaves').then(function (r) {
+        if (my !== seq) return;
+        clear(box);
+        if (!r.items.length) { box.appendChild(UI.emptyState('지난 일괄 퇴실이 없습니다.')); return; }
+        r.items.forEach(function (b) {
+          var card = el('div', { class: 'card', style: 'word-break:keep-all' }, [
+            el('div', { style: 'display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap' }, [el('h2', { style: 'margin:0', text: b.gradeText + ' 일괄 퇴실' }), b.live ? null : UI.statusPill('canceled', '모두 되돌림')]),
+            el('div', { class: 'muted', text: b.dateKo + '부터 · 퇴실 ' + b.live + '명' + (b.canceled ? ' · 되돌린 ' + b.canceled + '명' : '') })]);
+          if (b.canUndo) card.appendChild(el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:8px', text: '일괄 되돌리기', onclick: function (e) { undoSheet(b, e.currentTarget); } }));
+          box.appendChild(card);
+        });
+      }).catch(function (err) { if (my !== seq) return; clear(box); showError(box, err); });
+    }
+
+    function undoSheet(b, btn) {
+      btn.disabled = true;
+      call('previewBatchUndo', b.batchId).then(function (p) {
+        btn.disabled = false;
+        if (!p.ok) { UI.toast((p.errors && p.errors[0] && p.errors[0].message) || '되돌릴 수 없습니다.', { kind: 'warn', ms: 5000 }); draw(); return; }
+        var area = el('textarea', { maxlength: '200' });
+        var field = UI.field('되돌리는 사유', area, { hint: '2자 이상 적어 주세요. 사유는 기록에 남습니다.' });
+        var content = [el('p', { class: 'sheet-lead', text: p.lead }), el('div', { class: 'muted', text: b.gradeText + ' · ' + b.dateKo + '부터' }), el('ul', { class: 'list' }, p.lines.map(function (t) { return el('li', { text: t }); }))];
+        (p.warnings || []).forEach(function (w) { content.push(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: w })); });
+        content.push(field);
+        var sheet = UI.bottomSheet({ title: '일괄 되돌리기', content: el('div', {}, content), actions: [
+          { text: '돌아가기', kind: 'secondary', onclick: function () { sheet.close(); } },
+          { text: '일괄 되돌리기', kind: 'danger', disabled: true, onclick: function () {
+            var why = area.value.trim(); if (why.length < 2) return;
+            sheet.buttons[1].disabled = true;
+            call('undoBatchLeave', b.batchId, why, p.expect).then(function (r) {
+              if (r.stale) { sheet.close(); UI.toast(r.error, { kind: 'warn', ms: 5000 }); draw(); return; }
+              if (!r.ok) { sheet.buttons[1].disabled = false; field.setError((r.errors && r.errors[0] && r.errors[0].message) || '되돌리지 못했습니다.'); return; }
+              sheet.close(); UI.toast('일괄 퇴실 ' + r.count + '명을 되돌렸습니다.', { kind: 'ok', ms: 5000 }); draw();
+            }).catch(function (err) { sheet.buttons[1].disabled = false; fail(err); });
+          } }] });
+        area.addEventListener('input', function () { sheet.buttons[1].disabled = area.value.trim().length < 2; field.setError(''); });
+        sheet.open();
+      }).catch(function (err) { btn.disabled = false; fail(err); });
+    }
+
+    draw();
+  }
+</script>

@@ -224,7 +224,9 @@ function getMoveContext(studentId, ymd) {
   requirePermission_('status.view', { studentId: sid, ymd: foodPermYmd_(foodTermFor_(sid, eff, readAll_('terms'), readAll_('enrollments')), eff) });
   var rows = readAll_('status_changes').filter(function (c) { return c.student_id === sid; });
   var now = {}, onDate = {};
-  ['학사', '기숙사', '조식', '중식', '석식'].forEach(function (it) { now[it] = statusOn_(rows, sid, it, today); onDate[it] = statusOn_(rows, sid, it, eff); });
+  ['학사', '기숙사', '조식', '석식'].forEach(function (it) { now[it] = statusOn_(rows, sid, it, today); onDate[it] = statusOn_(rows, sid, it, eff); });
+  now['중식'] = lunchOn_(rows, sid, today, foodLunchOpts_(today));   // 결정 79: 퇴실 뒤 중식은 lunchOn_으로
+  onDate['중식'] = lunchOn_(rows, sid, eff, foodLunchOpts_(eff));
   var re = inoutReentryDefaults_(rows, sid, eff);
   return { today: today, date: eff, now: now, onDate: onDate, types: inoutTypeChips_(onDate['학사'], onDate['기숙사']),
     reentry: re && onDate['학사'] !== '입실' ? { leaveDate: re.leaveDate, leaveKo: foodDateKo_(re.leaveDate), meals: re.meals } : null };   // 재입실 급식 기본값(퇴실 전 값)

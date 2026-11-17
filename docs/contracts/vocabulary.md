@@ -69,6 +69,7 @@
 | status_changes | effective_date_auto | 규칙 계산값. effective_date와 다르면 교사가 고친 행(사유는 reason) |
 | status_changes | reason(자동) | 퇴실 정리 행 `학사 퇴실 조식 중단`·`학사 퇴실 석식 중단`(movePlan_), 2OUT 퇴실 대표 행 `2OUT 퇴실`(날짜·면담 정보 없음). `2OUT 퇴실` 사유와 `[2OUT]`으로 시작하는 memo는 **예약어**다. 일반 입퇴실 입력(관리자 포함)에서는 거부하고, C20(`out.dismiss` + 면담 관문) 서버만 쓴다 |
 | status_changes | reason·memo(임시 퇴실, 결정 70·77) | 건강상 임시 퇴실 대표 행: reason `임시 퇴실`, memo `[임시] return:yyyy-MM-dd`(+ 공백 뒤 사람이 쓴 사유). 연결 기숙사 퇴실 행 reason도 `임시 퇴실`. `임시 퇴실` 사유와 `[임시]`로 시작하는 memo는 **예약어**(일반 입력 거부, 임시 퇴실 유형만 쓴다). 둘이 다 있어야 임시 퇴실로 본다(`isTempLeaveRow_`) |
+| status_changes | memo(일괄 퇴실, 결정 74①) | 학년 일괄 퇴실 대표 행: `[일괄] <batchId>`(UUID, `moveBatchPlan_`). 한 번에 되돌릴 때(`moveBatchUndoPlan_`) 쓴다. `[일괄]`로 시작하는 memo는 예약어(일반 입력 거부) |
 | status_changes | memo(자동) | 2OUT 퇴실 대표 행 `[2OUT] out:<OUT id> note:<면담 id>`. 화면에 내보내지 않는다 |
 | status_changes | cancel_reason | `[자동] <원인 행 id> …`(규칙이 취소) 또는 사람이 적은 사유(2자 이상) |
 
@@ -116,3 +117,44 @@ Apps Script는 같은 전역 이름을 경고 없이 덮는다. 새 전역 이�
 | students | phone | 학생 전화(개인 연락처, 결정 76) — `readAll_`에서 빠진다. `readContacts_`와 `contact.view` 통과 함수만 |
 | guardian_links | name · phone | 보호자 이름·전화(개인 연락처, 결정 76) — 위와 같다. 감사 기록에는 값을 남기지 않는다 |
 | users | roles | `admin` `duty_manager` `attendance` `hall_teacher` `homeroom` `student` `parent` (쉼표로 여러 개) |
+
+## settings 키(설정 스프레드시트 `settings` 탭)
+
+`key` 열의 이름과 `value` 형식. 앞뒤 공백은 무시한다. **값이 빈칸이거나 행이 없으면 '기본값'대로 동작한다.**
+`tests/core/settings_keys.test.js`가 코드가 읽는 키가 이 표에 모두 있는지 검사한다(새 키를 쓰면 여기에 줄을 더한다).
+'누가 고치나'가 시트이면 소유자가 설정 시트를 손으로 고친다(데이터 시트가 아니라 설정 시트라 손편집 대상이다). 기본값 행은 `setup()`이 `Schema.gs DEFAULT_SETTINGS`로 처음 한 번 만든다.
+
+| 키 | 값 형식 | 쓰는 곳 | 기본값(없을 때) | 누가 고치나 |
+| --- | --- | --- | --- | --- |
+| `study.weekday.start` · `study.weekday.end` | `HH:mm` | Schedule.gs `calDefaults_` → `resolveDayPlan_` defaults(월~목) | `18:30` · `23:50` | 시트 |
+| `study.fri.start` · `study.fri.end` | `HH:mm` | 같음(금) | `18:30` · `23:00` | 시트 |
+| `study.sat.start` · `study.sat.end` | `HH:mm` | 같음(토) | `09:00` · `17:00` | 시트 |
+| `study.sun.start` · `study.sun.end` | `HH:mm` | 같음(일) | `14:00` · `22:00` | 시트 |
+| `study.holiday.start` · `study.holiday.end` | `HH:mm` | 같음(휴일, 결정 72) | `09:00` · `21:50`(`CAL_HOLIDAY_DEFAULT` — DEFAULT_SETTINGS 행 없음) | 시트 |
+| `meal.morning_cutoff` | `HH:mm` | Meals.gs → `mealCutoffHm_`·`mealEffectiveDate_`(실시·일반 석식 당일 마감, 미실시 수요일 마감, 결정 2·71) | `11:30`. 시각이 아니면 오류(다른 마감으로 조용히 계산하지 않음) | 시트 |
+| `exception.types` | 유형 이름 쉼표 목록 | Exceptions.gs `excSettings_`(F1 칩), 자동 OUT | DEFAULT_SETTINGS 11개 유형 | 시트 |
+| `exception.auto_out_types` | 유형 이름 쉼표 목록 | `excSettings_` → `reconcileAutoOuts_` autoTypes, `AUTO_OUT_SINCE` 넓힘 이력(결정 40) | `미인정지각,미인정조퇴,미인정결석` | 시트 |
+| `exception.type_short` | `유형:약어` 쉼표 목록 | `excSettings_`·AttendanceSheet.gs `sheetSettings_` → `resolveCell_` typeShort | DEFAULT_SETTINGS 약어표 | 시트 |
+| `attendance.end_type_day_types` | 요일 유형 쉼표 목록(`mon_thu`·`holiday` 등) | `sheetSettings_` → `resolveCell_` endTypeDayTypes(R3 END) | `mon_thu` | 시트 |
+| `attendance.end_label` | 글자 | `sheetSettings_` → END 칸 글자 | `정상 종료` | 시트 |
+| `attendance.legend` | 글자 | (아직 쓰지 않음 — 범례는 PRD F2 기본값) | — | 시트 |
+| `print.title` | 글자 | `sheetSettings_` → 출석부 머리말 | `신한학사 출석부` | 시트 |
+| `print.vacant_label` | 글자 | `sheetSettings_` → 빈 좌석 표기 | `공석` | 시트 |
+| `timetable.submit_start_day` · `timetable.submit_end_day` | 날짜 숫자 · 숫자 또는 `last` | (아직 쓰지 않음 — F9 시간표 제출 기간) | `25` · `last` | 시트 |
+| `out.instant_rule_ids` | violation_rules `id` 쉼표 목록 | Outs.gs `vioInstantIds_` → `outInstantNext_`·`vioOutOpts_`(결정 69·78) | 즉시 퇴실 항목 없음 | **화면**(OUT 항목 설정, `setOutInstantRule` — 지정 이력 `OUT_INSTANT_SINCE`와 함께 바뀌므로 시트로 고치지 않는다) |
+
+### 스크립트 속성(Script Properties)
+
+코드가 쓰는 이름 전부. 값이 비밀(파일·폴더 ID, 시험 계정)인 것은 코드·문서·백업 값에 적지 않는다. **백업**은 `Backup.gs BAK_STATE_VALUES`(앱상태.json에 값까지 남김) 여부 — 나머지는 이름만 남는다.
+
+| 이름 | 값 | 쓰는 곳 | 백업 값 |
+| --- | --- | --- | --- |
+| `DB_ID` · `COUNSEL_ID` · `CONFIG_ID` | 스프레드시트 ID(비밀) | Schema.gs `DB_FILES` → Db.gs·Setup.gs·Backup.gs·RepairIds.gs | 아니오 |
+| `AUTO_OUT_SINCE` | JSON `{types, since, widened}` | AutoOuts.gs `vioAutoSince_` ↔ `outAutoSinceNext_`(결정 40) | 예 |
+| `OUT_INSTANT_SINCE` | JSON `{ids, periods}` | Outs.gs ↔ `outInstantNext_`(결정 78) | 예 |
+| `MAIL_ENABLED` | `true`일 때만 메일 | Notify.gs·AutoOuts.gs·Outs.gs | 예 |
+| `DIAG_ENABLED` | `true`일 때만 진단 화면(`diagPing`) | Code.gs·Setup.gs(처음 setup 때 `true`) — 시범 운영 전 `false`(pilot-guide 1절) | 예 |
+| `BACKUP_FOLDER_ID` | Drive 폴더 ID(비밀) | Backup.gs | 아니오 |
+| `BACKUP_RUNNING` | 시작 시각(ms) — 겹친 실행 막기, 30분 뒤 저절로 풀림 | Backup.gs | 아니오 |
+| `TEST_STUDENT_EMAIL` · `TEST_PARENT_EMAIL` · `TEST_TEACHER_EMAIL` · `TEST_HOMEROOM_EMAIL` | 시험 계정(비밀, 개발용) | src/dev FakeData.gs·FakeStage2.gs | 아니오 |
+| `SPIKE_TEMPLATE_ID` | 인쇄 시험 템플릿 ID(개발용) | src/dev PrintSpike.gs | 아니오 |

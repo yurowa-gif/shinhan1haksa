@@ -74,7 +74,7 @@ function resolveCell_(c)
 function resolveStudentDay_(plan, s, opts)  // s = {exceptions, fixedRows, endType} → 블록 순서대로 [{seq, code, text, exceptionId, more}]
 
 // src/rules/StatusRules.gs
-function statusOn_(changes, studentId, item, ymd)   // item '학사'|'기숙사'|'조식'|'석식' → 값 또는 ''
+function statusOn_(changes, studentId, item, ymd)   // item '학사'|'기숙사'|'조식'|'중식'|'석식' → 값 또는 ''
 function statusRowOn_(changes, studentId, item, ymd)   // (R18) statusOn_이 고른 행 자체 또는 null
 function isTempLeaveRow_(row)                          // (R18, 결정 70·77) 학사 퇴실 + reason '임시 퇴실' + memo '[임시] …'
 function tempLeaveReturnDate_(row)                     // (R18) memo '[임시] return:yyyy-MM-dd'의 날짜 또는 ''
@@ -106,6 +106,10 @@ function movePlan_(changes, studentId, move, opts)
 function moveUndoPlan_(changes, headId, opts)   // (R11b) opts = {today} → {toCancel:[{id, cancel_reason?}], toRestore:[{id}], warnings}
 function moveReentryBan_(changes, studentId, terms, ymd)   // (R18, 결정 63·70·77) → {banned, until, leaveDate, kind:'2OUT'|'자진'|''}
 function move2OutBan_(changes, studentId, terms, ymd)   // (R13) 옛 이름 = moveReentryBan_(명단 업로드가 부른다)
+function moveBatchTargets_(students, enrollments, changes, termId, grade, ymd)   // (R20, 결정 74①) → [studentId]
+function moveBatchPlan_(changes, studentIds, move, opts)   // (R20) move = {effectiveDate, requestedAt, dinner}, opts = movePlan_ opts + batchId(필수)
+        //   → {plans:[{studentId, type, rows, toCancel, toRestore, warnings, summary}], skipped:[{studentId, reason}]}
+function moveBatchUndoPlan_(changes, batchId, opts)   // (R20) → {plans:[{studentId, headId, toCancel, toRestore, warnings}]}
 
 // src/rules/SeatRules.gs (R14, stage3.md 1절)
 function seatDraft_(spaces, seats, students, prev, fixed, avoids, seed)   // → {assignments:[{seat_id, student_id}], unplaced:[studentId], violations, warnings}
@@ -147,7 +151,8 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts)  
         //   → {kind, date, rule, autoDate(R10), from, blocked, superseded, supersededBy:[id], toCancel:[…], followUps:[…], warnings:[]}
 function mealPendingToCancel_(changes, studentId, item, effectiveDate, opts)     // 새 행이 덮어야 할 행(R6 추가)
         // opts = {source:'F7'|'F6', requestedAt, newValue} → [{id, effective_date, value}]
-function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, vacation)
+function lunchOn_(changes, studentId, ymd, opts)   // (결정 79 후속) 그날 중식 값 '실시'|'미실시'|'', opts = {vacation, cutoff}
+function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, vacation, opts)
         // (R12, vacation·lunch R19) → {groups:{'여1':{hall, dorm, nonDorm, breakfast, lunch, hallDinner, generalDinner}, …, '여 합계','남 합계','1학년'…'전체'},
         //    afterLeaveHallDinner, unknownGroup:[studentId], warnings}
 ```
@@ -240,7 +245,7 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, 
 - ASSUMPTION(결정 22 적용): 같은 학생·같은 날·겹치는 블록에 다른 묶음의 자동 유형 특이사항 두 건이 확정되면 OUT도 두 건(→ 퇴실 대상이 될 수 있다). C5는 저장·확정 때 겹침 경고 후 확인을 받는다(막지는 않음).
 - `outLevel_`: 같은 학생·같은 `term_id`(학기마다 초기화)에서 status 빈칸·`유효`인 OUT 수(직접·자동 모두). 2 이상이면 `level:2`, `'퇴실 대상'`.
 - **즉시 퇴실 항목(결정 69):** `opts.instantRuleIds`(violation_rules `id` 목록)에 `rule_id`가 있는 OUT 한 건은 **2로 센다** — `count`는 OUT 수의 합이라 그 한 건만으로 `level:2`. 취소된 OUT은 세지 않는다(다른 OUT과 같음). `outDismissalGate_`의 `triggerOutId`는 시간순으로 합이 처음 2가 되는 OUT(즉시 항목이면 그 한 건), 면담 날짜도 그 OUT 발생일 이후. opts를 주지 않으면 지금과 같다.
-  - **설정 계약(코딩B):** `settings` 탭(시트 구조 변경 없음) 키 `out.instant_rule_ids`, 값 = 즉시 퇴실 항목의 violation_rules `id`를 쉼표로(빈칸·없음 = 즉시 항목 없음). 관리자 설정 화면에서 violation_rules 이름을 골라 id로 저장한다. OUT 단계를 보이는 곳(`Outs.gs` getOutContext·listOuts·saveOut 결과, `AutoOuts.gs` 단계 알림, `Counsel.gs`·`Outs.gs`의 `outDismissalGate_`)은 모두 이 값을 읽어 `{instantRuleIds}`로 넘긴다 — 한 곳만 넘기면 화면마다 단계가 달라진다. `rule_id`가 빈 OUT(자동 OUT의 rule_id는 R-AUTO 행)은 1로 센다.
+  - **설정 계약(코딩B):** `settings` 탭(시트 구조 변경 없음) 키 `out.instant_rule_ids`, 값 = 즉시 퇴실 항목의 violation_rules `id`를 쉼표로(빈칸·없음 = 즉시 항목 없음). 관리자 설정 화면에서 violation_rules 이름을 골라 id로 저장한다. OUT 단계를 보이는 곳(`Outs.gs` getOutContext·listOuts·saveOut 결과, `AutoOuts.gs` 단계 알림, `Counsel.gs`·`Outs.gs`의 `outDismissalGate_`)은 모두 이 값을 읽어 `{instantRuleIds}`로 넘긴다 — 한 곳만 넘기면 화면마다 단계가 달라진다. `rule_id`가 빈 OUT은 1로 센다. 자동 OUT(rule_id = R-AUTO 행)은 즉시 퇴실 항목으로 지정할 수 없어(`setOutInstantRule`이 거부) 늘 1이다.
   - **결정 78(R17 보충) — 지정한 뒤에 기록된 위반부터 2:** `opts.instantPeriods = {ruleId:[{from, to}]}`를 주면 `instantRuleIds`는 보지 않고, OUT 행 `created_at`이 그 항목의 지정 구간(`from ≤ created_at < to`, `to ''`면 지금까지) 안일 때만 2로 센다. 지정 전에 기록된 위반은 1 그대로, 지정을 풀면 그 뒤 기록은 1. ASSUMPTION: '기록된 시각' = `created_at`(발생 일시가 지정 전이어도 지정 뒤에 기록했으면 2), `created_at`이 비면 1.
   - `outInstantNext_(snapshot, currentIds, nowIso)`: `outAutoSinceNext_`와 같은 방식의 지정 이력. 새로 지정된 id는 `{from: now, to: ''}`, 풀린 id는 열린 구간의 `to = now`, 다시 지정하면 새 구간. 스냅숏이 없으면(처음·분실) 지금 지정된 id는 지금부터(소급하지 않음). 손으로 고친 모양은 틀린 구간을 버리고, 지정됐는데 열린 구간이 없으면 지금부터 열고, 풀렸는데 열린 구간은 닫는다(`changed:true` — 저장). 잘못된 nowIso는 Error.
   - **저장 쪽 계약(코딩B, #171 소급 연결을 바꿈):** 스크립트 속성 **`OUT_INSTANT_SINCE`**(JSON = `snapshot`, `AUTO_OUT_SINCE`처럼 백업 대상 `BAK_STATE_VALUES`에 넣는다)를 둔다. ① `setOutInstantRule`은 settings 값을 바꾼 **같은 락 안에서** `outInstantNext_(스냅숏, 새 id 목록, 지금)`을 부르고 `changed`면 속성에 쓴다. ② OUT 수를 세는 모든 곳(`vioOutOpts_`)은 `{instantPeriods: periods}`를 넘긴다 — 읽을 때도 `outInstantNext_(스냅숏, settings 값, 지금)`으로 맞춰(settings를 손으로 고친 경우) `changed`면 속성을 고친다(락 안에서). 모양이 틀린 속성(JSON 아님 등)은 없는 것(null)으로 본다. ③ `setOutInstantRule`의 `affected`는 지정 순간에는 늘 0이다(이미 기록된 OUT은 바뀌지 않음) — 확인 시트 문구를 '이번부터 기록되는 OUT부터 2OUT'으로 바꾼다.
@@ -336,7 +341,7 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, 
 - **방학 중식(R19, 결정 73):** item `중식`, 값 `실시`·`미실시`(조식과 같은 값·같은 적용일 규칙 — 실시 11:30, 미실시 수 11:30). 학사생 값은 `실시`.
   - `mealPlanChange_(…, '중식', …, {vacation})`: `vacation`(그 방학 terms 행, `start_date`·`end_date`)이 없거나 날짜가 아니면 Error. 방학 시작일 **전** 중식 행은 보지 않는다(지난 방학 값이 이어지지 않게 — 방학마다 새로 신청). 계산한 적용일이 시작일보다 이르면 시작일(rule `vacation_start`, 방학 전에 미리 낸 신청), 고친 날(manual)이 시작일보다 이르면 Error, 적용일이 끝날 뒤면 경고. 막힘은 석식과 같다(결정 79). **퇴실 정리 followUps를 쓰지 않는다.**
   - `mealCountsOn_(…, prevTermId, vacation)`: `vacation`을 주고 그날이 방학 안이면 `lunch` = 시작일 이후 중식 행으로 본 값이 `실시`이고, 학사 `입실`이거나 학사 퇴실 뒤 중단일 전(결정 79, 아래). 주지 않으면 `lunch`는 0. 저장 쪽은 termId 기간이 방학이면 그 terms 행을 넘긴다.
-  - `movePlan_`·퇴실 취소는 중식을 건드리지 않는다(퇴실 정리 행 없음). **결정 79:** 학사 퇴실 뒤 중식은 석식처럼 미실시 규칙의 중단일(`mealEffectiveDate_('stop', 퇴실 대표 행 requested_at, {leaveDate})`) 전날까지 집계에 센다 — 그날 학사 상태를 만든 행(`statusRowOn_`)이 퇴실이면 그 행으로 계산, 신청 일시가 틀리면 퇴실일에 끝난 것으로 본다. 재입실하면 퇴실 전 값으로 이어진다. `mealPlanChange_` 막힘도 석식과 같다(퇴실 기록 뒤 신청했거나 중단일 이후 적용이면 실시 불가, 먼저 신청한 것은 중단일 전까지 둔다).
+  - `movePlan_`·퇴실 취소는 중식을 건드리지 않는다(퇴실 정리 행 없음). **결정 79:** 학사 퇴실 뒤 중식은 석식처럼 미실시 규칙의 중단일(`mealEffectiveDate_('stop', 퇴실 대표 행 requested_at, {leaveDate})`) 전날까지 집계에 센다 — 그날 학사 상태를 만든 행(`statusRowOn_`)이 퇴실이면 그 행으로 계산, 신청 일시가 틀리면 퇴실일에 끝난 것으로 본다. 재입실하면 퇴실 전 값으로 이어진다. **중식 값은 `lunchOn_(changes, sid, ymd, {vacation, cutoff})`로만 본다**(`statusOn_(…,'중식')`은 퇴실 뒤에도 `실시`로 남는다): 방학(type `방학`) 밖이면 `''`, 이번 방학 행 값이 `실시`가 아니면 그 값, `실시`인데 학사 입실이 아니면 퇴실 행의 중단일 전 `실시`·그날부터 `미실시`. `mealCountsOn_` lunch(8번째 인자 `opts.cutoff`)와 학생 상태 표시(Meals.gs 학생 목록·기록 '오늘', Moves.gs `getMoveContext` now·onDate)가 모두 이것을 쓴다. `mealPlanChange_` 막힘도 석식과 같다(퇴실 기록 뒤 신청했거나 중단일 이후 적용이면 실시 불가, 먼저 신청한 것은 중단일 전까지 둔다).
   - 저장 쪽(코딩): F7 신청 화면의 중식 버튼은 방학 기간에만, 식수 집계·xlsx·PDF에 `lunch` 열(방학일 때만), 명단 업로드의 중식 열은 이번 범위 밖.
 
 ## 동작 메모(R13, 2026-11-12)
@@ -349,6 +354,11 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, 
   - `movePlan_` `move.type` `'학사 임시 퇴실'`·`'학사 및 기숙사 임시 퇴실'` + `move.returnDate`(필수, 퇴실일 뒤 — 없거나 틀리거나 퇴실일 이하면 오류): 쓰는 행·급식 정리·상태 검사·경고·summary는 일반 퇴실과 **같다**(77② — 급식을 끊고, 자리·침대도 일반 퇴실처럼 빈다). 다른 것은 대표 행(학사 퇴실)·연결 기숙사 퇴실 행의 `reason`이 `'임시 퇴실'`, **대표 행에만** `memo` = `'[임시] return:<복귀 예정일>'`인 것뿐이다.
   - 저장 쪽(코딩): ① 대표 행 `reason`은 계획 값(`'임시 퇴실'`)을 쓰고, 사람이 쓴 사유는 `memo`에 `'[임시] return:… '` 뒤 공백으로 잇는다. ② `'임시 퇴실'` 사유·`[임시]`로 시작하는 memo는 `2OUT 퇴실`처럼 **예약어**(일반 입력 거부). ③ 사유는 건강상만(77⑤ — 화면 안내). ④ 복귀는 지금의 학사 입실(재입실) 그대로. ⑤ 복귀 예정일이 지나면 담당교사 홈에 '복귀 예정일 지남'(`tempLeaveOn_(…, 오늘)`의 `returnDate < 오늘`). ⑥ **일반 퇴실로 바꾸기(77④)** = `moveUndoPlan_`(임시 퇴실 대표) 저장 + 같은 적용일·**같은 신청 일시**(원래 행의 `requested_at` — 석식 중단일이 같게)로 `movePlan_` 일반 퇴실 저장을 한 락 안에서. 그러면 막힘이 처음 임시 퇴실한 날부터 센다(적용일이 오늘보다 이르다는 경고는 그대로 보인다).
   - `outDismissalGate_` 결과에 `tempLeave`(= `tempLeaveOn_(changes, sid, ymd)`)를 더한다. 임시 퇴실 중이면 `alreadyLeft`가 **아니고**(면담은 할 수 있다) `reason '임시 퇴실 중'`, `ok:false`(77③ — 복귀 뒤 확정). 순서: 이미 퇴실 → 퇴실 대상 아님 → 임시 퇴실 중 → 면담 기록 필요 → ok.
+- **R20(결정 74①) 학년 일괄 퇴실:**
+  - `moveBatchTargets_`: termId에 등록되고 `grade`(문자·숫자 같게)이며 ymd에 학사 `입실`인 학생 id(students 순서, 중복 없음). 잘못된 ymd는 Error.
+  - `moveBatchPlan_`: 학생마다 `movePlan_` 한 번 — 유형은 퇴실일에 기숙사 `입실`이면 `학사 및 기숙사 퇴실`, 아니면 `학사 퇴실`(자동). 적용일·신청 일시·석식 선택(`dinner`)은 모두에게 같다. 계획(rows·toCancel·toRestore·warnings·summary)은 그 학생 `movePlan_`과 **같고**, 대표 행에만 `memo = '[일괄] <batchId>'`. 오류 학생은 `skipped`에 첫 오류와 함께 빼고 나머지를 계획한다(같은 id는 한 번). `batchId`가 없거나 공백이 있으면 Error. 급식은 일반 퇴실 정리 그대로(조식 퇴실일, 석식 결정 35, 중식은 집계 — 결정 79), 좌석·방은 일반 퇴실처럼 퇴실 학생 자리를 빈자리로 보는 지금 동작(따로 쓰는 행 없음). 일괄 퇴실은 자진 퇴실이라 재입실이 막힌다(결정 77①).
+  - `moveBatchUndoPlan_`: memo가 `[일괄] <batchId>`(또는 그 뒤 공백 + 글)인 살아 있는 학사 퇴실 대표마다 `moveUndoPlan_`(결정 59). 없으면 `plans []`.
+  - 저장 쪽(C26): ① `batchId` = 저장 때 만든 UUID(미리보기에서 만들어 expect에 넣고 저장 때 그대로). ② 미리보기와 저장은 같은 함수·같은 입력(대상 학생 id 목록 포함)으로 부르고, 저장은 한 락 안에서 모든 학생의 rows를 쓰고 toCancel·toRestore를 반영한다(학생마다 대표 행 id를 연결 행 linked_change_id에). expect 서명에 대상 목록·계획을 넣어 그사이 바뀌면 다시 미리보기. ③ 되돌리기는 `moveBatchUndoPlan_` 결과를 한 락 안에서. 권한·사유·서류 표시는 지금 입퇴실과 같게(관리자 — ASSUMPTION, 저장 쪽 판정). ④ 180명 이내라 한 번 실행 6분 안 — 시트 쓰기는 모아서 한 번에.
 - `movePlan_` 학사 입실: `opts.terms`가 있고 막혀 있으면 errors `2OUT 퇴실로 M월 D일까지 다시 들어올 수 없습니다`(해가 다르면 `yyyy년 M월 D일`, until이 없으면 `…다음 학기 끝날까지 다시 들어올 수 없습니다(다음 학기가 아직 등록되지 않았습니다)`). `opts.terms`가 없거나 빈 배열이면 검사하지 않는다(호환 — 빈 terms로 무기한 막지 않게). 명단 업로드의 등록 막힘(결정 63 두 번째)은 R4 명단 쪽이 이 함수를 불러 정한다.
 - **결정 35 보충(mealCountsOn_):** 선택 인자 `prevTermId`(직전 운영 기간 id)를 주면 이번 기간에 등록이 없는 그 기간 등록생 가운데 그날 학사가 `입실`이 아니면서 석식이 `학사 석식`인 학생도 센다(학기 막바지 퇴실 뒤 석식이 다음 기간까지 이어지는 학생 — 학사 0). 이번 기간에 신청하지 않고 상태만 이어진 학생(학사 입실 그대로)·더 옛 기간·term_id 빈 등록은 세지 않는다. 주지 않으면 지금처럼 이번 기간 등록생만. C19(Meals.gs)는 직전 기간 id를 넘긴다(후속).
 
