@@ -210,7 +210,7 @@ def('home-counsel', 'F12 상담일지', '학사 교사 홈 카드 — 상담일�
 var CAL_EVENTS = [[5, 5, '입학식', '행사', '10:00 강당'], [9, 9, '학부모 총회', '행사', '19:00 시청각실'], [17, 18, '모의고사', '시험', '1~3학년 전체'], [24, 24, '학사 설명회', '안내', '신입 학부모 대상'], [24, 24, '건강검진', '행사', '2학년']];
 var CAL_OFF = 12, CAL_KINDS = ['행사', '시험', '안내', '기타'];
 function calOn(d) { return CAL_EVENTS.filter(function (e) { return e[0] <= d && d <= e[1]; }); }
-/** 달력 한 칸: 날짜 + 일정이 하나면 짧은 제목(칸 폭에 맞춰 …), 둘 이상이면 "2건". 운영 안 하는 날은 회색 점선 + "쉼", 고른 날은 굵은 테두리 + ⚠(의미: 고른 날) */
+/** 달력 한 칸: 날짜 + 일정이 하나면 짧은 제목(칸 폭에 맞춰 …), 둘 이상이면 "2건". 운영 안 하는 날은 회색 점선 + "쉼", 고른 날은 굵은 파랑 테두리(.sel, aria-current, 아이콘 없음) */
 function calGrid(sel) {
   var weeks = [];
   for (var w = 0; w < 5; w++) {
@@ -218,12 +218,12 @@ function calGrid(sel) {
     for (var i = 0; i < 7; i++) {
       var date = w * 7 + i;   // 일요일 시작 달력. 2027년 3월 1일이 월요일이라 첫 칸(일)은 2월 28일이므로 비운다
       if (date < 1 || date > 31) { tr.push(el('td', { style: 'padding:4px' }, [])); continue; }
-      var ev = calOn(date), cls = 'rg-cell' + (date === CAL_OFF ? ' off' : '') + (ev.length ? ' has' : '') + (date === sel ? ' bad' : '');
+      var ev = calOn(date), cls = 'rg-cell' + (date === CAL_OFF ? ' off' : '') + (ev.length ? ' has' : '') + (date === sel ? ' sel' : '');
       var kids = [el('span', { class: 'rg-sym', text: String(date) })];
       if (date === CAL_OFF) kids.push(el('span', { class: 'rg-pre', style: 'font-size:var(--font-xs)', text: '쉼' }));
       else if (ev.length === 1) kids.push(el('span', { class: 'rg-pre', style: 'font-size:var(--font-xs)', text: ev[0][2].replace(/\s/g, '').slice(0, 2) }));
       else if (ev.length > 1) kids.push(el('span', { class: 'rg-pre', style: 'font-size:var(--font-xs)', text: ev.length + '건' }));
-      tr.push(el('td', { style: 'padding:4px' }, [el('button', { type: 'button', class: cls, 'aria-label': '3월 ' + date + '일' + ev.map(function (e) { return ' ' + e[2]; }).join(',') + (date === CAL_OFF ? ' 운영 안 함' : ''), style: 'min-width:0;padding:2px 0' }, kids)]));
+      tr.push(el('td', { style: 'padding:4px' }, [el('button', Object.assign({ type: 'button', class: cls, 'aria-label': '3월 ' + date + '일' + ev.map(function (e) { return ' ' + e[2]; }).join(',') + (date === CAL_OFF ? ' 운영 안 함' : ''), style: 'min-width:0;padding:2px 0' }, date === sel ? { 'aria-current': 'date' } : {}), kids)]));
     }
     weeks.push(el('tr', {}, tr));
   }
@@ -234,7 +234,7 @@ function calPage(m, who, sel) {
   m.appendChild(card('', [el('div', { style: 'display:flex;gap:8px;align-items:center' }, [rgArrow('‹', '이전 달'), el('b', { style: 'flex:1;text-align:center', text: '2027년 3월' }), rgArrow('›', '다음 달')]),
     el('div', { class: 'muted', style: 'margin-top:8px', text: '이번 달 일정 5건' })]));
   m.appendChild(calGrid(sel));
-  m.appendChild(el('div', { class: 'muted', style: 'word-break:keep-all;margin-bottom:8px', text: '칸 = 날짜 + 일정 제목 앞 두 글자(여럿이면 "N건"). 회색 점선 "쉼" = 운영 안 하는 날(자습 일정). ⚠ 굵은 테두리 = 지금 고른 날.' }));
+  m.appendChild(el('div', { class: 'muted', style: 'word-break:keep-all;margin-bottom:8px', text: '칸 = 날짜 + 일정 제목 앞 두 글자(여럿이면 "N건"). 회색 점선 "쉼" = 운영 안 하는 날(자습 일정). 굵은 파랑 테두리 = 지금 고른 날.' }));
   if (who === '관리자') m.appendChild(el('button', { type: 'button', class: 'btn', text: '일정 추가' }));
 }
 function calEventLi(e, admin) {
