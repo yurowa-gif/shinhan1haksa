@@ -44,9 +44,11 @@
       var first = date.slice(0, 8) + '01', nm = new Date(Date.UTC(+date.slice(0, 4), +date.slice(5, 7), 1)).toISOString().slice(0, 10);
       return { from: first, to: addDays(nm, -1) };
     }
-    function shift(n) {
-      var step = state.view === 'day' ? 1 : state.view === 'week' ? 7 : 31;
-      state.date = state.view === 'month' ? (function () { var d = new Date(Date.UTC(+state.date.slice(0, 4), +state.date.slice(5, 7) - 1 + n, 1)); return d.toISOString().slice(0, 10); })() : addDays(state.date, n * step);
+    function shift(n) {   // 서버가 기간 안으로 줄여 돌려준 범위(d.from·d.to)에서 한 칸 이동한다
+      var d = state.data, a = d ? (n < 0 ? d.from : d.to) : state.date;
+      if (state.view === 'day') state.date = addDays(a, n);
+      else if (state.view === 'week') state.date = addDays(rangeFor('week', a).from, 7 * n);
+      else state.date = new Date(Date.UTC(+a.slice(0, 4), +a.slice(5, 7) - 1 + n, 1)).toISOString().slice(0, 10);
       load();
     }
 
@@ -69,6 +71,7 @@
         if (!d.ok) { clear(body); body.appendChild(el('div', { class: 'error', text: d.error })); drawHead(); return; }
         if (state.tab === 'totals') state.totals = d; else state.data = d;
         if (d.pick) { state.grade = d.pick.grade; state.classNo = d.pick.classNo; }
+        if (state.tab === 'grid') state.date = d.from;   // 화면 날짜도 서버 범위로 맞춘다
         drawHead(); draw();
       }).catch(function (err) { clear(body); showError(body, err); });
     }
@@ -83,12 +86,12 @@
       if (state.tab === 'grid') {
         head.appendChild(el('div', { style: 'margin-top:8px' }, [UI.segmented({ label: '보기', value: state.view, options: [{ value: 'day', label: '하루' }, { value: 'week', label: '주' }, { value: 'month', label: '달' }],
           onchange: function (v) { state.view = v; load(); } })]));
-        var r = rangeFor(state.view, state.date);
-        head.appendChild(el('div', { class: 'res-nav' }, [
-          el('button', { type: 'button', class: 'btn secondary', 'aria-label': '이전', text: '‹', onclick: function () { shift(-1); } }),
-          el('div', { class: 'grow', text: r.from === r.to ? U.formatDateKo(r.from, true) : U.formatRangeKo(r.from, r.to) }),
-          el('button', { type: 'button', class: 'btn secondary', 'aria-label': '다음', text: '›', onclick: function () { shift(1); } })
-        ]));
+        var g = state.data, r = g ? { from: g.from, to: g.to } : rangeFor(state.view, state.date);
+        var prev = el('button', { type: 'button', class: 'btn secondary', 'aria-label': '이전', text: '‹', onclick: function () { shift(-1); } });
+        var next = el('button', { type: 'button', class: 'btn secondary', 'aria-label': '다음', text: '›', onclick: function () { shift(1); } });
+        if (g && g.from <= g.termStart) prev.disabled = true;   // 기간 처음·끝에서 멈춘다
+        if (g && g.to >= g.termEnd) next.disabled = true;
+        head.appendChild(el('div', { class: 'res-nav' }, [prev, el('div', { class: 'grow', text: r.from === r.to ? U.formatDateKo(r.from, true) : U.formatRangeKo(r.from, r.to) }), next]));
       } else {
         head.appendChild(el('div', { style: 'margin-top:8px' }, [UI.segmented({ label: '범위', value: state.totRange, options: [{ value: 'week', label: '이 주' }, { value: 'month', label: '이번 달' }, { value: 'term', label: '학기' }],
           onchange: function (v) { state.totRange = v; load(); } })]));
@@ -107,6 +110,7 @@
 
     /* ───────── 격자 ───────── */
     function draw() { clear(body); if (state.tab === 'totals') drawTotals(); else drawGrid(); }
+    function who(s) { var d = state.data || state.totals; return d && d.pick ? s.number + '번 ' + s.name : U.studentLabel(s); }   // 한 반을 보면 학년이 같아 번호가 더 쓸모 있다
     var KIND_SHORT = { '×': '결석', '△': '지각', '조': '조퇴' };
     function drawDayList() {   // 휴대폰: 날짜 하나 → 학생 줄(번호 순서 그대로)
       var d = state.data, x = d.dates[0], list = el('div');
@@ -137,7 +141,7 @@
       table.appendChild(el('thead', {}, [tr]));
       var tb = el('tbody');
       d.students.forEach(function (s) {
-        var row = el('tr', {}, [el('td', { class: 'name', text: U.studentLabel(s) })]);
+        var row = el('tr', {}, [el('td', { class: 'name', text: who(s) })]);
         d.dates.forEach(function (x) {
           var c = (d.cells[s.id] || {})[x.date];
           var td = el('td');
@@ -263,18 +267,43 @@
     function hm(min) { var h = Math.floor(min / 60), m = Math.round(min % 60); return (h ? h + '시간' : '') + (m || !h ? (h ? ' ' : '') + m + '분' : ''); }
     function study(st) { return hm(st.studiedMinutes) + ' / ' + hm(st.minutes); }
     function missedText(st) {
-      var keys = Object.keys(st.missedMinutes || {}).sort(function (a, b) { return st.missedMinutes[b] - st.missedMinutes[a]; });
+      var keys = Object.keys(st.missedMinutes || {}).filter(function (k) { return st.missedMinutes[k] > 0; }).sort(function (a, b) { return st.missedMinutes[b] - st.missedMinutes[a]; });
       return keys.length ? keys.map(function (k) { return k + ' ' + hm(st.missedMinutes[k]); }).join(' · ') : '빠진 시간 없음';
+    }
+    function hrs(min) { var h = Math.round(min / 30) / 2; return String(h); }
+    function short(st) { return hrs(st.studiedMinutes) + '/' + hrs(st.minutes) + '시간'; }
+    function drawTotalsCards() {   // 휴대폰: 표 대신 학생마다 한 줄 카드
+      var t = state.totals, list = el('div');
+      function line(total) {
+        return ['결석', '지각', '조퇴'].map(function (k) { return k + ' ' + total[k]['인정'] + '/' + total[k]['미인정']; }).join(' · ');
+      }
+      function study2(total) { return '학습 ' + short(total['학습량']); }
+      t.rows.forEach(function (r) {
+        var card = el('div', { class: 'res-rec' }, [
+          el('button', { type: 'button', class: 'res-cell', style: 'align-items:flex-start;text-align:left;min-height:var(--tap)', onclick: function () { toggle(r.student.id); } }, [el('b', { text: who(r.student) }), el('span', { class: 'muted', text: line(r.total) }), el('span', { class: 'muted', text: study2(r.total) })])
+        ]);
+        if (state.open === r.student.id) {
+          var rec = state.records[r.student.id];
+          card.appendChild(el('div', { class: 'muted', text: '빠진 시간 ' + missedText(r.total['학습량']) }));
+          if (!rec) card.appendChild(el('div', { class: 'muted', text: '불러오는 중…' }));
+          else if (!rec.records.length) card.appendChild(el('div', { class: 'muted', text: '이 범위에 결과 기록이 없습니다.' }));
+          else rec.records.forEach(function (x) { card.appendChild(el('div', {}, [el('b', { text: x.date.slice(5).replace('-', '/') + ' ' + x.weekdayKo + ' ' + x.kind }), ' ' + (x.recognized ? '인정' : '미인정') + (x.autoOut ? ' · 자동 1OUT' : '') + (x.reason ? ' · ' + x.reason : '')])); });
+        }
+        list.appendChild(card);
+      });
+      list.appendChild(el('div', { class: 'res-rec' }, [el('b', { text: '합계' }), el('div', { class: 'muted', text: line(t.sum) }), el('div', { class: 'muted', text: study2(t.sum) })]));
+      body.appendChild(el('div', { class: 'card' }, [list, el('div', { class: 'muted', style: 'margin-top:8px', text: '숫자는 인정/미인정. 학습은 공부한 시간/전체 시간입니다. 이름을 누르면 빠진 시간 까닭과 기록이 나옵니다.' })]));
     }
     function drawTotals() {
       var t = state.totals;
       if (!t.rows.length) { body.appendChild(UI.emptyState('볼 수 있는 학생이 없습니다.')); return; }
+      if (window.innerWidth < 600) { drawTotalsCards(); return; }
       var table = el('table', { class: 'res-table res-sum' });
       table.appendChild(el('thead', {}, [el('tr', {}, [el('th', { class: 'name', text: '학생' })].concat(['결석', '지각', '조퇴'].map(function (k) { return el('th', { text: k + ' 인정/미인정' }); })).concat([el('th', { text: '학습량 공부/전체' })]))]));
       var tb = el('tbody');
       function cells(total) { return ['결석', '지각', '조퇴'].map(function (k) { var a = total[k]['인정'], b = total[k]['미인정']; return el('td', { class: a || b ? '' : 'muted', text: a + ' / ' + b }); }).concat([el('td', { text: study(total['학습량']) })]); }
       t.rows.forEach(function (r) {
-        var tr = el('tr', {}, [el('td', { class: 'name' }, [el('button', { type: 'button', class: 'res-cell', style: 'align-items:flex-start;text-align:left', text: U.studentLabel(r.student), onclick: function () { toggle(r.student.id); } })])].concat(cells(r.total)));
+        var tr = el('tr', {}, [el('td', { class: 'name' }, [el('button', { type: 'button', class: 'res-cell', style: 'align-items:flex-start;text-align:left', text: who(r.student), onclick: function () { toggle(r.student.id); } })])].concat(cells(r.total)));
         tb.appendChild(tr);
         if (state.open === r.student.id) {
           var rec = state.records[r.student.id];
