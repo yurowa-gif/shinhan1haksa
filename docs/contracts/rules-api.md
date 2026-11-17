@@ -72,6 +72,10 @@ function effectiveFixedRows_(rows, studentId, ymd)
  *  → {code:'EXC'|'FIXED'|'END'|'NONE', text, exceptionId, more} */
 function resolveCell_(c)
 function resolveStudentDay_(plan, s, opts)  // s = {exceptions, fixedRows, endType} → 블록 순서대로 [{seq, code, text, exceptionId, more}]
+function attResultKind_(type)                 // (R22, F11) → {kind:'결석'|'지각'|'조퇴'|'블록'|'', recognized}
+function attResultByBlocks_(spec, blocks)     // (R22) '블록' 종류(가정사유) → '결석'|'지각'|'조퇴'|''
+function attGridCell_(plan, s, opts)          // (R22) 격자 칸 → {date, operating, marks:[{seq,code,text}], results:[{kind, mark, recognized, exceptionIds, types}], warnings}
+function attResultTotals_(cells)              // (R22) → {결석:{인정, 미인정}, 지각:{…}, 조퇴:{…}}
 
 // src/rules/StatusRules.gs
 function statusOn_(changes, studentId, item, ymd)   // item '학사'|'기숙사'|'조식'|'중식'|'석식' → 값 또는 ''
@@ -222,6 +226,12 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, 
   - FIXED가 여럿이면 `teacher_confirmed_at` → `updated_at` 최신.
   - END: `endType`(`'23:00:00'`도 읽음) `=== opts.endTime`(기본 `'23:00'`), `dayType`이 `opts.endTypeDayTypes`(기본 `['mon_thu']`, 항목 앞뒤 공백 무시)에 있음, 마지막 블록, **그 블록과 그날 종료(`dayEnd`)가 모두 종료 시각보다 늦게 끝남**. ASSUMPTION: 날짜별 종료를 23:00 이하로 당긴 날(22:00·22:30·23:00)은 모두 그 시각에 귀가하므로 표시하지 않는다. ASSUMPTION: 특별 요일 유형(`exam` 등)으로 바꾼 날은 실제 달력 요일의 기본 유형으로 판정한다(목요일 exam → 표시, 금요일 exam → 표시 안 함). 휴일(`holiday`, 결정 72 보충 R21)은 특별 유형이 아니라 그 자체가 기본 유형이다: 목요일 휴일도 `mon_thu`로 보지 않으므로 `endTypeDayTypes`에 `holiday`가 없으면 END가 없다. 휴일 칸은 `blocks`의 `day_type 'holiday'` 블록(오전 토요일 칸·오후·저녁 일요일 칸, C24가 기본값을 채움)을 `resolveDayPlan_`이 그대로 쓴다.
 - `resolveStudentDay_`: 운영 안 하는 날은 `[]`. `exceptions`는 `date === plan.date`인 행만 쓴다(**날짜가 빈 행은 쓰지 않는다** — 빈 날짜 하나가 모든 날에 찍히지 않게). `plan.end`를 `dayEnd`로 넘긴다. `fixedRows`는 `effectiveFixedRows_` 결과를 넘긴다. 고정 일정 요일은 요일 유형이 아니라 **실제 달력 요일**(`ymdWeekdayKo_`). C7은 결과에서 `seq·code·text`만 sheet-model `marks`로 옮긴다.
+- **R22 F11 출결 결과 정리 격자(학생 × 날짜):** 결과는 새 탭 없이 **확정 사전 특이사항 행**으로 저장한다(총괄 전제 — 출결 담당이 종이 출석부의 ×·△·조를 보고 유형을 골라 확정으로 넣는다. 미인정 유형은 지금처럼 자동 1OUT이 붙는다).
+  - `attResultKind_(type)`: 유형 이름(괄호 설명을 뗀 `attTypeBase_`)으로 정한다 — settings `exception.types`에 새 유형을 더해도 이름 규칙을 따른다. `병결`·`…결석` → 결석, `…지각` → 지각, `…조퇴` → 조퇴, `가정사유` → `블록`(덮는 블록으로), 그 밖 `''`. `recognized` = 이름이 `미인정`으로 시작하지 않음. ASSUMPTION: 학원·학사 외/내 프로그램·기타·모르는 유형은 결과가 아니다(칸에 약어만 보이고 누적에 세지 않는다 — 결과로 세려면 결석·지각·조퇴 유형으로 입력).
+  - `attResultByBlocks_(spec, blocks)`: 그날 블록(`resolveDayPlan_` 블록) 모두 → 결석, 첫 블록은 덮고 마지막은 아님 → 지각, 마지막은 덮고 첫 블록은 아님 → 조퇴, 그 밖(가운데만·처음과 끝만) → `''`. 블록이 없는 날은 `ALL`만 결석.
+  - `attGridCell_(plan, s, opts)`: `marks` = `resolveStudentDay_`(출석부 칸과 **같은 판정·우선순위**: 사전 특이사항 → 고정 일정 '학'·'가' → 23:00 종료)에서 `seq·code·text`. `results` = 그날 확정 특이사항을 종류로 읽어 **종류마다 하루 1번**(ASSUMPTION — 여러 블록·여러 행의 미인정지각도 지각 1회). 결석이 있으면 그날은 결석 하나만, 지각과 조퇴는 같은 날 둘 다 셀 수 있다. 한 종류에 인정·미인정이 섞이면 미인정(ASSUMPTION — 엄한 쪽). 기호 결석 `×`·지각 `△`·조퇴 `조`. 운영 안 하는 날은 `marks`·`results`가 비고 그날 확정 특이사항이 있으면 경고(세지 않는다, ASSUMPTION).
+  - `attResultTotals_(cells)`: 한 학생의 칸 목록(날짜 범위·기간은 부르는 쪽이 고른다)의 누적, 칸마다 종류당 1.
+  - 저장 쪽(C33): 날짜마다 `resolveDayPlan_` 한 번, 학생마다 `effectiveFixedRows_` → `attGridCell_`. 출석(○)은 따로 저장하지 않는다(결과가 없는 운영일 = 출석). 결과 입력은 지금 F1 저장(`saveException`·`confirmException`)을 그대로 쓴다.
 
 ## 동작 메모(R5, 2026-11-07, 총괄 검토 3차 반영)
 
