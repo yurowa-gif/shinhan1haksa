@@ -198,40 +198,88 @@ def('home-counsel', 'F12 상담일지', '학사 교사 홈 카드 — 상담일�
     link('상담일지 열기', 'secondary', 'margin-top:12px')]));
 });
 
-/* ═════════ F13 월별 일정 (대략 — events 탭 승인 뒤) ═════════ */
+/* ═════════ F13 월별 일정 (결정 80: events 탭 — 시작일·끝날·제목·종류·메모·상태) ═════════ */
+// 일정: [시작일, 끝날, 제목, 종류, 메모]. 가짜 달력 = 2027년 3월(3/1은 월요일), 운영 안 하는 날 = 3/12(금)(자습 일정에서 읽는다)
+var CAL_EVENTS = [[5, 5, '입학식', '행사', '10:00 강당'], [9, 9, '학부모 총회', '행사', '19:00 시청각실'], [17, 18, '모의고사', '시험', '1~3학년 전체'], [24, 24, '학사 설명회', '안내', '신입 학부모 대상'], [24, 24, '건강검진', '행사', '2학년']];
+var CAL_OFF = 12, CAL_KINDS = ['행사', '시험', '안내', '기타'];
+function calOn(d) { return CAL_EVENTS.filter(function (e) { return e[0] <= d && d <= e[1]; }); }
+/** 달력 한 칸: 날짜 + 일정이 하나면 짧은 제목(칸 폭에 맞춰 …), 둘 이상이면 "2건". 운영 안 하는 날은 회색 점선 + "쉼", 고른 날은 굵은 테두리 + ⚠(의미: 고른 날) */
 function calGrid(sel) {
-  var ev = { 5: '입학식', 9: '학부모 총회', 17: '모의고사', 24: '학사 설명회' }, offDay = 12, weeks = [];
+  var weeks = [];
   for (var w = 0; w < 5; w++) {
     var tr = [];
     for (var i = 0; i < 7; i++) {
       var date = w * 7 + i;   // 일요일 시작 달력. 2027년 3월 1일이 월요일이라 첫 칸(일)은 2월 28일이므로 비운다
       if (date < 1 || date > 31) { tr.push(el('td', { style: 'padding:4px' }, [])); continue; }
-      var cls = 'rg-cell' + (date === offDay ? ' off' : '') + (ev[date] ? ' has' : '') + (date === sel ? ' bad' : '');
+      var ev = calOn(date), cls = 'rg-cell' + (date === CAL_OFF ? ' off' : '') + (ev.length ? ' has' : '') + (date === sel ? ' bad' : '');
       var kids = [el('span', { class: 'rg-sym', text: String(date) })];
-      if (date === offDay) kids.push(el('span', { class: 'rg-pre', text: '쉼' }));
-      else if (ev[date]) kids.push(el('span', { class: 'rg-pre', text: '●' }));
-      tr.push(el('td', { style: 'padding:4px' }, [el('button', { type: 'button', class: cls, 'aria-label': '3월 ' + date + '일' + (ev[date] ? ' ' + ev[date] : '') + (date === offDay ? ' 운영 안 함' : ''), style: 'min-width:0' }, kids)]));
+      if (date === CAL_OFF) kids.push(el('span', { class: 'rg-pre', style: 'font-size:var(--font-xs)', text: '쉼' }));
+      else if (ev.length === 1) kids.push(el('span', { class: 'rg-pre', style: 'font-size:var(--font-xs)', text: ev[0][2].replace(/\s/g, '').slice(0, 2) }));
+      else if (ev.length > 1) kids.push(el('span', { class: 'rg-pre', style: 'font-size:var(--font-xs)', text: ev.length + '건' }));
+      tr.push(el('td', { style: 'padding:4px' }, [el('button', { type: 'button', class: cls, 'aria-label': '3월 ' + date + '일' + ev.map(function (e) { return ' ' + e[2]; }).join(',') + (date === CAL_OFF ? ' 운영 안 함' : ''), style: 'min-width:0;padding:2px 0' }, kids)]));
     }
     weeks.push(el('tr', {}, tr));
   }
   var head = el('thead', {}, [el('tr', {}, ['일', '월', '화', '수', '목', '금', '토'].map(function (t) { return el('th', { style: 'text-align:center;padding:4px', text: t }); }))]);
   return el('div', { class: 'tablewrap' }, [el('table', { class: 'data rg', style: 'table-layout:fixed' }, [head, el('tbody', {}, weeks)])]);
 }
-def('calendar-month', 'F13 월별 일정(대략)', '월별 일정 달력 — 관리자는 [일정 추가], 교사는 보기만 (운영 안 하는 날은 회색)', {}, function (root) {
-  var m = frame(root, { title: '월별 일정', who: '관리자', note: '시안(대략) · events 탭 승인 뒤에 확정(열: 날짜·제목·대상·내용). 미정: 하루에 일정이 여럿일 때 칸 표시, 여러 날 걸치는 일정(기간)을 한 줄로 할지. 회색 "쉼"은 F3 일정의 운영 안 하는 날이 자동으로 나온다(여기서 정하지 않는다).' });
-  m.appendChild(card('', [el('div', { style: 'display:flex;gap:8px;align-items:center' }, [rgArrow('‹', '이전 달'), el('b', { style: 'flex:1;text-align:center', text: '2027년 3월' }), rgArrow('›', '다음 달')])]));
-  m.appendChild(calGrid(9));
-  m.appendChild(el('div', { class: 'muted', style: 'margin-bottom:8px', text: '● 일정 있음 · 회색 점선 "쉼" = 운영 안 하는 날 · ⚠ 굵은 테두리 = 지금 고른 날' }));
-  m.appendChild(card('3월 9일(화)', [el('ul', { class: 'list' }, [el('li', { style: 'display:block' }, [el('b', { text: '학부모 총회' }), el('div', { class: 'muted', text: '대상 전체 · 19:00 시청각실' })])]),
-    el('button', { type: 'button', class: 'btn', style: 'margin-top:12px', text: '일정 추가' })]));
+function calPage(m, who, sel) {
+  m.appendChild(card('', [el('div', { style: 'display:flex;gap:8px;align-items:center' }, [rgArrow('‹', '이전 달'), el('b', { style: 'flex:1;text-align:center', text: '2027년 3월' }), rgArrow('›', '다음 달')]),
+    el('div', { class: 'muted', style: 'margin-top:8px', text: '이번 달 일정 5건' })]));
+  m.appendChild(calGrid(sel));
+  m.appendChild(el('div', { class: 'muted', style: 'word-break:keep-all;margin-bottom:8px', text: '칸 = 날짜 + 일정 제목 앞 두 글자(여럿이면 "N건"). 회색 점선 "쉼" = 운영 안 하는 날(자습 일정). ⚠ 굵은 테두리 = 지금 고른 날.' }));
+  if (who === '관리자') m.appendChild(el('button', { type: 'button', class: 'btn', text: '일정 추가' }));
+}
+function calEventLi(e, admin) {
+  var when = e[0] === e[1] ? '3월 ' + e[0] + '일' : '3월 ' + e[0] + '일 ~ ' + e[1] + '일';
+  var left = el('div', { style: 'flex:1 1 auto;min-width:0;word-break:keep-all' }, [el('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, [el('b', { text: e[2] }), UI.statusPill('mute', e[3])]),
+    el('div', { class: 'muted', text: when }), e[4] ? el('div', { class: 'muted', text: e[4] }) : null]);
+  return el('li', { style: 'align-items:center;gap:8px' }, [left, admin ? el('button', { type: 'button', class: 'btn secondary', style: 'flex:0 0 auto;margin-top:0', text: '취소' }) : null]);
+}
+function calDaySheet(date, admin, off) {
+  var ev = calOn(date), kids = [];
+  if (off) kids.push(el('div', { class: 'notice info', style: 'word-break:keep-all', text: '이 날은 자습을 운영하지 않습니다(자습 일정). 일정과 따로 정해져 있습니다.' }));
+  if (!ev.length) kids.push(el('div', { class: 'muted', text: '이 날 등록된 일정이 없습니다.' }));
+  else kids.push(el('ul', { class: 'list' }, ev.map(function (e) { return calEventLi(e, admin); })));
+  var actions = [{ text: '닫기', kind: 'secondary', onclick: function () {} }];
+  if (admin) actions.push({ text: '이 날에 일정 추가', kind: 'primary', onclick: function () {} });
+  return UI.bottomSheet({ title: '3월 ' + date + '일(' + ['일', '월', '화', '수', '목', '금', '토'][date % 7] + ')', content: el('div', {}, kids), actions: actions });
+}
+def('calendar-month', 'F13 월별 일정', '월 달력 (관리자: [일정 추가] 버튼, 교사 역할: 보기만) — 칸에 짧은 제목, 운영 안 하는 날 회색', {}, function (root) {
+  var m = frame(root, { title: '월별 일정', who: '관리자', note: '시안 · 결정 80(events 탭). 모든 역할이 달력으로 본다(교사 화면은 [일정 추가] 버튼이 없는 같은 모양, calendar-day-sheet-teacher). 칸을 누르면 그날 일정 시트. 회색 "쉼"은 자습 일정(day_schedules)의 운영 안 함을 읽어 온 것이라 일정으로 따로 넣지 않는다.' });
+  m.classList.add('wide');
+  calPage(m, '관리자', 9);
 });
-def('calendar-add', 'F13 월별 일정(대략)', '일정 추가 시트 (제목·날짜·대상·내용, 관리자만)', { sheet: true }, function (root) {
+def('calendar-day-sheet', 'F13 월별 일정', '날짜를 누르면 — 그날 일정 목록 시트 (관리자: 줄마다 [취소], [이 날에 일정 추가])', { sheet: true }, function (root) {
+  var m = frame(root, { title: '월별 일정', who: '관리자', note: '시안 · 한 날 일정이 둘이면 시트에 목록으로. 여러 날 일정은 기간을 한 줄로 보인다. 종류는 알약.' });
+  calPage(m, '관리자', 24);
+  calDaySheet(24, true, false).open();
+});
+def('calendar-day-sheet-teacher', 'F13 월별 일정', '교사 역할이 날짜를 눌렀을 때 — 보기만 (취소·추가 버튼 없음), 운영 안 하는 날 안내', { sheet: true }, function (root) {
+  var m = frame(root, { title: '월별 일정', who: '박선생', note: '시안 · 학사 교사·출결 담당·담임·근무표 담당자 모두 같은 보기. 운영 안 하는 날은 안내 한 줄.' });
+  calPage(m, '박선생', 12);
+  calDaySheet(12, false, true).open();
+});
+function calForm(withError) {
+  var range = UI.rangeField({ from: '2027-03-17', to: withError ? '2027-03-16' : '2027-03-18', onchange: function () {} });   // 시작일을 고르면 종료일이 같은 날로 맞춰지고, 종료일이 앞서면 오류(기존 부품)
+  return el('div', {}, [UI.field('제목', el('input', { type: 'text', value: '모의고사', maxlength: '60' }), { hint: '달력 칸에는 앞 두 글자만 나옵니다. 한눈에 알아볼 말로 적어 주세요.' }), range,
+    UI.field('종류', el('div', { class: 'chips' }, CAL_KINDS.map(function (t) { return el('button', { type: 'button', class: t === '시험' ? 'chip on' : 'chip', text: t }); }))),
+    UI.field('메모(선택)', el('textarea', { maxlength: '300', text: '1~3학년 전체' }))]);
+}
+def('calendar-add', 'F13 월별 일정', '일정 추가 폼 시트 (제목·시작일·끝날·종류 칩·메모, 관리자만)', { sheet: true }, function (root) {
+  var m = frame(root, { title: '월별 일정', who: '관리자', note: '시안 · 열: 시작일·끝날·제목·종류·메모(결정 80). 종류 칩 값은 미정(행사·시험·안내·기타는 제안, 코딩A·총괄이 확정). 날짜는 기존 UI.rangeField(시작일을 고르면 종료일이 같은 날로 맞춰짐 = 열 이름 끝날).' });
+  calPage(m, '관리자', 17);
+  UI.bottomSheet({ title: '일정 추가', content: calForm(false), actions: [{ text: '닫기', kind: 'secondary', onclick: function () {} }, { text: '일정 저장', kind: 'primary', onclick: function () {} }] }).open();
+});
+def('calendar-add-error', 'F13 월별 일정', '일정 추가 — 종료일이 시작일보다 앞이면 칸 아래 오류(UI.rangeField), 저장되지 않음', { sheet: true }, function (root) {
   var m = frame(root, { title: '월별 일정', who: '관리자' });
-  m.appendChild(calGrid(9));
-  var body = el('div', {}, [UI.field('제목', el('input', { type: 'text', value: '학부모 총회' })), UI.dateField({ label: '날짜', value: '2027-03-09', onchange: function () {} }),
-    UI.field('대상', el('div', { class: 'chips' }, [el('button', { type: 'button', class: 'chip on', text: '전체' }), el('button', { type: 'button', class: 'chip', text: '1학년' }), el('button', { type: 'button', class: 'chip', text: '2학년' }), el('button', { type: 'button', class: 'chip', text: '3학년' })])),
-    UI.field('내용(선택)', el('textarea', { maxlength: '300', text: '19:00 시청각실' }))]);
-  UI.bottomSheet({ title: '일정 추가', content: body, actions: [{ text: '닫기', kind: 'secondary', onclick: function () {} }, { text: '일정 저장', kind: 'primary', onclick: function () {} }] }).open();
+  calPage(m, '관리자', 17);
+  UI.bottomSheet({ title: '일정 추가', content: calForm(true), actions: [{ text: '닫기', kind: 'secondary', onclick: function () {} }, { text: '일정 저장', kind: 'primary', onclick: function () {} }] }).open();
+});
+def('calendar-cancel', 'F13 월별 일정', '일정 취소 확인 (사유 필수, 삭제가 아니라 취소됨으로 남김)', { sheet: true }, function (root) {
+  var m = frame(root, { title: '월별 일정', who: '관리자' });
+  calPage(m, '관리자', 24);
+  UI.confirmWithReason({ title: '일정을 취소합니다', message: '3월 24일(수) 건강검진(행사). 달력에서 사라지지만 기록은 "취소됨"으로 남습니다. 날짜·제목을 고치려면 취소한 뒤 새로 등록해 주세요.', reasonLabel: '사유', confirmText: '일정 취소', danger: true, onconfirm: function () {} });
 });
 
 /* ═════════ 실행 ═════════ */

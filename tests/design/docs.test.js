@@ -203,16 +203,16 @@ test('D12 5단계 시안(stage5-screens.js): 화면 이름이 stage5-screens.md 
   const src = css.readFile('design/preview/stage5-screens.js');
   const doc = css.readFile('docs/design/stage5-screens.md');
   const ids = [...src.matchAll(/^def\('([^']+)'/gm)].map((m) => m[1]);
-  assert.ok(ids.length >= 15, '시안 수 ' + ids.length);
+  assert.ok(ids.length >= 19, '시안 수 ' + ids.length);
   ids.forEach((id) => {
     assert.ok(doc.indexOf('`' + id + '`') >= 0, '`' + id + '` 가 문서에 없다');
     assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'docs', 'design', 'stage5-photos', id + '.png')), id + ' 사진이 없다');
   });
   const imgs = [...doc.matchAll(/!\[[^\]]*\]\((stage5-photos\/[^)]+)\)/g)].map((m) => m[1]);
-  assert.ok(imgs.length >= 15, '문서의 사진 수 ' + imgs.length);
+  assert.ok(imgs.length >= 19, '문서의 사진 수 ' + imgs.length);
   imgs.forEach((f) => assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'docs', 'design', f)), f + ' 파일이 없다'));
   ['.rg-cell', '.rg-pre', '.rg-sym', 'table.data.rg', '.rg-cell.bad', '.rg-cell.off', '.rg-cell.has'].forEach((c) => assert.ok(css.readFile('src/ui/Styles.html').indexOf(c.replace(/^table\.data\./, 'table.data.')) >= 0, c + ' 가 Styles.html 에 없다'));
-  ['`counsel.view`', '`counsel.save`', '`counsel.cancel`', 'ASSUMPTION', '미정·가정', '삭제 버튼은 어디에도 없다', '저장한 뒤에는 고치지 않는다', '자동 1OUT', '(내용 생략, N자)', '기본 켬'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
+  ['`counsel.view`', '`counsel.save`', '`counsel.cancel`', 'ASSUMPTION', '미정·가정', '삭제 버튼은 어디에도 없다', '저장한 뒤에는 고치지 않는다', '자동 1OUT', '(내용 생략, N자)', '기본 켬', '결정 80', 'UI.rangeField'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
   // 미인정·운영 안 함은 색만으로 알리지 않는다(⚠ 글자·점선)
   const styles = css.readFile('src/ui/Styles.html');
   assert.ok(/\.rg-cell\.bad \.rg-sym::before \{ content: "⚠ "/.test(styles) && /\.rg-cell\.bad \{ border: 3px solid/.test(styles) && /\.rg-cell\.off \{[^}]*border-style: dashed/.test(styles));

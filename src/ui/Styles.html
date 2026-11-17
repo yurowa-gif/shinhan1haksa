@@ -230,7 +230,7 @@
   table.data.rg th:first-child, table.data.rg td:first-child { text-align: left; padding: 4px 10px; }
   .rg-cell { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-width: 56px; min-height: var(--tap); padding: 2px 4px;
     border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); color: var(--text); font: inherit; cursor: pointer; }
-  .rg-cell .rg-pre { font-size: var(--font-sm); color: var(--muted-ink); }
+  .rg-cell .rg-pre { font-size: var(--font-sm); color: var(--muted-ink); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .rg-cell .rg-sym { font-weight: 700; font-size: var(--font-lg); }
   .rg-cell.has { background: var(--accent-weak); border-color: var(--accent); }
   .rg-cell.bad { border: 3px solid var(--warn); background: var(--warn-weak); }
