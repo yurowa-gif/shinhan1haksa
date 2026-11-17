@@ -71,6 +71,7 @@ var SCREENS = {
   schedule: { file: 'ui/screen_schedule', title: '자습 일정·블록', view: 'schedule.view' },
   sheet: { file: 'ui/screen_sheet', title: '출석부', view: 'sheet.view' },
   exceptions: { file: 'ui/screen_exceptions', title: '특이사항', view: 'exception.view' },
+  results: { file: 'ui/screen_results', title: '출결 결과 정리', view: 'exception.view' },
   seats: { file: 'ui/screen_seats', title: '좌석표', view: 'seat.view' },
   avoid: { file: 'ui/screen_avoid', title: '떨어뜨릴 짝', view: 'avoid.view' },
   duty: { file: 'ui/screen_duty', title: '근무표', view: 'duty.view' },
