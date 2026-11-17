@@ -21,16 +21,18 @@ var RES_MARK = { '결석': '×', '지각': '△', '조퇴': '조' };
 
 /* ───────────── 순수 도우미 ───────────── */
 
-/** 결과 종류별 유형 선택지(순수): 결석 = 병결·…결석, 지각 = …지각, 조퇴 = …조퇴 + 가정사유(블록으로). '기타'·학원·프로그램은 없다. → {결석:[{type, recognized}], …} */
+/** 결과 종류별 유형 선택지(순수): R22 attResultChoices_(병○○·미인정○○) + 가정사유(덮는 블록으로 종류가 정해지는 인정 사유, 시안 D12). '기타'·학원·프로그램은 없다. → {결석:[{type, recognized}], …} */
 function resOptions_(types) {
   var out = { '결석': [], '지각': [], '조퇴': [] };
+  attResultChoices_(types).forEach(function (c) { out[c.kind].push({ type: c.type, recognized: c.recognized }); });
   (types || []).forEach(function (t) {
-    var k = attResultKind_(t);
-    if (k.kind === '블록') RES_KINDS.forEach(function (kind) { out[kind].push({ type: t, recognized: k.recognized }); });
-    else if (out[k.kind]) out[k.kind].push({ type: t, recognized: k.recognized });
+    if (attTypeBase_(t) === '가정사유') RES_KINDS.forEach(function (kind) { out[kind].push({ type: String(t), recognized: true }); });
   });
   return out;
 }
+
+/** 이 행이 결과 화면에서 다루는 행인가(결과 유형 또는 가정사유) — 학원·프로그램 같은 사전 특이사항은 결과 취소가 건드리지 않는다 */
+function resOwnType_(type) { return !!attResultKind_(type) || attTypeBase_(type) === '가정사유'; }
 
 /** 종류별 기본 시간 표기(순수): 결석 ALL, 지각 첫 블록, 조퇴 마지막 블록. blocks = resolveDayPlan_ 블록 */
 function resDefaultBlocks_(kind, blocks) {
@@ -59,7 +61,7 @@ function resValidateCell_(cell, ctx) {
   if (reason.length > EXC_REASON_MAX) add('reason', '사유는 ' + EXC_REASON_MAX + '자 안으로 적어 주세요.');
   if (!errors.length) {
     var k = attResultKind_(type);
-    var real = k.kind === '블록' ? attResultByBlocks_(spec, ctx.plan.blocks) : k.kind;
+    var real = k ? k.kind : attResultByBlocks_(spec, ctx.plan.blocks);   // 결과 유형은 그 종류, 가정사유는 덮는 블록으로
     if (real !== kind) add('blocks', kind === '결석' ? '결석은 그날 시간 전체를 골라 주세요.' : kind === '지각' ? '지각은 첫 시간부터 늦은 시간까지(마지막은 빼고) 골라 주세요.' : '조퇴는 마지막 시간부터 일찍 간 시간까지(첫 시간은 빼고) 골라 주세요.');
   }
   return { errors: errors, rec: { type: type, blocks: parsed.errors.length ? '' : (parsed.all ? 'ALL' : formatBlockSpec_(parsed)), reason: reason, kind: kind } };
@@ -83,7 +85,7 @@ function resMergeMails_(mails) {
 
 /** 종료 뒤 허용 날짜(순수): term.end_date + RES_GRACE_DAYS 이전이면 true */
 function resEditable_(term, today) {
-  return !!term && today <= ymdAddDays_(term.end_date, RES_GRACE_DAYS);
+  return !!term && today <= ymdAddDays_(term.end_date, RES_GRACE_DAYS);   // attGridWritable_와 같은 14일(RES_GRACE_DAYS)
 }
 
 /* ───────────── 읽기 ───────────── */
@@ -226,9 +228,9 @@ function getResultCell(studentId, date) {
     ok: true, student: s.view, date: date, weekdayKo: ymdWeekdayKo_(date), operating: plan.operating,
     blocks: plan.blocks.map(function (b) { return { seq: b.seq, start: b.start, end: b.end, label: b.label }; }),
     rows: rowsOf.map(function (r) {
-      var k = attResultKind_(r.type), kind = k.kind === '블록' ? attResultByBlocks_(r.blocks, plan.blocks) : k.kind;
-      return { id: r.id, type: r.type, short: ctx.exSettings.typeShort[r.type] || '', blocks: r.blocks, blocksText: excBlocksText_(r.blocks), status: r.status, reason: r.reason || '', kind: kind,
-        recognized: k.recognized, by: names[normalizeEmail_(r.confirmed_by || r.requested_by)] || '' };
+      var k = attResultKind_(r.type), byBlocks = attResultByBlocks_(r.blocks, plan.blocks), own = resOwnType_(r.type);
+      return { id: r.id, type: r.type, short: ctx.exSettings.typeShort[r.type] || '', blocks: r.blocks, blocksText: excBlocksText_(r.blocks), status: r.status, reason: r.reason || '',
+        kind: own ? (k ? k.kind : byBlocks) : '', counts: byBlocks, recognized: k ? k.recognized : true, by: names[normalizeEmail_(r.confirmed_by || r.requested_by)] || '' };
     }),
     marks: cell.marks, results: cell.results.map(function (x) { return { kind: x.kind, mark: x.mark, recognized: x.recognized, types: x.types }; }),
     options: options, defaults: defaults, autoOut: ctx.exSettings.autoOut, warnings: cell.warnings,
@@ -252,7 +254,6 @@ function resPlan_(user, payload) {
   var errors = [], items = [], seen = {}, warnings = [], options = resOptions_(ctx.exSettings.types);
   var students = {}, today = ctx.today;
   resStudents_(ctx).forEach(function (s) { students[s.raw.id] = s; });
-  if (!resEditable_(ctx.term, today)) return { ok: false, errors: [{ index: -1, field: '', message: '"' + ctx.term.name + '"은(는) 끝난 지 ' + RES_GRACE_DAYS + '일이 지나 결과를 고칠 수 없습니다. 볼 수만 있습니다.' }] };
   var ended = ctx.term.end_date < today;
   cells.forEach(function (c, i) {
     var err = function (field, message) { errors.push({ index: i, field: field, message: message }); };
@@ -261,7 +262,8 @@ function resPlan_(user, payload) {
     var s = students[sid];
     if (!s) { err('studentId', '이번 기간 학사생이 아니거나 볼 수 없는 학생입니다.'); return; }
     if (!ymdIsValid_(date) || !ctx.plans[date]) { err('date', '이 범위 안의 날짜가 아닙니다.'); return; }
-    if (date > today) { err('date', '아직 오지 않은 날의 결과는 넣을 수 없습니다.'); return; }
+    var w = attGridWritable_(ctx.term, date, today, RES_GRACE_DAYS);
+    if (!w.ok) { err('date', w.reason); return; }
     var plan = ctx.plans[date];
     if (!plan.operating) { err('date', '그날은 자습을 운영하지 않아 결과를 넣을 수 없습니다.'); return; }
     if (statusOn_(ctx.changes, sid, '학사', date) !== '입실') { err('date', '그날은 학사 입실 상태가 아닙니다.'); return; }
@@ -279,14 +281,14 @@ function resPlan_(user, payload) {
   });
   if (errors.length) return { ok: false, errors: errors };
   // 대체: 그 학생·그 날의 살아 있는 행 중 새 결과와 블록이 겹치는 것(사전 특이사항·이전 결과)
-  var exBy = resRowsByStudent_(ctx.rows), cancelSet = {}, toCancel = [], replaced = [];
+  var cancelSet = {}, toCancel = [], replaced = [], byId = {};
+  ctx.rows.forEach(function (r) { byId[r.id] = r; });
   items.forEach(function (it) {
-    (exBy[it.student.raw.id] || []).forEach(function (r) {
-      if (String(r.date) !== it.date || EXC_LIVE.indexOf(String(r.status).trim()) < 0 || cancelSet[r.id]) return;
-      if (!excSpecsOverlap_(it.rec.blocks, r.blocks)) return;
-      cancelSet[r.id] = true; toCancel.push({ id: r.id, studentId: r.student_id, date: it.date });
-      var k = attResultKind_(r.type);
-      replaced.push({ label: it.student.view.label, date: it.date, type: r.type, wasResult: k.kind !== '', blocks: excBlocksText_(r.blocks) });
+    attResultReplaces_(ctx.rows, it.student.raw.id, it.date, it.rec.blocks).forEach(function (id) {   // R22: 그날 블록이 겹치는 살아 있는 행
+      if (cancelSet[id]) return;
+      var r = byId[id];
+      cancelSet[id] = true; toCancel.push({ id: id, studentId: r.student_id, date: it.date });
+      replaced.push({ label: it.student.view.label, date: it.date, type: r.type, wasResult: !!attResultKind_(r.type), blocks: excBlocksText_(r.blocks) });
     });
   });
   replaced.forEach(function (x) {
@@ -337,11 +339,11 @@ function saveResults(payload, sig) {
     if (excRows_(ctx.term).missing) ensureTermSheet_('exceptions', ctx.term.id);
     var now = nowIso_();
     var since = vioAutoSince_(ctx.exSettings.autoOut, now);   // 쓰기 전에, confirmed_at에 쓰는 바로 그 now로
-    var groupOf = {}, groupIds = [];
+    var groupIds = [];
     var rows = p.items.map(function (it) {
-      var g = it.student.raw.id + '|' + it.date;
-      if (!groupOf[g]) { groupOf[g] = Utilities.getUuid(); groupIds.push(groupOf[g]); }
-      return { term_id: ctx.term.id, group_id: groupOf[g], student_id: it.student.raw.id, date: it.date, blocks: it.rec.blocks, type: it.rec.type,
+      var gid = attResultGroupId_(it.student.raw.id, it.date);   // R22: 같은 학생·같은 날 = 한 묶음
+      if (groupIds.indexOf(gid) < 0) groupIds.push(gid);
+      return { term_id: ctx.term.id, group_id: gid, student_id: it.student.raw.id, date: it.date, blocks: it.rec.blocks, type: it.rec.type,
         reason: it.rec.reason, status: '확정', requested_by: user.email, requested_at: now, confirmed_by: user.email, confirmed_at: now, cancel_reason: '' };
     });
     if (p.toCancel.length) bulkUpdateRecords_(sheet, p.toCancel.map(function (x) { return { id: x.id, patch: { status: '취소', cancel_reason: RES_AUTO_REASON } }; }), user.email);
@@ -383,11 +385,15 @@ function cancelResult(input) {
     var hit = cell.results.filter(function (x) { return x.kind === kind; })[0];
     if (!hit) return { ok: false, stale: true, error: '이미 취소됐거나 없는 결과입니다. 새로 불러와 주세요.' };
     var sheet = termSheetName_('exceptions', ctx.term.id);
+    var typeOf = {};
+    rowsOf.forEach(function (r) { typeOf[r.id] = r.type; });
+    var ids = hit.exceptionIds.filter(function (id) { return resOwnType_(typeOf[id]); });   // 학원·프로그램 같은 사전 특이사항은 여기서 취소하지 않는다
+    if (!ids.length) return { ok: false, errors: [{ field: 'kind', message: '이 ' + kind + '은(는) 결과 화면에서 넣은 것이 아니라 취소할 수 없습니다. 사전 특이사항 화면에서 고쳐 주세요.' }] };
     var since = vioAutoSince_(ctx.exSettings.autoOut, nowIso_());
-    bulkUpdateRecords_(sheet, hit.exceptionIds.map(function (id) { return { id: id, patch: { status: '취소', cancel_reason: why } }; }), user.email);
+    bulkUpdateRecords_(sheet, ids.map(function (id) { return { id: id, patch: { status: '취소', cancel_reason: why } }; }), user.email);
     var auto = vioAfterExceptionWrite_(ctx.term, [s.raw.id], user.email, since);
-    writeAudit_(sheet, '', 'result:cancel', null, null, user.email, 'db', s.view.label + ' ' + date + ' ' + kind + ' 취소(' + hit.exceptionIds.length + '행)');
-    return { ok: true, count: hit.exceptionIds.length, out: auto.out, _mails: resMergeMails_(auto.mails) };
+    writeAudit_(sheet, '', 'result:cancel', null, null, user.email, 'db', s.view.label + ' ' + date + ' ' + kind + ' 취소(' + ids.length + '행)');
+    return { ok: true, count: ids.length, out: auto.out, _mails: resMergeMails_(auto.mails) };
   });
   return excFinishAuto_(res, user);
 }
@@ -401,22 +407,26 @@ function cancelResult(input) {
 function getResultTotals(filter) {
   var user = requirePermission_('exception.view');
   filter = filter || {};
-  var ctx = resLoad_(user, filter.from, filter.to, { noFixed: true, maxDays: 400 });
+  var ctx = resLoad_(user, filter.from, filter.to, { maxDays: 400 });
   if (ctx.error) return { ok: false, error: ctx.error };
   var all = resStudents_(ctx), f = resFilter_(all, filter);
-  var exBy = resRowsByStudent_(ctx.rows);
+  var exBy = resRowsByStudent_(ctx.rows), fixedBy = resRowsByStudent_(ctx.fixed || []);
   var rows = f.shown.map(function (s) {
-    var byDate = {};
-    (exBy[s.raw.id] || []).forEach(function (r) {
-      var d = String(r.date);
-      if (d < ctx.from || d > ctx.to || String(r.status).trim() !== '확정' || !ctx.plans[d]) return;
-      (byDate[d] = byDate[d] || []).push(r);
+    var rowsOf = (exBy[s.raw.id] || []).filter(function (r) { var d = String(r.date); return d >= ctx.from && d <= ctx.to; });
+    var cells = [];
+    ctx.dates.forEach(function (d) {   // 학습량은 운영한 날 전부(입실 중인 날만)에서 센다
+      if (!ctx.plans[d].operating || statusOn_(ctx.changes, s.raw.id, '학사', d) !== '입실') return;
+      cells.push(resCell_(ctx, s, rowsOf.filter(function (r) { return String(r.date) === d; }), fixedBy[s.raw.id] || [], d));
     });
-    var cells = Object.keys(byDate).map(function (d) { return attGridCell_(ctx.plans[d], { exceptions: byDate[d] }, {}); });
     return { student: s.view, total: attResultTotals_(cells) };
   });
-  var sum = { '결석': { '인정': 0, '미인정': 0 }, '지각': { '인정': 0, '미인정': 0 }, '조퇴': { '인정': 0, '미인정': 0 } };
-  rows.forEach(function (r) { RES_KINDS.forEach(function (k) { sum[k]['인정'] += r.total[k]['인정']; sum[k]['미인정'] += r.total[k]['미인정']; }); });
+  var sum = { '결석': { '인정': 0, '미인정': 0 }, '지각': { '인정': 0, '미인정': 0 }, '조퇴': { '인정': 0, '미인정': 0 }, '학습량': { days: 0, minutes: 0, studiedMinutes: 0, missedMinutes: {} } };
+  rows.forEach(function (r) {
+    RES_KINDS.forEach(function (k) { sum[k]['인정'] += r.total[k]['인정']; sum[k]['미인정'] += r.total[k]['미인정']; });
+    var st = r.total['학습량'];
+    sum['학습량'].minutes += st.minutes; sum['학습량'].studiedMinutes += st.studiedMinutes;
+    Object.keys(st.missedMinutes).forEach(function (t) { sum['학습량'].missedMinutes[t] = (sum['학습량'].missedMinutes[t] || 0) + st.missedMinutes[t]; });
+  });
   return { ok: true, term: { id: ctx.term.id, name: ctx.term.name }, termStart: ctx.term.start_date, termEnd: ctx.term.end_date, from: ctx.from, to: ctx.to, classes: f.classes, pick: f.pick, rows: rows, sum: sum };
 }
 

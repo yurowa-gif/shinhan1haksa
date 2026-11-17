@@ -43,6 +43,7 @@ test('순수: 유형 선택지는 R22 대응(결석·지각·조퇴 + 가정사�
   assert.deepStrictEqual(o['결석'].map((x) => x.type), ['병결', '미인정결석', '가정사유']);
   assert.deepStrictEqual(o['지각'].map((x) => x.type), ['병지각', '미인정지각', '가정사유']);
   assert.deepStrictEqual(o['조퇴'].map((x) => x.recognized), [true, false, true]);
+  assert.ok(!JSON.stringify(o).includes('학원') && !JSON.stringify(o).includes('기타'), '학원·기타는 선택지에 없다');
   const blocks = [{ start: '18:00', end: '20:00' }, { start: '20:00', end: '22:00' }];
   const d = (k) => plain(env.asOwner((c) => c.resDefaultBlocks_(k, blocks)));
   assert.deepStrictEqual([d('결석'), d('지각'), d('조퇴')], ['ALL', '18:00-20:00', '20:00-22:00']);
@@ -172,4 +173,25 @@ test('누적: 학생별 결석·지각·조퇴 인정/미인정(칸마다 1), �
   const rec = plain(x.env.call(ATT, 'getResultRecords', x.a.id, D1, '2027-03-12'));
   assert.deepStrictEqual(rec.records.map((q) => [q.date, q.autoOut]), [[D1, true], [D2, false]]);
   assert.ok(!JSON.stringify(rec).includes('@'), '이메일 없음');
+});
+
+test('R22 보충: 같은 학생·같은 날은 F11 묶음 하나, 학원 같은 사전 특이사항은 결과 취소가 건드리지 않고, 누적에 학습량(빠진 시간 까닭별)이 나온다', () => {
+  const x = makeEnv();
+  const info = plain(x.env.call(ATT, 'getResultCell', x.a.id, D1));
+  const last = info.blocks[info.blocks.length - 1];
+  x.env.call(ADMIN, 'saveException', { studentId: x.a.id, from: D1, to: D1, blocks: last.start + '-' + last.end, type: '학원(보강 포함)', reason: '' });
+  assert.strictEqual(x.save(ATT, [x.cell(x.a, { kind: '지각', type: '병지각' })]).r.ok, true);
+  const mine = x.etab().filter((e) => e.student_id === x.a.id && e.status === '확정');
+  const res = mine.find((e) => e.type === '병지각');
+  assert.strictEqual(res.group_id, 'F11:' + x.a.id + ':' + D1);
+  const tok = () => plain(x.env.call(ATT, 'getResultGrid', { from: D1, to: '2027-03-12', all: true })).token;
+  const c = plain(x.env.call(ATT, 'cancelResult', { studentId: x.a.id, date: D1, kind: '지각', reason: '잘못 입력', range: x.range, token: tok() }));
+  assert.strictEqual(c.ok, true, JSON.stringify(c));
+  const after = x.etab().filter((e) => e.student_id === x.a.id);
+  assert.deepStrictEqual(after.map((e) => [e.type, e.status]).sort(), [['병지각', '취소'], ['학원(보강 포함)', '확정']], '학원 행은 그대로');
+  const t = plain(x.env.call(ATT, 'getResultTotals', { from: D1, to: '2027-03-12', all: true }));
+  const row = t.rows.find((q) => q.student.id === x.a.id).total;
+  assert.ok(row['학습량'].days >= 1 && row['학습량'].minutes > row['학습량'].studiedMinutes, JSON.stringify(row['학습량']));
+  assert.ok(Object.keys(row['학습량'].missedMinutes).length >= 1, '빠진 시간 까닭');
+  assert.ok(t.sum['학습량'].minutes >= row['학습량'].minutes);
 });
