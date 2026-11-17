@@ -75,14 +75,15 @@ def('result-grid-phone', 'F11 결과 정리', '결과 정리 — 휴대폰 (날�
 
 function rgSheet(opts) {
   var sym = { 결석: '×', 지각: '△', 조퇴: '조' };
-  var types = { 결석: ['병결', '미인정결석', '기타'], 지각: ['병지각', '미인정지각', '기타'], 조퇴: ['병조퇴', '미인정조퇴', '기타'] }[opts.result];
+  var types = { 결석: ['병결', '가정사유', '미인정결석'], 지각: ['병지각', '가정사유', '미인정지각'], 조퇴: ['병조퇴', '가정사유', '미인정조퇴'] }[opts.result];   // 결정 81: 인정 = 병○○ + 가정사유, 기타는 결과로 세지 않아 뺀다
   var body = el('div', {}, [
     el('p', { class: 'sheet-lead', text: opts.lead }),
     opts.pre ? el('div', { class: 'notice info', style: 'word-break:keep-all', text: opts.pre }) : null,
     UI.field('결과', UI.segmented({ label: '결과', value: opts.result, options: [{ value: '결석', label: '결석 ×' }, { value: '지각', label: '지각 △' }, { value: '조퇴', label: '조퇴 조' }], onchange: function () {} })),
-    UI.field('시간', el('div', {}, [UI.blockChips({ blocks: RG_BLOCKS, value: { all: opts.result === '결석', seqs: opts.result === '결석' ? [] : opts.seqs }, onchange: function () {} })]), { hint: '결석은 전체가 기본입니다. 지각·조퇴는 해당 시간을 고릅니다.' }),
-    UI.field('유형', el('div', { class: 'chips' }, types.map(function (t) { return el('button', { type: 'button', class: t === opts.type ? 'chip on' : 'chip', text: t }); })), { hint: '병○○ = 인정, 미인정○○ = 미인정(자동 1OUT).' }),
+    UI.field('시간', el('div', {}, [UI.blockChips({ blocks: RG_BLOCKS, value: { all: opts.result === '결석', seqs: opts.result === '결석' ? [] : opts.seqs }, onchange: function () {} })]), { hint: '기본: 결석 = 전체, 지각 = 첫 블록부터, 조퇴 = 끝 블록까지.' }),
+    UI.field('유형', el('div', { class: 'chips' }, types.map(function (t) { return el('button', { type: 'button', class: t === opts.type ? 'chip on' : 'chip', text: t }); })), { hint: '병○○·가정사유 = 인정, 미인정○○ = 미인정(자동 1OUT).' }),
     UI.field('사유(선택)', el('textarea', { maxlength: '200', text: opts.reason || '' }), { hint: '조퇴 사유는 출석부 메모 칸에도 같이 나옵니다.' }),
+    opts.family ? el('div', { class: 'notice info', style: 'word-break:keep-all', text: '가정사유는 고른 시간이 덮는 블록으로 셉니다: 하루 전부 = 인정 결석, 첫 블록부터 = 인정 지각, 끝 블록까지 = 인정 조퇴(가운데만이면 세지 않습니다). OUT은 생기지 않습니다(결정 81).' }) : null,
     opts.bad ? el('div', { class: 'notice warn', style: 'word-break:keep-all', text: '미인정이라 저장하면 자동으로 1OUT이 기록됩니다(무단 지각·결석·이탈). 담당교사·담임에게 알림이 갑니다.' })
       : el('div', { class: 'muted', style: 'word-break:keep-all', text: '결과는 사전 특이사항(확정)으로 저장됩니다. 잘못 넣으면 취소하고 새로 넣습니다.' })]);
   return UI.bottomSheet({ title: opts.title, content: body, actions: [{ text: '닫기', kind: 'secondary', onclick: function () {} }, { text: '결과 저장', kind: 'primary', onclick: function () {} }] });
@@ -90,7 +91,7 @@ function rgSheet(opts) {
 var RG_BLOCKS = [{ seq: 1, start: '09:00', end: '12:00', label: '①' }, { seq: 2, start: '14:00', end: '15:30', label: '②' }, { seq: 3, start: '15:30', end: '17:00', label: '③' }, { seq: 4, start: '19:00', end: '20:30', label: '④' }, { seq: 5, start: '20:30', end: '23:00', label: '⑤' }];
 
 def('result-cell-sheet', 'F11 결과 정리', '칸을 눌렀을 때 — 결과 → 시간 → 유형 → 사유 (인정: 병결)', { sheet: true }, function (root) {
-  var m = frame(root, { title: '출결 결과 정리', who: '출결 담당', note: '시안 · 결과를 고르면 유형 칩이 그 결과의 유형만 남는다(결석: 병결·미인정결석·기타). 저장하면 사전 특이사항(확정)이 만들어져 출석부 칸에 약어가 나온다.' });
+  var m = frame(root, { title: '출결 결과 정리', who: '출결 담당', note: '시안 · 결과를 고르면 유형 칩이 그 결과의 유형만 남는다(결석: 병결·가정사유·미인정결석, 결정 81). 저장하면 사전 특이사항(확정)이 만들어져 출석부 칸에 약어가 나온다.' });
   m.appendChild(rgTabs('grid'));
   m.appendChild(rgLegend());
   rgSheet({ title: '결과 입력', lead: '3월 11일(목) · 3-1 1번 김가온', result: '결석', type: '병결', seqs: [], reason: '독감, 병원 진료' }).open();
@@ -99,13 +100,19 @@ def('result-cell-sheet-bad', 'F11 결과 정리', '미인정을 고르면 — �
   var m = frame(root, { title: '출결 결과 정리', who: '출결 담당' });
   m.appendChild(rgTabs('grid'));
   m.appendChild(rgLegend());
-  rgSheet({ title: '결과 입력', lead: '3월 10일(수) · 3-1 3번 이서준', result: '지각', type: '미인정지각', seqs: [4], reason: '20:40 입실', bad: true }).open();
+  rgSheet({ title: '결과 입력', lead: '3월 10일(수) · 3-1 3번 이서준', result: '지각', type: '미인정지각', seqs: [1], reason: '09:40 입실', bad: true }).open();
+});
+def('result-cell-sheet-family', 'F11 결과 정리', '가정사유를 고르면 — 덮는 블록으로 인정 지각(첫 블록부터)·결석·조퇴로 센다는 안내', { sheet: true }, function (root) {
+  var m = frame(root, { title: '출결 결과 정리', who: '출결 담당' });
+  m.appendChild(rgTabs('grid'));
+  m.appendChild(rgLegend());
+  rgSheet({ title: '결과 입력', lead: '3월 10일(수) · 3-1 9번 한지우', result: '지각', type: '가정사유', seqs: [1, 2], reason: '가족 행사로 오후 입실', family: true }).open();
 });
 def('result-cell-pre', 'F11 결과 정리', '사전 특이사항이 있는 칸 — 위에 안내, 결과를 더할 수 있다', { sheet: true }, function (root) {
   var m = frame(root, { title: '출결 결과 정리', who: '출결 담당' });
   m.appendChild(rgTabs('grid'));
   m.appendChild(rgLegend());
-  rgSheet({ title: '결과 입력', lead: '3월 9일(화) · 3-1 1번 김가온', pre: '이 칸에는 사전 특이사항 "학(학원)"이 있습니다. 학원에 가지 않고 결과(결석·지각·조퇴)가 있을 때만 더해 주세요. 사전 특이사항 자체는 [사전 특이사항]에서 고칩니다.', result: '조퇴', type: '병조퇴', seqs: [4, 5] }).open();
+  rgSheet({ title: '결과 입력', lead: '3월 9일(화) · 3-1 1번 김가온', pre: '이 칸에는 사전 특이사항 "학(학원)"이 있습니다. 학원에 가지 않고 결과(결석·지각·조퇴)가 있을 때만 더해 주세요. 사전 특이사항 자체는 [사전 특이사항]에서 고칩니다.', result: '조퇴', type: '병조퇴', seqs: [5] }).open();
 });
 def('result-cancel', 'F11 결과 정리', '입력한 결과 취소 (사유 입력, 자동 1OUT도 함께 취소)', { sheet: true }, function (root) {
   var m = frame(root, { title: '출결 결과 정리', who: '출결 담당' });
