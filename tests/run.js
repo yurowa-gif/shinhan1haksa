@@ -54,7 +54,7 @@ function runFile(f) {
     state.failures.push({ name: f + ' 불러오기', message: e.message });
     console.log('  ✗ 파일을 불러오다 오류가 났습니다\n    ' + String(e.stack || e).split('\n').join('\n    '));
   }
-  console.log(RESULT + JSON.stringify({ passed: state.passed, failed: state.failed, failures: state.failures, rssMB: Math.round(process.resourceUsage().maxRSS / 1024) }));
+  console.log(RESULT + JSON.stringify({ passed: state.passed, failed: state.failed, failures: state.failures }));
   process.exit(0);
 }
 
@@ -75,7 +75,6 @@ function runOnce() {
     process.exit(1);
   }
 
-  let peak = null;   // 파일별 최대 메모리(RSS) 중 가장 큰 것
   for (const f of files) {
     console.log('\n' + f);
     const r = spawnSync(process.execPath, [__filename, '--file=' + f], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: process.env });
@@ -90,7 +89,6 @@ function runOnce() {
       continue;
     }
     const res = JSON.parse(last.slice(RESULT.length));
-    if (!peak || res.rssMB > peak.mb) peak = { mb: res.rssMB, file: f };
     state.passed += res.passed; state.failed += res.failed;
     state.failures.push.apply(state.failures, res.failures);
     if (res.passed + res.failed === 0) console.log('  (테스트 없음)');
@@ -98,7 +96,6 @@ function runOnce() {
 
   console.log('\n' + state.passed + ' passed, ' + state.failed + ' failed' +
     ' (파일 ' + files.length + '개, ' + (tz ? 'TZ=' + tz : resolved) + ')');
-  if (peak) console.log('파일별 최대 메모리 중 가장 큰 것: ' + peak.mb + 'MB(' + peak.file + ')');
   if (state.failures.length) {
     console.log('실패 목록:');
     for (const x of state.failures) console.log('  - ' + x.name);
