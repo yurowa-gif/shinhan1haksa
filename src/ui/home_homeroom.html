@@ -1,6 +1,11 @@
 <script>
   /** 2단계 A 카드(CODING-A: 근무·OUT·면담). 이 함수의 몸통만 고친다(docs/plan/stage2.md 1절) */
   function renderStage2A(d, root) {
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '상담일지' }),
+      el('div', { class: 'muted', style: 'word-break:keep-all', text: '우리 반 학생의 상담 기록을 읽습니다(쓰기는 담당교사).' }),
+      el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=counsel', text: '상담일지 열기' })
+    ]));
     if (!d.out || d.out.error) return;
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '우리 반 OUT' }),

@@ -235,5 +235,6 @@
   .rg-cell.has { background: var(--accent-weak); border-color: var(--accent); }
   .rg-cell.bad { border: 3px solid var(--warn); background: var(--warn-weak); }
   .rg-cell.bad .rg-sym::before { content: "⚠ "; color: var(--warn); }
+  .rg-cell.sel { border: 3px solid var(--accent); }   /* 달력에서 지금 고른 날: 색 + 굵기(아이콘 없음, aria-current="date"). ⚠는 미인정·경고 뜻이라 쓰지 않는다 */
   .rg-cell.off { background: var(--muted-weak); border-style: dashed; color: var(--muted-ink); cursor: not-allowed; }
 </style>
