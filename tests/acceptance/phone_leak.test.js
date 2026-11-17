@@ -9,10 +9,9 @@
  * 저장 함수(save·commit·cancel 등)의 응답은 이 파일이 부르지 않는다(인자를 맞춰야 해서 각 기능 흐름 시험이 맡는다).
  */
 const assert = require('assert');
-const fs = require('fs');
-const path = require('path');
 const { test, plain } = require('../helpers/harness');
 const { createGasEnv } = require('../helpers/gas-fakes');
+const { textOf, readFunctions, argSets: argSetsOf } = require('../helpers/leak-scan');
 
 const ADMIN = 'owner@example.com', HALL = 'test.teacher@example.com', HOMEROOM = 'test.homeroom@example.com';
 const STUDENT = 'test.student@example.com', PARENT = 'test.parent@example.com';
@@ -26,38 +25,6 @@ function phonesIn(text) {
   for (const m of String(text).matchAll(PHONE_RE)) out.add('010-0000-' + m[1]);
   return out;
 }
-/** 응답 전체를 글로: base64 칸은 풀어서(출력물) 함께 */
-function textOf(v) {
-  const parts = [];
-  const walk = (x, key) => {
-    if (typeof x === 'string') {
-      parts.push(x);
-      if (/base64/i.test(key || '') && /^[A-Za-z0-9+/=\s]+$/.test(x)) parts.push(Buffer.from(x, 'base64').toString('utf8'));
-    } else if (Array.isArray(x)) x.forEach((y) => walk(y, key));
-    else if (x && typeof x === 'object') Object.keys(x).forEach((k) => walk(x[k], k));
-  };
-  walk(v, '');
-  return parts.join('\n');
-}
-
-/** 공개 함수 중 화면에서 부르는 읽기·미리보기(get·list·preview)와 그 매개변수 이름 */
-function readFunctions() {
-  const reg = {};
-  const add = (j) => Object.assign(reg, j.functions || {});
-  add(JSON.parse(fs.readFileSync(path.join(__dirname, '../public-api.json'), 'utf8')));
-  const dir = path.join(__dirname, '../public-api.d');
-  fs.readdirSync(dir).filter((f) => f.endsWith('.json')).forEach((f) => add(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))));
-  const sigs = {};
-  const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).forEach((e) => {
-    const p = path.join(d, e.name);
-    if (e.isDirectory()) return walk(p);
-    if (!p.endsWith('.gs')) return;
-    for (const m of fs.readFileSync(p, 'utf8').matchAll(/^function ([A-Za-z0-9]+)\(([^)]*)\)/gm)) sigs[m[1]] = m[2].split(',').map((s) => s.trim()).filter(Boolean);
-  });
-  walk(path.join(__dirname, '../../src'));
-  return Object.keys(reg).filter((n) => reg[n].use === '화면' && /^(get|list|preview)/.test(n) && sigs[n]).map((n) => ({ name: n, params: sigs[n] }));
-}
-
 function seededEnv() {
   const env = createGasEnv({ owner: ADMIN, now: TODAY + 'T15:00:00' });
   Object.assign(env.scriptProps, { TEST_TEACHER_EMAIL: HALL, TEST_HOMEROOM_EMAIL: HOMEROOM, TEST_STUDENT_EMAIL: STUDENT, TEST_PARENT_EMAIL: PARENT });
@@ -116,23 +83,6 @@ function allowedPhones(env, email, phones) {
   return ok;
 }
 
-/** 매개변수 이름 → 넣어 볼 값 목록(한 함수에 여러 벌) */
-function argSets(fn, ctx, roles) {
-  const val = {
-    date: [TODAY], ymd: [TODAY], month: [TODAY.slice(0, 7), '2027-01'], termId: ctx.termIds, studentId: ctx.studentIds,
-    names: [true], role: roles, filter: [{}].concat(ctx.termIds.map((t) => ({ termId: t }))), format: [undefined, 'xlsx'],
-    seed: [7], fixedSeatIds: [[]], assignments: [[]], headId: [ctx.headId], spaceId: [ctx.spaceId], cells: [[]],
-    input: ctx.studentIds.slice(0, 4).map((s) => ({ studentId: s, date: TODAY, ymd: TODAY, termId: ctx.termIds[0] })),
-    text: [''], opts: [{}]
-  };
-  let sets = [[]];
-  fn.params.forEach((p) => {
-    const vs = val[p] || [undefined];
-    sets = sets.flatMap((s) => vs.map((v) => s.concat([v])));
-  });
-  return sets.map((s) => { while (s.length && s[s.length - 1] === undefined) s.pop(); return s; });
-}
-
 test('가짜 번호 찾기: 010-0000-xxxx를 구분자 없이·점·빈칸으로 써도 찾고, base64로 감싼 출력물 안도 찾는다(감시 도구 자체 확인)', () => {
   assert.deepStrictEqual([...phonesIn('a 010-0000-1234 b 01000001235 c 010.0000.1236 d 010 0000 1237')], ['010-0000-1234', '010-0000-1235', '010-0000-1236', '010-0000-1237']);
   assert.deepStrictEqual([...phonesIn(textOf({ pdf: { base64: Buffer.from('<td>010-0000-1999</td>').toString('base64') } }))], ['010-0000-1999']);
@@ -163,7 +113,7 @@ test('전화번호 노출 감시: 모든 역할 × 읽기·미리보기 공개 �
     const roles = user ? String(user.roles).split(',').map((s) => s.trim()) : ['student'];
     const allowed = allowedPhones(env, who, phones);
     for (const fn of fns) {
-      for (const args of argSets(fn, ctx, roles)) {
+      for (const args of argSetsOf(fn, Object.assign({ today: TODAY, roles }, ctx))) {
         calls++;
         let out;
         try { out = plain(env.call(who, fn.name, ...args)); answered++; } catch (e) { out = e.message; }
@@ -182,7 +132,7 @@ test('전화번호 노출 감시: 모든 역할 × 읽기·미리보기 공개 �
   assert.ok(files.length >= 3, '출력물 함수 ' + files.map((f) => f.name));
   let captured = 0;
   for (const fn of files) {
-    for (const args of argSets(fn, ctx, ['admin'])) {
+    for (const args of argSetsOf(fn, Object.assign({ today: TODAY, roles: ['admin'] }, ctx))) {
       const cap = [];
       env.as(ADMIN, (c) => {
         const U = c.Utilities;

@@ -168,6 +168,18 @@ function rehearse(n) {
   const batchUndoMs = Date.now() - t1;
   const batchBack = g3Ids.filter((id) => on(id, '학사', '2027-07-07') === '입실').length;
 
+  // 4e) 상담일지(F12, C32): 담당교사가 7/1 학사생의 40%에 상담 1건씩, 그중 1건은 고치기(취소 + 새 행). 월별 일정(F13, C34): 관리자 2건(하나는 7/30~8/2 달 경계)
+  const cnIds = students.map((s) => s.id).filter((id) => on(id, '학사', '2027-07-01') === '입실').slice(0, Math.round(n * 0.4));
+  const teacherOf = (sid) => env.rows('enrollments').find((e) => e.term_id === term.id && e.student_id === sid).teacher_email;
+  const notes = cnIds.map((sid, i) => ({ sid, r: ok(call(teacherOf(sid), 'saveCounselNote', { studentId: sid, date: '2027-07-01', type: ['생활', '학업', '진로'][i % 3], target: '학생', content: '가짜 상담 내용 [R-' + i + ']' }), '상담 저장') }));
+  ok(call(teacherOf(notes[0].sid), 'reviseCounselNote', notes[0].r.id, { studentId: notes[0].sid, date: '2027-07-01', type: '생활', target: '학부모', content: '가짜 상담 내용(고침)' }, '가짜: 대상 착오'), '상담 고치기');
+  const cnList = call(ADMIN, 'getCounselNotes', notes[0].sid);
+  const cnLive = env.rows('counsel_notes', 'counsel').filter((r) => r.status !== '취소' && r.type !== '2OUT 학부모 면담').length;   // D의 2OUT 면담은 따로
+  const ev0 = call(ADMIN, 'getEventData', '2027-07');
+  const evA = ok(call(ADMIN, 'saveEvent', { title: '가짜 기말고사', kind: '시험', start_date: '2027-07-12', end_date: '2027-07-15', memo: '', token: ev0.token }), '일정 저장');
+  const evB = ok(call(ADMIN, 'saveEvent', { title: '가짜 여름 특강', kind: '특강', start_date: '2027-07-30', end_date: '2027-08-02', memo: '', token: call(ADMIN, 'getEventData', '2027-07').token }), '일정 저장');
+  const evAug = call(HALL, 'getEventData', '2027-08').days.filter((d) => d.ids.includes(evB.id)).map((d) => d.date);
+
   // 5) 학기 전환. 여름방학은 이어받기가 없고(명단 올리기) — 1학기 끝 학사생 + 신규 1명 + 2OUT 퇴실 학생(막힘)을 올린다.
   //    2학기는 1학기 학사생을 이어받는다(퇴실 E·2OUT D 제외, 재입실 F 포함)
   env.setNow('2027-07-10T10:00:00');
@@ -217,6 +229,8 @@ function rehearse(n) {
       exam: { changed: exam.changed, operating: examSheet.operating },
       program: { asked: pIds.length, saved: prog.count, made: progMade, inner: progInner, canceled: progCancel.canceledExceptions, left: progLeft },
       lunch: { on: lunchOn, all: lunchAll },
+      counsel: { asked: cnIds.length, live: cnLive, listed: JSON.stringify(cnList).includes('가짜 상담 내용(고침)') },
+      events: { aug: evAug, a: !!evA.id },
       batch: { targets: g3Ids.length, preview: bp.count, saved: bs.count, out: batchOut, back: batchBack, saveMs: batchSaveMs, undoMs: batchUndoMs }
     }
   };
@@ -225,7 +239,7 @@ function rehearse(n) {
 const big = rehearse(180);
 const small = rehearse(30);
 
-test('리허설 180명: 명단 → 좌석·방 초안 → 1주일 기록 → 식수 집계 → 휴일·시험 기간 일괄 설정 → 프로그램 126명 만들기·취소 → 3학년 일괄 퇴실·되돌리기 → 여름방학 전환(신규 1명, 2OUT 퇴실 학생 막힘)·방학 중식', () => {
+test('리허설 180명: 명단 → 좌석·방 초안 → 1주일 기록 → 식수 집계 → 휴일·시험 기간 일괄 설정 → 프로그램 126명 만들기·취소 → 3학년 일괄 퇴실·되돌리기 → 상담 72건·월별 일정 → 여름방학 전환(신규 1명, 2OUT 퇴실 학생 막힘)·방학 중식', () => {
   const f = big.facts;
   assert.strictEqual(f.students, 180);
   assert.strictEqual(f.seated, 180, '좌석 초안이 180명 모두 앉힌다(1층 146 + SA 51)');
@@ -258,6 +272,10 @@ test('리허설 180명: 명단 → 좌석·방 초안 → 1주일 기록 → 식
   // 방학 중식(C30): 방학 전 신청은 방학 시작일부터, 식수 집계 중식 열
   f.lunch.on.forEach((x) => assert.deepStrictEqual(x, ['', '실시'], '중식은 방학 시작일(7/19)부터'));
   assert.strictEqual(f.lunch.all, 3, '식수 집계 7/20 중식 = 3');
+  // 상담일지·월별 일정(5단계)
+  assert.strictEqual(f.counsel.asked, 72, '학사생 40%');
+  assert.deepStrictEqual([f.counsel.live, f.counsel.listed], [72, true], '살아 있는 상담 = 72(고친 1건은 취소 + 새 행), 고친 내용이 목록에');
+  assert.deepStrictEqual([f.events.a, f.events.aug], [true, ['2027-08-01', '2027-08-02']], '달 경계 일정은 8월 달력에도');
   // 학년 일괄 퇴실(C26): 3학년 전원 저장 → 모두 퇴실 → 되돌리기 → 모두 입실(뒤 학기 전환 단언이 그대로 통과하는 것도 이 확인)
   assert.ok(f.batch.targets >= 50, '3학년 ' + f.batch.targets);
   assert.deepStrictEqual([f.batch.preview, f.batch.saved, f.batch.out, f.batch.back], [f.batch.targets, f.batch.targets, f.batch.targets, f.batch.targets]);
