@@ -35,6 +35,7 @@ var ROLE_PRIORITY = ['admin', 'attendance', 'hall_teacher', 'duty_manager', 'hom
  * 1단계: status_changes, day_schedules, blocks, fixed_schedules, spaces, seats, seat_assignments + 기간별 탭(SCHEMA_TERM_TABS).
  * 2단계(결정 41): duty_slots, violation_rules, 기간별 violations, counsel_notes·status_changes 열 추가.
  * 3단계(결정 64): avoid_pairs, rooms, room_assignments.
+ * 5단계(결정 80): events(월별 일정).
  * 4단계(결정 75·76): doc_types, programs, program_participants, 기간별 student_docs, students.phone, guardian_links.name·phone.
  */
 var SCHEMA = {
@@ -87,7 +88,11 @@ var SCHEMA = {
     // 학사 프로그램(1행 = 1날짜). blocks: 'ALL' 또는 'HH:mm-HH:mm;…'(exceptions.blocks와 같은 표기). status: 유효·취소
     programs: ['name', 'date', 'blocks', 'memo', 'status'],
     // 프로그램 참가자(1행 = 1명). exception_id = 그 참가로 만든 사전 특이사항 id(프로그램 취소 시 함께 취소). status: 유효·취소
-    program_participants: ['program_id', 'student_id', 'exception_id', 'status']
+    program_participants: ['program_id', 'student_id', 'exception_id', 'status'],
+
+    /* ───── 5단계(결정 80, F13) ───── */
+    // 월별 일정(시험·행사·특강·휴업 …). 끝날이 비면 시작일 하루. status: 유효·취소(지우지 않는다), 취소 사유는 cancel_reason. 운영 안 하는 날은 day_schedules가 따로 정한다(두 번 입력하지 않는다)
+    events: ['start_date', 'end_date', 'title', 'kind', 'memo', 'status', 'cancel_reason']
   },
   counsel: {
     // target·linked_violation_id·cancel_reason은 2단계(결정 41). 6단계 열은 그때 setup이 제자리에 끼운다
@@ -112,6 +117,8 @@ var DEFAULT_SETTINGS = [
   // 2026-11-06 결정(docs/decisions.md 8번). 쉼표 구분, 관리자가 수정
   ['exception.types', '병결,병지각,병조퇴,가정사유(가족여행 포함),학원(보강 포함),학사 외 프로그램,학사 내 프로그램(파워클래스·면접특강 등),미인정지각,미인정조퇴,미인정결석,기타', '사전 특이사항 유형'],
   ['exception.auto_out_types', '미인정지각,미인정조퇴,미인정결석', '기록 즉시 자동 1OUT이 되는 유형'],
+  // 결정 80: 월별 일정 종류(쉼표 구분, 관리자가 수정). 일정 등록 화면의 종류 목록
+  ['event.kinds', '시험,행사,특강,휴업,기타', '월별 일정 종류'],
   ['timetable.submit_start_day', '25', '시간표 제출 시작일(매월)'],
   ['timetable.submit_end_day', 'last', '시간표 제출 마감(말일)'],
   ['attendance.legend', '○ 출석, × 결석, △ 지각, 조 조퇴, 학 학원, 가 가정', '출석부 범례'],

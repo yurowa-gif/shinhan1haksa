@@ -131,7 +131,7 @@ test('2단계: 바뀐 탭의 전체 헤더가 5절 승인안 그대로(새 탭 3
   assert.deepStrictEqual(Object.keys(ctx.SCHEMA_TERM_TABS), ['exceptions', 'violations', 'student_docs']);
   // 탭 목록: 2단계에 더한 것은 duty_slots·violation_rules뿐(duty_swaps·meal_counts·out_dismissals는 만들지 않는다). 그 뒤는 3단계 결정 64의 3개(stage3_tabs.test.js)
   assert.deepStrictEqual(Object.keys(ctx.SCHEMA.db), ['users', 'terms', 'students', 'enrollments', 'guardian_links', 'audit_log',
-    'status_changes', 'day_schedules', 'blocks', 'fixed_schedules', 'spaces', 'seats', 'seat_assignments', 'duty_slots', 'violation_rules', 'avoid_pairs', 'rooms', 'room_assignments', 'doc_types', 'programs', 'program_participants']);
+    'status_changes', 'day_schedules', 'blocks', 'fixed_schedules', 'spaces', 'seats', 'seat_assignments', 'duty_slots', 'violation_rules', 'avoid_pairs', 'rooms', 'room_assignments', 'doc_types', 'programs', 'program_participants', 'events']);
   assert.deepStrictEqual(Object.keys(ctx.SCHEMA.counsel), ['counsel_notes']);
 });
 
