@@ -217,3 +217,82 @@ function resolveStudentDay_(plan, s, opts) {
     return { seq: b.seq, code: r.code, text: r.text, exceptionId: r.exceptionId, more: r.more };
   });
 }
+
+/* ───── F11 출결 결과 정리 격자(R22, PRD F11) ─────
+ * 결과는 새 탭 없이 확정 사전 특이사항(exceptions) 행으로 저장한다(총괄 전제): 종이 출석부의 ×·△·조를 유형으로 고른다.
+ * 그래서 격자 칸 = 출석부 칸(resolveStudentDay_, 같은 우선순위) + 그날 확정 특이사항에서 읽은 결과 기호, 누적은 그 결과를 센다.
+ */
+
+/**
+ * 특이사항 유형 → 결과 종류. 유형 이름(괄호 설명은 뗀다)으로 정한다 — 관리자가 settings exception.types에 새 유형을 더해도 이름 규칙을 따른다.
+ * → {kind:'결석'|'지각'|'조퇴'|'블록'|'', recognized}
+ * - '병결'·'…결석' → 결석, '…지각' → 지각, '…조퇴' → 조퇴. recognized = 이름이 '미인정'으로 시작하지 않음(병결·병지각 = 인정).
+ * - '가정사유' → '블록'(그 특이사항이 덮는 블록으로 정한다 — attResultByBlocks_).
+ * - ASSUMPTION(총괄 질문 후보): 학원·학사 외 프로그램·학사 내 프로그램·기타와 모르는 유형은 출결 결과가 아니다(칸에 약어만 보이고 누적에 세지 않는다).
+ *   학원·프로그램은 허락된 활동이고, 기타는 결석·지각·조퇴를 정할 수 없어서다 — 결과로 세려면 결석·지각·조퇴 유형으로 입력한다.
+ */
+function attResultKind_(type) {
+  var base = attTypeBase_(type);
+  var recognized = base.indexOf('미인정') !== 0;
+  if (base === '병결' || /결석$/.test(base)) return { kind: '결석', recognized: recognized };
+  if (/지각$/.test(base)) return { kind: '지각', recognized: recognized };
+  if (/조퇴$/.test(base)) return { kind: '조퇴', recognized: recognized };
+  if (base === '가정사유') return { kind: '블록', recognized: recognized };
+  return { kind: '', recognized: recognized };
+}
+
+/**
+ * 블록 표기가 덮는 그날 블록으로 결과 종류(가정사유 등 '블록' 종류). blocks = resolveDayPlan_ 블록(시작 순).
+ * 모든 블록 → 결석, 첫 블록은 덮고 마지막은 아님 → 지각(늦게 옴), 마지막은 덮고 첫 블록은 아님 → 조퇴(일찍 감), 그 밖(가운데만·첫과 마지막만) → ''.
+ * 블록이 없는 날은 'ALL'이면 결석, 아니면 ''.
+ */
+function attResultByBlocks_(spec, blocks) {
+  var p = parseBlockSpec_(spec), list = blocks || [];
+  if (!list.length) return p.all ? '결석' : '';
+  var cov = list.map(function (b) { return blockSpecCovers_(p, b); });
+  if (cov.every(Boolean)) return '결석';
+  var first = cov[0], last = cov[cov.length - 1];
+  return first && !last ? '지각' : last && !first ? '조퇴' : '';
+}
+
+/**
+ * 격자 한 칸(학생 × 날짜). plan = resolveDayPlan_ 결과, s = {exceptions(그 학생 행), fixedRows(effectiveFixedRows_ 결과), endType},
+ * opts = resolveCell_ opts(typeShort 등).
+ * → {date, operating, marks:[{seq, code, text}](출석부 칸과 같은 판정 — resolveStudentDay_), results:[{kind, mark, recognized, exceptionIds, types}], warnings}
+ * - results: 그날(date) 확정 특이사항마다 attResultKind_(블록 종류는 attResultByBlocks_)로 종류를 정하고 **종류마다 하루 1번**으로 묶는다
+ *   (ASSUMPTION: 여러 블록·여러 행의 미인정지각도 그날 지각 1회). 결석이 있으면 그날은 결석 하나만(지각·조퇴는 세지 않음).
+ *   지각과 조퇴는 같은 날 둘 다 셀 수 있다. 한 종류에 인정·미인정 행이 섞이면 미인정(ASSUMPTION — 엄한 쪽). 순서: 결석·지각·조퇴.
+ * - 운영 안 하는 날은 marks·results가 비고, 그날 확정 특이사항이 있으면 경고(ASSUMPTION: 세지 않는다).
+ */
+function attGridCell_(plan, s, opts) {
+  s = s || {};
+  var date = ruleStr_(plan && plan.date), operating = !!(plan && plan.operating);
+  var exc = (s.exceptions || []).filter(function (e) { return e && ruleStr_(e.status) === '확정' && ruleStr_(e.date) === date; });
+  var out = { date: date, operating: operating, marks: [], results: [], warnings: [] };
+  if (!operating) {
+    if (exc.length) out.warnings.push(date + ' 운영 안 하는 날의 특이사항 ' + exc.length + '건은 결과로 세지 않습니다');
+    return out;
+  }
+  out.marks = resolveStudentDay_(plan, s, opts).map(function (m) { return { seq: m.seq, code: m.code, text: m.text }; });
+  var by = {};
+  exc.forEach(function (e) {
+    var k = attResultKind_(e.type), kind = k.kind === '블록' ? attResultByBlocks_(e.blocks, plan.blocks) : k.kind;
+    if (!kind) return;
+    var r = by[kind] = by[kind] || { kind: kind, mark: { '결석': '×', '지각': '△', '조퇴': '조' }[kind], recognized: true, exceptionIds: [], types: [] };
+    r.recognized = r.recognized && k.recognized;
+    r.exceptionIds.push(ruleStr_(e.id));
+    if (r.types.indexOf(ruleStr_(e.type)) < 0) r.types.push(ruleStr_(e.type));
+  });
+  out.results = by['결석'] ? [by['결석']] : ['지각', '조퇴'].filter(function (k) { return by[k]; }).map(function (k) { return by[k]; });
+  return out;
+}
+
+/** 격자 칸들(attGridCell_ 결과, 한 학생의 날짜 범위)의 누적. → {결석:{인정, 미인정}, 지각:{…}, 조퇴:{…}} — 칸마다 종류당 1. */
+function attResultTotals_(cells) {
+  var t = {};
+  ['결석', '지각', '조퇴'].forEach(function (k) { t[k] = { '인정': 0, '미인정': 0 }; });
+  (cells || []).forEach(function (c) {
+    (c && c.results || []).forEach(function (r) { if (t[r.kind]) t[r.kind][r.recognized ? '인정' : '미인정']++; });
+  });
+  return t;
+}
