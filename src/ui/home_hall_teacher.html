@@ -65,6 +65,15 @@
         el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=docs', text: '서류 체크리스트 열기' })
       ]));
     }
+    if (d.counsel && !d.counsel.error) {
+      var cn = d.counsel;
+      root.appendChild(el('div', { class: 'card' }, [
+        el('h2', { text: '상담일지' }),
+        el('div', { style: 'margin:8px 0' }, [cn.withoutNote ? UI.statusPill('todo', '이번 기간 상담 기록 없는 학생 ' + cn.withoutNote + '명') : UI.statusPill('confirmed', cn.total ? '담당 학생 모두 기록 있음' : '담당 학생 없음')]),
+        el('div', { class: 'muted', style: 'word-break:keep-all', text: '최근 30일 내가 쓴 상담 ' + cn.mine30 + '건 · 내용은 담당교사·담임·관리자만 봅니다.' }),
+        el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=counsel', text: '상담일지 열기' })
+      ]));
+    }
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '출석부' }),
       el('div', { class: 'muted', text: '날짜를 고르면 그날 출석부를 미리 보고 PDF로 받습니다.' }),
