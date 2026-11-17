@@ -72,10 +72,15 @@ function effectiveFixedRows_(rows, studentId, ymd)
  *  → {code:'EXC'|'FIXED'|'END'|'NONE', text, exceptionId, more} */
 function resolveCell_(c)
 function resolveStudentDay_(plan, s, opts)  // s = {exceptions, fixedRows, endType} → 블록 순서대로 [{seq, code, text, exceptionId, more}]
-function attResultKind_(type)                 // (R22, F11) → {kind:'결석'|'지각'|'조퇴'|'블록'|'', recognized}
-function attResultByBlocks_(spec, blocks)     // (R22) '블록' 종류(가정사유) → '결석'|'지각'|'조퇴'|''
-function attGridCell_(plan, s, opts)          // (R22) 격자 칸 → {date, operating, marks:[{seq,code,text}], results:[{kind, mark, recognized, exceptionIds, types}], warnings}
-function attResultTotals_(cells)              // (R22) → {결석:{인정, 미인정}, 지각:{…}, 조퇴:{…}}
+function attResultTable_()                    // (R22, F11) 결과 유형 대응표(상수) → {이름: {kind, mark, recognized}}
+function attResultKind_(type)                 // (R22) → {kind:'결석'|'지각'|'조퇴', mark, recognized} 또는 null(결과 유형 아님)
+function attResultChoices_(types)             // (R22) 설정 유형 중 결과 선택지 → [{type, kind, mark, recognized}]
+function attResultByBlocks_(spec, blocks)     // (R22, 결정 81) 가정사유의 종류(덮은 블록) → '결석'|'지각'|'조퇴'|''
+function attGridCell_(plan, s, opts)          // (R22) 격자 칸 → {date, operating, marks:[{seq,code,text}], results:[{kind, mark, recognized, exceptionIds, types}], study:{…}, warnings}
+function attResultTotals_(cells)              // (R22) → {결석:{인정, 미인정}, 지각:{…}, 조퇴:{…}, 학습량:{days, blocks, studiedBlocks, minutes, studiedMinutes, missedMinutes}}
+function attResultGroupId_(studentId, ymd)    // (R22) 격자 결과 group_id = 같은 학생·같은 날 한 묶음
+function attResultReplaces_(exceptions, studentId, ymd, blocks, keepIds)   // (R22) 결과가 대체할 사전 특이사항 id
+function attGridWritable_(term, ymd, today, graceDays)   // (R22) 그 칸에 결과를 쓸 수 있나 → {ok, reason}
 
 // src/rules/StatusRules.gs
 function statusOn_(changes, studentId, item, ymd)   // item '학사'|'기숙사'|'조식'|'중식'|'석식' → 값 또는 ''
@@ -227,10 +232,14 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, 
   - END: `endType`(`'23:00:00'`도 읽음) `=== opts.endTime`(기본 `'23:00'`), `dayType`이 `opts.endTypeDayTypes`(기본 `['mon_thu']`, 항목 앞뒤 공백 무시)에 있음, 마지막 블록, **그 블록과 그날 종료(`dayEnd`)가 모두 종료 시각보다 늦게 끝남**. ASSUMPTION: 날짜별 종료를 23:00 이하로 당긴 날(22:00·22:30·23:00)은 모두 그 시각에 귀가하므로 표시하지 않는다. ASSUMPTION: 특별 요일 유형(`exam` 등)으로 바꾼 날은 실제 달력 요일의 기본 유형으로 판정한다(목요일 exam → 표시, 금요일 exam → 표시 안 함). 휴일(`holiday`, 결정 72 보충 R21)은 특별 유형이 아니라 그 자체가 기본 유형이다: 목요일 휴일도 `mon_thu`로 보지 않으므로 `endTypeDayTypes`에 `holiday`가 없으면 END가 없다. 휴일 칸은 `blocks`의 `day_type 'holiday'` 블록(오전 토요일 칸·오후·저녁 일요일 칸, C24가 기본값을 채움)을 `resolveDayPlan_`이 그대로 쓴다.
 - `resolveStudentDay_`: 운영 안 하는 날은 `[]`. `exceptions`는 `date === plan.date`인 행만 쓴다(**날짜가 빈 행은 쓰지 않는다** — 빈 날짜 하나가 모든 날에 찍히지 않게). `plan.end`를 `dayEnd`로 넘긴다. `fixedRows`는 `effectiveFixedRows_` 결과를 넘긴다. 고정 일정 요일은 요일 유형이 아니라 **실제 달력 요일**(`ymdWeekdayKo_`). C7은 결과에서 `seq·code·text`만 sheet-model `marks`로 옮긴다.
 - **R22 F11 출결 결과 정리 격자(학생 × 날짜):** 결과는 새 탭 없이 **확정 사전 특이사항 행**으로 저장한다(총괄 전제 — 출결 담당이 종이 출석부의 ×·△·조를 보고 유형을 골라 확정으로 넣는다. 미인정 유형은 지금처럼 자동 1OUT이 붙는다).
-  - `attResultKind_(type)`: 유형 이름(괄호 설명을 뗀 `attTypeBase_`)으로 정한다 — settings `exception.types`에 새 유형을 더해도 이름 규칙을 따른다. `병결`·`…결석` → 결석, `…지각` → 지각, `…조퇴` → 조퇴, `가정사유` → `블록`(덮는 블록으로), 그 밖 `''`. `recognized` = 이름이 `미인정`으로 시작하지 않음. ASSUMPTION: 학원·학사 외/내 프로그램·기타·모르는 유형은 결과가 아니다(칸에 약어만 보이고 누적에 세지 않는다 — 결과로 세려면 결석·지각·조퇴 유형으로 입력).
-  - `attResultByBlocks_(spec, blocks)`: 그날 블록(`resolveDayPlan_` 블록) 모두 → 결석, 첫 블록은 덮고 마지막은 아님 → 지각, 마지막은 덮고 첫 블록은 아님 → 조퇴, 그 밖(가운데만·처음과 끝만) → `''`. 블록이 없는 날은 `ALL`만 결석.
-  - `attGridCell_(plan, s, opts)`: `marks` = `resolveStudentDay_`(출석부 칸과 **같은 판정·우선순위**: 사전 특이사항 → 고정 일정 '학'·'가' → 23:00 종료)에서 `seq·code·text`. `results` = 그날 확정 특이사항을 종류로 읽어 **종류마다 하루 1번**(ASSUMPTION — 여러 블록·여러 행의 미인정지각도 지각 1회). 결석이 있으면 그날은 결석 하나만, 지각과 조퇴는 같은 날 둘 다 셀 수 있다. 한 종류에 인정·미인정이 섞이면 미인정(ASSUMPTION — 엄한 쪽). 기호 결석 `×`·지각 `△`·조퇴 `조`. 운영 안 하는 날은 `marks`·`results`가 비고 그날 확정 특이사항이 있으면 경고(세지 않는다, ASSUMPTION).
-  - `attResultTotals_(cells)`: 한 학생의 칸 목록(날짜 범위·기간은 부르는 쪽이 고른다)의 누적, 칸마다 종류당 1.
+  - `attResultTable_()`·`attResultKind_(type)`: 결과 유형은 **상수 대응표**(총괄 답 ④, 유형 이름 = 괄호 설명을 뗀 `attTypeBase_` 기준): `병결`·`미인정결석` → 결석 `×`, `병지각`·`미인정지각` → 지각 `△`, `병조퇴`·`미인정조퇴` → 조퇴 `조`, `미인정…`은 미인정. 그 밖(가정사유·학원·학사 외/내 프로그램·기타·모르는 유형)은 `null` — 격자 결과 선택지에는 없다(총괄 답 ④). **결정 81: 가정사유는 누적에 인정으로 센다**(OUT은 생기지 않음), 학원·학사 외/내 프로그램·기타·모르는 유형은 허락된 활동이라 세지 않는다(결정 81 총괄 가정 — 칸 약어와 학습량의 빠진 시간으로만 보인다). 가정사유의 종류는 `attResultByBlocks_`(그날 블록 모두 → 결석, 첫 블록은 덮고 마지막은 아님 → 지각, 마지막은 덮고 첫 블록은 아님 → 조퇴, 가운데만·처음과 끝만 → `''` — 종류로는 세지 않고 학습량에 빠진 블록으로 남는다, 블록이 없는 날은 `ALL`만 결석). settings `exception.types`에서 이 여섯 이름을 바꾸면 결과로 읽히지 않는다(시험이 DEFAULT_SETTINGS 11개 유형을 대조한다).
+  - `attResultChoices_(types)`: 설정 유형 목록 중 결과 유형만, 설정 순서대로 — 격자 결과 선택지.
+  - `attGridCell_(plan, s, opts)`: `marks` = `resolveStudentDay_`(출석부 칸과 **같은 판정·우선순위**: 사전 특이사항 → 고정 일정 '학'·'가' → 23:00 종료)에서 `seq·code·text`. `results` = 그날 확정 특이사항(결과 유형은 그 종류·인정 여부, 가정사유는 인정 + 덮은 블록의 종류)을 **종류마다 하루 1번**(ASSUMPTION — 여러 블록·여러 행의 미인정지각도 지각 1회). 결석이 있으면 그날은 결석 하나만, 지각과 조퇴는 같은 날 둘 다 셀 수 있다. 한 종류에 인정·미인정이 섞이면 미인정(ASSUMPTION — 엄한 쪽). 기호 결석 `×`·지각 `△`·조퇴 `조`. 운영 안 하는 날은 `marks`·`results`가 비고 그날 확정 특이사항이 있으면 경고(세지 않는다, ASSUMPTION).
+  - `study`(학습량, 선생님 지시): 그날 블록마다 `marks` 판정으로 — 사전 특이사항(EXC)·고정 일정 '학'·'가'(FIXED) 블록은 빠진 블록(ASSUMPTION: 블록 일부만 덮어도 그 블록 전체), 23:00 종료(END) 블록은 `opts.endTime`(기본 23:00)까지만(블록이 그 뒤에 시작하면 0분), 빈칸은 블록 전체. `{blocks, studiedBlocks, minutes(블록 분 합), studiedMinutes, missed:[{seq, code, text(칸 글자), minutes}]}`. 운영 안 하는 날은 모두 0.
+  - `attResultTotals_(cells)`: 한 학생의 칸 목록(날짜 범위·기간은 부르는 쪽이 고른다)의 누적, 결석·지각·조퇴는 칸마다 종류당 1. `학습량` = 운영한 날 수(`days`)와 블록·분 합, `missedMinutes` = 빠진 까닭(칸 글자 — '가정'·'학원'·'학'·'가'·'무지' 등)별 분.
+  - `attResultGroupId_(sid, ymd)` = `'F11:<sid>:<ymd>'`: 격자로 쓴 결과 행의 `group_id`. 같은 학생·같은 날 = 한 묶음(하루 1OUT, 총괄 답 ①, 결정 22), 날짜가 다르면 다른 묶음. 빈 학생·잘못된 날짜는 Error.
+  - `attResultReplaces_(exceptions, sid, ymd, blocks, keepIds)`: 결과를 저장할 때 대체(취소)할 행 id — 같은 학생·같은 날의 살아 있는(`요청`·`확정`) 행 중 블록이 결과 블록과 **겹치는** 것(총괄 답 ⑤). 겹치지 않는 부분 특이사항은 둘 다 둔다. `ALL`은 무엇과도 겹치고, 맞닿기만 하면 겹치지 않는다(`blockSpecCovers_`와 같음). `keepIds`는 빼고 본다. 결과 블록 표기가 틀리면 Error.
+  - `attGridWritable_(term, ymd, today, graceDays)` → `{ok, reason}`: 칸 날짜가 그 기간 안이고 오늘 이전(아직 오지 않은 날은 거부)이며, 오늘 ≤ 기간 종료일 + `graceDays`(기본 14, 총괄 답 — 끝난 기간은 종료 후 14일까지 격자 저장 허용). 음수·소수 `graceDays`는 Error.
   - 저장 쪽(C33): 날짜마다 `resolveDayPlan_` 한 번, 학생마다 `effectiveFixedRows_` → `attGridCell_`. 출석(○)은 따로 저장하지 않는다(결과가 없는 운영일 = 출석). 결과 입력은 지금 F1 저장(`saveException`·`confirmException`)을 그대로 쓴다.
 
 ## 동작 메모(R5, 2026-11-07, 총괄 검토 3차 반영)
