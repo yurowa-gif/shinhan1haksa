@@ -229,7 +229,8 @@ test('5단계 선생님 확인 체크리스트: 번호(0-1~C24)가 겹치지 않
   assert.ok(rows.length >= 60, '단계 수 ' + rows.length);
   rows.forEach((l) => assert.strictEqual(l.replace(/\\\|/g, '').split('|').length, 8, l.slice(0, 40)));
   ['0-1', 'A1', 'B1', 'C1', 'A17', 'B18', 'C24'].forEach((id) => assert.ok(ids.indexOf(id) >= 0, id + ' 가 없다'));
-  ['이 일정을 등록할까요?', '이 일정을 취소할까요?', '상담 기록을 취소합니다', '결과를 저장할까요?', '(내용 생략, N자)', '연결된 자동 1OUT도 함께 취소됩니다', '끝난 지 오래되어 볼 수만 있습니다', '결과 입력은 출결 담당·관리자만 합니다.', '미인정이라 저장하면 자동으로 1OUT', '다른 관리자가 먼저 바꿨습니다', '다른 선생님이 먼저 바꿨습니다', '볼 수 있는 학생이 없습니다', 'NONE', '14일', '한 통'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
+  ['이 일정을 등록할까요?', '이 일정을 취소할까요?', '상담 기록을 취소합니다', '결과를 저장할까요?', '(내용 생략, N자)', '연결된 자동 1OUT도 함께 취소됩니다', '끝난 지 오래되어 볼 수만 있습니다', '결과 입력은 출결 담당·관리자만 합니다.', '미인정이라 저장하면 자동으로 1OUT', '다른 관리자가 먼저 바꿨습니다', '다른 선생님이 먼저 바꿨습니다', '볼 수 있는 학생이 없습니다', '출석(특이사항 없음)', '이 화면은 볼 수 있는 역할이 아닙니다', '14일', '한 통'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
+  assert.ok(doc.indexOf('알려진 표시 문제') < 0 && !/NONE · NONE/.test(doc), '고쳐진 표시 문제 안내가 남아 있다');
   const imgs = [...doc.matchAll(/!\[[^\]]*\]\((stage5-check-photos\/[^)]+)\)/g)].map((m) => m[1]);
   assert.ok(imgs.length >= 25, '사진 수 ' + imgs.length);
   imgs.forEach((f) => assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'docs', 'design', f)), f + ' 파일이 없다'));
