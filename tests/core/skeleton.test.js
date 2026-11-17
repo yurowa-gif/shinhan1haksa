@@ -68,19 +68,19 @@ test('screenParams_: 2단계 tab·month(yyyy-MM 모양)·prefill(out2만)을 통
   assert.ok(!ctx.screenParams_({ month: '</script>', tab: '<b>' }).includes('<'));
 });
 
-test('getHomeData: 홈 역할이 보기 키(duty.view·out.view·status.list·doc.view)를 가진 훅만 부르고 ms를 남긴다, 기존 값은 그대로, 학생·학부모 홈에는 없다', () => {
+test('getHomeData: 홈 역할이 보기 키(duty.view·out.view·status.list·doc.view·counsel.list)를 가진 훅만 부르고 ms를 남긴다, 기존 값은 그대로, 학생·학부모 홈에는 없다', () => {
   const env = createGasEnv();
   env.seedFake();
   // 값은 각 CODING 세션이 시험한다. 여기서는 어느 홈에 어느 키가 있는지만 본다
-  const teachers = [['test.admin@example.com', 'admin', 'counts', ['docs', 'duty', 'food', 'out']],
+  const teachers = [['test.admin@example.com', 'admin', 'counts', ['counsel', 'docs', 'duty', 'food', 'out']],
     ['test.attendance@example.com', 'attendance', 'exc', ['docs', 'duty', 'food', 'out']],
     ['test.duty@example.com', 'duty_manager', 'month', ['duty']],
-    ['test.teacher@example.com', 'hall_teacher', 'students', ['docs', 'duty', 'food', 'out']],
-    ['test.homeroom@example.com', 'homeroom', 'students', ['food', 'out']]];
+    ['test.teacher@example.com', 'hall_teacher', 'students', ['counsel', 'docs', 'duty', 'food', 'out']],
+    ['test.homeroom@example.com', 'homeroom', 'students', ['counsel', 'food', 'out']]];
   for (const [who, role, kept, hooks] of teachers) {
     const d = env.call(who, 'getHomeData', role);
     assert.deepStrictEqual(Object.keys(d.ms).sort(), hooks, role);
-    for (const k of ['duty', 'out', 'food', 'docs']) {
+    for (const k of ['duty', 'out', 'food', 'docs', 'counsel']) {
       assert.strictEqual(k in d, hooks.includes(k), role + ' ' + k);
       if (hooks.includes(k)) assert.strictEqual(typeof d.ms[k], 'number', role + ' ms.' + k);
     }

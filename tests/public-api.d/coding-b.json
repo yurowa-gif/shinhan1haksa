@@ -147,6 +147,26 @@
     "undoBatchLeave": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getCounselContext": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getCounselNotes": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveCounselNote": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "cancelCounselNote": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "reviseCounselNote": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }

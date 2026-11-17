@@ -1,0 +1,140 @@
+<style>
+  .cn-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); word-break: keep-all; }
+  .cn-row .row-btn { flex: 0 0 auto; white-space: nowrap; }
+  .cn-note { padding: 12px 0; border-bottom: 1px solid var(--line); word-break: keep-all; }
+  .cn-note.canceled { opacity: .6; }
+  .cn-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
+  .cn-body { white-space: pre-wrap; margin: 6px 0; }
+  .cn-btns { display: flex; gap: 8px; margin-top: 8px; }
+  .cn-btns .btn { flex: 0 0 auto; white-space: nowrap; }
+  .cn-check { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+</style>
+<script>
+  /**
+   * 상담일지 화면(C32, F12 교사 쪽): 학생 목록 → 학생을 누르면 그 학생의 상담 기록과 쓰기.
+   * 기록 내용은 한 학생씩 서버가 권한(담당교사·담임(자기 반)·관리자)을 확인해 준다. 고치기 = 취소 + 새 행.
+   */
+  function renderScreen(root) {
+    var ctx = null, seq = 0, data = null, editing = null;
+    var head = el('div', { class: 'card' }), body = el('div');
+    root.appendChild(head); root.appendChild(body);
+    var query = el('input', { type: 'search', placeholder: '이름 또는 학번', autocomplete: 'off' });
+    var label = function (s) { return s.grade + '-' + s.classNo + ' ' + s.number + '번 ' + s.name; };
+
+    call('getCounselContext').then(function (r) {
+      ctx = r; drawHead();
+      var want = (window.SCREEN_PARAMS || {}).student;
+      if (want && r.students.some(function (s) { return s.id === want; })) openStudent(want);
+    }).catch(function (err) { clear(head); showError(head, err); });
+
+    function drawHead() {
+      clear(head);
+      head.appendChild(el('h2', { text: '상담일지' }));
+      head.appendChild(el('div', { class: 'muted', text: '상담 내용은 담당교사·담임(자기 반)·관리자만 봅니다. 학부모에게는 상담 날짜와 교사만 보이고 내용은 보이지 않습니다.' }));
+      head.appendChild(UI.field('학생 찾기', query, { name: 'q' }));
+      query.oninput = drawRows;
+      head.appendChild(el('div', { id: 'cn-rows' }));
+      drawRows();
+    }
+    function drawRows() {
+      var box = head.querySelector('#cn-rows'); clear(box);
+      var q = query.value.trim();
+      var rows = ctx.students.filter(function (s) { return !q || s.name.indexOf(q) >= 0 || String(s.studentNo).indexOf(q) >= 0; });
+      if (!rows.length) { box.appendChild(UI.emptyState(ctx.students.length ? '찾는 학생이 없습니다.' : '볼 수 있는 학생이 없습니다.')); return; }
+      rows.forEach(function (s) {
+        box.appendChild(el('div', { class: 'cn-row' }, [
+          el('span', { text: label(s) + (s.mine || !ctx.students.some(function (q) { return q.mine; }) ? '' : ' (담당 아님)') }),
+          el('button', { type: 'button', class: 'btn secondary row-btn', text: '상담 보기', onclick: function () { openStudent(s.id); } })
+        ]));
+      });
+    }
+
+    function openStudent(id) {
+      var mine = ++seq; editing = null;
+      clear(body); body.appendChild(el('div', { class: 'loading', text: '불러오는 중…' }));
+      call('getCounselNotes', id).then(function (r) { if (mine !== seq) return; data = r; drawRecord(); })
+        .catch(function (err) { if (mine !== seq) return; clear(body); showError(body, err); });
+    }
+
+    function drawRecord() {
+      clear(body);
+      var status = el('div', { 'aria-live': 'polite' });
+      body.appendChild(el('div', { class: 'card' }, [el('h2', { text: label(data.student) }), status,
+        el('div', { class: 'muted', text: '상담 ' + data.notes.filter(function (n) { return n.status === '유효'; }).length + '건' })]));
+      if (data.canWrite) body.appendChild(formCard(status));
+      var list = el('div', { class: 'card' }, [el('h2', { text: '상담 기록' })]);
+      if (!data.notes.length) list.appendChild(UI.emptyState('아직 상담 기록이 없습니다.'));
+      data.notes.forEach(function (n) { list.appendChild(noteRow(n, status)); });
+      body.appendChild(list);
+    }
+
+    function noteRow(n, status) {
+      var canceled = n.status === '취소';
+      var meta = el('div', { class: 'cn-meta' }, [el('b', { text: n.dateKo }), UI.statusPill(canceled ? 'todo' : 'confirmed', canceled ? '취소' : n.type), el('span', { class: 'muted', text: n.teacher + ' · ' + (n.target || '') })]);
+      var box = el('div', { class: canceled ? 'cn-note canceled' : 'cn-note' }, [meta, el('div', { class: 'cn-body', text: n.content })]);
+      if (canceled) box.appendChild(el('div', { class: 'muted', text: '취소 사유: ' + n.cancelReason }));
+      else if (!n.showToParent) box.appendChild(el('div', { class: 'muted', text: '학부모에게 상담 여부를 보이지 않음' }));
+      if (n.fixed) box.appendChild(el('div', { class: 'muted', text: '2OUT 학부모 면담 — OUT 화면에서만 취소합니다.' }));
+      if (n.canEdit) {
+        box.appendChild(el('div', { class: 'cn-btns' }, [
+          el('button', { type: 'button', class: 'btn secondary', text: '고치기', onclick: function () { editing = n; drawRecord(); window.scrollTo(0, 0); } }),
+          el('button', { type: 'button', class: 'btn secondary', text: '취소', onclick: function () {
+            UI.confirmWithReason({ title: '상담 기록을 취소합니다', message: '기록은 지워지지 않고 취소로 남습니다.', confirmText: '취소 처리', onconfirm: function (reason) {
+              call('cancelCounselNote', n.id, reason).then(function (r) { if (r.ok) { UI.toast('취소했습니다.'); openStudent(data.student.id); } else showFail(status, r); }).catch(function (e) { showError(status, e); });
+            } });
+          } })
+        ]));
+      }
+      return box;
+    }
+    function showFail(status, r) { clear(status); (r.errors || []).forEach(function (e) { status.appendChild(el('div', { class: 'error', role: 'alert', text: e.message })); }); }
+
+    function formCard(status) {
+      var card = el('div', { class: 'card' }, [el('h2', { text: editing ? '상담 고치기' : '상담 쓰기' })]);
+      var seed = editing || { date: ctx.today, type: '', target: '학생', content: '', showToParent: true };
+      var type = seed.type, target = seed.target, errs = {};
+      var date = UI.dateField({ label: '상담 날짜', value: seed.date, max: ctx.today, name: 'date' });
+      var chipBox = el('div', { class: 'chips' });
+      function drawTypes() {
+        clear(chipBox);
+        data.types.forEach(function (t) { chipBox.appendChild(el('button', { type: 'button', class: t === type ? 'chip on' : 'chip', text: t, onclick: function () { type = t; drawTypes(); } })); });
+      }
+      drawTypes();
+      var typeBox = UI.field('유형', chipBox, { name: 'type' });
+      var targetBox = UI.field('상담 대상', UI.segmented({ label: '상담 대상', value: target, options: [{ value: '학생', label: '학생' }, { value: '학부모', label: '학부모' }], onchange: function (v) { target = v; } }), { name: 'target' });
+      var area = el('textarea', { maxlength: '2000', rows: '6' }); area.value = seed.content;
+      var count = el('div', { class: 'hint' });
+      var contentBox = UI.field('상담 내용', area, { name: 'content' });
+      contentBox.appendChild(count);
+      function recount() { count.textContent = area.value.length + ' / 2000자'; }
+      area.oninput = recount; recount();
+      var show = el('input', { type: 'checkbox' }); show.checked = seed.showToParent !== false;
+      var check = el('label', { class: 'cn-check' }, [show, el('span', { text: '학부모에게 날짜·교사 보이기' })]);
+      errs = { date: date.setError, type: typeBox.setError, target: targetBox.setError, content: contentBox.setError };
+      var send = el('button', { type: 'button', class: 'btn', text: editing ? '고쳐서 저장' : '저장' });
+      var buttons = [send];
+      if (editing) buttons.push(el('button', { type: 'button', class: 'btn secondary', text: '그만두기', onclick: function () { editing = null; drawRecord(); } }));
+      function input() { return { studentId: data.student.id, date: date.getValue(), type: type, target: target, content: area.value, showToParent: show.checked }; }
+      function fail(r) {
+        Object.keys(errs).forEach(function (k) { errs[k](''); }); clear(status);
+        (r.errors || []).forEach(function (e) { if (errs[e.field]) errs[e.field](e.message); else status.appendChild(el('div', { class: 'error', role: 'alert', text: e.message })); });
+      }
+      function done(r, msg) { send.disabled = false; if (!r.ok) { fail(r); return; } UI.toast(msg); openStudent(data.student.id); }
+      send.onclick = function () {
+        if (send.disabled) return;
+        if (editing) {
+          UI.confirmWithReason({ title: '상담을 고칩니다', message: '옛 기록은 취소로 남고 새 기록이 생깁니다.', reasonLabel: '고치는 이유', confirmText: '고쳐서 저장', danger: false, onconfirm: function (reason) {
+            send.disabled = true;
+            call('reviseCounselNote', editing.id, input(), reason).then(function (r) { done(r, '고쳐서 저장했습니다.'); }).catch(function (e) { send.disabled = false; showError(status, e); });
+          } });
+          return;
+        }
+        send.disabled = true;
+        call('saveCounselNote', input()).then(function (r) { done(r, r.duplicate ? '이미 같은 기록이 있습니다.' : '저장했습니다.'); }).catch(function (e) { send.disabled = false; showError(status, e); });
+      };
+      [date, typeBox, targetBox, contentBox, check].forEach(function (n) { card.appendChild(n); });
+      card.appendChild(el('div', { class: 'cn-btns' }, buttons));
+      return card;
+    }
+  }
+</script>

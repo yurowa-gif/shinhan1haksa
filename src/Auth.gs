@@ -80,6 +80,8 @@ function permissions_() {
     'out.rules': { roles: ['admin'] },
     'out.dismiss': { roles: ['admin'] },
     // 2OUT 학부모 면담(F12): 출결 담당은 넣지 않는다(넣으면 canAccessStudentByFacts_가 학사생 전체를 허용한다)
+    // 상담일지 화면·홈 카드(C32): 역할만(학생 범위는 getCounselContext가 계산). 기록 한 학생의 내용은 counsel.view가 다시 판정
+    'counsel.list': { roles: ['admin', 'hall_teacher', 'homeroom'] },
     'counsel.view': { roles: ['admin', 'hall_teacher', 'homeroom'], scope: 'student', noDuty: true },
     'counsel.save': { roles: ['hall_teacher'], scope: 'student', noDuty: true },
     'counsel.cancel': { roles: ['hall_teacher'] },   // 행 id만 받는 첫 줄(역할만), 범위는 락 안에서 counsel.save로 다시
