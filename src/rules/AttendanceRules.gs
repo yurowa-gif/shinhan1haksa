@@ -226,8 +226,8 @@ function resolveStudentDay_(plan, s, opts) {
 /**
  * 결과 유형 대응표(상수, 유형 이름 = 괄호 설명을 뗀 이름 기준, 총괄 답 ④). → {이름: {kind, mark, recognized}}
  * 격자에서 고르는 결과 선택지는 이 여섯 유형뿐이다(총괄 답 ④). settings exception.types에서 이 여섯 이름을 바꾸면 결과로 읽히지 않는다(시험이 지킨다).
- * 결정 81(선생님 답): 가정사유로 빠진 것도 누적에 **인정**으로 센다 — 종류는 덮은 블록으로(attResultByBlocks_), OUT은 생기지 않는다.
- * 학원·학사 외/내 프로그램·기타·모르는 유형은 허락된 활동이라 결과로 세지 않는다(결정 81 총괄 가정) — 칸 약어와 학습량의 빠진 시간으로만 보인다.
+ * 결정 81(선생님 답): 그 밖의 유형(가정사유·학원·학사 외/내 프로그램·기타·모르는 유형)으로 빠진 것도 누적에 **인정**으로 센다 —
+ * 종류는 덮은 블록으로(attResultByBlocks_), OUT은 생기지 않는다. 고정 일정 '학'·'가'는 특이사항이 아니라 결석·지각·조퇴로 세지 않고 학습량의 빠진 시간에만 든다.
  */
 function attResultTable_() {
   return {
@@ -244,7 +244,7 @@ function attResultKind_(type) {
 }
 
 /**
- * 가정사유의 결과 종류(결정 81): 덮은 블록으로 정한다. blocks = resolveDayPlan_ 블록(시작 순).
+ * 결과 유형이 아닌 빠짐의 종류(결정 81): 덮은 블록으로 정한다. blocks = resolveDayPlan_ 블록(시작 순).
  * 모든 블록 → 결석, 첫 블록은 덮고 마지막은 아님 → 지각(늦게 옴), 마지막은 덮고 첫 블록은 아님 → 조퇴(일찍 감),
  * 그 밖(가운데만·처음과 끝만)·덮은 블록 없음 → ''(종류로 세지 않지만 학습량에는 빠진 블록으로 남는다). 블록이 없는 날은 'ALL'만 결석.
  */
@@ -271,7 +271,8 @@ function attResultChoices_(types) {
  * → {date, operating, marks:[{seq, code, text}](출석부 칸과 같은 판정 — resolveStudentDay_), results:[{kind, mark, recognized, exceptionIds, types}],
  *    study:{blocks, studiedBlocks, minutes, studiedMinutes, missed:[{seq, code, text, minutes}]}, warnings}
  * - results: 그날(date) 확정 특이사항을 **종류마다 하루 1번**으로 묶는다(결정 81 총괄 가정: 여러 블록·여러 행의 미인정지각도 그날 지각 1회).
- *   결과 유형(attResultKind_)은 그 종류·인정 여부 그대로, 가정사유는 인정이고 종류는 덮은 블록으로(attResultByBlocks_, 결정 81), 그 밖은 세지 않는다.
+ *   결과 유형(attResultKind_)은 그 종류·인정 여부 그대로, 그 밖의 유형은 인정이고 종류는 덮은 블록으로(attResultByBlocks_, 결정 81).
+ *   고정 일정 '학'·'가'는 results에 들지 않는다(학습량에서만 빠진 시간).
  *   결석이 있으면 그날은 결석 하나만(지각·조퇴는 세지 않음). 지각과 조퇴는 같은 날 둘 다 셀 수 있다. 한 종류에 인정·미인정 행이 섞이면 미인정
  *   (결정 81 총괄 가정 — 엄한 쪽). 순서: 결석·지각·조퇴.
  * - study(학습량, 선생님 지시): 그날 블록마다 출석부 칸 판정으로 — 사전 특이사항(EXC)·고정 일정 '학'·'가'(FIXED) 블록은 빠진 블록
@@ -292,8 +293,7 @@ function attGridCell_(plan, s, opts) {
   var by = {};
   exc.forEach(function (e) {
     var k = attResultKind_(e.type);
-    if (!k) {   // 결정 81: 가정사유만 인정으로 센다(종류는 덮은 블록), 학원·프로그램·기타는 세지 않는다
-      if (attTypeBase_(e.type) !== '가정사유') return;
+    if (!k) {   // 결정 81: 결과 유형이 아닌 빠짐(가정사유·학원·프로그램·기타)도 인정, 종류는 덮은 블록으로
       var kind = attResultByBlocks_(e.blocks, plan.blocks);
       if (!kind) return;
       k = { kind: kind, mark: { '결석': '×', '지각': '△', '조퇴': '조' }[kind], recognized: true };
