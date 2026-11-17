@@ -155,6 +155,18 @@
     "commitContacts": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getEventData": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveEvent": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "cancelEvent": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }

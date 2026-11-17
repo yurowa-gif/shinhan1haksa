@@ -51,6 +51,9 @@ function permissions_() {
     'room.view': { roles: ['admin', 'hall_teacher', 'attendance', 'duty_manager'] },
     'room.edit': { roles: ['admin', 'hall_teacher'] },
     'room.layout': { roles: ['admin'] },
+    // ── 5단계(결정 80, F13). 월별 일정: 교사 역할은 모두 보기, 등록·취소는 관리자만. 학생·학부모는 F14(0단계 진단 뒤) ──
+    'event.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom', 'duty_manager'] },
+    'event.edit': { roles: ['admin'] },
     // ── 4단계(결정 75·76, S4-0). 서류 체크리스트·프로그램·연락처. 학생·학부모·담임에게는 내보내지 않는다 ──
     'doc.view': { roles: ['admin', 'hall_teacher', 'attendance'] },
     'doc.edit': { roles: ['admin', 'hall_teacher'], scope: 'student' },
