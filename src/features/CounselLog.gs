@@ -115,7 +115,10 @@ function getCounselNotes(studentId) {
         teacher: names[normalizeEmail_(n.teacher_email)] || '(등록 안 된 교사)', content: String(n.content || ''), showToParent: String(n.show_to_parent).toUpperCase() !== 'FALSE',
         status: live ? '유효' : '취소', cancelReason: String(n.cancel_reason || ''), fixed: fixed, mine: author, canEdit: live && !fixed && author && mine };
     });
-  return { student: cnlOne_(student), canWrite: mine, types: cnlTypes_(), notes: notes };
+  var enrolled = term ? enr.filter(function (e) { return e.term_id === term.id && e.student_id === sid; })[0] : null;
+  var one = cnlOne_(student);
+  one.teacher = enrolled ? (names[normalizeEmail_(enrolled.teacher_email)] || '') : '';   // 담당교사 이름(화면 머리줄)
+  return { student: one, canWrite: mine, types: cnlTypes_(), notes: notes };
 }
 
 function cnlFindNote_(noteId) { return findById_('counsel_notes', String(noteId || ''), 'counsel'); }
