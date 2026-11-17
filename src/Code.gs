@@ -11,13 +11,13 @@ function doGet(e) {
   var p = (e && e.parameter) || {};
 
   if (p.page === 'diag') {
-    if (!isDiagEnabled_()) return renderPage_('ui/NoAccess', { email: '' }, '권한 없음');
+    if (!isDiagEnabled_()) return renderPage_('ui/NoAccess', { email: '', message: noAccessText_('', false) }, '권한 없음');
     return renderPage_('ui/Diag', { diag: collectDiag_() }, '접속 진단');
   }
 
   // C0 임시: 인쇄 방식 시험 화면(소유자 본인만). A/B 결정 뒤 지운다.
   if (p.page === 'printspike') {
-    try { assertOwnerRun_(); } catch (err) { return renderPage_('ui/NoAccess', { email: '' }, '권한 없음'); }
+    try { assertOwnerRun_(); } catch (err) { return renderPage_('ui/NoAccess', { email: '', message: noAccessText_('', false) }, '권한 없음'); }
     return renderPage_('ui/screen_printspike', {}, '인쇄 방식 시험');
   }
 
@@ -30,7 +30,7 @@ function doGet(e) {
 
   if (!user.registered) {
     logDenied_(user.email, 'app.open', user.email ? '등록되지 않은 계정' : '이메일 확인 불가');
-    return renderPage_('ui/NoAccess', { email: user.email }, '권한 없음');
+    return renderPage_('ui/NoAccess', { email: user.email, message: noAccessText_(user.email, false) }, '권한 없음');
   }
 
   // 화면(?page=...): 역할을 확인한 뒤 화면 조각을 끼운다. 진짜 권한 검사는 화면이 부르는 서버 함수가 한다.
@@ -38,7 +38,7 @@ function doGet(e) {
     var sc = screenResolve_(p.page, user.roles);
     if (!sc.ok) {
       logDenied_(user.email, 'screen.' + String(p.page).slice(0, 40), sc.why);
-      return renderPage_('ui/NoAccess', { email: user.email }, '권한 없음');
+      return renderPage_('ui/NoAccess', { email: user.email, message: noAccessText_(user.email, true) }, '권한 없음');
     }
     return renderPage_('ui/screen_shell', {
       screenFile: sc.screen.file,
@@ -117,6 +117,16 @@ function renderPage_(file, vars, title) {
   return t.evaluate()
     .setTitle((title ? title + ' · ' : '') + APP_NAME)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/**
+ * 권한 없음 화면의 안내 문구(순수 — 판정은 서버가 그대로 하고 문구만 나눈다).
+ * 이메일이 없으면 로그인 안내, 등록된 계정이 권한 밖 화면을 열면 역할 안내, 등록 안 된 계정이면 등록 요청 안내.
+ */
+function noAccessText_(email, registered) {
+  if (!email) return '접속한 계정의 이메일을 확인할 수 없습니다. 구글 계정에 로그인했는지 확인해 주세요.';
+  if (registered) return '이 화면은 볼 수 있는 역할이 아닙니다. 처음으로 돌아가 주세요.';
+  return '이 계정은 등록되어 있지 않습니다. 학사 담당 선생님께 계정 등록을 요청해 주세요.';
 }
 
 /** 템플릿 안에서 다른 HTML 파일을 끼워 넣는다 */

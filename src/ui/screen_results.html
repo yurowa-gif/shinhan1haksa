@@ -111,6 +111,11 @@
     /* ───────── 격자 ───────── */
     function draw() { clear(body); if (state.tab === 'totals') drawTotals(); else drawGrid(); }
     function who(s) { var d = state.data || state.totals; return d && d.pick ? s.number + '번 ' + s.name : U.studentLabel(s); }   // 한 반을 보면 학년이 같아 번호가 더 쓸모 있다
+    /** 출석부 칸 글자: code NONE(빈칸)은 빼고, 전부 비면 '출석(특이사항 없음)' */
+    function marksText(marks) {
+      var t = (marks || []).filter(function (m) { return m.code !== 'NONE'; }).map(function (m) { return m.text || m.code; }).filter(function (x) { return x; });
+      return t.length ? t.join(' · ') : '출석(특이사항 없음)';
+    }
     var KIND_SHORT = { '×': '결석', '△': '지각', '조': '조퇴' };
     function drawDayList() {   // 휴대폰: 날짜 하나 → 학생 줄(번호 순서 그대로)
       var d = state.data, x = d.dates[0], list = el('div');
@@ -177,7 +182,7 @@
       var sheet = null;
       function reloadAll() { if (sheet) sheet.close(); load(); }
       content.appendChild(el('p', { class: 'muted', text: U.formatDateKo(c.date, true) + ' · ' + (c.blocks.length ? c.blocks.map(function (b) { return b.start + '-' + b.end; }).join(' / ') : '시간 없음') }));
-      if (c.marks.length) content.appendChild(el('p', { text: '출석부 칸: ' + c.marks.map(function (m) { return m.text || m.code; }).join(' · ') }));
+      content.appendChild(el('p', { text: '출석부 칸: ' + marksText(c.marks) }));
       // 지금 있는 기록
       var live = c.rows.filter(function (r) { return r.status !== '취소'; });
       var pre = live.filter(function (r) { return !r.kind; })[0];
