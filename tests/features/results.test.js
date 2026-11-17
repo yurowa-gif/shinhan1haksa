@@ -47,11 +47,12 @@ test('순수: 유형 선택지는 R22 대응(결석·지각·조퇴 + 가정사�
   const blocks = [{ start: '18:00', end: '20:00' }, { start: '20:00', end: '22:00' }];
   const d = (k) => plain(env.asOwner((c) => c.resDefaultBlocks_(k, blocks)));
   assert.deepStrictEqual([d('결석'), d('지각'), d('조퇴')], ['ALL', '18:00-20:00', '20:00-22:00']);
-  const m = plain(env.asOwner((c) => c.resMergeMails_([{ to: ['b@x', 'a@x'], body: '하나' }, { to: ['a@x', 'b@x'], body: '둘' }, { to: ['c@x'], body: '셋' }])));
-  assert.strictEqual(m.length, 2);
-  assert.deepStrictEqual(m[0].to, ['a@x', 'b@x']);
-  assert.ok(m[0].body.includes('2건') && m[0].body.includes('하나') && m[0].body.includes('둘'));
-  assert.strictEqual(m[1].body, '셋');
+  const m = plain(env.asOwner((c) => c.resMergeMails_([{ to: ['b@x', 'A@x'], body: '하나' }, { to: ['a@x', 'c@x'], body: '둘' }, { to: ['c@x'], body: '둘' }, { to: ['d@x'], body: '셋' }])));
+  assert.deepStrictEqual(m.map((x) => x.to), [['b@x'], ['a@x'], ['c@x'], ['d@x']], '사람마다 한 통(받는 사람 목록이 달라도)');
+  const a = m.find((x) => x.to[0] === 'a@x');
+  assert.ok(a.body.includes('2건') && a.body.includes('하나') && a.body.includes('둘'), a.body);
+  assert.ok(m.find((x) => x.to[0] === 'c@x').body === '둘', '같은 본문은 한 번만');
+  assert.strictEqual(m.find((x) => x.to[0] === 'd@x').body, '셋');
 });
 
 test('권한: 보기=exception.view, 저장·취소=exception.confirm. 담당 교사는 자기 학생만 보고 저장은 못 한다', () => {

@@ -2,7 +2,7 @@
  * F11 출결 결과 정리 격자(C33, 접두어 res). 규칙은 R22(AttendanceRules.gs attResultKind_·attGridCell_·attResultTotals_)가 정한다 — 칸 = 출석부 칸(resolveStudentDay_)과 같은 판정 + 그날 확정 특이사항의 결과 기호.
  * 결과는 새 탭 없이 **확정 사전 특이사항(exceptions_<기간>) 행**으로 저장한다. 미인정 유형은 지금처럼 자동 1OUT이 붙는다(vioAfterExceptionWrite_).
  *   보기: exception.view(출결 담당·관리자 전체, 학사 교사 담당 학생, 담임 자기 반) / 저장·취소: exception.confirm(관리자·출결 담당).
- *   여러 칸을 한 번에 저장한다: 락 하나, bulkAppend_ 한 번(새 결과 행), bulkUpdateRecords_ 한 번(바뀌는 행 취소), 자동 OUT 맞추기 한 번, 메일은 받는 사람마다 한 통(결정 2).
+ *   여러 칸을 한 번에 저장한다: 락 하나, bulkAppend_ 한 번(새 결과 행), bulkUpdateRecords_ 한 번(바뀌는 행 취소), 자동 OUT 맞추기 한 번, 메일은 받는 사람(이메일)마다 한 통(결정 2).
  * 총괄 답(2026-11-17) ASSUMPTION:
  *   - 묶음: 같은 학생·같은 날 = 한 묶음(group_id 하나, 하루 1OUT), 날짜가 다르면 다른 묶음.
  *   - 대체: 결과는 그날 블록이 겹치는 기존 특이사항(사전 특이사항·이전 결과)을 대체한다 — 그 날짜 행만 취소 + 결과 새 행(cancel_reason '결과 정리에서 바꿈'). 겹치지 않는 부분 특이사항(학원 20:00-22:00 등)은 둘 다 둔다.
@@ -67,19 +67,24 @@ function resValidateCell_(cell, ctx) {
   return { errors: errors, rec: { type: type, blocks: parsed.errors.length ? '' : (parsed.all ? 'ALL' : formatBlockSpec_(parsed)), reason: reason, kind: kind } };
 }
 
-/** 받는 사람마다 한 통으로 모은다(순수): mails = [{to:[이메일], body}] → [{to, body}] — 같은 받는 사람 목록(정렬)끼리 본문을 줄바꿈 두 번으로 잇고 머리 줄 한 줄 */
+/**
+ * 받는 사람마다 한 통으로 모은다(순수, 총괄 결정): mails = [{to:[이메일], body}] → [{to:[이메일 하나], body}].
+ * 이메일(사람) 단위로 그 사람이 받을 본문을 모두 모은다 — 두 반 학생을 맡은 담당교사도 저장 한 번에 한 통. 이메일은 대소문자·앞뒤 공백을 무시하고 같은 본문은 한 번만 넣는다. 순서는 처음 나온 차례.
+ */
 function resMergeMails_(mails) {
   var by = {}, order = [];
   (mails || []).forEach(function (m) {
-    var to = (m.to || []).slice().sort();
-    var key = to.join(',');
-    if (!key) return;
-    if (!by[key]) { by[key] = { to: to, bodies: [] }; order.push(key); }
-    by[key].bodies.push(String(m.body || ''));
+    (m.to || []).forEach(function (raw) {
+      var e = String(raw || '').trim().toLowerCase();
+      if (!e) return;
+      if (!by[e]) { by[e] = []; order.push(e); }
+      var body = String(m.body || '');
+      if (by[e].indexOf(body) < 0) by[e].push(body);
+    });
   });
-  return order.map(function (k) {
-    var g = by[k];
-    return { to: g.to, body: (g.bodies.length > 1 ? '결과 정리로 OUT ' + g.bodies.length + '건이 자동 기록되었습니다.\n\n' : '') + g.bodies.join('\n\n') };
+  return order.map(function (e) {
+    var bodies = by[e];
+    return { to: [e], body: (bodies.length > 1 ? '결과 정리로 OUT ' + bodies.length + '건이 자동 기록되었습니다.\n\n' : '') + bodies.join('\n\n') };
   });
 }
 

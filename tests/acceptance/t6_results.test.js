@@ -92,7 +92,7 @@ test('한 달 결과(2027-03, 고정 seed) 주 단위 저장: 학생별 누적 �
   DECISION81(env, h, before);
 });
 
-test('같은 학생·같은 날 미인정 지각 + 미인정 조퇴 = 하루 1OUT(한 묶음), 저장 한 번에 메일은 받는 사람마다 한 통(같은 반 여러 명을 맡은 담당교사)', () => {
+test('같은 학생·같은 날 미인정 지각 + 미인정 조퇴 = 하루 1OUT(한 묶음), 저장 한 번에 메일은 받는 사람마다 한 통(두 반 학생을 맡은 담당교사)', () => {
   const env = seededEnv();
   const h = helpers(env);
   const D = '2027-03-24';   // 수
@@ -100,17 +100,22 @@ test('같은 학생·같은 날 미인정 지각 + 미인정 조퇴 = 하루 1OU
   const sById = Object.fromEntries(env.rows('students').map((s) => [s.id, s]));
   const pool = env.rows('enrollments').filter((e) => e.term_id === h.term.id).map((e) => e.student_id).filter((sid) => h.on(sid, D) === '입실' && !live.includes(sid));
   const classOf = (sid) => sById[sid].grade + '-' + sById[sid].class_no;
-  // ASSUMPTION(총괄 확인 중): 지금 resMergeMails_는 '받는 사람 목록'이 같은 것끼리 묶어서, 여러 반 학생을 맡은 담당교사는 반마다 한 통(담임이 다름)을 받는다.
-  //   그래서 여기서는 같은 반 4명으로 확인한다. 반이 달라도 한 통이 되게 바뀌면 이 줄을 두 반으로 바꾼다.
-  const big = pool.map(classOf).sort((a, b) => pool.filter((x) => classOf(x) === b).length - pool.filter((x) => classOf(x) === a).length)[0];
-  const ids = pool.filter((sid) => classOf(sid) === big).slice(0, 4);
-  assert.ok(ids.length >= 3, '같은 반 ' + ids.length + '명');
+  // 두 반 학생을 한 담당교사가 맡는 경우도 받는 사람마다 한 통(총괄 결정)
+  const classes = [...new Set(pool.map(classOf))].sort((a, b) => pool.filter((x) => classOf(x) === b).length - pool.filter((x) => classOf(x) === a).length);
+  const ids = classes.slice(0, 2).flatMap((c) => pool.filter((sid) => classOf(sid) === c).slice(0, 2));
+  assert.ok(classes.length >= 2 && ids.length >= 3, '두 반 ' + ids.map(classOf).join());
+  assert.ok(new Set(ids.map(classOf)).size === 2, '두 반에 걸친다');
   // 메일은 example.com으로 보내지 않으므로(AutoOuts.gs) 이 4명만 보낼 수 있는 가짜 주소의 담당교사로 바꾼다
   const T = 'hall.mail@fake-school.test';
   env.asOwner((c) => c.addUser(T, '시험 메일 담당', 'hall_teacher'));
   const ss = env.spreadsheets[env.scriptProps.DB_ID]._sheets.find((x) => x._name === 'enrollments');
   const col = ss._data[0].indexOf('teacher_email'), sc = ss._data[0].indexOf('student_id'), tc = ss._data[0].indexOf('term_id');
   ss._data.forEach((r) => { if (r[tc] === h.term.id && ids.includes(r[sc])) r[col] = T; });
+  // 반마다 다른 담임(보낼 수 있는 가짜 주소) — 받는 사람 목록이 [담당교사+담임1]·[담당교사+담임2]로 달라도 담당교사는 한 통
+  classes.slice(0, 2).forEach((c, i) => {
+    const H = 'homeroom' + i + '@fake-school.test';
+    env.asOwner((cx) => { cx.addUser(H, '시험 담임' + i, 'homeroom'); cx.updateRecord_('users', env.rows('users').find((u) => u.email === H).id, { homeroom_class: c }, 'test.admin@example.com'); });
+  });
   const outs0 = h.autoOuts().length, mail0 = env.mail.length;
   const cells = [{ studentId: ids[0], date: D, kind: '지각', type: '미인정지각' }, { studentId: ids[0], date: D, kind: '조퇴', type: '미인정조퇴' }]
     .concat(ids.slice(1).map((sid) => ({ studentId: sid, date: D, kind: '지각', type: '미인정지각' })));
@@ -122,7 +127,10 @@ test('같은 학생·같은 날 미인정 지각 + 미인정 조퇴 = 하루 1OU
   assert.strictEqual(new Set(groups).size, 1, '한 묶음');
   const mails = env.mail.slice(mail0);
   const toT = mails.filter((m) => JSON.stringify(m).toLowerCase().includes(T));
-  assert.strictEqual(toT.length, 1, '담당교사에게 한 통: ' + JSON.stringify(mails).slice(0, 600));
+  assert.strictEqual(toT.length, 1, '두 반을 맡은 담당교사에게 한 통: ' + JSON.stringify(mails).slice(0, 600));
+  const perPerson = {};
+  mails.forEach((m) => [].concat(m.to || m.recipient || []).forEach((t) => { perPerson[String(t).toLowerCase()] = (perPerson[String(t).toLowerCase()] || 0) + 1; }));
+  assert.ok(Object.values(perPerson).every((n) => n === 1), '누구에게도 한 통을 넘지 않는다: ' + JSON.stringify(perPerson));
 });
 
 test('대체: 결과 블록과 겹치는 사전 특이사항만 "결과 정리에서 바꿈"으로 취소, 겹치지 않으면 둘 다 남는다', () => {
