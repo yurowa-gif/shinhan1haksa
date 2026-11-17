@@ -81,12 +81,10 @@ test('한 달 결과(2027-03, 고정 seed) 주 단위 저장: 학생별 누적 �
   assert.strictEqual(h.autoOuts().length - outsBefore, unexcused, '미인정 결과 = 새 자동 1OUT');
   const summary = Object.fromEntries(h.call(ADMIN, 'listOuts', { scope: 'term' }).summary.map((s) => [s.studentId, s]));
   gen.twoOutIds.forEach((sid) => assert.ok(summary[sid] && summary[sid].count >= 2, sid + ' 2OUT'));
-  // 학습량: 공부한 시간 + 빠진 시간 = 운영 시간(학생마다, 합계도)
-  //   단, 23:00 종료 학생은 23:00 뒤가 공부도 빠짐도 아니다(AttendanceRules END) — 그 몫(gap)은 0 이상, 시간 단위
+  // 학습량: 공부한 시간 + 빠진 시간 = 전체(학생마다)
+  //   전체 = 그 학생이 있어야 하는 시간(23:00 종료면 23:00까지, #225)
   const sumMissed = (m) => Object.values(m).reduce((a, b) => a + b, 0);
-  const gap = (t) => t['학습량'].minutes - t['학습량'].studiedMinutes - sumMissed(t['학습량'].missedMinutes);
-  Object.values(after).forEach((t) => assert.ok(gap(t) >= 0 && gap(t) % 60 === 0, '공부 + 빠짐 + 23:00 뒤 = 운영 시간 ' + gap(t)));
-  assert.ok(Object.values(after).filter((t) => gap(t) === 0).length > students.length / 2, '23:00 종료가 아닌 대부분은 공부 + 빠짐 = 운영 시간');
+  Object.entries(after).forEach(([sid, t]) => assert.strictEqual(t['학습량'].studiedMinutes + sumMissed(t['학습량'].missedMinutes), t['학습량'].minutes, '공부 + 빠짐 = 전체 ' + sid));
   assert.ok(Object.values(after).every((t) => t['학습량'].days > 0));
 
   DECISION81(env, h, before);
