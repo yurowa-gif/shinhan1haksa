@@ -276,8 +276,9 @@ function attResultChoices_(types) {
  *   결석이 있으면 그날은 결석 하나만(지각·조퇴는 세지 않음). 지각과 조퇴는 같은 날 둘 다 셀 수 있다. 한 종류에 인정·미인정 행이 섞이면 미인정
  *   (결정 81 총괄 가정 — 엄한 쪽). 순서: 결석·지각·조퇴.
  * - study(학습량, 선생님 지시): 그날 블록마다 출석부 칸 판정으로 — 사전 특이사항(EXC)·고정 일정 '학'·'가'(FIXED) 블록은 빠진 블록
- *   (블록 전체, ASSUMPTION: 블록 일부만 덮어도 그 블록은 빠짐), 23:00 종료(END) 블록은 opts.endTime(기본 23:00)까지만 공부, 빈칸은 블록 전체 공부.
- *   minutes = 블록 분 합, studiedMinutes = 공부한 분 합. missed에 빠진 블록과 칸 글자(약어·'학'·'가')를 남긴다.
+ *   (블록 전체, ASSUMPTION: 블록 일부만 덮어도 그 블록은 빠짐), 빈칸·23:00 종료(END)는 공부.
+ *   minutes = 그 학생이 있어야 하는 시간(총괄 결정): 23:00 종료 학생의 마지막 블록은 opts.endTime(기본 23:00)까지만 — 빠진 블록이어도 같다.
+ *   그래서 늘 studiedMinutes + missed 분 합 = minutes. missed에 빠진 블록과 칸 글자(약어·'학'·'가')를 남긴다.
  * - 운영 안 하는 날은 marks·results가 비고 study는 0, 그날 확정 특이사항이 있으면 경고(결정 81 총괄 가정: 세지 않는다).
  */
 function attGridCell_(plan, s, opts) {
@@ -304,13 +305,18 @@ function attGridCell_(plan, s, opts) {
     if (r.types.indexOf(ruleStr_(e.type)) < 0) r.types.push(ruleStr_(e.type));
   });
   out.results = by['결석'] ? [by['결석']] : ['지각', '조퇴'].filter(function (k) { return by[k]; }).map(function (k) { return by[k]; });
-  var endMin = hmToMin_(hmNorm_((opts || {}).endTime) || '23:00'), st = out.study;
-  (plan.blocks || []).forEach(function (b, i) {
-    var bs = hmToMin_(hmNorm_(b.start)), be = hmToMin_(hmNorm_(b.end)), len = be - bs, m = out.marks[i] || {};
+  // 학습량의 전체 = 그 학생이 있어야 하는 시간(총괄 결정): 23:00 종료 학생의 마지막 블록은 종료 시각까지만(특이사항·고정 일정으로 빠져도 같다)
+  // — 그래서 늘 studiedMinutes + 빠진 분 = minutes. 23:00 종료 여부는 특이사항·고정 일정을 뺀 칸 판정(resolveCell_ END)으로 본다
+  var endMin = hmToMin_(hmNorm_((opts || {}).endTime) || '23:00'), st = out.study, blocks = plan.blocks || [];
+  var weekdayKo = ymdWeekdayKo_(date);
+  blocks.forEach(function (b, i) {
+    var bs = hmToMin_(hmNorm_(b.start)), be = hmToMin_(hmNorm_(b.end)), m = out.marks[i] || {};
+    var ends = resolveCell_({ block: b, isLastBlock: i === blocks.length - 1, dayType: plan.dayType, weekdayKo: weekdayKo, dayEnd: plan.end,
+      exceptions: [], fixedRows: [], endType: s.endType, opts: opts }).code === 'END';
+    var len = ends ? Math.max(0, Math.min(be, endMin) - bs) : be - bs;
     st.blocks++; st.minutes += len;
     if (m.code === 'EXC' || m.code === 'FIXED') { st.missed.push({ seq: b.seq, code: m.code, text: m.text, minutes: len }); return; }
-    st.studiedBlocks++;
-    st.studiedMinutes += m.code === 'END' ? Math.max(0, Math.min(be, endMin) - bs) : len;
+    st.studiedBlocks++; st.studiedMinutes += len;
   });
   return out;
 }
