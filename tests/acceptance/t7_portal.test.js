@@ -90,3 +90,17 @@ test('T7 감시 도구 자체: 다른 학생 이름·학번·id·전화·표시�
   const leaks = portalLeaks(env, bad, acc, { markers: ['[T7-CN-A]'] });
   assert.strictEqual(leaks.length, bad.length, leaks.join('\n'));
 });
+
+test('T7 권한 키 행렬(facility.*, S7-0): 쓰기는 학생 본인 것만, 보기·누적은 학생·학부모 모두 거부 — 학부모는 자녀 것도 대신 쓰지 못한다', () => {
+  const env = seededEnv();
+  const acc = portalAccounts(env);
+  const can = (email, action, ctx) => { try { env.as(email, (c) => c.requirePermission_(action, ctx)); return true; } catch (e) { if (e.message !== '권한이 없습니다.') throw e; return false; } };
+  const targets = [acc.A, acc.B, acc.C, acc.outsider];
+  const got = {}, want = {};
+  for (const x of acc.all) {
+    const mine = visibleIds(acc, x.email), isStudent = acc.students.includes(x);
+    got[x.email] = targets.map((t) => can(x.email, 'facility.write', { studentId: t.id })).concat([can(x.email, 'facility.view', {}), can(x.email, 'facility.report', {})]);
+    want[x.email] = targets.map((t) => isStudent && mine.includes(t.id)).concat([false, false]);
+  }
+  assert.deepStrictEqual(got, want, '[write A, write B, write C, write 4번, view, report]');
+});
