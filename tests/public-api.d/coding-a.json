@@ -195,6 +195,30 @@
     "getResultRecords": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getFacilityForm": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveFacilityLog": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "cancelFacilityLog": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getFacilityDay": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getFacilityReport": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "searchFacilityStudents": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }

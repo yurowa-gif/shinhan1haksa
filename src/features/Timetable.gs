@@ -5,10 +5,9 @@
  * - 쓰기는 withLock_ 안에서 행을 다시 읽고 ttTransition_으로 다시 판정한다(그 사이 상태가 바뀌었으면 거부). 지우지 않는다(취소 = status '취소').
  * - 출석부에 반영: 확정되면 effectiveFixedRows_가 그 달부터 읽는다(확정 전에는 앞 달 확정 시간표 유지 — R23).
  * ASSUMPTION: 돌려보낸 사람·사유(교사 [돌려보내기]·부모 [동의하지 않습니다])는 새 열이 없어 audit_log(action 'timetable:return')에 남기고 학생 화면이 거기서 읽는다. 선생님 답에 따라 열로 옮길 수 있다.
- * ASSUMPTION: 평일 종료 유형(23:00/23:50)은 학생이 고른 값을 audit_log('timetable:submit')에 두었다가 교사가 [확인]할 때 enrollments.end_type을 바꾼다(총괄 결정, 새 열 없음). 바로 지금 달 출석부에도 적용된다.
+ * 평일 종료 유형(23:00/23:50)은 F9 제출에 넣지 않는다(총괄 결정): 시간표는 다음 달 것인데 enrollments.end_type은 지금 달 출석부를 바꾸므로, 교사가 지금처럼 학생 정보 화면에서 고친다.
  * 돌려보내기는 R23의 parentReturn(학부모, 제출 단계, 사유 선택)·teacherReturn(담당교사, 동의 단계, 사유 필수)을 쓴다. 지난달 가져오기는 ttCopyPrevious_(앞 달 확정 시간표).
  */
-var TTC_END_TYPES = ['23:00', '23:50'];
 var TTC_REASON_MAX = 100;
 var TTC_RETURN_MIN = 2;
 
@@ -76,11 +75,6 @@ function ttcReturnInfo_(sid, month, status) {
   return d ? { by: d.by === 'parent' ? 'parent' : 'teacher', byName: String(d.n || ''), reason: String(d.r || '') } : { by: 'teacher', byName: '', reason: '' };
 }
 
-function ttcEnrollment_(sid, month) {
-  var term = termOnDate_(month + '-01') || getCurrentTerm_();
-  return term ? readAll_('enrollments').filter(function (e) { return e.term_id === term.id && e.student_id === sid; })[0] || null : null;
-}
-
 function ttcStudent_(s) { return { id: s.id, name: s.name, grade: +s.grade, classNo: s.class_no, number: s.number }; }
 
 function ttcDateKo_(iso) { return iso && ymdIsValid_(String(iso).slice(0, 10)) ? foodDateKo_(String(iso).slice(0, 10)) : ''; }
@@ -97,10 +91,7 @@ function ttcView_(rows, sid, month) {
   var sub = live.reduce(function (a, r) { return a || ruleStr_(r.submitted_at); }, '');
   var agr = live.reduce(function (a, r) { return a || ruleStr_(r.parent_agreed_at); }, '');
   var con = live.reduce(function (a, r) { return a || ruleStr_(r.teacher_confirmed_at); }, '');
-  var sd = ttcLastAudit_('timetable:submit', sid, month);
-  var enr = ttcEnrollment_(sid, month);
   return { month: month, monthKo: ttcMonthKo_(month), status: st.status, entries: ttcEntries_(rows, sid, month), submittedKo: ttcDateKo_(sub), agreedKo: ttcDateKo_(agr), confirmedKo: ttcDateKo_(con),
-    endType: sd && sd.e ? sd.e : (enr && enr.end_type ? String(enr.end_type) : ''), currentEndType: enr && enr.end_type ? String(enr.end_type) : '',
     returned: ttcReturnInfo_(sid, month, st.status), slots: ttcSlots_(month) };
 }
 
@@ -143,7 +134,7 @@ function getPreviousTimetable(month) {
 }
 
 /**
- * 시간표 제출·다시 제출(학생 본인만). input = {month, entries:[{weekday, blocks, code}], endType?}. 제출 기간·중복·상태는 R23이 판정한다.
+ * 시간표 제출·다시 제출(학생 본인만). input = {month, entries:[{weekday, blocks, code}]}. 제출 기간·중복·상태는 R23이 판정한다.
  * → {ok:true, status} | {ok:false, errors}
  */
 function submitTimetable(input) {
@@ -153,14 +144,11 @@ function submitTimetable(input) {
   input = input || {};
   var month = String(input.month || '');
   if (!ttcMonthOk_(month)) return ttcFail_('적용월을 확인할 수 없습니다. 새로 고친 뒤 다시 해 주세요.', 'month');
-  var endType = String(input.endType || '').trim();
-  if (endType && TTC_END_TYPES.indexOf(endType) < 0) return ttcFail_('평일 자습 끝나는 시각은 23:00 또는 23:50 중에서 골라 주세요.', 'endType');
   return withLock_(function () {
     var d = ttcLoad_();
     var plan = ttTransition_(d.rows, sid, month, 'submit', { now: nowIso_(), entries: Array.isArray(input.entries) ? input.entries : [], window: ttcCfg_() });
     if (!plan.ok) return ttcFail_(plan.reason);
     ttcApply_(plan, user.email);
-    ttcSaveAudit_('timetable:submit', user, { s: sid, m: month, e: endType });
     return { ok: true, status: '제출', warnings: plan.warnings };
   });
 }
@@ -258,21 +246,18 @@ function getTimetableEntry(studentId, month) {
 }
 
 /**
- * 담당교사 확인(담당 학생·관리자). 학부모 동의가 있어야 한다(R23). endType을 주면 enrollments.end_type을 바꾼다(ASSUMPTION: 바로 적용).
+ * 담당교사 확인(담당 학생·관리자). 학부모 동의가 있어야 한다(R23). 종료 시각은 건드리지 않는다.
  * → {ok:true} | {ok:false, errors}
  */
-function confirmTimetable(studentId, month, endType) {
+function confirmTimetable(studentId, month) {
   var user = requirePermission_('timetable.confirm', { studentId: studentId });
-  var sid = String(studentId || ''), et = String(endType || '').trim();
+  var sid = String(studentId || '');
   if (!ttcMonthOk_(month)) return ttcFail_('적용월을 확인할 수 없습니다.');
-  if (et && TTC_END_TYPES.indexOf(et) < 0) return ttcFail_('평일 자습 끝나는 시각은 23:00 또는 23:50 중에서 골라 주세요.', 'endType');
   return withLock_(function () {
     var d = ttcLoad_();
     var plan = ttTransition_(d.rows, sid, String(month), 'confirm', { now: nowIso_() });
     if (!plan.ok) return ttcFail_(plan.reason);
-    var enr = et ? ttcEnrollment_(sid, String(month)) : null;
     ttcApply_(plan, user.email);
-    if (enr && String(enr.end_type || '') !== et) updateRecord_('enrollments', enr.id, { end_type: et }, user.email);
     return { ok: true };
   });
 }

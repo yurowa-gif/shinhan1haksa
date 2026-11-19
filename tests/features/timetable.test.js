@@ -26,7 +26,7 @@ function makeEnv() {
 }
 const call = (x, who, fn, ...a) => plain(x.env.call(who, fn, ...a));
 const ENTRIES = [{ weekday: '월', blocks: '18:30-20:00', code: '학' }, { weekday: '토', blocks: '09:00-12:00', code: '가' }];
-const submit = (x, o) => call(x, STUDENT, 'submitTimetable', Object.assign({ month: MONTH, entries: ENTRIES, endType: '23:00' }, o || {}));
+const submit = (x, o) => call(x, STUDENT, 'submitTimetable', Object.assign({ month: MONTH, entries: ENTRIES }, o || {}));
 const status = (x) => (x.live()[0] || {}).status || '';
 
 test('권한표: 시간표 화면 함수는 역할·학생 범위를 서버가 정한다(학생=본인, 학부모=연결된 자녀, 교사=담당 학생, 관리자) — 나머지는 denied 기록', () => {
@@ -54,7 +54,7 @@ test('권한표: 시간표 화면 함수는 역할·학생 범위를 서버가 �
   assert.strictEqual(x.rows().length, 0, '거부된 호출은 행을 만들지 않는다');
 });
 
-test('학생 제출: 제출 기간에 낸 표가 행으로 남고(학·가, 정규 표기), 종료 시각·상태가 화면에 보인다, 응답에 이메일 없음', () => {
+test('학생 제출: 제출 기간에 낸 표가 행으로 남고(학·가, 정규 표기), 상태가 화면에 보인다, 응답에 이메일 없음', () => {
   const x = makeEnv();
   const c0 = call(x, STUDENT, 'getTimetableContext');
   assert.deepStrictEqual([c0.ok, c0.window.open, c0.window.month, c0.view.status, c0.hasPrev], [true, true, MONTH, '', false]);
@@ -63,17 +63,17 @@ test('학생 제출: 제출 기간에 낸 표가 행으로 남고(학·가, 정�
   assert.strictEqual(r.ok, true, JSON.stringify(r));
   assert.deepStrictEqual(x.live().map((q) => [q.weekday, q.blocks, q.code, q.status]).sort(), [['월', '18:30-20:00', '학', '제출'], ['토', '09:00-12:00', '가', '제출']]);
   const c1 = call(x, STUDENT, 'getTimetableContext');
-  assert.deepStrictEqual([c1.view.status, c1.view.endType, c1.view.entries.length, !!c1.view.submittedKo], ['제출', '23:00', 2, true]);
+  assert.deepStrictEqual([c1.view.status, c1.view.entries.length, !!c1.view.submittedKo], ['제출', 2, true]);
+  assert.ok(!('endType' in c1.view), '종료 시각은 F9에서 다루지 않는다');
   assert.ok(!/@/.test(textOf(c1)), '이메일 없음');
 });
 
-test('제출 거부: 기간 밖·다른 달·겹치는 칸·잘못된 종료 시각 — 행이 늘지 않는다. 다시 내면 옛 행은 취소로 남고 동의부터 다시', () => {
+test('제출 거부: 기간 밖·다른 달·겹치는 칸 — 행이 늘지 않는다. 다시 내면 옛 행은 취소로 남고 동의부터 다시', () => {
   const x = makeEnv();
   const bad = (o) => { const r = submit(x, o); assert.strictEqual(r.ok, false, JSON.stringify(o)); return r.errors[0].message; };
   bad({ month: '2027-05' });
   bad({ entries: [{ weekday: '월', blocks: '18:30-20:00', code: '학' }, { weekday: '월', blocks: '19:00-21:00', code: '가' }] });
   bad({ entries: [{ weekday: '월', blocks: '18:30-20:00', code: '없음' }] });
-  assert.strictEqual(bad({ endType: '22:00' }).includes('23:00'), true);
   bad({ month: 'x' });
   assert.strictEqual(x.rows().length, 0);
   x.env.setNow(CLOSED);
@@ -112,20 +112,19 @@ test('학부모 동의: 연결된 자녀만, 제출일 때만(두 번째는 거�
   assert.strictEqual(status(x), '동의');
 });
 
-test('담당교사 확인: 동의 뒤에만, 확인하면 확정 + 종료 유형 반영 + 출석부가 그 달부터 읽는다. 다시 확인·동의 없이 확인은 거부', () => {
+test('담당교사 확인: 동의 뒤에만, 확인하면 확정(종료 시각은 그대로) + 출석부가 그 달부터 읽는다. 다시 확인·동의 없이 확인은 거부', () => {
   const x = makeEnv();
   submit(x);
   assert.strictEqual(call(x, x.teacher, 'confirmTimetable', x.me.id, MONTH, '').ok, false, '동의 전');
   call(x, PARENT, 'agreeTimetable', x.me.id, MONTH);
-  assert.strictEqual(call(x, x.teacher, 'confirmTimetable', x.me.id, MONTH, '22:00').ok, false, '잘못된 종료 시각');
   assert.strictEqual(status(x), '동의');
   const e0 = call(x, x.teacher, 'getTimetableEntry', x.me.id, MONTH).view;
-  assert.deepStrictEqual([e0.status, e0.endType, !!e0.agreedKo], ['동의', '23:00', true]);
+  assert.deepStrictEqual([e0.status, !!e0.agreedKo], ['동의', true]);
   const enr = () => x.env.rows('enrollments').find((e) => e.term_id === x.term.id && e.student_id === x.me.id);
-  const want = enr().end_type === '23:50' ? '23:00' : '23:50';
-  assert.strictEqual(call(x, x.teacher, 'confirmTimetable', x.me.id, MONTH, want).ok, true);
+  const endBefore = enr().end_type;
+  assert.strictEqual(call(x, x.teacher, 'confirmTimetable', x.me.id, MONTH).ok, true);
   assert.strictEqual(status(x), '확정');
-  assert.strictEqual(enr().end_type, want, '교사가 확인하면서 고른 종료 유형이 반영된다');
+  assert.strictEqual(enr().end_type, endBefore, '확인해도 지금 달 출석부의 종료 유형은 바뀌지 않는다(교사가 학생 정보 화면에서 고친다)');
   const fixed = x.env.as(ADMIN, (c) => c.effectiveFixedRows_(c.readAll_('fixed_schedules'), x.me.id, '2027-04-05'));
   assert.deepStrictEqual(plain(fixed).map((r) => [r.weekday, r.code]).sort(), [['월', '학'], ['토', '가']], '출석부가 읽는 시간표');
   assert.strictEqual(plain(x.env.as(ADMIN, (c) => c.effectiveFixedRows_(c.readAll_('fixed_schedules'), x.me.id, '2027-03-30'))).length, 0, '시작 전에는 적용 안 됨');

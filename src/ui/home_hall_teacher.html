@@ -149,4 +149,18 @@
         el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=calendar', text: '월별 일정 열기' })])));
     };
   })();
+  /** 시설 일지 카드(C35, F10): 오늘 일지 수와 링크. 학사 교사는 오늘 근무일 때만(서버가 판정), 이름은 없다 */
+  (function () {
+    var base = renderHome;
+    renderHome = function (d, root) {
+      base(d, root);
+      var f = d.facility;
+      if (!f || f.error || !f.onDuty) return;
+      var kids = [el('h2', { text: '시설 일지' }), el('div', { style: 'margin:8px 0' }, [f.count ? UI.statusPill('todo', '오늘 일지 ' + f.count + '건') : UI.statusPill('mute', '오늘 쓴 일지 없음')]),
+        el('div', { class: 'muted', style: 'word-break:keep-all', text: f.isAdmin ? '학생이 쓴 시설 사용 일지와 학생 × 날짜 누적표를 봅니다.' : '오늘 학생들이 말씀드리고 쓴 시설 사용 일지입니다.' }),
+        el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=facilityday', text: '오늘 시설 일지 보기' })];
+      if (f.isAdmin) kids.push(el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=facilityday&tab=stats', text: '누적표 보기' }));
+      root.appendChild(el('div', { class: 'card' }, kids));
+    };
+  })();
 </script>
