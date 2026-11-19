@@ -245,15 +245,15 @@ test('D13 7단계 시안(stage7-screens.js): 화면 이름이 stage7-screens.md 
   const src = css.readFile('design/preview/stage7-screens.js');
   const doc = css.readFile('docs/design/stage7-screens.md');
   const ids = [...src.matchAll(/^def\('([^']+)'/gm)].map((m) => m[1]);
-  assert.ok(ids.length >= 19, '시안 수 ' + ids.length);
+  assert.ok(ids.length >= 23, '시안 수 ' + ids.length);
   ids.forEach((id) => {
     assert.ok(doc.indexOf('`' + id + '`') >= 0, '`' + id + '` 가 문서에 없다');
     assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'docs', 'design', 'stage7-photos', id + '.png')), id + ' 사진이 없다');
   });
   const imgs = [...doc.matchAll(/!\[[^\]]*\]\((stage7-photos\/[^)]+)\)/g)].map((m) => m[1]);
-  assert.ok(imgs.length >= 19, '문서의 사진 수 ' + imgs.length);
+  assert.ok(imgs.length >= 23, '문서의 사진 수 ' + imgs.length);
   imgs.forEach((f) => assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'docs', 'design', f)), f + ' 파일이 없다'));
-  ['미정·가정', '처음 쓰는 사람', '상담은 날짜·교사만', '삭제가 아니라 취소', '번호를 쓴다', '`facility.write`', '`facility.report`', '규칙 8절', '확인 못 한 것'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
+  ['총괄 답', '지난달 시간표 그대로 가져오기', '돌려보낸 사람과 사유', '사유 한 줄', '미정·가정', '처음 쓰는 사람', '상담은 날짜·교사만', '삭제가 아니라 취소', '번호를 쓴다', '`facility.write`', '`facility.report`', '규칙 8절', '확인 못 한 것'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
   // 학생·학부모 시안 화면에는 전화번호·이메일·교사 메모 글자가 없다
   const studentParent = src.slice(src.indexOf('F14 학생 홈'), src.indexOf('F10 시설 사용 일지'));
   assert.ok(!/010-|@example|메모:|전화/.test(studentParent.replace(/\/\*[\s\S]*?\*\//g, '').replace(/note: '[^']*'/g, '')), '학생·학부모 시안에 전화·이메일·메모가 보인다');

@@ -159,7 +159,9 @@ def('timetable-student', 'F9 시간표', '시간표 내기 — 월·종료 시�
   m.appendChild(card('언제부터', [el('div', { style: 'word-break:keep-all', text: '2027년 5월 1일부터 한 달. 4월 30일까지 낼 수 있습니다.' })]));
   m.appendChild(card('평일 자습 끝나는 시각', [UI.segmented({ label: '평일 종료', value: '23:00', options: [{ value: '23:00', label: '23:00' }, { value: '23:50', label: '23:50' }], onchange: function () {} })]));
   m.appendChild(card('학원·집 공부 시간', []));
-  var c = m.lastChild; ttTable(c, TT_VALS, false);
+  var c = m.lastChild;
+  c.appendChild(el('button', { type: 'button', class: 'btn secondary', style: 'margin-bottom:12px', text: '지난달 시간표 그대로 가져오기' }));
+  ttTable(c, TT_VALS, false);
 });
 def('timetable-cell-sheet', 'F9 시간표', '칸을 누르면 — 학·가·비움 고르기(칸 하나씩)', { sheet: true }, function (root) {
   var m = frame(root, { title: '5월 시간표', who: '김가온 학생', bar: [{ text: '닫기', kind: 'secondary' }, { text: '시간표 제출' }] });
@@ -200,6 +202,35 @@ def('timetable-teacher-confirm', 'F9 시간표', '담당교사 확인 시트 —
   var body = el('div', {}, [el('p', { class: 'sheet-lead', text: '3. 김가온 · 5월 시간표' }), el('ul', { class: 'list' }, ['월·수 ①② 학원, 토 ①~③ 집 공부', '평일 자습 23:00에 끝남', '부모님이 4월 27일에 동의함']
     .map(function (t) { return el('li', { text: t }); })), el('div', { class: 'notice info', style: 'word-break:keep-all', text: '확인하면 5월 1일부터 출석부에 학·가가 나옵니다. 그 전까지는 지금 시간표가 그대로 쓰입니다.' })]);
   UI.bottomSheet({ title: '시간표를 확인합니다', content: body, actions: [{ text: '돌려보내기', kind: 'secondary', onclick: function () {} }, { text: '확인', kind: 'primary', onclick: function () {} }] }).open();
+});
+
+def('timetable-import-confirm', 'F9 시간표', '[지난달 시간표 그대로 가져오기] 확인 — 지금 표를 덮어쓴다는 안내, 가져온 뒤 고칠 수 있다', { sheet: true }, function (root) {
+  var m = frame(root, { title: '5월 시간표', who: '김가온 학생', bar: [{ text: '닫기', kind: 'secondary' }, { text: '시간표 제출' }] });
+  m.appendChild(card('학원·집 공부 시간', []));
+  ttTable(m.lastChild, {}, false);
+  UI.confirmSheet({ title: '지난달 시간표를 가져옵니다', lead: '4월 시간표 그대로', lines: ['월·수 ①② 학원, 토 ①~③ 집 공부, 평일 자습 23:00에 끝남', '지금 표에 적은 것은 이 시간표로 바뀝니다.', '가져온 뒤에도 칸을 눌러 고칠 수 있고, [시간표 제출]을 눌러야 냅니다.'], confirmText: '가져오기', onconfirm: function () {} });
+});
+function ttReturned(m, by, why) {
+  m.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: by + ' 시간표를 돌려보냈습니다. 사유: ' + why + ' 아래 표를 고쳐서 다시 내 주세요.' }));
+  m.appendChild(card('언제부터', [el('div', { style: 'word-break:keep-all', text: '2027년 5월 1일부터 한 달. 4월 30일까지 낼 수 있습니다.' })]));
+  m.appendChild(card('평일 자습 끝나는 시각', [UI.segmented({ label: '평일 종료', value: '23:00', options: [{ value: '23:00', label: '23:00' }, { value: '23:50', label: '23:50' }], onchange: function () {} })]));
+  m.appendChild(card('학원·집 공부 시간', []));
+  ttTable(m.lastChild, TT_VALS, false);
+}
+def('timetable-returned', 'F9 시간표', '돌려보내진 시간표(교사) — 맨 위에 돌려보낸 사람·사유, 아래에서 고쳐서 다시 내기', {}, function (root) {
+  var m = frame(root, { title: '5월 시간표', who: '김가온 학생', bar: [{ text: '닫기', kind: 'secondary' }, { text: '고쳐서 다시 내기' }], note: '시안 · 결정(총괄): 돌려보낸 사람과 사유를 맨 위에, 그 아래에서 고쳐서 다시 낸다. 경고 상자는 한 화면에 이것 하나(규칙 8절). 다시 내면 부모 동의부터 다시 시작한다(R23 확인 필요).' });
+  ttReturned(m, '담당 박선생님이', '"토요일 ③은 집이 아니라 학원이라고 부모님이 알려 주셨습니다."');
+});
+def('timetable-returned-parent', 'F9 시간표', '돌려보내진 시간표(학부모) — 돌려보낸 사람이 부모님일 때 같은 모양', {}, function (root) {
+  var m = frame(root, { title: '5월 시간표', who: '김가온 학생', bar: [{ text: '닫기', kind: 'secondary' }, { text: '고쳐서 다시 내기' }], note: '시안 · 부모님이 [동의하지 않습니다]를 눌러 돌아온 경우. 사유를 적지 않으셨으면 사유 문장을 빼고 "부모님이 시간표를 돌려보냈습니다. 아래 표를 고쳐서 다시 내 주세요."로 쓴다.' });
+  ttReturned(m, '부모님이', '"주말 시간을 다시 정해 주세요."');
+});
+def('timetable-parent-decline', 'F9 시간표', '학부모 [동의하지 않습니다] — 사유 한 줄(선택), 학생에게 "돌려보냄"으로 돌아간다', { sheet: true }, function (root) {
+  var m = frame(root, { title: '시간표 동의', who: '김학부모', tabs: [{ t: '김가온', on: true }, { t: '김나래' }], bar: [{ text: '동의하지 않습니다', kind: 'secondary' }, { text: '동의합니다' }] });
+  m.appendChild(card('김가온 학생 · 5월 시간표', [el('div', { style: 'word-break:keep-all', text: '5월 1일부터 한 달 동안의 학원·집 공부 시간입니다.' })]));
+  var f = UI.field('사유(선택)', el('input', { type: 'text', maxlength: '100', value: '주말 시간을 다시 정해 주세요.' }), { hint: '한 줄로 적으면 학생이 보고 고칩니다. 적지 않아도 됩니다.' });
+  var body = el('div', {}, [el('p', { style: 'word-break:keep-all', text: '학생에게 시간표가 "돌려보냄"으로 돌아갑니다. 학생이 고쳐서 다시 내면 다시 동의를 부탁드립니다.' }), f]);
+  UI.bottomSheet({ title: '동의하지 않습니다', content: body, actions: [{ text: '돌아가기', kind: 'secondary', onclick: function () {} }, { text: '학생에게 돌려보내기', kind: 'danger', onclick: function () {} }] }).open();
 });
 
 /* ═════════ 실행 ═════════ */
