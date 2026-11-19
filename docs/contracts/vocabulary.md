@@ -143,7 +143,7 @@ Apps Script는 같은 전역 이름을 경고 없이 덮는다. 새 전역 이�
 | `attendance.legend` | 글자 | (아직 쓰지 않음 — 범례는 PRD F2 기본값) | — | 시트 |
 | `print.title` | 글자 | `sheetSettings_` → 출석부 머리말 | `신한학사 출석부` | 시트 |
 | `print.vacant_label` | 글자 | `sheetSettings_` → 빈 좌석 표기 | `공석` | 시트 |
-| `timetable.submit_start_day` · `timetable.submit_end_day` | 날짜 숫자 · 숫자 또는 `last` | (아직 쓰지 않음 — F9 시간표 제출 기간) | `25` · `last` | 시트 |
+| `timetable.submit_start_day` · `timetable.submit_end_day` | 날짜 숫자 · 숫자 또는 `last` | `ttSubmitWindow_`(F9 시간표 제출 기간, R23 — 화면은 C37) | `25` · `last` | 시트 |
 | `counsel.types` | 유형 이름 쉼표 목록(`2OUT 학부모 면담`과 겹치는 이름은 무시) | CounselLog.gs `cnlTypes_`(상담일지 유형 칩, C32) | `학업,생활,진로,건강,가정,기타` | 시트 |
 | `out.instant_rule_ids` | violation_rules `id` 쉼표 목록 | Outs.gs `vioInstantIds_` → `outInstantNext_`·`vioOutOpts_`(결정 69·78) | 즉시 퇴실 항목 없음 | **화면**(OUT 항목 설정, `setOutInstantRule` — 지정 이력 `OUT_INSTANT_SINCE`와 함께 바뀌므로 시트로 고치지 않는다) |
 
