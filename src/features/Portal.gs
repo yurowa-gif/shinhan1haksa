@@ -147,7 +147,7 @@ function getPortalStudent(studentId, month) {
   var own = portalWho_().ownStudentIds.indexOf(sid) >= 0;   // 본인 판정도 신원 한 곳(portalWho_)에서
   var res = { viewer: own ? 'student' : 'parent', today: today, term: term ? { name: term.name } : null, student: ptlStudentOne_(student),
     teacher: ptlTeacherName_(term, sid), outs: ptlOuts_(term, sid), exceptions: ptlExceptions_(term, sid, today), seat: ptlSeat_(term, sid, today), room: ptlRoom_(term, sid),
-    status: ptlStatus_(sid, today), pending: ptlPending_(sid, today), upcoming: ptlUpcoming_(today, 3), month: ptlMonth_(m) };
+    todo: ttcTodo_(sid, own, today), status: ptlStatus_(sid, today), pending: ptlPending_(sid, today), upcoming: ptlUpcoming_(today, 3), month: ptlMonth_(m) };
   if (!own) res.counsel = ptlCounsel_(sid);
   return res;
 }

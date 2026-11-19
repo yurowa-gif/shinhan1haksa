@@ -74,6 +74,15 @@
         el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=counsel', text: '상담일지 열기' })
       ]));
     }
+    if (d.timetable && !d.timetable.error) {
+      var tt = d.timetable;
+      root.appendChild(el('div', { class: 'card' }, [
+        el('h2', { text: tt.monthKo + ' 시간표' }),
+        el('div', { style: 'margin:8px 0' }, [tt.todo ? UI.statusPill('todo', '확인 필요 ' + tt.todo + '명') : UI.statusPill('confirmed', '확인할 시간표 없음')]),
+        el('div', { class: 'muted', style: 'word-break:keep-all', text: (tt.open ? '제출 마감까지 ' + tt.daysLeft + '일(' + tt.endKo + ')' : '지금은 제출 기간이 아닙니다') + ' · 미제출 ' + tt.missing + '명(담당 ' + tt.total + '명)' }),
+        el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=timetable&role=hall_teacher', text: '시간표 열기' })
+      ]));
+    }
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '출석부' }),
       el('div', { class: 'muted', text: '날짜를 고르면 그날 출석부를 미리 보고 PDF로 받습니다.' }),

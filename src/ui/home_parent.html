@@ -9,7 +9,8 @@
       ]));
       return;
     }
-    var tabs = el('nav', { class: 'tabs', 'aria-label': '자녀 전환' });
+    window.PORTAL_APP_URL = d.appUrl;
+    var tabs = el('nav', { class: 'tabs wrap', 'aria-label': '자녀 전환' });
     var body = el('div');
     root.appendChild(tabs);
     root.appendChild(body);
@@ -20,8 +21,10 @@
       renderPortal(body, child.id);   // 본문(OUT·특이사항·급식·상담 여부·월별 일정)은 ui/Portal. 서버(getPortalStudent)가 연결된 자녀인지 확인한다
     }
 
+    // 탭 글자는 이름만(360px에서 잘리지 않게). 같은 이름이 둘 이상이면 학년을 붙인다. 학년·반은 아래 카드에 나온다
+    function tabName(c) { return d.children.filter(function (o) { return o.name === c.name; }).length > 1 ? c.name + ' (' + c.label + ')' : c.name; }
     d.children.forEach(function (c, i) {
-      var b = el('button', { class: 'tab', type: 'button', text: c.name + ' (' + c.label + ')' });
+      var b = el('button', { class: 'tab', type: 'button', text: tabName(c) });
       b.addEventListener('click', function () { show(c, b); });
       tabs.appendChild(b);
       if (i === 0) setTimeout(function () { show(c, b); }, 0);

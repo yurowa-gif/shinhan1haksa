@@ -46,6 +46,16 @@
       var info = s.grade + '학년 ' + s.classNo + '반 ' + s.number + '번' + (st['기숙사'] === '입실' ? ' · 기숙사생' : '') + (p.teacher ? ' · 담당 ' + p.teacher : '');
       root.appendChild(el('div', { class: 'card' }, [el('h2', { text: s.name }), el('div', { class: 'muted', text: info })]));
 
+      var td = p.todo, base = window.PORTAL_APP_URL || '';
+      if (td && td.kind === 'submit') {
+        root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '다음 달 시간표를 내 주세요' }), el('div', { class: 'pt-note', text: td.monthKo + ' 시간표 제출 기간입니다. ' + td.endKo + '까지 내 주세요. 낸 뒤에는 부모님이 동의하고 선생님이 확인합니다.' }),
+          el('a', { class: 'btn', style: 'margin-top:8px', href: base + '?page=timetable&role=student', text: '시간표 내기' })]));
+      } else if (td && td.kind === 'returned') {
+        root.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all' }, [document.createTextNode(td.monthKo + ' 시간표가 돌려보내졌습니다. 고쳐서 ' + td.endKo + '까지 다시 내 주세요. '), el('a', { href: base + '?page=timetable&role=student', text: '시간표 열기' })]));
+      } else if (td && td.kind === 'agree') {
+        root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '시간표에 동의해 주세요' }), el('div', { class: 'pt-note', text: s.name + ' 학생이 ' + td.monthKo + ' 시간표를 냈습니다. 동의하면 담당 선생님이 확인한 뒤 ' + td.monthKo + ' 1일부터 적용됩니다.' }),
+          el('a', { class: 'btn', style: 'margin-top:8px', href: base + '?page=timetable&role=parent&student=' + encodeURIComponent(s.id), text: '시간표 보고 동의하기' })]));
+      }
       var o = p.outs, live = o.items.filter(function (i) { return i.status === '유효'; });
       if (o.total >= 2 && !parent) {
         root.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: '퇴실 대상입니다. OUT이 2번 쌓여서 학교를 나가야 하는 단계입니다. ' + (p.teacher ? '담당 ' + p.teacher + '님' : '담당 선생님') + '이 학부모님과 면담을 한 뒤 관리자가 정합니다. 궁금하면 담당 선생님께 먼저 물어보세요.' }));
