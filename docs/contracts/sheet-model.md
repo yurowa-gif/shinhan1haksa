@@ -163,3 +163,7 @@
 ## 미리보기·테스트용 좌석 배치
 
 실제 좌석표를 받기 전에는 `src/dev/FakeSeats.gs`의 `buildFakeSeatLayout_()`를 쓴다(실제 2025 자리배치도 구조: 1층 20×12 격자에 세로 줄 8개 146석 + 기둥·비상문·창문·통로, SA실은 방마다 5×2에 SA1 8·SA2 9(남), SA3 8·SA4 8·SA5 9·SA6 9(여) — docs/reference/real-layout-2025.md). 가짜 학생은 30명뿐이라 1층은 대부분 공석이다. 레이아웃을 확인하는 미리보기에서는 같은 30명 이름을 반복해서 채우고 새 가짜 인물은 만들지 않는다.
+
+## 참고: 시설 사용 일지 탭(7단계, 출석부 모델과는 별개)
+
+`facility_logs_<기간>`(운영 기간별 탭, 결정 83)은 출석부 모델(`cells[]` 등)에 들어가지 않는다 — 출석부 칸에는 영향이 없고, 시설 사용 기록만 따로 쌓인다. 열: `term_id · student_id · facility · date · start · end · companions · purpose · status · cancel_reason`(+ id·공통 꼬리 열). 값 어휘는 `vocabulary.md`.
