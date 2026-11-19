@@ -28,6 +28,7 @@
 
   <?!= include('ui/Client') ?>
   <?!= include('ui/Components') ?>
+  <? if (role === 'student' || role === 'parent') { ?><?!= include('ui/Portal') ?><? } ?>
   <?!= include(homeFileFor_(role)) ?>
   <script>
     (function () {

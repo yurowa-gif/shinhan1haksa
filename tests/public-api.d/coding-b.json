@@ -167,6 +167,14 @@
     "reviseCounselNote": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getPortalHome": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getPortalStudent": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }

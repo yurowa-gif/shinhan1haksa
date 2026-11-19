@@ -19,6 +19,9 @@ function permissions_() {
   return {
     // 홈 화면: 요청한 역할(context.role)을 실제로 가진 사람만
     'home.view': { roles: ROLES, scope: 'ownRole' },
+    // 포털(F14, C36, 결정 82): 학생은 본인, 학부모는 연결된 자녀만(교사 역할은 이 키로 못 연다). home은 역할만, view는 scope student(isOwn·isGuardian)
+    'portal.home': { roles: ['student', 'parent'] },
+    'portal.view': { roles: ['student', 'parent'], scope: 'student' },
     // 학생 한 명의 기본 정보 보기
     // wideView: 보기 키만 — 학사 교사도 이번 기간 학사생 전체를 본다(결정 45). 쓰기 키·counsel.view에는 달지 않는다
     'student.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom', 'student', 'parent'], scope: 'student', wideView: true },

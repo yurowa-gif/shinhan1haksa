@@ -13,14 +13,7 @@
     function show(child, btn) {
       Array.prototype.forEach.call(tabs.children, function (b) { b.classList.remove('on'); });
       btn.classList.add('on');
-      clear(body).appendChild(el('div', { class: 'loading', text: '불러오는 중…' }));
-      // 서버가 이 자녀에 대한 권한을 다시 확인한다(student.view)
-      call('getStudentSummary', child.id)
-        .then(function (s) {
-          clear(body).appendChild(studentCard(s));
-          body.appendChild(soonCard('OUT · 출결 특이사항 · 급식·기숙사 상태 · 상담 여부', '1단계 이후 차례로 추가합니다.'));
-        })
-        .catch(function (err) { clear(body); showError(body, err); });
+      renderPortal(body, child.id);   // 본문(OUT·특이사항·급식·상담 여부·월별 일정)은 ui/Portal. 서버(getPortalStudent)가 연결된 자녀인지 확인한다
     }
 
     d.children.forEach(function (c, i) {
