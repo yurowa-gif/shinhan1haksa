@@ -104,3 +104,93 @@ test('T7 권한 키 행렬(facility.*, S7-0): 쓰기는 학생 본인 것만, �
   }
   assert.deepStrictEqual(got, want, '[write A, write B, write C, write 4번, view, report]');
 });
+
+test('T7 포털(C36): getPortalStudent는 학생 본인·학부모 자녀만(남은 denied:portal.view), 학부모에게 상담은 날짜·교사만(내용 없음), 학생 화면에는 상담 칸이 없다', () => {
+  const env = seededEnv();
+  const acc = portalAccounts(env);
+  const markers = writeCounsel(env, acc);
+  const a = env.expectAllowed(acc.A.email, 'getPortalStudent', acc.A.id);
+  assert.strictEqual(a.viewer, 'student');
+  assert.ok(!('counsel' in a), '학생 화면에는 상담 칸 없음');
+  env.expectDenied(acc.A.email, 'portal.view', 'getPortalStudent', acc.B.id);
+  env.expectDenied(acc.P1.email, 'portal.view', 'getPortalStudent', acc.C.id);
+  env.expectDenied(acc.P2.email, 'portal.view', 'getPortalStudent', acc.outsider.id);
+  const pa = env.expectAllowed(acc.P1.email, 'getPortalStudent', acc.A.id);
+  const pb = env.expectAllowed(acc.P1.email, 'getPortalStudent', acc.B.id);
+  assert.strictEqual(pa.viewer, 'parent');
+  assert.ok(JSON.stringify(pa.counsel).includes('2027-03-08'), 'A는 학부모 공개 → 날짜가 보인다 ' + JSON.stringify(pa.counsel));
+  assert.ok(!JSON.stringify(pb.counsel || []).includes('2027-03-08'), 'B는 비공개 → 안 보인다');
+  markers.forEach((m) => assert.ok(!JSON.stringify([a, pa, pb]).includes(m), '상담 내용 없음 ' + m));
+});
+
+/** 그날 근무 한 칸을 넣는다(가짜 근무표는 1월뿐) → 근무교사 이메일 */
+function putDuty(env, ymd, email) {
+  env.asOwner((c) => c.bulkAppend_('duty_slots', [{ date: ymd, slot: '단독', end_time: '23:00', original_email: email, actual_email: email, swapped_at: '', swapped_by: '', status: '유효', memo: '가짜 T7' }], ADMIN));
+  return email;
+}
+
+test('T7 시설 일지 흐름(C35): 쓰기(남의 id를 넣어도 본인 행) → 같은 시간 겹침은 확인 뒤에만 → 같은 일지 두 번 거부 → 남의 일지 취소는 denied → 본인 취소(행은 남고 감사)', () => {
+  const env = seededEnv();
+  const acc = portalAccounts(env);
+  const f = env.expectAllowed(acc.A.email, 'getFacilityForm');
+  const facility = f.names[0];
+  // 함께 쓴 학생: 이름으로 찾아 표식(handle)만 받는다
+  const found = env.call(acc.A.email, 'searchFacilityStudents', acc.B.name.slice(0, 2), TODAY);
+  const hit = found.results.find((r) => r.name === acc.B.name);
+  assert.ok(hit, '형제 B를 찾는다 ' + JSON.stringify(found));
+  const base = { facility, date: TODAY, start: '19:00', end: '20:00', companions: [hit.handle], purpose: '가짜 모둠 공부' };
+  const s1 = env.call(acc.A.email, 'saveFacilityLog', Object.assign({ studentId: acc.B.id }, base));   // 남의 id를 넣어도 무시
+  assert.strictEqual(s1.ok, true, JSON.stringify(s1));
+  const tab = 'facility_logs_' + s1.termId.slice(0, 8);
+  const row = () => env.rows(tab).find((r) => r.id === s1.id);
+  assert.deepStrictEqual([row().student_id, row().companions, row().status], [acc.A.id, acc.B.id, '유효'], '본인 행, 함께 쓴 학생은 id로 저장');
+  // C가 같은 시설·겹치는 시간 → 확인 요청, 확인하면 저장(overlapped)
+  const over = Object.assign({}, base, { start: '19:30', end: '20:30', companions: [] });
+  const c1 = env.call(acc.C.email, 'saveFacilityLog', over);
+  assert.deepStrictEqual([c1.ok, c1.needsConfirm], [false, true], JSON.stringify(c1));
+  const c2 = env.call(acc.C.email, 'saveFacilityLog', Object.assign({ confirmOverlap: true }, over));
+  assert.deepStrictEqual([c2.ok, c2.overlapped], [true, true], JSON.stringify(c2));
+  // 같은 일지 두 번
+  assert.strictEqual(env.call(acc.A.email, 'saveFacilityLog', base).ok, false);
+  // 남의 일지 취소: B·학부모는 거부, 행은 그대로
+  env.expectDenied(acc.B.email, 'facility.write', 'cancelFacilityLog', s1.termId, s1.id);
+  env.expectDenied(acc.P1.email, 'facility.write', 'cancelFacilityLog', s1.termId, s1.id);
+  assert.strictEqual(row().status, '유효');
+  // 본인 취소: 행은 남고 취소·감사
+  assert.strictEqual(env.call(acc.A.email, 'cancelFacilityLog', s1.termId, s1.id).ok, true);
+  assert.deepStrictEqual([row().status, !!row().cancel_reason], ['취소', true]);
+  assert.ok(env.rows('audit_log').some((a) => a.row_id === s1.id), '감사 기록');
+});
+
+test('T7 시설 일지 권한·유출: 함께 쓴 학생 찾기 응답은 이름·표식뿐, 그날 일지는 근무교사(오늘)·관리자만, 근무 아닌 교사·학생·학부모는 거부, 누적은 관리자만', () => {
+  const env = seededEnv();
+  const acc = portalAccounts(env);
+  const found = env.call(acc.A.email, 'searchFacilityStudents', acc.C.name.slice(0, 1), TODAY);
+  assert.ok(found.results.length > 0);
+  found.results.forEach((r) => assert.deepStrictEqual(Object.keys(r).sort(), ['handle', 'name']));
+  const text = JSON.stringify(found);
+  const students = env.rows('students');
+  students.forEach((s) => { assert.ok(!text.includes(s.id) && !text.includes(s.student_no) && !text.includes(s.email), '찾기 응답에 id·학번·이메일 없음'); });
+  assert.ok(!/010[-. ]?0000/.test(text));
+  assert.ok(!found.results.some((r) => r.name === acc.A.name), '본인은 빼고');
+  // 학부모·다른 역할은 찾기도 못 한다
+  env.expectDenied(acc.P1.email, 'facility.write', 'searchFacilityStudents', '김', TODAY);
+
+  const s = env.call(acc.A.email, 'saveFacilityLog', { facility: env.call(acc.A.email, 'getFacilityForm').names[0], date: TODAY, start: '19:00', end: '20:00', companions: [], purpose: '가짜' });
+  assert.strictEqual(s.ok, true, JSON.stringify(s));
+  const duty = putDuty(env, TODAY, 'fake.teacher2@example.com');
+  const day = env.expectAllowed(duty, 'getFacilityDay', TODAY);
+  assert.ok(day.ok && JSON.stringify(day).includes(acc.A.name), '근무교사는 오늘 일지를 본다');
+  const yesterday = env.call(duty, 'getFacilityDay', '2027-03-08');
+  assert.strictEqual(yesterday.ok, false, '근무교사도 다른 날은 못 본다');
+  const offDuty = env.rows('users').find((u) => String(u.roles).split(',').includes('hall_teacher') && u.email !== duty && !String(u.roles).includes('admin')).email;
+  const before = env.rows('audit_log').length;
+  const off = env.call(offDuty, 'getFacilityDay', TODAY);
+  assert.strictEqual(off.ok, false, '근무 아닌 교사는 못 본다 ' + offDuty);
+  assert.ok(env.rows('audit_log').slice(before).some((a) => a.action === 'denied:facility.view'), '거부 기록');
+  assert.strictEqual(env.call(ADMIN, 'getFacilityDay', '2027-03-08').ok, true, '관리자는 어느 날이든');
+  for (const x of acc.all) env.expectDenied(x.email, 'facility.view', 'getFacilityDay', TODAY);
+  env.expectAllowed(ADMIN, 'getFacilityReport', { from: '2027-03-01', to: TODAY });
+  env.expectDenied(duty, 'facility.report', 'getFacilityReport', { from: '2027-03-01', to: TODAY });
+  env.expectDenied(acc.A.email, 'facility.report', 'getFacilityReport', { from: '2027-03-01', to: TODAY });
+});
