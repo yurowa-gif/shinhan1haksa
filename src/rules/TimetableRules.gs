@@ -89,8 +89,10 @@ function ttValidateEntries_(entries) {
 }
 
 /**
- * 한 학생·한 달의 상태. → {status: ''(행 없음)|'제출'|'동의'|'확정'|'반려'|'혼합', rows(살아 있는 행)}
+ * 한 학생·한 달의 상태. → {status: ''(행 없음)|'제출'|'동의'|'확정'|'반려'|'혼합', rows(살아 있는 행), returnedBy}
  * '혼합'은 살아 있는 행의 상태가 서로 다를 때(이 규칙으로 쓰면 생기지 않는다 — 옛 행·손으로 고친 시트).
+ * '반려'는 화면에서 '돌려보냄'. returnedBy(반려일 때만, 아니면 ''): parent_agreed_at이 비어 있으면 '학부모', 있으면 '담당교사'
+ * (학부모는 제출 단계에서, 담당교사는 동의 단계에서만 돌려보내므로 동의 시각으로 가린다).
  */
 function ttMonthState_(rows, studentId, month) {
   var sid = ruleStr_(studentId), mo = ruleStr_(month);
@@ -100,7 +102,9 @@ function ttMonthState_(rows, studentId, month) {
   var sts = {};
   live.forEach(function (r) { sts[ruleStr_(r.status)] = 1; });
   var keys = Object.keys(sts);
-  return { status: !keys.length ? '' : keys.length === 1 ? keys[0] : '혼합', rows: live };
+  var status = !keys.length ? '' : keys.length === 1 ? keys[0] : '혼합';
+  return { status: status, rows: live,
+    returnedBy: status !== '반려' ? '' : ruleStr_(live[0].parent_agreed_at) ? '담당교사' : '학부모' };
 }
 
 /**
@@ -114,10 +118,13 @@ function ttMonthState_(rows, studentId, month) {
  *   'unagree'   학부모 동의 거두기: 동의 → 제출(parent_agreed_at '').
  *   'confirm'   담당교사 확인: 동의 → 확정(teacher_confirmed_at = now).
  *   'unconfirm' 담당교사 확인 거두기: 확정 → 동의(teacher_confirmed_at ''). 이미 시작한 달이면 경고.
- *   'reject'    담당교사 반려: 제출·동의 → 반려(학생이 다시 내야 한다).
- * ctx = {now:'yyyy-MM-ddTHH:mm:ss', entries, window}
+ *   'parentReturn'  학부모 [동의하지 않습니다]: 제출 → 반려(화면 '돌려보냄'). 사유(ctx.reason) 한 줄은 선택.
+ *   'teacherReturn' 담당교사 돌려보냄(확인 단계): 동의 → 반려. 사유 필수. parent_agreed_at은 남긴다(누가 돌려보냈는지 가린다).
+ *               돌려보낸 뒤 학생이 고쳐 다시 내면(submit) 동의·확인은 처음부터.
+ * ctx = {now:'yyyy-MM-ddTHH:mm:ss', entries, window, reason}
  * → {ok, reason, add:[행(student_id, month, weekday, blocks, code, submitted_at, parent_agreed_at, teacher_confirmed_at, status)],
- *    update:[{id, set:{열: 값}}], cancel:[id], warnings:[]}
+ *    update:[{id, set:{열: 값}}], cancel:[id], warnings:[], returned:{by:'학부모'|'담당교사', reason}|null}
+ * ASSUMPTION(열린 질문): fixed_schedules에 사유 열이 없어 returned.reason은 저장 쪽(C37)이 audit_log 등에 남긴다 — 열을 더할지는 총괄 결정.
  * ok false면 add·update·cancel은 비어 있다. 잘못된 month·now·action은 Error.
  */
 function ttTransition_(rows, studentId, month, action, ctx) {
@@ -127,8 +134,9 @@ function ttTransition_(rows, studentId, month, action, ctx) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mo)) throw new Error('month는 yyyy-MM이어야 합니다: ' + month);
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(now) || !ymdIsValid_(now.slice(0, 10))) throw new Error('now는 yyyy-MM-ddTHH:mm:ss여야 합니다: ' + ctx.now);
   var st = ttMonthState_(rows, sid, mo), cur = st.status, ids = st.rows.map(function (r) { return ruleStr_(r.id); });
-  var out = { ok: true, reason: '', add: [], update: [], cancel: [], warnings: [] };
-  var fail = function (reason) { return { ok: false, reason: reason, add: [], update: [], cancel: [], warnings: [] }; };
+  var out = { ok: true, reason: '', add: [], update: [], cancel: [], warnings: [], returned: null };
+  var fail = function (reason) { return { ok: false, reason: reason, add: [], update: [], cancel: [], warnings: [], returned: null }; };
+  var note = ruleStr_(ctx.reason).replace(/\s+/g, ' ');
   var need = function (allowed, what) {
     return allowed.indexOf(cur) >= 0 ? '' : (cur ? '지금 상태(' + cur + ')에서는 ' + what + ' 수 없습니다' : '제출한 시간표가 없습니다');
   };
@@ -174,9 +182,16 @@ function ttTransition_(rows, studentId, month, action, ctx) {
       setAll({ status: '동의', teacher_confirmed_at: '' });
       if (started) out.warnings.push(mo + '은 이미 시작한 달입니다. 다시 확인할 때까지 출석부는 앞 달 확정 시간표를 씁니다');
       return out;
-    case 'reject':
-      if ((why = need(['제출', '동의'], '반려할'))) return fail(why);
+    case 'parentReturn':
+      if ((why = need(['제출'], '돌려보낼'))) return fail(why);
       setAll({ status: '반려' });
+      out.returned = { by: '학부모', reason: note };
+      return out;
+    case 'teacherReturn':
+      if ((why = need(['동의'], '돌려보낼'))) return fail(why);
+      if (!note) return fail('돌려보내는 사유를 적어 주세요');
+      setAll({ status: '반려' });
+      out.returned = { by: '담당교사', reason: note };
       return out;
   }
   throw new Error('알 수 없는 action: ' + action);
@@ -194,4 +209,22 @@ function ttMissing_(rows, studentIds, month) {
     var s = ttMonthState_(rows, sid, month).status;
     return s === '' || s === '반려';
   });
+}
+
+/**
+ * [지난달 시간표 그대로 가져오기]: month의 앞 달에 출석부가 쓰던 확정 시간표(effectiveFixedRows_ — 앞 달을 새로 내지 않았으면
+ * 그보다 앞 달에서 이어진 것)를 이번 제출 초안 entries로 복사한다. 저장하지 않는다(학생이 고쳐 submit).
+ * → {entries:[{weekday, blocks, code}](ttValidateEntries_ 정규화·정렬), fromMonth:'yyyy-MM'|''}
+ * 확정 시간표가 없거나 그 달이 '없음'이면 entries []·fromMonth ''. 잘못된 month는 Error.
+ */
+function ttCopyPrevious_(rows, studentId, month) {
+  var mo = ruleStr_(month);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mo)) throw new Error('month는 yyyy-MM이어야 합니다: ' + month);
+  var y = Number(mo.slice(0, 4)), m = Number(mo.slice(5, 7));
+  var prev = m === 1 ? (y - 1) + '-12' : y + '-' + ymdPad2_(m - 1);
+  var sid = ruleStr_(studentId);
+  var eff = effectiveFixedRows_(rows, ruleStr_(studentId), prev + '-01');
+  var v = ttValidateEntries_(eff.map(function (r) { return { weekday: r.weekday, blocks: r.blocks, code: r.code }; }));
+  // 옛 행이 지금 검사에 걸리면(손으로 고친 시트) 빈 초안 — 학생이 새로 고른다
+  return { entries: v.ok ? v.rows : [], fromMonth: v.ok && eff.length ? ruleStr_(eff[0].month) : '' };
 }
