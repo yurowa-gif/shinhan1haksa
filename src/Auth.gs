@@ -22,6 +22,15 @@ function permissions_() {
     // 포털(F14, C36, 결정 82): 학생은 본인, 학부모는 연결된 자녀만(교사 역할은 이 키로 못 연다). home은 역할만, view는 scope student(isOwn·isGuardian)
     'portal.home': { roles: ['student', 'parent'] },
     'portal.view': { roles: ['student', 'parent'], scope: 'student' },
+    // 시간표(F9, C37): 학생 본인 제출, 학부모 동의(연결된 자녀), 담당교사·관리자 확인. 신원은 portalWho_. screen = 화면을 여는 역할만
+    'timetable.screen': { roles: ['student', 'parent', 'hall_teacher', 'admin'] },
+    'timetable.mine': { roles: ['student'] },
+    'timetable.submit': { roles: ['student'] },
+    'timetable.parent': { roles: ['parent'], scope: 'student' },
+    'timetable.agree': { roles: ['parent'], scope: 'student' },
+    'timetable.list': { roles: ['admin', 'hall_teacher'] },
+    'timetable.view': { roles: ['admin', 'hall_teacher'], scope: 'student', noDuty: true },
+    'timetable.confirm': { roles: ['admin', 'hall_teacher'], scope: 'student', noDuty: true },
     // 학생 한 명의 기본 정보 보기
     // wideView: 보기 키만 — 학사 교사도 이번 기간 학사생 전체를 본다(결정 45). 쓰기 키·counsel.view에는 달지 않는다
     'student.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom', 'student', 'parent'], scope: 'student', wideView: true },

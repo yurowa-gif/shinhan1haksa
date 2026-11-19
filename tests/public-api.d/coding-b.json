@@ -175,6 +175,46 @@
     "getPortalStudent": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getTimetableContext": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getPreviousTimetable": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "submitTimetable": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getChildTimetable": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "agreeTimetable": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "declineTimetable": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "listTimetables": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getTimetableEntry": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "confirmTimetable": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "returnTimetable": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }

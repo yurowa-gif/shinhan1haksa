@@ -84,7 +84,8 @@ var SCREENS = {
   contacts: { file: 'ui/screen_contacts', title: '연락처', view: 'contact.list' },
   calendar: { file: 'ui/screen_calendar', title: '월별 일정', view: 'event.view' },
   batch: { file: 'ui/screen_batch', title: '학년 일괄 퇴실', view: 'batch.leave' },
-  counsel: { file: 'ui/screen_counsel', title: '상담일지', view: 'counsel.list' }
+  counsel: { file: 'ui/screen_counsel', title: '상담일지', view: 'counsel.list' },
+  timetable: { file: 'ui/screen_timetable', title: '시간표', view: 'timetable.screen' }
 };
 
 /**
@@ -97,6 +98,7 @@ function screenParams_(p) {
   if (tabs.indexOf(String(p.tab)) >= 0) out.tab = String(p.tab);
   if (/^\d{4}-\d{2}-\d{2}$/.test(String(p.date || ''))) out.date = String(p.date);
   if (/^\d{4}-\d{2}$/.test(String(p.month || ''))) out.month = String(p.month);
+  if (ROLES.indexOf(String(p.role)) >= 0) out.role = String(p.role);   // 한 화면을 여러 역할이 쓸 때(시간표) 어느 쪽으로 열지
   if (String(p.prefill) === 'out2') out.prefill = 'out2';   // 2OUT 퇴실 확정 뒤 입퇴실 화면 미리 채우기
   if (/^[0-9a-fA-F-]{8,40}$/.test(String(p.student || ''))) out.student = String(p.student);   // 학생 id(UUID 모양만)
   return JSON.stringify(out).replace(/</g, '\\u003c');
@@ -160,7 +162,7 @@ function getHomeData(role) {
   // 2단계 교사 홈 카드(각 기능 파일의 훅). 보고 있는 홈 역할이 그 보기 키를 가질 때만 부른다(출결 담당·근무표 담당자 홈에 OUT·급식 없음, 학생·학부모 홈에는 없음).
   // 훅 하나가 실패해도 홈 전체는 열린다(setup 전 탭 없음 등). ms = 훅마다 걸린 시간 — 확인 ③에서 재고, PRD §9 3초를 넘으면 카드별 호출로 바꾼다
   var perms = permissions_();
-  [['duty', dtyHomeInfo_, 'duty.view'], ['out', vioHomeInfo_, 'out.view'], ['food', foodHomeInfo_, 'status.list'], ['docs', docHomeInfo_, 'doc.view'], ['events', evtHomeInfo_, 'event.view'], ['counsel', cnlHomeInfo_, 'counsel.list']].forEach(function (h) {
+  [['duty', dtyHomeInfo_, 'duty.view'], ['out', vioHomeInfo_, 'out.view'], ['food', foodHomeInfo_, 'status.list'], ['docs', docHomeInfo_, 'doc.view'], ['events', evtHomeInfo_, 'event.view'], ['counsel', cnlHomeInfo_, 'counsel.list'], ['timetable', ttcHomeInfo_, 'timetable.list']].forEach(function (h) {
     if (!hasAnyAllowedRole_([role], perms[h[2]].roles)) return;
     var t0 = Date.now();
     try {

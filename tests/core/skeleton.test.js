@@ -66,6 +66,8 @@ test('screenParams_: 2단계 tab·month(yyyy-MM 모양)·prefill(out2만)을 통
   for (const month of ['2027-1', '2027-01-01', '202701', '2027-01"', '<b>']) assert.deepStrictEqual(run({ month }), {}, month);
   for (const prefill of ['x', 'OUT2', 'out2 ', 'out', '']) assert.deepStrictEqual(run({ prefill }), {}, prefill);
   assert.ok(!ctx.screenParams_({ month: '</script>', tab: '<b>' }).includes('<'));
+  assert.deepStrictEqual(run({ role: 'student' }), { role: 'student' });
+  assert.deepStrictEqual(run({ role: 'superuser' }), {}, '모르는 역할은 버린다');
 });
 
 test('getHomeData: 홈 역할이 보기 키(duty.view·out.view·status.list·doc.view·event.view·counsel.list)를 가진 훅만 부르고 ms를 남긴다, 기존 값은 그대로, 학생·학부모 홈에는 없다', () => {
