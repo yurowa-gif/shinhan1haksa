@@ -11,6 +11,7 @@ const assert = require('assert');
 const { test, plain } = require('../helpers/harness');
 const { createGasEnv } = require('../helpers/gas-fakes');
 const { monthResults } = require('../helpers/fake-results');
+const { statusReader } = require('../helpers/status-reader');
 
 const ADMIN = 'owner@example.com', HALL = 'test.teacher@example.com', HOMEROOM = 'test.homeroom@example.com', ATT = 'test.attendance@example.com';
 const MARK = { '결석': '×', '지각': '△', '조퇴': '조' };
@@ -31,7 +32,7 @@ function helpers(env) {
   const call = (who, fn, ...a) => plain(env.call(who, fn, ...a));
   const term = env.rows('terms').find((t) => t.name === '2027 1학기');
   const exTab = () => env.rows('exceptions_' + term.id.slice(0, 8));
-  const on = (sid, d) => env.as(ADMIN, (c) => c.statusOn_(c.readAll_('status_changes'), sid, '학사', d));
+  const st = statusReader(env, ADMIN), on = (sid, d) => st(sid, '학사', d);
   const totals = (from, to) => Object.fromEntries(call(ATT, 'getResultTotals', { from, to, all: true }).rows.map((r) => [r.student.id, r.total]));
   const save = (cells, from, to, who) => {
     const payload = { range: { from, to }, cells };
