@@ -9,6 +9,7 @@ const assert = require('assert');
 const { test, loadGs, plain } = require('../helpers/harness');
 const { createGasEnv } = require('../helpers/gas-fakes');
 const { monthResults } = require('../helpers/fake-results');
+const { statusReader } = require('../helpers/status-reader');
 
 const ADMIN = 'owner@example.com', HALL = 'test.teacher@example.com', ATT = 'test.attendance@example.com';
 const TEACHERS = ['fake.teacher1@example.com', 'fake.teacher2@example.com', 'fake.teacher3@example.com'];
@@ -76,7 +77,7 @@ function rehearse(n) {
   const byNo = Object.fromEntries(students.map((s) => [s.student_no, s]));
   const idOf = (i) => byNo[fake.students[i].student_no].id;
   const dorm = (sid) => env.rows('status_changes').some((c) => c.student_id === sid && c.item === '기숙사' && c.value === '입실');
-  const on = (sid, item, ymd) => env.as(ADMIN, (c) => c.statusOn_(c.readAll_('status_changes'), sid, item, ymd));
+  const on = statusReader(env, ADMIN);   // 실행 없이 판정(컨텍스트가 쌓이지 않게)
 
   // 2) 좌석 초안·방 초안 저장(학사 교사)
   const sp = ok(call(HALL, 'previewSeatDraft', term.id, [], 7), '좌석 초안');
