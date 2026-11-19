@@ -61,10 +61,10 @@ test('권한: 학부모·교사·담임·관리자·출결 담당은 쓰기·찾
     x.env.expectDenied(who, 'facility.write', 'saveFacilityLog', log());
     x.env.expectDenied(who, 'facility.write', 'getFacilityForm');
     x.env.expectDenied(who, 'facility.write', 'searchFacilityStudents', '가', TODAY);
-    x.env.expectDenied(who, 'facility.write', 'cancelFacilityLog', x.term.id, id, '그냥 취소');
+    x.env.expectDenied(who, 'facility.write', 'cancelFacilityLog', x.term.id, id);
   }
   const before = JSON.stringify(x.tab());
-  x.env.expectDenied(x.BMAIL, 'facility.write', 'cancelFacilityLog', x.term.id, id, '남의 일지');
+  x.env.expectDenied(x.BMAIL, 'facility.write', 'cancelFacilityLog', x.term.id, id);
   assert.strictEqual(JSON.stringify(x.tab()), before, '남의 일지는 그대로');
   // 학생 계정이어도 학생 명단에 이메일이 없으면(본인 id 없음) 거부
   x.env.asOwner((c) => c.addUser('nobody.student@fakeschool.invalid', '명단 밖 학생', 'student'));
@@ -115,23 +115,20 @@ test('겹침: 같은 시설·같은 시간이면 저장 전에 막고(needsConfi
 });
 function BMAILOF(x) { return x.BMAIL; }
 
-test('취소: 사유 2자 이상, 행은 남고 status 취소·사유·audit update, 두 번 취소는 stale, 내 기록에 사유와 함께 보인다', () => {
+test('취소: 사유 없이 확인만, 행은 남고 status 취소·cancel_reason 본인 취소·audit update, 두 번 취소는 stale, 내 기록에 취소로 보인다', () => {
   const x = seeded();
   const id = call(x.env, STUDENT, 'saveFacilityLog', log()).id;
-  const cancel = (reason) => call(x.env, STUDENT, 'cancelFacilityLog', x.term.id, id, reason);
-  const short = cancel('아');
-  assert.deepStrictEqual([short.ok, short.errors[0].field], [false, 'reason']);
+  const cancel = () => call(x.env, STUDENT, 'cancelFacilityLog', x.term.id, id);
   assert.strictEqual(x.tab()[0].status, '유효');
-  assert.strictEqual(cancel('가'.repeat(201)).ok, false);
-  const r = cancel('시설을 쓰지 않았어요');
+  const r = cancel();
   assert.strictEqual(r.ok, true);
   const rows = x.tab();
-  assert.deepStrictEqual([rows.length, rows[0].status, rows[0].cancel_reason], [1, '취소', '시설을 쓰지 않았어요']);
+  assert.deepStrictEqual([rows.length, rows[0].status, rows[0].cancel_reason], [1, '취소', '본인 취소']);
   assert.ok(x.env.auditActions().includes('update'));
-  assert.strictEqual(cancel('다시 취소').stale, true);
-  assert.strictEqual(call(x.env, STUDENT, 'cancelFacilityLog', 'nope', id, '없는 기간').ok, false);
+  assert.strictEqual(cancel().stale, true);
+  assert.strictEqual(call(x.env, STUDENT, 'cancelFacilityLog', 'nope', id).ok, false);
   const f = call(x.env, STUDENT, 'getFacilityForm');
-  assert.deepStrictEqual([f.logs[0].status, f.logs[0].cancelReason], ['취소', '시설을 쓰지 않았어요']);
+  assert.deepStrictEqual(f.logs.map((l) => l.status), ['취소']);
 });
 
 test('함께 쓴 학생 찾기: 이름·초성으로 최대 8명, 이름과 표식뿐(id·학번 없음), 본인·그날 입실 아님 제외, 빈 검색어는 0명', () => {
@@ -154,7 +151,7 @@ test('함께 쓴 학생 찾기: 이름·초성으로 최대 8명, 이름과 표�
 test('그날 일지: 관리자는 어느 날이든, 학사 교사는 그날 실제 근무일 때만 오늘 것(아니면 안내+거부 기록), 학생·학부모·담임은 거부', () => {
   const x = seeded();
   call(x.env, STUDENT, 'saveFacilityLog', log({ companions: [handleOf(x.env, STUDENT, x.B.name)] }));
-  call(x.env, STUDENT, 'cancelFacilityLog', x.term.id, call(x.env, STUDENT, 'saveFacilityLog', log({ facility: '특강실', start: '19:00', end: '20:00' })).id, '잘못 썼어요');
+  call(x.env, STUDENT, 'cancelFacilityLog', x.term.id, call(x.env, STUDENT, 'saveFacilityLog', log({ facility: '특강실', start: '19:00', end: '20:00' })).id);
   for (const who of [STUDENT, PARENT, HOMEROOM, ATT]) x.env.expectDenied(who, 'facility.view', 'getFacilityDay', TODAY);
   // 학사 교사: 근무 아님
   const before = x.env.rows('audit_log').length;
@@ -180,7 +177,7 @@ test('누적표(관리자만): 학생 × 날짜 분 합, 함께 쓴 학생도 �
   call(x.env, STUDENT, 'saveFacilityLog', log({ date: YEST, start: '15:00', end: '16:30', companions: [hB] }));   // 90분
   call(x.env, STUDENT, 'saveFacilityLog', log({ facility: '특강실', start: '19:00', end: '20:00' }));   // 60분
   const cancelled = call(x.env, STUDENT, 'saveFacilityLog', log({ facility: '특강실', start: '21:00', end: '22:00' }));
-  call(x.env, STUDENT, 'cancelFacilityLog', x.term.id, cancelled.id, '쓰지 않았어요');
+  call(x.env, STUDENT, 'cancelFacilityLog', x.term.id, cancelled.id);
   for (const who of [STUDENT, PARENT, HALL, HOMEROOM, ATT]) x.env.expectDenied(who, 'facility.report', 'getFacilityReport', { from: YEST, to: TODAY });
   const r = call(x.env, OWNER, 'getFacilityReport', { from: YEST, to: TODAY });
   assert.strictEqual(r.ok, true);

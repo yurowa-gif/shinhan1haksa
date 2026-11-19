@@ -74,7 +74,9 @@ test('권한 키: facility.write는 학생 본인만, facility.view는 admin·ha
   denied(OWNER, 'facility.write', ctxOf(mine.id));   // 관리자도 학생 대신 쓰지 않는다
   denied(STUDENT, 'facility.view', {}); denied(PARENT, 'facility.view', {}); denied(HOMEROOM, 'facility.view', {});
   denied(HALL, 'facility.report', {}); denied(STUDENT, 'facility.report', {});
-  env.as(OWNER, fn('facility.view', {})); env.as(HALL, fn('facility.view', {})); env.as(OWNER, fn('facility.report', {}));
+  env.as(OWNER, fn('facility.view', {})); env.as(OWNER, fn('facility.report', {}));
+  // facility.view는 역할 키일 뿐이다 — 학사 교사가 그날 근무일인지는 getFacilityDay가 서버에서 다시 판정한다(근무 아니면 거부 기록, tests/features/facility.test.js)
+  assert.strictEqual(plain(env.call(HALL, 'getFacilityDay', '')).ok, false, '근무 아닌 학사 교사는 목록을 못 본다');
 });
 
 test('facility_logs 탭: 기간마다 생기고 헤더(공통 열 규칙)·설정 facility.names 기본값', () => {

@@ -6,7 +6,7 @@
  * - 학생 응답에 넣지 않는 것: 다른 학생의 정보(함께 쓴 학생 후보와 내 일지의 함께 쓴 학생은 **이름만**), 다른 학생의 일지, 이메일·전화.
  * ASSUMPTION(총괄에게 알림):
  *   - 같은 시설·같은 시간이 겹치면 저장 전에 막고(needsConfirm) 학생이 [그래도 저장]을 눌러야 저장한다(시안은 오류, 총괄 지시는 '겹침 경고').
- *   - 본인 취소는 사유 2자 이상을 받는다(총괄 지시. 시안은 사유 없음). 본인의 유효한 일지는 날짜와 상관없이 취소할 수 있다.
+ *   - 본인 취소는 사유를 받지 않고 확인만 한다(총괄 결정 2026-11-19, 시안과 같음). cancel_reason에는 '본인 취소'를 남기고 audit_log에도 남는다. 본인의 유효한 일지는 날짜와 상관없이 취소할 수 있다.
  *   - 함께 쓴 학생도 그 시설을 쓴 것으로 누적표에 센다(작성자와 같은 시간).
  *   - 함께 쓴 학생 후보는 한꺼번에 내려주지 않고 이름·초성으로 찾을 때마다 최대 8명(searchFacilityStudents)만 이름과 **불투명 표식(handle)** 으로 돌려준다 — 다른 학생의 id·학번·학년·반이 학생 응답에 없다.
  *     그날 학사 입실 중인 그 기간 학사생만 후보이고, 저장할 때 표식을 서버가 다시 풀어(그날 후보인지 다시 확인) id로 쓴다.
@@ -15,8 +15,7 @@
 var FAC_PAST_DAYS = 7;
 var FAC_MAX_COMPANIONS = 10;
 var FAC_PURPOSE_MAX = 100;
-var FAC_REASON_MAX = 200;
-var FAC_REASON_MIN = 2;
+var FAC_SELF_CANCEL = '본인 취소';
 var FAC_REPORT_MAX_DAYS = 62;
 var FAC_MY_DAYS = 30;
 
@@ -188,7 +187,7 @@ function getFacilityForm() {
     facRows_(t).forEach(function (r) {
       if (r.student_id !== me || String(r.date) < from || String(r.date) > today) return;
       out.logs.push({ id: r.id, termId: t.id, date: r.date, weekdayKo: ymdWeekdayKo_(r.date), facility: r.facility, start: hmNorm_(r.start) || r.start, end: hmNorm_(r.end) || r.end,
-        companions: facSplitIds_(r.companions).map(function (id) { return byId[id] ? byId[id].name : '(알 수 없음)'; }), purpose: r.purpose || '', status: r.status, cancelReason: r.status === '취소' ? (r.cancel_reason || '') : '' });
+        companions: facSplitIds_(r.companions).map(function (id) { return byId[id] ? byId[id].name : '(알 수 없음)'; }), purpose: r.purpose || '', status: r.status });
     });
   });
   out.logs.sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : (a.start < b.start ? 1 : -1); });
@@ -236,8 +235,8 @@ function saveFacilityLog(input) {
   });
 }
 
-/** 내 일지 취소(학생 본인, 사유 2자 이상). 행은 남고 status만 '취소'. */
-function cancelFacilityLog(termId, id, reason) {
+/** 내 일지 취소(학생 본인, 사유 없이 확인만 — 총괄 결정). 행은 남고 status '취소' + cancel_reason '본인 취소', audit_log update. */
+function cancelFacilityLog(termId, id) {
   var user = requirePermission_('facility.write', { studentId: portalWho_().studentId });
   var me = portalWho_().studentId;
   return withLock_(function () {
@@ -250,10 +249,7 @@ function cancelFacilityLog(termId, id, reason) {
     if (!row) return { ok: false, stale: true, error: '기록을 찾지 못했습니다. 새로 불러와 주세요.' };
     if (row.student_id !== me) facDenied_(user, 'facility.write', '남의 일지 취소 시도');   // 남의 일지는 거부(기록 남김)
     if (String(row.status).trim() !== '유효') return { ok: false, stale: true, error: '이미 취소된 일지입니다.' };
-    var why = String(reason || '').trim();
-    if (why.length < FAC_REASON_MIN) return { ok: false, errors: [{ field: 'reason', message: '취소 사유를 ' + FAC_REASON_MIN + '자 이상 적어 주세요.' }] };
-    if (why.length > FAC_REASON_MAX) return { ok: false, errors: [{ field: 'reason', message: '취소 사유는 ' + FAC_REASON_MAX + '자 안으로 적어 주세요.' }] };
-    updateRecord_(tab, row.id, { status: '취소', cancel_reason: why }, user.email);
+    updateRecord_(tab, row.id, { status: '취소', cancel_reason: FAC_SELF_CANCEL }, user.email);
     return { ok: true };
   });
 }

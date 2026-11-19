@@ -112,7 +112,7 @@ Apps Script는 같은 전역 이름을 경고 없이 덮는다. 새 전역 이�
 | students | track | `문` · `이` · `''` |
 | events | status | `유효` · `취소` (취소는 `cancel_reason` 필수, 행은 지우지 않는다. 결정 80) |
 | events | kind | settings `event.kinds`의 값 그대로(기본 `시험` · `행사` · `특강` · `휴업` · `기타`). 끝날이 비면 시작일 하루 |
-| facility_logs_<기간> | status | `유효` · `취소` (취소는 `cancel_reason` 필수, 행은 지우지 않는다. 결정 83) |
+| facility_logs_<기간> | status | `유효` · `취소` (취소는 행을 지우지 않는다. 학생 본인 취소는 사유 입력 없이 `cancel_reason` = `본인 취소`, 결정 83·총괄 결정) |
 | facility_logs_<기간> | facility | settings `facility.names`의 값 그대로(기본 `특강실` · `원형테이블`). `start`·`end` = `HH:mm`(start < end), `companions` = 함께 쓴 학생 id 쉼표 목록(그 기간 학사생만, 본인 제외) |
 | doc_types | status | `유효` · `취소` |
 | student_docs_<기간> | state | `제출` · `미제출` · `해당없음` (학생·서류 종류마다 최대 1행, 행이 없으면 미제출) |

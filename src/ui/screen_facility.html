@@ -10,7 +10,7 @@
 <script>
   /**
    * 시설 일지 쓰기·내 기록(C35, F10 학생). docs/design/stage7-screens.md 3절. 학생 본인만(서버가 portalWho_로 판정).
-   * 같은 시설·시간이 겹치면 서버가 needsConfirm으로 막고, 학생이 [그래도 저장]을 눌러야 저장된다. 취소는 사유 2자 이상.
+   * 같은 시설·시간이 겹치면 서버가 needsConfirm으로 막고, 학생이 [그래도 저장]을 눌러야 저장된다. 취소는 사유 없이 확인만(총괄 결정).
    */
   function renderScreen(root) {
     var U = UI.util;
@@ -138,18 +138,17 @@
           el('div', { text: l.start + '–' + l.end }),
           l.companions.length ? el('div', { class: 'muted', text: '함께 쓴 학생: ' + l.companions.join(', ') }) : null,
           l.purpose ? el('div', { class: 'muted', text: l.purpose }) : null,
-          cancelled && l.cancelReason ? el('div', { class: 'muted', text: '취소 사유: ' + l.cancelReason }) : null
         ]);
         if (!cancelled) row.appendChild(el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:8px', text: '취소', onclick: function () { askCancel(l); } }));
         card.appendChild(row);
       });
       body.appendChild(card);
     }
-    function askCancel(l) {
-      UI.confirmWithReason({ title: '이 일지를 취소합니다', message: U.formatDateKo(l.date, false) + ' ' + l.facility + ' ' + l.start + '–' + l.end + ' — 삭제가 아니라 "취소"로 남습니다.', reasonLabel: '취소 사유', confirmText: '일지 취소', minLength: 2, danger: true,
-        onconfirm: function (reason) {
-          call('cancelFacilityLog', l.termId, l.id, reason).then(function (r) {
-            if (!r.ok) { UI.toast(r.error || (r.errors && r.errors[0].message) || '취소하지 못했습니다.', { kind: 'warn', ms: 5000 }); if (r.stale) load(); return; }
+    function askCancel(l) {   // 사유 없이 확인만(총괄 결정). 삭제가 아니라 '취소'로 남는다
+      UI.confirmSheet({ title: '이 일지를 취소합니다', lead: U.formatDateKo(l.date, false) + ' ' + l.facility + ' ' + l.start + '–' + l.end, lines: ['삭제가 아니라 "취소"로 남습니다.'], confirmText: '일지 취소', danger: true,
+        onconfirm: function () {
+          call('cancelFacilityLog', l.termId, l.id).then(function (r) {
+            if (!r.ok) { UI.toast(r.error || '취소하지 못했습니다.', { kind: 'warn', ms: 5000 }); if (r.stale) load(); return; }
             UI.toast('일지를 취소했습니다.'); load();
           }).catch(fail);
         } });
