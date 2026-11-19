@@ -55,23 +55,26 @@ test('getPortalHome: 학생은 본인만, 학부모는 연결된 자녀만(이�
   assert.deepStrictEqual(Object.keys(p.children[0]).sort(), ['classNo', 'grade', 'id', 'name', 'number']);
 });
 
-test('학생 홈: 본인 OUT(날짜·항목·몇 OUT, 메모 없음)·취소 OUT 제외·출결 특이사항(유형만)·상태, 상담 줄은 없다', () => {
+test('학생 홈: 본인 OUT(날짜·항목·몇 OUT, 메모 없음)·취소 OUT은 취소로 남고 합계 제외·출결 특이사항(유형만)·상태, 상담 줄은 없다', () => {
   const x = makeEnv();
   x.addOut(x.me, '2027-03-02T20:00:00');
   x.addOut(x.me, '2027-03-03T19:00:00');
-  x.addOut(x.me, '2027-03-03T21:00:00', { status: '취소', cancel_reason: '가짜 취소' });
+  x.addOut(x.me, '2027-03-03T21:00:00', { status: '취소', cancel_reason: 'ZZ-취소사유-표식' });
   x.addOut(x.stranger, '2027-03-03T19:30:00');
   const r = plain(x.env.call(ATT, 'saveException', { studentId: x.me.id, from: '2027-03-04', blocks: 'ALL', type: '병결', reason: M_EXC }));
   assert.strictEqual(r.ok, true, JSON.stringify(r));
   const d = call(x, STUDENT, 'getPortalStudent', x.me.id);
   assert.strictEqual(d.viewer, 'student');
-  assert.deepStrictEqual([d.outs.total, d.outs.label, d.outs.items.map((i) => [i.date, i.ruleName, i.weight])], [2, '퇴실 대상', [['2027-03-03', x.rule.name, 1], ['2027-03-02', x.rule.name, 1]]]);
+  assert.deepStrictEqual([d.outs.total, d.outs.label], [2, '퇴실 대상']);
+  assert.deepStrictEqual(d.outs.items.map((i) => [i.date, i.ruleName, i.weight, i.status]), [['2027-03-03', x.rule.name, 1, '취소'], ['2027-03-03', x.rule.name, 1, '유효'], ['2027-03-02', x.rule.name, 1, '유효']],
+    '취소 OUT도 "취소"로 남지만 합계에는 안 센다');
+  assert.ok(d.outs.items.every((i) => Object.keys(i).sort().join() === 'date,dateKo,ruleName,status,weight'), '메모·취소 사유·입력자 칸 없음');
   assert.deepStrictEqual(d.exceptions.filter((e) => e.date === '2027-03-04').map((e) => [e.type, e.state, e.upcoming]), [['병결', '확정', true]]);
   assert.ok(d.exceptions.every((e) => Object.keys(e).sort().join() === 'date,dateKo,short,state,type,upcoming'), '사유 칸 없음');
   assert.strictEqual(d.status['학사'], '입실');
   assert.ok(!('counsel' in d), '학생 응답에는 상담 줄이 없다');
   const text = textOf(d);
-  for (const bad of [M_OUT, M_EXC, HALL, ATT]) assert.ok(!text.includes(bad), bad);
+  for (const bad of [M_OUT, M_EXC, HALL, ATT, 'ZZ-취소사유-표식']) assert.ok(!text.includes(bad), bad);
   names(x, [x.me.id]).forEach((n) => assert.ok(!text.includes(n), '다른 학생 이름: ' + n));
 });
 
@@ -156,4 +159,34 @@ test('유출 감시: 두 학생 계정 × 모든 학생의 id를 넣어 불러�
   assert.ok(allowed >= 2);
   // 운영 DB 감사 기록에도 표지가 없다(읽기는 감사에 남기지 않는다)
   assert.ok(!x.env.rows('audit_log').some((a) => JSON.stringify(a).includes(M_NOTE1)));
+});
+
+test('머리 카드·앞으로 일정·바뀌는 급식: 담당교사 이름(이메일 아님), 오늘부터의 일정 3건(메모 없음), 적용일이 뒤인 변경만', () => {
+  const x = makeEnv();
+  const tok = plain(x.env.call(ADMIN, 'getEventData', '2027-03')).token;
+  for (const [i, t] of ['가짜 일정1', '가짜 일정2', '가짜 일정3', '가짜 일정4'].entries()) {
+    const r = plain(x.env.call(ADMIN, 'saveEvent', { token: i === 0 ? tok : plain(x.env.call(ADMIN, 'getEventData', '2027-03')).token, title: t, kind: '행사', start_date: '2027-03-0' + (i + 5), end_date: '', memo: M_EVT }));
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+  }
+  plain(x.env.call(ADMIN, 'saveEvent', { token: plain(x.env.call(ADMIN, 'getEventData', '2027-03')).token, title: '지난 일정', kind: '행사', start_date: '2027-03-02', end_date: '', memo: '' }));
+  const d = call(x, PARENT, 'getPortalStudent', x.me.id);
+  const tname = x.env.rows('users').find((u) => u.email === x.teacherOf(x.me)).name;
+  assert.strictEqual(d.teacher, tname);
+  assert.deepStrictEqual(d.upcoming.map((e) => e.title), ['가짜 일정1', '가짜 일정2', '가짜 일정3'], '오늘 이후 3건, 지난 일정 제외');
+  assert.ok(!textOf(d).includes(M_EVT) && !textOf(d).includes(x.teacherOf(x.me)));
+  assert.ok(d.pending.every((c) => c.date > TODAY && ['기숙사', '조식', '석식', '중식'].includes(c.item)));
+  assert.deepStrictEqual(Object.keys(d.upcoming[0]).sort(), ['dateKo', 'end', 'kind', 'start', 'title']);
+});
+
+test('취소된 특이사항은 "취소"로 남고(사유 없음), 신원 판정은 portalWho_ 한 곳(이 파일은 users·guardian_links·students.email을 직접 보지 않는다)', () => {
+  const x = makeEnv();
+  const r = plain(x.env.call(ATT, 'saveException', { studentId: x.me.id, from: '2027-03-09', blocks: 'ALL', type: '병결', reason: M_EXC }));
+  assert.strictEqual(r.ok, true);
+  const grp = plain(x.env.call(ATT, 'listExceptions', { scope: 'student', studentId: x.me.id })).groups.find((g) => g.dates.includes('2027-03-09'));
+  assert.strictEqual(plain(x.env.call(ATT, 'cancelException', x.term.id, grp.groupId, '가짜 취소 사유')).ok, true);
+  const d = call(x, STUDENT, 'getPortalStudent', x.me.id);
+  assert.deepStrictEqual(d.exceptions.filter((e) => e.date === '2027-03-09').map((e) => e.state), ['취소']);
+  assert.ok(!textOf(d).includes('가짜 취소 사유') && !textOf(d).includes(M_EXC));
+  const src = require('fs').readFileSync(require('path').join(__dirname, '../../src/features/Portal.gs'), 'utf8');
+  assert.ok(!/guardian_links|getCurrentUser_|ptlWho_|\b(student|st|s|me)\.email\b/.test(src.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')), '신원은 portalWho_만');
 });

@@ -1,70 +1,122 @@
 <style>
   .pt-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); word-break: keep-all; }
   .pt-row:last-child { border-bottom: 0; }
-  .pt-pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .pt-k { font-weight: 700; flex: 0 0 auto; min-width: 5.2em; }
+  .pt-v { flex: 1 1 auto; min-width: 0; }
+  .pt-pills { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .pt-note { margin: 8px 0; word-break: keep-all; }
   .pt-nav { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
-  .pt-nav .btn { flex: 0 0 auto; white-space: nowrap; }
+  .pt-nav .btn, .pt-card .btn { flex: 0 0 auto; white-space: nowrap; }
 </style>
 <script>
   /**
-   * 학생·학부모 포털 본문(C36, F14 읽기만). 학생 홈은 본인 id, 학부모 홈은 고른 자녀 id로 부른다.
-   * 서버(getPortalStudent)가 본인·연결된 자녀인지 다시 확인한다. 내용은 서버가 준 것만 그린다.
+   * 학생·학부모 포털 본문(C36, F14 읽기만, D13 시안 docs/design/stage7-screens.md 1·2절).
+   * 학생 홈은 본인 id, 학부모 홈은 고른 자녀 id로 부른다. 서버(getPortalStudent)가 본인·연결된 자녀인지 다시 확인하고, 이 파일은 서버가 준 것만 그린다.
+   * 화면: 홈 → [내 OUT 자세히] · [출결 기록 전체 보기] · [월별 일정 열기](같은 자리에서 바뀌고 [← 돌아가기]로 홈).
    */
-  function renderPortal(root, studentId, month) {
+  function renderPortal(root, studentId, month, view) {
     clear(root).appendChild(el('div', { class: 'loading', text: '불러오는 중…' }));
-    call('getPortalStudent', studentId, month || '').then(function (p) { draw(p); }).catch(function (err) { clear(root); showError(root, err); });
+    call('getPortalStudent', studentId, month || '').then(function (p) { draw(p, view || 'home'); }).catch(function (err) { clear(root); showError(root, err); });
 
-    function row(left, right) { return el('div', { class: 'pt-row' }, [el('span', { text: left }), right ? (typeof right === 'string' ? el('span', { class: 'muted', text: right }) : right) : null]); }
-    function card(title, kids) { return el('div', { class: 'card' }, [el('h2', { text: title })].concat(kids)); }
+    function row(key, val) {
+      return el('div', { class: 'pt-row' }, [el('span', { class: 'pt-k', text: key }), el('span', { class: 'pt-v' }, [typeof val === 'string' ? document.createTextNode(val) : val])]);
+    }
+    function card(title, kids) { return el('div', { class: 'card pt-card' }, [el('h2', { text: title })].concat(kids.filter(Boolean))); }
+    function note(text) { return el('div', { class: 'muted pt-note', text: text }); }
+    function link(text, fn) { return el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:8px', text: text, onclick: fn }); }
+    function pillsOf(list) { return el('div', { class: 'pt-pills' }, list); }
+    function typeKind(t) { return /^병/.test(t) ? 'byung' : /^학원/.test(t) ? 'hak' : /^가정/.test(t) ? 'ga' : 'mute'; }
+    function stateKind(s) { return s === '확정' ? 'confirmed' : s === '취소' ? 'canceled' : 'requested'; }
+    function excRow(e) { return row(e.dateKo, pillsOf([UI.statusPill(typeKind(e.type), e.type.replace(/\s*\(.*$/, '')), UI.statusPill(stateKind(e.state), e.state === '확인 대기' ? '요청' : e.state)])); }
+    function ymd(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+    function weekOf(today) {
+      var p = today.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2]);
+      var mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
+      return [ymd(mon), ymd(new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6))];
+    }
 
-    function draw(p) {
+    function draw(p, view) {
       clear(root);
-      var s = p.student, st = p.status || {};
-      var pills = [];
-      if (st['학사']) pills.push(UI.statusPill(st['학사'] === '퇴실' ? 'mute' : 'confirmed', '학사 ' + st['학사']));
-      if (st['기숙사']) pills.push(UI.statusPill('mute', '기숙사 ' + st['기숙사']));
-      root.appendChild(card(s.name, [el('div', { class: 'muted', text: s.grade + '학년 ' + s.classNo + '반 ' + s.number + '번' + (p.term ? ' · ' + p.term.name : '') }), el('div', { class: 'pt-pills' }, pills)]));
+      var s = p.student, st = p.status || {}, parent = p.viewer === 'parent';
+      var back = function () { return el('button', { type: 'button', class: 'btn secondary', style: 'margin-bottom:12px', text: '← 돌아가기', onclick: function () { renderPortal(root, studentId, '', 'home'); } }); };
+      if (view === 'outs') return outsView(p, back);
+      if (view === 'exceptions') return exceptionsView(p, back);
+      if (view === 'month') return monthView(p, back);
 
-      var o = p.outs, outKids = [];
-      outKids.push(el('div', { class: 'pt-pills' }, [o.total >= 2 ? UI.statusPill('out2', '퇴실 대상') : o.total === 1 ? UI.statusPill('out1', '1OUT') : UI.statusPill('mute', 'OUT 없음')]));
-      o.items.forEach(function (i) { outKids.push(row(UI.util.formatDateKo(i.date) + ' · ' + i.ruleName, i.weight + 'OUT')); });
-      root.appendChild(card('이번 기간 OUT', outKids));
+      var info = s.grade + '학년 ' + s.classNo + '반 ' + s.number + '번' + (st['기숙사'] === '입실' ? ' · 기숙사생' : '') + (p.teacher ? ' · 담당 ' + p.teacher : '');
+      root.appendChild(el('div', { class: 'card' }, [el('h2', { text: s.name }), el('div', { class: 'muted', text: info })]));
 
-      var exKids = [];
-      if (!p.exceptions.length) exKids.push(UI.emptyState('이번 기간 출결 특이사항이 없습니다.'));
-      p.exceptions.forEach(function (e) {
-        exKids.push(row(e.dateKo + ' · ' + e.short + (e.upcoming ? ' (예정)' : ''), UI.statusPill(e.state === '확정' ? 'confirmed' : 'requested', e.state)));
-      });
-      root.appendChild(card('출결 특이사항', exKids));
+      var o = p.outs, live = o.items.filter(function (i) { return i.status === '유효'; });
+      if (o.total >= 2 && !parent) {
+        root.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: '퇴실 대상입니다. OUT이 2번 쌓여서 학교를 나가야 하는 단계입니다. 담당 ' + (p.teacher ? p.teacher + '선생님' : '선생님') + '이 학부모님과 면담을 한 뒤 관리자가 정합니다. 궁금하면 담당 선생님께 먼저 물어보세요.' }));
+      }
+      var outKids = [pillsOf([o.total >= 2 ? UI.statusPill('out2', '퇴실 대상') : o.total === 1 ? UI.statusPill('out1', '1OUT') : UI.statusPill('mute', 'OUT 없음'), el('span', { text: '이번 기간 ' + o.total + '건' })])];
+      live.slice(0, 3).forEach(function (i) { outKids.push(el('div', { class: 'pt-note', text: i.dateKo + ' ' + i.ruleName })); });
+      outKids.push(note(parent ? 'OUT이 2번 쌓이면 퇴실 대상이 됩니다. 그때는 담당 선생님이 먼저 연락드립니다.' : 'OUT이 2번 쌓이면 퇴실 대상이 됩니다. OUT은 학기마다 처음부터 다시 셉니다.'));
+      if (!parent) outKids.push(link('내 OUT 자세히', function () { renderPortal(root, studentId, '', 'outs'); }));
+      root.appendChild(card(parent ? 'OUT' : '내 OUT', outKids));
 
-      root.appendChild(card('내 자리·방', [
-        row('자습 자리', p.seat ? p.seat.space + ' ' + p.seat.label : '아직 정해지지 않았습니다'),
-        row('기숙사 방', p.room ? p.room.floor + '층 ' + p.room.roomNo + '호' : '아직 정해지지 않았습니다')
-      ]));
+      var wk = weekOf(p.today), shown = p.exceptions.filter(function (e) { return parent || (e.date >= wk[0] && e.date <= wk[1]); }).filter(function (e) { return e.state !== '취소'; });
+      if (parent) shown = shown.slice(0, 5);
+      var exKids = shown.length ? shown.map(excRow) : [UI.emptyState(parent ? '출결 기록이 없습니다.' : '이번 주 출결 기록이 없습니다.')];
+      exKids.push(note('요청은 선생님이 확인하면 확정으로 바뀝니다.'));
+      if (!parent) exKids.push(link('출결 기록 전체 보기', function () { renderPortal(root, studentId, '', 'exceptions'); }));
+      root.appendChild(card(parent ? '출결 기록' : '이번 주 출결 기록', exKids));
 
-      var meal = Object.keys(st).filter(function (k) { return k === '조식' || k === '석식' || k === '중식'; }).map(function (k) { return row(k, st[k] || '없음'); });
-      if (meal.length) root.appendChild(card('급식', meal));
-
-      if (p.viewer === 'parent') {
+      if (!parent) {
+        var ph = [p.seat ? row('자습 자리', p.seat.space + ' ' + p.seat.label) : null, p.room ? row('기숙사', p.room.floor + '층 ' + p.room.roomNo + '호') : null].filter(Boolean);
+        root.appendChild(card('내 자리와 방', ph.length ? ph : [note('아직 정해진 자리가 없습니다.')]));
+      } else {
+        var meal = [row('기숙사', st['기숙사'] || '없음'), row('조식', st['조식'] || '없음'), row('석식', st['석식'] || '없음')];
+        if (st['중식']) meal.push(row('중식', st['중식']));
+        if ((p.pending || []).length) {
+          meal.push(el('div', { class: 'pt-k', style: 'margin-top:8px', text: '바뀌는 것' }));
+          p.pending.forEach(function (c) { meal.push(el('div', { class: 'pt-note', text: c.dateKo + '부터 ' + c.item + ' ' + c.value })); });
+        }
+        root.appendChild(card('급식과 기숙사', meal));
         var cn = p.counsel || [], cnKids = [];
-        if (!cn.length) cnKids.push(UI.emptyState('상담 기록이 없습니다.'));
-        cn.forEach(function (c) { cnKids.push(row(c.dateKo, c.teacher + ' 선생님')); });
-        cnKids.push(el('div', { class: 'muted', style: 'margin-top:8px;word-break:keep-all', text: '상담 내용은 보이지 않고, 상담한 날짜와 선생님만 알려 드립니다.' }));
-        root.appendChild(card('상담 여부', cnKids));
+        if (!cn.length) cnKids.push(el('div', { class: 'pt-note', text: '아직 상담 기록이 없습니다.' }));
+        cn.slice(0, 5).forEach(function (c) { cnKids.push(el('div', { class: 'pt-note', text: c.dateKo + (c.teacher ? ' ' + c.teacher + '님과' : '') + ' 상담이 있었습니다.' })); });
+        cnKids.push(note('상담 내용은 학교에서만 봅니다. 자세한 이야기는 담당 선생님께 직접 물어봐 주세요.'));
+        root.appendChild(card('상담', cnKids));
       }
 
+      var up = p.upcoming || [];
+      var upKids = up.length ? up.map(function (e) { return row(e.dateKo, e.title); }) : [UI.emptyState('앞으로 등록된 일정이 없습니다.')];
+      upKids.push(link('월별 일정 열기', function () { renderPortal(root, studentId, '', 'month'); }));
+      root.appendChild(card('앞으로 일정', upKids));
+    }
+
+    function outsView(p, back) {
+      root.appendChild(back());
+      var kids = p.outs.items.length ? p.outs.items.map(function (i) {
+        return row(i.dateKo, pillsOf([el('span', { text: i.ruleName }), i.status === '취소' ? UI.statusPill('canceled', '취소') : UI.statusPill(p.outs.total >= 2 ? 'out2' : 'out1', i.weight + 'OUT')]));
+      }) : [UI.emptyState('이번 기간 OUT이 없습니다.')];
+      root.appendChild(card('내 OUT' + (p.term ? ' · ' + p.term.name : ''), kids));
+      root.appendChild(card('OUT이란', [note('학교 생활 규칙을 어기면 OUT이 하나씩 쌓입니다. OUT이 2번 쌓이면 퇴실 대상이 되고, 담당 선생님과 학부모님이 면담을 한 뒤 관리자가 정합니다. OUT은 학기마다 처음부터 다시 셉니다. 취소된 OUT은 세지 않습니다.')]));
+    }
+
+    function exceptionsView(p, back) {
+      root.appendChild(back());
+      var kids = p.exceptions.length ? p.exceptions.map(excRow) : [UI.emptyState('이번 기간 출결 기록이 없습니다.')];
+      kids.push(note('요청은 선생님이 확인하면 확정으로 바뀝니다. 취소된 기록도 취소로 남습니다.'));
+      root.appendChild(card('내 출결 기록' + (p.term ? ' · ' + p.term.name : ''), kids));
+    }
+
+    function monthView(p, back) {
+      root.appendChild(back());
       var m = p.month, y = +m.month.slice(0, 4), mo = +m.month.slice(5, 7);
       var shift = function (d) { var t = new Date(y, mo - 1 + d, 1); return t.getFullYear() + '-' + ('0' + (t.getMonth() + 1)).slice(-2); };
-      var calKids = [el('div', { class: 'pt-nav' }, [
-        el('button', { type: 'button', class: 'btn secondary', text: '← 이전', onclick: function () { renderPortal(root, studentId, shift(-1)); } }),
+      var kids = [el('div', { class: 'pt-nav' }, [
+        el('button', { type: 'button', class: 'btn secondary', text: '← 이전', onclick: function () { renderPortal(root, studentId, shift(-1), 'month'); } }),
         el('b', { style: 'white-space:nowrap', text: y + '년 ' + mo + '월' }),
-        el('button', { type: 'button', class: 'btn secondary', text: '다음 →', onclick: function () { renderPortal(root, studentId, shift(1)); } })
+        el('button', { type: 'button', class: 'btn secondary', text: '다음 →', onclick: function () { renderPortal(root, studentId, shift(1), 'month'); } })
       ])];
-      if (!m.events.length) calKids.push(UI.emptyState('이 달에 등록된 일정이 없습니다.'));
-      m.events.forEach(function (e) { calKids.push(row(e.title + ' (' + e.kind + ')', e.start === e.end ? UI.util.formatDateKo(e.start) : UI.util.formatDateKo(e.start) + ' ~ ' + UI.util.formatDateKo(e.end))); });
+      if (!m.events.length) kids.push(UI.emptyState('이 달에 등록된 일정이 없습니다.'));
+      m.events.forEach(function (e) { kids.push(row(e.start === e.end ? UI.util.formatDateKo(e.start) : UI.util.formatDateKo(e.start) + ' ~ ' + UI.util.formatDateKo(e.end), e.title + ' (' + e.kind + ')')); });
       var closed = m.days.filter(function (d) { return !d.operating; }).map(function (d) { return +d.date.slice(8) + '일(' + d.weekdayKo + ')'; });
-      if (closed.length) calKids.push(row('운영 안 하는 날', closed.join(', ')));
-      root.appendChild(card('월별 일정', calKids));
+      if (closed.length) kids.push(row('운영 안 하는 날', closed.join(', ')));
+      root.appendChild(card('월별 일정', kids));
     }
   }
 </script>
