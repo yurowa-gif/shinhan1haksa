@@ -235,7 +235,7 @@
       if (!list.length) card.appendChild(UI.emptyState(tab === 'todo' ? '지금 할 일이 없습니다.' : '학생이 없습니다.'));
       list.forEach(function (i) {
         var kind = { '확인 필요': 'todo', '동의 기다림': 'requested', '제출 안 함': 'todo', '확정': 'confirmed', '돌려보냄': 'canceled' }[i.label] || 'mute';
-        var row = el('div', { class: 'tt-row' }, [el('div', { class: 'tt-main' }, [el('b', { text: i.grade + '학년 ' + i.name }), el('div', { class: 'muted', text: i.grade + '-' + i.classNo + ' ' + i.number + '번' })]), UI.statusPill(kind, i.label)]);
+        var row = el('div', { class: 'tt-row' }, [el('div', { class: 'tt-main' }, [el('b', { text: i.grade + '. ' + i.name }), el('div', { class: 'muted', text: i.grade + '-' + i.classNo + ' ' + i.number + '번' })]), UI.statusPill(kind, i.label)]);
         if (i.status) { row.style.cursor = 'pointer'; row.onclick = function () { openEntry(i, r); }; }
         card.appendChild(row);
       });
@@ -246,7 +246,7 @@
         if (!x.ok) { UI.toast(x.errors[0].message, { kind: 'warn' }); return; }
         var v = x.view, days = {};
         v.entries.forEach(function (e) { (days[e.code] = days[e.code] || []).push(e.weekday); });
-        var lines = [el('p', { class: 'sheet-lead', text: i.grade + '학년 ' + i.name + ' · ' + v.monthKo + ' 시간표' }),
+        var lines = [el('p', { class: 'sheet-lead', text: i.grade + '. ' + i.name + ' · ' + v.monthKo + ' 시간표' }),
           el('p', { text: '학(학원): ' + ((days['학'] || []).join(' ') || '없음') }), el('p', { text: '가(집): ' + ((days['가'] || []).join(' ') || '없음') }),
           el('p', { text: '부모 동의: ' + (v.agreedKo || '아직') })];
         if (v.status === '동의') { lines.push(el('p', { class: 'muted', text: '확인하면 ' + v.monthKo + ' 1일부터 출석부에 학·가가 나옵니다. 그 전까지는 지금 시간표가 그대로 쓰입니다.' })); }

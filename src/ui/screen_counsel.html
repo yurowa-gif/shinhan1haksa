@@ -61,7 +61,7 @@
       var status = el('div', { 'aria-live': 'polite' });
       var s = data.student;
       var top = el('div', { class: 'card' }, [
-        el('div', { class: 'cn-head' }, [el('div', {}, [el('b', { text: s.grade + '학년 ' + s.name }), el('span', { class: 'muted', text: ' ' + s.grade + '-' + s.classNo + ' ' + s.number + '번' + (s.teacher ? ' · 담당 ' + s.teacher : '') })]),
+        el('div', { class: 'cn-head' }, [el('div', {}, [el('b', { text: s.grade + '. ' + s.name }), el('span', { class: 'muted', text: ' ' + s.grade + '-' + s.classNo + ' ' + s.number + '번' + (s.teacher ? ' · 담당 ' + s.teacher : '') })]),
           el('button', { type: 'button', class: 'btn secondary row-btn', style: 'flex:0 0 auto;white-space:nowrap', text: '학생 바꾸기', onclick: function () { dropBar(); clear(body); data = null; head.style.display = ''; window.scrollTo(0, 0); } })])
       ]);
       if (data.canWrite) top.appendChild(UI.segmented({ label: '상담', value: tab, options: [{ value: 'list', label: '상담 목록' }, { value: 'write', label: editing ? '고치기' : '새로 쓰기' }], onchange: function (v) { tab = v; if (v === 'list') editing = null; draw(); } }));
