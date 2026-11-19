@@ -6,13 +6,11 @@
  * - 출석부에 반영: 확정되면 effectiveFixedRows_가 그 달부터 읽는다(확정 전에는 앞 달 확정 시간표 유지 — R23).
  * ASSUMPTION: 돌려보낸 사람·사유(교사 [돌려보내기]·부모 [동의하지 않습니다])는 새 열이 없어 audit_log(action 'timetable:return')에 남기고 학생 화면이 거기서 읽는다. 선생님 답에 따라 열로 옮길 수 있다.
  * ASSUMPTION: 평일 종료 유형(23:00/23:50)은 학생이 고른 값을 audit_log('timetable:submit')에 두었다가 교사가 [확인]할 때 enrollments.end_type을 바꾼다(총괄 결정, 새 열 없음). 바로 지금 달 출석부에도 적용된다.
- * ASSUMPTION: 학부모 [동의하지 않습니다]·교사 [돌려보내기]는 R23의 reject(상태 '반려')를 쓴다. 규칙 세션의 parentReturn·teacherReturn이 들어오면 이름만 바꾼다.
- * ASSUMPTION: [지난달 그대로 가져오기]는 이 파일의 ttcCopyPrevious_(앞 달 살아 있는 학·가 행)이다. 규칙 세션의 ttCopyPrevious_가 들어오면 그것으로 바꾼다.
+ * 돌려보내기는 R23의 parentReturn(학부모, 제출 단계, 사유 선택)·teacherReturn(담당교사, 동의 단계, 사유 필수)을 쓴다. 지난달 가져오기는 ttCopyPrevious_(앞 달 확정 시간표).
  */
 var TTC_END_TYPES = ['23:00', '23:50'];
 var TTC_REASON_MAX = 100;
 var TTC_RETURN_MIN = 2;
-var TTC_RETURN_ACTION = 'reject';   // 규칙 세션이 parentReturn·teacherReturn을 넣으면 여기만 바꾼다
 
 /* ───────────── 읽기 도우미 ───────────── */
 
@@ -50,15 +48,8 @@ function ttcEntries_(rows, sid, month) {
     .map(function (r) { return { weekday: ruleStr_(r.weekday), blocks: ruleStr_(r.blocks), code: ruleStr_(r.code) }; });
 }
 
-/** 앞 달('yyyy-MM') */
-function ttcPrevMonth_(m) {
-  var y = +m.slice(0, 4), mo = +m.slice(5, 7) - 1;
-  if (mo < 1) { y -= 1; mo = 12; }
-  return y + '-' + ('0' + mo).slice(-2);
-}
-
-/** 지난달 그대로 가져오기(ASSUMPTION: 앞 달에 살아 있는 학·가 행, 상태는 따지지 않는다). 없으면 [] */
-function ttcCopyPrevious_(rows, sid, month) { return ttcEntries_(rows, sid, ttcPrevMonth_(month)); }
+/** 지난달 그대로 가져오기(R23 ttCopyPrevious_: 앞 달 확정 시간표) → {entries, fromMonth} */
+function ttcCopyPrevious_(rows, sid, month) { return ttCopyPrevious_(rows, sid, month); }
 
 function ttcAuditRows_(action) {
   return readAll_('audit_log').filter(function (a) { return String(a.action) === action; });
@@ -139,7 +130,7 @@ function getTimetableContext() {
   if (!sid) return { ok: false, reason: '학생 명단에서 내 계정을 찾지 못했습니다. 담당 선생님께 알려 주세요.' };
   var d = ttcLoad_(), win = ttcWindow_(d.today);
   var view = ttcView_(d.rows, sid, win.month);
-  return { ok: true, student: ttcStudent_(findById_('students', sid)), today: d.today, window: win, view: view, hasPrev: ttcCopyPrevious_(d.rows, sid, win.month).length > 0 };
+  return { ok: true, student: ttcStudent_(findById_('students', sid)), today: d.today, window: win, view: view, hasPrev: ttcCopyPrevious_(d.rows, sid, win.month).entries.length > 0 };
 }
 
 /** [지난달 그대로 가져오기] 내용(저장하지 않는다). → {ok, entries, monthKo} */
@@ -147,8 +138,8 @@ function getPreviousTimetable(month) {
   requirePermission_('timetable.mine');
   var sid = ttcOwnId_();
   if (!sid || !ttcMonthOk_(month)) return ttcFail_('가져올 수 없습니다.');
-  var d = ttcLoad_(), entries = ttcCopyPrevious_(d.rows, sid, String(month));
-  return entries.length ? { ok: true, entries: entries, monthKo: ttcMonthKo_(ttcPrevMonth_(String(month))) } : ttcFail_('지난달에 낸 시간표가 없습니다.');
+  var d = ttcLoad_(), prev = ttcCopyPrevious_(d.rows, sid, String(month));
+  return prev.entries.length ? { ok: true, entries: prev.entries, monthKo: ttcMonthKo_(prev.fromMonth) } : ttcFail_('지난달에 확정된 시간표가 없습니다.');
 }
 
 /**
@@ -217,10 +208,8 @@ function declineTimetable(studentId, month, reason) {
   if (why.length > TTC_REASON_MAX) return ttcFail_('사유는 ' + TTC_REASON_MAX + '자 안으로 적어 주세요.', 'reason');
   return withLock_(function () {
     var d = ttcLoad_();
-    var plan = ttTransition_(d.rows, sid, String(month), TTC_RETURN_ACTION, { now: nowIso_() });
+    var plan = ttTransition_(d.rows, sid, String(month), 'parentReturn', { now: nowIso_(), reason: why });   // 부모는 동의 전(제출)에서만
     if (!plan.ok) return ttcFail_(plan.reason);
-    var st = ttMonthState_(d.rows, sid, String(month)).status;
-    if (st !== '제출') return ttcFail_('지금 상태(' + st + ')에서는 돌려보낼 수 없습니다. 새로 고쳐 주세요.');   // 부모는 동의 전(제출)에서만 돌려보낸다
     ttcApply_(plan, user.email);
     ttcSaveAudit_('timetable:return', user, { s: sid, m: String(month), by: 'parent', n: String(user.name || ''), r: why });
     return { ok: true };
@@ -288,7 +277,7 @@ function confirmTimetable(studentId, month, endType) {
   });
 }
 
-/** 담당교사 돌려보내기(사유 필수 2~100자). 학생에게 '돌려보냄'으로 돌아간다. → {ok:true} | {ok:false, errors} */
+/** 담당교사 돌려보내기(동의 단계에서, 사유 필수 2~100자). 학생에게 '돌려보냄'으로 돌아간다. → {ok:true} | {ok:false, errors} */
 function returnTimetable(studentId, month, reason) {
   var user = requirePermission_('timetable.confirm', { studentId: studentId });
   var sid = String(studentId || ''), why = String(reason === undefined || reason === null ? '' : reason).trim();
@@ -296,7 +285,7 @@ function returnTimetable(studentId, month, reason) {
   if (why.length < TTC_RETURN_MIN || why.length > TTC_REASON_MAX) return ttcFail_('돌려보내는 사유를 ' + TTC_RETURN_MIN + '자 이상 ' + TTC_REASON_MAX + '자 안으로 적어 주세요.', 'reason');
   return withLock_(function () {
     var d = ttcLoad_();
-    var plan = ttTransition_(d.rows, sid, String(month), TTC_RETURN_ACTION, { now: nowIso_() });
+    var plan = ttTransition_(d.rows, sid, String(month), 'teacherReturn', { now: nowIso_(), reason: why });   // 담당교사는 동의 뒤 확인 단계에서만, 사유 필수
     if (!plan.ok) return ttcFail_(plan.reason);
     ttcApply_(plan, user.email);
     ttcSaveAudit_('timetable:return', user, { s: sid, m: String(month), by: 'teacher', n: String(user.name || ''), r: why });

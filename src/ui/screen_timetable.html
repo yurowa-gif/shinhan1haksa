@@ -251,7 +251,7 @@
           el('p', { text: '부모 동의: ' + (v.agreedKo || '아직') })];
         if (v.status === '동의') { lines.push(UI.field('평일 자습 끝나는 시각', endBox, { name: 'endType' })); lines.push(el('p', { class: 'muted', text: '확인하면 ' + v.monthKo + ' 1일부터 출석부에 학·가가 나옵니다. 그 전까지는 지금 시간표가 그대로 쓰입니다.' })); }
         var content = el('div', {}, lines), actions = v.status === '동의' ? [] : [{ text: '닫기', kind: 'secondary', onclick: function () { sheet.close(); } }];   // 확인할 수 있을 때는 [돌려보내기]·[확인] 두 개만(배경을 누르면 닫힌다)
-        if (v.status === '제출' || v.status === '동의') actions.push({ text: '돌려보내기', kind: 'secondary', onclick: function () { sheet.close(); askReturn(i, v, r); } });
+        if (v.status === '동의') actions.push({ text: '돌려보내기', kind: 'secondary', onclick: function () { sheet.close(); askReturn(i, v, r); } });
         if (v.status === '동의') actions.push({ text: '확인', onclick: function () {
           call('confirmTimetable', i.id, v.month, endType).then(function (c) { sheet.close(); if (!c.ok) { UI.toast(c.errors[0].message, { kind: 'warn' }); return; } UI.toast('확인했습니다.'); load(v.month); }).catch(function (e) { sheet.close(); UI.toast(e.message, { kind: 'warn' }); });
         } });

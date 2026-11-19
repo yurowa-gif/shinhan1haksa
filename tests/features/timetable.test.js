@@ -133,11 +133,14 @@ test('담당교사 확인: 동의 뒤에만, 확인하면 확정 + 종료 유형
   assert.strictEqual(call(x, ADMIN, 'returnTimetable', x.me.id, MONTH, '확정 뒤 돌려보내기').ok, false, '확정은 돌려보낼 수 없다');
 });
 
-test('돌려보내기: 사유 필수(2~100자), 학생에게 돌려보낸 사람 이름·사유가 보이고 이메일은 없다. 관리자도 할 수 있다', () => {
+test('돌려보내기: 담당교사는 동의 뒤 확인 단계에서만, 사유 필수(2~100자), 학생에게 돌려보낸 사람 이름·사유가 보이고 이메일은 없다. 관리자도 할 수 있다', () => {
   const x = makeEnv();
   submit(x);
-  for (const why of ['', '가', '가'.repeat(101)]) assert.strictEqual(call(x, x.teacher, 'returnTimetable', x.me.id, MONTH, why).ok, false, why.length + '자');
+  assert.strictEqual(call(x, x.teacher, 'returnTimetable', x.me.id, MONTH, M_WHY).ok, false, '부모 동의 전에는 교사가 돌려보내지 않는다(부모 몫)');
   assert.strictEqual(status(x), '제출');
+  call(x, PARENT, 'agreeTimetable', x.me.id, MONTH);
+  for (const why of ['', '가', '가'.repeat(101)]) assert.strictEqual(call(x, x.teacher, 'returnTimetable', x.me.id, MONTH, why).ok, false, why.length + '자');
+  assert.strictEqual(status(x), '동의');
   assert.strictEqual(call(x, x.teacher, 'returnTimetable', x.me.id, MONTH, M_WHY).ok, true);
   const c = call(x, STUDENT, 'getTimetableContext');
   const tname = x.env.rows('users').find((u) => u.email === x.teacher).name;
@@ -193,7 +196,7 @@ test('홈 할 일: 학생은 기간에 안 냈으면 submit·돌려보내졌으�
   assert.deepStrictEqual([todo(PARENT, x.me.id).kind, todo(PARENT, x.me.id).month], ['agree', MONTH]);
   call(x, PARENT, 'agreeTimetable', x.me.id, MONTH);
   assert.strictEqual(todo(PARENT, x.me.id), null);
-  call(x, x.teacher, 'returnTimetable', x.me.id, MONTH, '다시 확인해 주세요');
+  call(x, x.teacher, 'returnTimetable', x.me.id, MONTH, '다시 확인해 주세요');   // 부모가 동의한 뒤라 담당교사가 돌려보낼 수 있다
   assert.strictEqual(todo(STUDENT, x.me.id).kind, 'returned');
   x.env.setNow(CLOSED);
   assert.strictEqual(todo(STUDENT, x.me.id), null, '기간이 아니면 할 일 칸이 없다');
