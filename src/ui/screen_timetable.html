@@ -167,7 +167,7 @@
 
   /* ───────── 학부모 ───────── */
   function ttParent(root) {
-    var tabs = el('nav', { class: 'tabs', 'aria-label': '자녀 전환' }), box = el('div'), bar = null;
+    var tabs = el('nav', { class: 'tabs wrap', 'aria-label': '자녀 전환' }), box = el('div'), bar = null;
     root.appendChild(tabs); root.appendChild(box);
     function dropBar() { if (bar && bar.parentNode) bar.parentNode.removeChild(bar); bar = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); }
     var want = (window.SCREEN_PARAMS || {}).student || '';
