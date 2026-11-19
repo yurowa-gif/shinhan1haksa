@@ -5,9 +5,16 @@
   .tt-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); word-break: keep-all; }
   .tt-row .tt-main { flex: 1 1 auto; min-width: 0; }
   .tt-pad { margin: 8px 0; word-break: keep-all; }
+  /* 360px(글자 150%까지)에서 블록이 5개인 요일도 카드 안에 들어오게: 칸 폭을 줄이고 시각은 시·분 두 줄로 */
+  table.data.rg.tt-fit { table-layout: fixed; }
+  table.data.rg.tt-fit th, table.data.rg.tt-fit td { padding: 2px; }
+  table.data.rg.tt-fit th:first-child, table.data.rg.tt-fit td:first-child { width: 2.4em; padding-left: 4px; }
+  table.data.rg.tt-fit .rg-cell { min-width: 0; padding: 2px 0; }
+  .tt-time { display: block; line-height: 1.1; font-size: var(--font-sm); }
+  .tt-time small { display: block; font-size: .75em; color: var(--muted-ink); }
   .tt-cell-off { color: var(--muted-ink); border: 1px dashed var(--line); min-height: var(--tap); display: flex; align-items: center; justify-content: center; }
   .tt-tools { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
-  .tt-tools .btn { flex: 0 0 auto; white-space: nowrap; }
+  .tt-tools .btn { flex: 0 1 auto; max-width: 100%; white-space: normal; }   /* 긴 글자 한 개짜리 버튼은 큰 글씨에서 줄을 바꿔 카드 안에 둔다 */
 </style>
 <script>
   /**
@@ -57,14 +64,14 @@
         var code = cells[w][i];
         var label = code === '학' ? '학원' : code === '가' ? '가정' : '';
         var btn = el('button', { type: 'button', class: code ? 'rg-cell has' : 'rg-cell', 'aria-label': w + '요일 ' + TT_CIRCLED[i] + ' ' + b.start + '부터 ' + (label || '학사 자습') }, [
-          el('span', { class: 'rg-sym', text: code }), el('span', { class: 'rg-pre', text: code ? label : b.start })
+          code ? el('span', { class: 'rg-sym', text: code }) : el('span', { class: 'tt-time' }, [document.createTextNode(b.start.slice(0, 2)), el('small', { text: b.start.slice(3, 5) })]), code ? el('span', { class: 'rg-pre', text: label }) : null
         ]);
         if (onpick) btn.onclick = (function (ww, ii) { return function () { onpick(ww, ii); }; })(w, i); else btn.disabled = true;
         tds.push(el('td', {}, [btn]));
       }
       return el('tr', {}, tds);
     });
-    return el('div', { class: 'tablewrap' }, [el('table', { class: 'data rg' }, [el('thead', {}, [head]), el('tbody', {}, body)])]);
+    return el('div', { class: 'tablewrap' }, [el('table', { class: 'data rg tt-fit' }, [el('thead', {}, [head]), el('tbody', {}, body)])]);
   }
 
   function ttErrors(status, r) { clear(status); (r.errors || []).forEach(function (e) { status.appendChild(el('div', { class: 'error', role: 'alert', text: e.message })); }); }
