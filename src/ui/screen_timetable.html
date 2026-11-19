@@ -111,7 +111,9 @@
         box.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: who + (v.returned.by === 'parent' ? ' 시간표에 동의하지 않았습니다.' : ' 시간표를 돌려보냈습니다.') + (v.returned.reason ? ' 사유: ' + v.returned.reason : '') + ' 고쳐서 다시 내 주세요.' }));
       }
       if (st && st !== '반려' && !editing) {
-        box.appendChild(el('div', { class: 'notice info', text: '확정되기 전에는 지금 시간표가 그대로 쓰입니다.' }));
+        box.appendChild(st === '확정'
+          ? el('div', { class: 'notice ok', text: v.monthKo + ' 시간표가 확정되었습니다. ' + v.monthKo + ' 1일부터 적용됩니다.' })
+          : el('div', { class: 'notice info', text: '확정되기 전에는 지금 시간표가 그대로 쓰입니다.' }));
         var steps = [['내가 제출', '완료', 'confirmed'], ['부모님 동의', st === '제출' ? '기다리는 중' : '완료', st === '제출' ? 'requested' : 'confirmed'],
           ['선생님 확인', st === '확정' ? '완료' : st === '동의' ? '기다리는 중' : '아직', st === '확정' ? 'confirmed' : st === '동의' ? 'requested' : 'mute'],
           [v.monthKo + ' 1일부터 적용', st === '확정' ? '확정' : '아직', st === '확정' ? 'confirmed' : 'mute']];
@@ -233,7 +235,7 @@
       if (!list.length) card.appendChild(UI.emptyState(tab === 'todo' ? '지금 할 일이 없습니다.' : '학생이 없습니다.'));
       list.forEach(function (i) {
         var kind = { '확인 필요': 'todo', '동의 기다림': 'requested', '제출 안 함': 'todo', '확정': 'confirmed', '돌려보냄': 'canceled' }[i.label] || 'mute';
-        var row = el('div', { class: 'tt-row' }, [el('div', { class: 'tt-main' }, [el('b', { text: i.grade + '. ' + i.name }), el('span', { class: 'muted', text: ' ' + i.grade + '-' + i.classNo + ' ' + i.number + '번' })]), UI.statusPill(kind, i.label)]);
+        var row = el('div', { class: 'tt-row' }, [el('div', { class: 'tt-main' }, [el('b', { text: i.grade + '학년 ' + i.name }), el('div', { class: 'muted', text: i.grade + '-' + i.classNo + ' ' + i.number + '번' })]), UI.statusPill(kind, i.label)]);
         if (i.status) { row.style.cursor = 'pointer'; row.onclick = function () { openEntry(i, r); }; }
         card.appendChild(row);
       });
@@ -244,7 +246,7 @@
         if (!x.ok) { UI.toast(x.errors[0].message, { kind: 'warn' }); return; }
         var v = x.view, days = {};
         v.entries.forEach(function (e) { (days[e.code] = days[e.code] || []).push(e.weekday); });
-        var lines = [el('p', { class: 'sheet-lead', text: i.grade + '. ' + i.name + ' · ' + v.monthKo + ' 시간표' }),
+        var lines = [el('p', { class: 'sheet-lead', text: i.grade + '학년 ' + i.name + ' · ' + v.monthKo + ' 시간표' }),
           el('p', { text: '학(학원): ' + ((days['학'] || []).join(' ') || '없음') }), el('p', { text: '가(집): ' + ((days['가'] || []).join(' ') || '없음') }),
           el('p', { text: '부모 동의: ' + (v.agreedKo || '아직') })];
         if (v.status === '동의') { lines.push(el('p', { class: 'muted', text: '확인하면 ' + v.monthKo + ' 1일부터 출석부에 학·가가 나옵니다. 그 전까지는 지금 시간표가 그대로 쓰입니다.' })); }
