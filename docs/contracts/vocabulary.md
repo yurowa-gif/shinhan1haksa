@@ -59,7 +59,7 @@
 | duty_slots | status | `유효` · `취소` |
 | duty_slots | end_time / swapped_at | `HH:mm` / `yyyy-MM-ddTHH:mm:ss`(교대 전에는 빈칸) |
 | violation_rules | active | `TRUE` · `FALSE` |
-| counsel_notes | type | `생활` · `학습` · `진로` · `진학` · `2OUT 학부모 면담` · `기타` |
+| counsel_notes | type | 일반 상담 = settings `counsel.types` 값(기본 `학업` · `생활` · `진로` · `건강` · `가정` · `기타`, C32), 그리고 예약어 `2OUT 학부모 면담`(OUT 화면 전용, 일반 상담 화면에서 고를 수 없음). 2단계 이전 값 `학습`·`진학`은 옛 행에만 남을 수 있다 |
 | counsel_notes | target | `학생` · `학부모` |
 | counsel_notes | show_to_parent / status | `TRUE`(기본, 2단계는 늘 TRUE) · `FALSE` / `유효` · `취소` |
 | status_changes | requested_at | source `명단업로드`이면 `''`(C16). F6·F7은 날짜+시각 필수 |
@@ -110,6 +110,8 @@ Apps Script는 같은 전역 이름을 경고 없이 덮는다. 새 전역 이�
 | enrollments | end_type | `23:00` · `23:50` |
 | students | gender | `남` · `여` |
 | students | track | `문` · `이` · `''` |
+| events | status | `유효` · `취소` (취소는 `cancel_reason` 필수, 행은 지우지 않는다. 결정 80) |
+| events | kind | settings `event.kinds`의 값 그대로(기본 `시험` · `행사` · `특강` · `휴업` · `기타`). 끝날이 비면 시작일 하루 |
 | doc_types | status | `유효` · `취소` |
 | student_docs_<기간> | state | `제출` · `미제출` · `해당없음` (학생·서류 종류마다 최대 1행, 행이 없으면 미제출) |
 | programs | status | `유효` · `취소` (blocks는 exceptions와 같은 표기: `ALL` 또는 `HH:mm-HH:mm;…`) |
@@ -134,6 +136,7 @@ Apps Script는 같은 전역 이름을 경고 없이 덮는다. 새 전역 이�
 | `meal.morning_cutoff` | `HH:mm` | Meals.gs → `mealCutoffHm_`·`mealEffectiveDate_`(실시·일반 석식 당일 마감, 미실시 수요일 마감, 결정 2·71) | `11:30`. 시각이 아니면 오류(다른 마감으로 조용히 계산하지 않음) | 시트 |
 | `exception.types` | 유형 이름 쉼표 목록 | Exceptions.gs `excSettings_`(F1 칩), 자동 OUT | DEFAULT_SETTINGS 11개 유형 | 시트 |
 | `exception.auto_out_types` | 유형 이름 쉼표 목록 | `excSettings_` → `reconcileAutoOuts_` autoTypes, `AUTO_OUT_SINCE` 넓힘 이력(결정 40) | `미인정지각,미인정조퇴,미인정결석` | 시트 |
+| `event.kinds` | 종류 이름 쉼표 목록 | Events.gs `evtKinds_`(월별 일정 등록 화면의 종류 목록) | `시험,행사,특강,휴업,기타`(결정 80) | 시트 |
 | `exception.type_short` | `유형:약어` 쉼표 목록 | `excSettings_`·AttendanceSheet.gs `sheetSettings_` → `resolveCell_` typeShort | DEFAULT_SETTINGS 약어표 | 시트 |
 | `attendance.end_type_day_types` | 요일 유형 쉼표 목록(`mon_thu`·`holiday` 등) | `sheetSettings_` → `resolveCell_` endTypeDayTypes(R3 END) | `mon_thu` | 시트 |
 | `attendance.end_label` | 글자 | `sheetSettings_` → END 칸 글자 | `정상 종료` | 시트 |
@@ -141,6 +144,7 @@ Apps Script는 같은 전역 이름을 경고 없이 덮는다. 새 전역 이�
 | `print.title` | 글자 | `sheetSettings_` → 출석부 머리말 | `신한학사 출석부` | 시트 |
 | `print.vacant_label` | 글자 | `sheetSettings_` → 빈 좌석 표기 | `공석` | 시트 |
 | `timetable.submit_start_day` · `timetable.submit_end_day` | 날짜 숫자 · 숫자 또는 `last` | (아직 쓰지 않음 — F9 시간표 제출 기간) | `25` · `last` | 시트 |
+| `counsel.types` | 유형 이름 쉼표 목록(`2OUT 학부모 면담`과 겹치는 이름은 무시) | CounselLog.gs `cnlTypes_`(상담일지 유형 칩, C32) | `학업,생활,진로,건강,가정,기타` | 시트 |
 | `out.instant_rule_ids` | violation_rules `id` 쉼표 목록 | Outs.gs `vioInstantIds_` → `outInstantNext_`·`vioOutOpts_`(결정 69·78) | 즉시 퇴실 항목 없음 | **화면**(OUT 항목 설정, `setOutInstantRule` — 지정 이력 `OUT_INSTANT_SINCE`와 함께 바뀌므로 시트로 고치지 않는다) |
 
 ### 스크립트 속성(Script Properties)

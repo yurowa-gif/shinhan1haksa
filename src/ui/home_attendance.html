@@ -15,6 +15,7 @@
       el('h2', { text: '오늘·내일 특이사항' }),
       el('div', { class: 'muted', text: '오늘 ' + x.today + '명 · 내일 ' + x.tomorrow + '명' }),
       el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=exceptions', text: '특이사항 입력' }),
+      el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=results', text: '출결 결과 정리' }),
       el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=programs', text: '학사 프로그램 열기' })
     ]));
     if (d.out && !d.out.error) root.appendChild(el('div', { class: 'card' }, [
@@ -42,4 +43,20 @@
     ]));
     root.appendChild(soonCard('출결 결과 격자 정리', '5단계(F11)에서 만듭니다.'));
   }
+  /** 월별 일정 카드(C34, 결정 80): 오늘 일정과 다음 일정. 맨 아래에 붙인다 */
+  (function () {
+    var base = renderHome;
+    renderHome = function (d, root) {
+      base(d, root);
+      var e = d.events;
+      if (!e || e.error) return;
+      var md = function (ymd) { return (+ymd.slice(5, 7)) + '월 ' + (+ymd.slice(8, 10)) + '일'; };
+      var lines = [];
+      e.today.forEach(function (x) { lines.push(el('div', {}, [UI.statusPill('todo', '오늘'), ' ' + x.title + ' (' + x.kind + ')'])); });
+      e.next.forEach(function (x) { lines.push(el('div', { class: 'muted' }, [md(x.start) + ' ' + x.title + ' (' + x.kind + ')'])); });
+      if (!lines.length) lines.push(el('div', { class: 'muted', text: '오늘과 앞으로 2주 안에 등록된 일정이 없습니다.' }));
+      root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '월별 일정' })].concat(lines, [
+        el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=calendar', text: '월별 일정 열기' })])));
+    };
+  })();
 </script>

@@ -11,13 +11,13 @@ function doGet(e) {
   var p = (e && e.parameter) || {};
 
   if (p.page === 'diag') {
-    if (!isDiagEnabled_()) return renderPage_('ui/NoAccess', { email: '' }, '권한 없음');
+    if (!isDiagEnabled_()) return renderPage_('ui/NoAccess', { email: '', message: noAccessText_('', false) }, '권한 없음');
     return renderPage_('ui/Diag', { diag: collectDiag_() }, '접속 진단');
   }
 
   // C0 임시: 인쇄 방식 시험 화면(소유자 본인만). A/B 결정 뒤 지운다.
   if (p.page === 'printspike') {
-    try { assertOwnerRun_(); } catch (err) { return renderPage_('ui/NoAccess', { email: '' }, '권한 없음'); }
+    try { assertOwnerRun_(); } catch (err) { return renderPage_('ui/NoAccess', { email: '', message: noAccessText_('', false) }, '권한 없음'); }
     return renderPage_('ui/screen_printspike', {}, '인쇄 방식 시험');
   }
 
@@ -30,7 +30,7 @@ function doGet(e) {
 
   if (!user.registered) {
     logDenied_(user.email, 'app.open', user.email ? '등록되지 않은 계정' : '이메일 확인 불가');
-    return renderPage_('ui/NoAccess', { email: user.email }, '권한 없음');
+    return renderPage_('ui/NoAccess', { email: user.email, message: noAccessText_(user.email, false) }, '권한 없음');
   }
 
   // 화면(?page=...): 역할을 확인한 뒤 화면 조각을 끼운다. 진짜 권한 검사는 화면이 부르는 서버 함수가 한다.
@@ -38,7 +38,7 @@ function doGet(e) {
     var sc = screenResolve_(p.page, user.roles);
     if (!sc.ok) {
       logDenied_(user.email, 'screen.' + String(p.page).slice(0, 40), sc.why);
-      return renderPage_('ui/NoAccess', { email: user.email }, '권한 없음');
+      return renderPage_('ui/NoAccess', { email: user.email, message: noAccessText_(user.email, true) }, '권한 없음');
     }
     return renderPage_('ui/screen_shell', {
       screenFile: sc.screen.file,
@@ -71,6 +71,7 @@ var SCREENS = {
   schedule: { file: 'ui/screen_schedule', title: '자습 일정·블록', view: 'schedule.view' },
   sheet: { file: 'ui/screen_sheet', title: '출석부', view: 'sheet.view' },
   exceptions: { file: 'ui/screen_exceptions', title: '특이사항', view: 'exception.view' },
+  results: { file: 'ui/screen_results', title: '출결 결과 정리', view: 'exception.view' },
   seats: { file: 'ui/screen_seats', title: '좌석표', view: 'seat.view' },
   avoid: { file: 'ui/screen_avoid', title: '떨어뜨릴 짝', view: 'avoid.view' },
   duty: { file: 'ui/screen_duty', title: '근무표', view: 'duty.view' },
@@ -81,7 +82,9 @@ var SCREENS = {
   programs: { file: 'ui/screen_programs', title: '학사 프로그램', view: 'program.view' },
   docs: { file: 'ui/screen_docs', title: '서류 체크리스트', view: 'doc.view' },
   contacts: { file: 'ui/screen_contacts', title: '연락처', view: 'contact.list' },
-  batch: { file: 'ui/screen_batch', title: '학년 일괄 퇴실', view: 'batch.leave' }
+  calendar: { file: 'ui/screen_calendar', title: '월별 일정', view: 'event.view' },
+  batch: { file: 'ui/screen_batch', title: '학년 일괄 퇴실', view: 'batch.leave' },
+  counsel: { file: 'ui/screen_counsel', title: '상담일지', view: 'counsel.list' }
 };
 
 /**
@@ -116,6 +119,16 @@ function renderPage_(file, vars, title) {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
+/**
+ * 권한 없음 화면의 안내 문구(순수 — 판정은 서버가 그대로 하고 문구만 나눈다).
+ * 이메일이 없으면 로그인 안내, 등록된 계정이 권한 밖 화면을 열면 역할 안내, 등록 안 된 계정이면 등록 요청 안내.
+ */
+function noAccessText_(email, registered) {
+  if (!email) return '접속한 계정의 이메일을 확인할 수 없습니다. 구글 계정에 로그인했는지 확인해 주세요.';
+  if (registered) return '이 화면은 볼 수 있는 역할이 아닙니다. 처음으로 돌아가 주세요.';
+  return '이 계정은 등록되어 있지 않습니다. 학사 담당 선생님께 계정 등록을 요청해 주세요.';
+}
+
 /** 템플릿 안에서 다른 HTML 파일을 끼워 넣는다 */
 function include(file) {
   return HtmlService.createHtmlOutputFromFile(file).getContent();
@@ -147,7 +160,7 @@ function getHomeData(role) {
   // 2단계 교사 홈 카드(각 기능 파일의 훅). 보고 있는 홈 역할이 그 보기 키를 가질 때만 부른다(출결 담당·근무표 담당자 홈에 OUT·급식 없음, 학생·학부모 홈에는 없음).
   // 훅 하나가 실패해도 홈 전체는 열린다(setup 전 탭 없음 등). ms = 훅마다 걸린 시간 — 확인 ③에서 재고, PRD §9 3초를 넘으면 카드별 호출로 바꾼다
   var perms = permissions_();
-  [['duty', dtyHomeInfo_, 'duty.view'], ['out', vioHomeInfo_, 'out.view'], ['food', foodHomeInfo_, 'status.list'], ['docs', docHomeInfo_, 'doc.view']].forEach(function (h) {
+  [['duty', dtyHomeInfo_, 'duty.view'], ['out', vioHomeInfo_, 'out.view'], ['food', foodHomeInfo_, 'status.list'], ['docs', docHomeInfo_, 'doc.view'], ['events', evtHomeInfo_, 'event.view'], ['counsel', cnlHomeInfo_, 'counsel.list']].forEach(function (h) {
     if (!hasAnyAllowedRole_([role], perms[h[2]].roles)) return;
     var t0 = Date.now();
     try {

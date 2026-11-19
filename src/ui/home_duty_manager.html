@@ -45,4 +45,20 @@
   function renderStage2B(d, root) {
     return;
   }
+  /** 월별 일정 카드(C34, 결정 80): 오늘 일정과 다음 일정. 맨 아래에 붙인다 */
+  (function () {
+    var base = renderHome;
+    renderHome = function (d, root) {
+      base(d, root);
+      var e = d.events;
+      if (!e || e.error) return;
+      var md = function (ymd) { return (+ymd.slice(5, 7)) + '월 ' + (+ymd.slice(8, 10)) + '일'; };
+      var lines = [];
+      e.today.forEach(function (x) { lines.push(el('div', {}, [UI.statusPill('todo', '오늘'), ' ' + x.title + ' (' + x.kind + ')'])); });
+      e.next.forEach(function (x) { lines.push(el('div', { class: 'muted' }, [md(x.start) + ' ' + x.title + ' (' + x.kind + ')'])); });
+      if (!lines.length) lines.push(el('div', { class: 'muted', text: '오늘과 앞으로 2주 안에 등록된 일정이 없습니다.' }));
+      root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '월별 일정' })].concat(lines, [
+        el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=calendar', text: '월별 일정 열기' })])));
+    };
+  })();
 </script>

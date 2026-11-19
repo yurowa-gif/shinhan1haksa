@@ -81,6 +81,7 @@
       el('h2', { text: '사전 특이사항' }),
       el('div', { class: 'muted', text: '병결·가정사유·학원 등을 입력하고 담임·담당교사의 요청을 확정합니다.' }),
       el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=exceptions', text: '특이사항 열기' }),
+      el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=results', text: '출결 결과 정리' }),
       el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=programs', text: '학사 프로그램 열기' })
     ]));
     root.appendChild(el('div', { class: 'card' }, [
@@ -93,7 +94,8 @@
       el('div', { class: 'muted', text: '공간·좌석 격자를 그리고 학생을 자리에 앉힙니다.' }),
       el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=seats', text: '좌석표 열기' }),
       el('a', { class: 'btn secondary', style: 'margin:12px 0 0 8px', href: d.appUrl + '?page=avoid', text: '떨어뜨릴 짝' }),
-      el('a', { class: 'btn secondary', style: 'margin:12px 0 0 8px', href: d.appUrl + '?page=contacts', text: '연락처' })
+      el('a', { class: 'btn secondary', style: 'margin:12px 0 0 8px', href: d.appUrl + '?page=contacts', text: '연락처' }),
+      el('a', { class: 'btn secondary', style: 'margin:12px 0 0 8px', href: d.appUrl + '?page=counsel', text: '상담일지' })
     ]));
     root.appendChild(soonCard('계정, 설정', '1단계부터 차례로 추가합니다.'));
   }
@@ -149,4 +151,20 @@
     // 식수 집계 화면의 '서류 미제출' 링크(#docs)로 들어오면 서류 카드까지 내린다. Apps Script는 앱이 iframe 안이라 바깥 hash를 getLocation으로 읽는다(없으면 건너뜀)
     try { if (window.google && google.script && google.script.url && google.script.url.getLocation) google.script.url.getLocation(function (l) { if (l && l.hash === 'docs') { var t = document.getElementById('docs'); if (t) t.scrollIntoView(); } }); } catch (e) { /* 스크롤만 못 할 뿐 */ }
   }
+  /** 월별 일정 카드(C34, 결정 80): 오늘 일정과 다음 일정. 맨 아래에 붙인다 */
+  (function () {
+    var base = renderHome;
+    renderHome = function (d, root) {
+      base(d, root);
+      var e = d.events;
+      if (!e || e.error) return;
+      var md = function (ymd) { return (+ymd.slice(5, 7)) + '월 ' + (+ymd.slice(8, 10)) + '일'; };
+      var lines = [];
+      e.today.forEach(function (x) { lines.push(el('div', {}, [UI.statusPill('todo', '오늘'), ' ' + x.title + ' (' + x.kind + ')'])); });
+      e.next.forEach(function (x) { lines.push(el('div', { class: 'muted' }, [md(x.start) + ' ' + x.title + ' (' + x.kind + ')'])); });
+      if (!lines.length) lines.push(el('div', { class: 'muted', text: '오늘과 앞으로 2주 안에 등록된 일정이 없습니다.' }));
+      root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '월별 일정' })].concat(lines, [
+        el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=calendar', text: '월별 일정 열기' })])));
+    };
+  })();
 </script>

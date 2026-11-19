@@ -65,6 +65,15 @@
         el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=docs', text: '서류 체크리스트 열기' })
       ]));
     }
+    if (d.counsel && !d.counsel.error) {
+      var cn = d.counsel;
+      root.appendChild(el('div', { class: 'card' }, [
+        el('h2', { text: '상담일지' }),
+        el('div', { style: 'margin:8px 0' }, [cn.withoutNote ? UI.statusPill('todo', '이번 기간 상담 기록 없는 학생 ' + cn.withoutNote + '명') : UI.statusPill('confirmed', cn.total ? '담당 학생 모두 기록 있음' : '담당 학생 없음')]),
+        el('div', { class: 'muted', style: 'word-break:keep-all', text: '최근 30일 내가 쓴 상담 ' + cn.mine30 + '건 · 내용은 담당교사·담임·관리자만 봅니다.' }),
+        el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=counsel', text: '상담일지 열기' })
+      ]));
+    }
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '출석부' }),
       el('div', { class: 'muted', text: '날짜를 고르면 그날 출석부를 미리 보고 PDF로 받습니다.' }),
@@ -115,4 +124,20 @@
     kids.push(el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=moves', text: '입퇴실 신청' }));
     root.appendChild(el('div', { class: 'card' }, kids));
   }
+  /** 월별 일정 카드(C34, 결정 80): 오늘 일정과 다음 일정. 맨 아래에 붙인다 */
+  (function () {
+    var base = renderHome;
+    renderHome = function (d, root) {
+      base(d, root);
+      var e = d.events;
+      if (!e || e.error) return;
+      var md = function (ymd) { return (+ymd.slice(5, 7)) + '월 ' + (+ymd.slice(8, 10)) + '일'; };
+      var lines = [];
+      e.today.forEach(function (x) { lines.push(el('div', {}, [UI.statusPill('todo', '오늘'), ' ' + x.title + ' (' + x.kind + ')'])); });
+      e.next.forEach(function (x) { lines.push(el('div', { class: 'muted' }, [md(x.start) + ' ' + x.title + ' (' + x.kind + ')'])); });
+      if (!lines.length) lines.push(el('div', { class: 'muted', text: '오늘과 앞으로 2주 안에 등록된 일정이 없습니다.' }));
+      root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '월별 일정' })].concat(lines, [
+        el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=calendar', text: '월별 일정 열기' })])));
+    };
+  })();
 </script>

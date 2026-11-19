@@ -211,9 +211,30 @@ test('D12 5단계 시안(stage5-screens.js): 화면 이름이 stage5-screens.md 
   const imgs = [...doc.matchAll(/!\[[^\]]*\]\((stage5-photos\/[^)]+)\)/g)].map((m) => m[1]);
   assert.ok(imgs.length >= 19, '문서의 사진 수 ' + imgs.length);
   imgs.forEach((f) => assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'docs', 'design', f)), f + ' 파일이 없다'));
-  ['.rg-cell', '.rg-pre', '.rg-sym', 'table.data.rg', '.rg-cell.bad', '.rg-cell.off', '.rg-cell.has'].forEach((c) => assert.ok(css.readFile('src/ui/Styles.html').indexOf(c.replace(/^table\.data\./, 'table.data.')) >= 0, c + ' 가 Styles.html 에 없다'));
-  ['`counsel.view`', '`counsel.save`', '`counsel.cancel`', 'ASSUMPTION', '미정·가정', '삭제 버튼은 어디에도 없다', '저장한 뒤에는 고치지 않는다', '자동 1OUT', '(내용 생략, N자)', '기본 켬', '결정 80', 'UI.rangeField'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
+  ['.rg-cell', '.rg-pre', '.rg-sym', 'table.data.rg', '.rg-cell.bad', '.rg-cell.off', '.rg-cell.has', '.rg-cell.sel'].forEach((c) => assert.ok(css.readFile('src/ui/Styles.html').indexOf(c.replace(/^table\.data\./, 'table.data.')) >= 0, c + ' 가 Styles.html 에 없다'));
+  ['`counsel.view`', '`counsel.save`', '`counsel.cancel`', '결정 81', '미정·가정', '삭제 버튼은 어디에도 없다', '저장한 뒤에는 고치지 않는다', '자동 1OUT', '(내용 생략, N자)', '기본 켬', '결정 80', 'UI.rangeField'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
   // 미인정·운영 안 함은 색만으로 알리지 않는다(⚠ 글자·점선)
   const styles = css.readFile('src/ui/Styles.html');
+  assert.ok(/\.rg-cell\.sel \{ border: 3px solid var\(--accent\)/.test(styles) && !/\.rg-cell\.sel[^{]*::before/.test(styles), '고른 날은 아이콘 없이 색 + 굵기');
   assert.ok(/\.rg-cell\.bad \.rg-sym::before \{ content: "⚠ "/.test(styles) && /\.rg-cell\.bad \{ border: 3px solid/.test(styles) && /\.rg-cell\.off \{[^}]*border-style: dashed/.test(styles));
+});
+
+test('5단계 선생님 확인 체크리스트: 번호(0-1~C24)가 겹치지 않고 모든 줄이 7칸이며, 사진 파일이 있고 꼭 넣을 단계가 있다', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const doc = css.readFile('docs/design/stage5-teacher-checks.md');
+  const rows = doc.split('\n').filter((l) => /^\| (0-\d+|[A-C]\d+) \|/.test(l));
+  const ids = rows.map((l) => l.split('|')[1].trim());
+  assert.strictEqual(new Set(ids).size, ids.length, '번호 중복');
+  assert.ok(rows.length >= 60, '단계 수 ' + rows.length);
+  rows.forEach((l) => assert.strictEqual(l.replace(/\\\|/g, '').split('|').length, 8, l.slice(0, 40)));
+  ['0-1', 'A1', 'B1', 'C1', 'A17', 'B18', 'C24'].forEach((id) => assert.ok(ids.indexOf(id) >= 0, id + ' 가 없다'));
+  ['이 일정을 등록할까요?', '이 일정을 취소할까요?', '상담 기록을 취소합니다', '결과를 저장할까요?', '(내용 생략, N자)', '연결된 자동 1OUT도 함께 취소됩니다', '끝난 지 오래되어 볼 수만 있습니다', '결과 입력은 출결 담당·관리자만 합니다.', '미인정이라 저장하면 자동으로 1OUT', '다른 관리자가 먼저 바꿨습니다', '다른 선생님이 먼저 바꿨습니다', '볼 수 있는 학생이 없습니다', '출석(특이사항 없음)', '이 화면은 볼 수 있는 역할이 아닙니다', '14일', '한 통'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
+  assert.ok(doc.indexOf('알려진 표시 문제') < 0 && !/NONE · NONE/.test(doc), '고쳐진 표시 문제 안내가 남아 있다');
+  const imgs = [...doc.matchAll(/!\[[^\]]*\]\((stage5-check-photos\/[^)]+)\)/g)].map((m) => m[1]);
+  assert.ok(imgs.length >= 25, '사진 수 ' + imgs.length);
+  imgs.forEach((f) => assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'docs', 'design', f)), f + ' 파일이 없다'));
+  // 사진을 찍는 스크립트가 있고 세 절을 모두 다룬다
+  const shots = css.readFile('design/preview/stage5-real.js');
+  ['sectionA', 'sectionB', 'sectionC', "a-cal-form-error", "b-not-mine", "c-save-bad-confirm"].forEach((t) => assert.ok(shots.indexOf(t) >= 0, t));
 });
