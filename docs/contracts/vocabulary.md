@@ -159,6 +159,7 @@ Apps Script는 같은 전역 이름을 경고 없이 덮는다. 새 전역 이�
 | `DB_ID` · `COUNSEL_ID` · `CONFIG_ID` | 스프레드시트 ID(비밀) | Schema.gs `DB_FILES` → Db.gs·Setup.gs·Backup.gs·RepairIds.gs | 아니오 |
 | `AUTO_OUT_SINCE` | JSON `{types, since, widened}` | AutoOuts.gs `vioAutoSince_` ↔ `outAutoSinceNext_`(결정 40) | 예 |
 | `OUT_INSTANT_SINCE` | JSON `{ids, periods}` | Outs.gs ↔ `outInstantNext_`(결정 78) | 예 |
+| `FAC_HANDLE_SALT` | 무작위 글(UUID) | Facility.gs `facHandle_` — 함께 쓴 학생을 고르는 불투명 표식의 소금(처음 쓸 때 만든다, 지우거나 바꾸면 열려 있는 쓰기 화면의 표식만 무효). 값은 응답·기록에 넣지 않는다 | 아니오 |
 | `MAIL_ENABLED` | `true`일 때만 메일 | Notify.gs·AutoOuts.gs·Outs.gs | 예 |
 | `DIAG_ENABLED` | `true`일 때만 진단 화면(`diagPing`) | Code.gs·Setup.gs(처음 setup 때 `true`) — 시범 운영 전 `false`(pilot-guide 1절) | 예 |
 | `BACKUP_FOLDER_ID` | Drive 폴더 ID(비밀) | Backup.gs | 아니오 |

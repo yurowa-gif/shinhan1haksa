@@ -1,0 +1,158 @@
+<style>
+  .fc-log { padding: 12px 0; border-bottom: 1px solid var(--line); word-break: keep-all; }
+  .fc-log:last-child { border-bottom: 0; }
+  .fc-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .fc-times { display: flex; gap: 8px; }
+  .fc-times .field { flex: 1 1 0; }
+  .fc-chosen { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px; }
+  .fc-cancelled { color: var(--muted); }
+</style>
+<script>
+  /**
+   * 시설 일지 쓰기·내 기록(C35, F10 학생). docs/design/stage7-screens.md 3절. 학생 본인만(서버가 portalWho_로 판정).
+   * 같은 시설·시간이 겹치면 서버가 needsConfirm으로 막고, 학생이 [그래도 저장]을 눌러야 저장된다. 취소는 사유 2자 이상.
+   */
+  function renderScreen(root) {
+    var U = UI.util;
+    var state = { tab: window.SCREEN_TAB === 'mine' ? 'mine' : 'write', data: null, facility: '', start: '', end: '', purpose: '', companions: [], busy: false, bar: null };
+    var tabsBox = el('div', { class: 'card' });
+    var body = el('div');
+    root.appendChild(tabsBox); root.appendChild(body);
+    function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
+    function removeBar() { if (state.bar) { state.bar.remove(); state.bar = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); } }
+
+    function load(then) {
+      call('getFacilityForm').then(function (d) { state.data = d; if (!state.date) state.date = d.today; drawTabs(); drawTab(); if (then) then(); })
+        .catch(function (err) { clear(tabsBox); clear(body); showError(body, err); });
+    }
+    load();
+
+    function drawTabs() {
+      clear(tabsBox);
+      tabsBox.appendChild(el('h2', { text: '시설 일지' }));
+      tabsBox.appendChild(UI.segmented({ label: '화면', value: state.tab, options: [{ value: 'write', label: '일지 쓰기' }, { value: 'mine', label: '내가 쓴 일지' }],
+        onchange: function (v) { state.tab = v; drawTab(); } }));
+    }
+    function drawTab() { clear(body); removeBar(); if (state.tab === 'write') drawWrite(); else drawMine(); }
+
+    /* ───────── 쓰기 ───────── */
+    function drawWrite() {
+      var d = state.data;
+      if (!d.term) { body.appendChild(el('div', { class: 'notice warn', text: '지금 운영 중인 기간이 없어 일지를 쓸 수 없습니다.' })); return; }
+      if (d.enrolled === false) { body.appendChild(el('div', { class: 'notice warn', text: '이번 기간 학사생 명단에 없어 일지를 쓸 수 없습니다. 담당 선생님께 알려 주세요.' })); return; }
+      body.appendChild(el('div', { class: 'notice info', text: '먼저 오늘 근무 선생님께 말씀드린 뒤 적어 주세요.' }));
+
+      var whereCard = el('div', { class: 'card' }, [el('h2', { text: '어디서' })]);
+      var facBox = el('div', { class: 'chips', role: 'group', 'aria-label': '시설' });
+      var facFix = el('div', { class: 'fix' });
+      function drawFac() {
+        clear(facBox);
+        d.names.forEach(function (n) {
+          var on = state.facility === n;
+          facBox.appendChild(el('button', { type: 'button', class: on ? 'chip on' : 'chip', 'aria-pressed': on ? 'true' : 'false', text: n, onclick: function () { state.facility = n; facFix.textContent = ''; drawFac(); } }));
+        });
+      }
+      drawFac();
+      whereCard.appendChild(facBox); whereCard.appendChild(facFix);
+      body.appendChild(whereCard);
+
+      var whenCard = el('div', { class: 'card' }, [el('h2', { text: '언제' })]);
+      var dateF = UI.dateField({ label: '날짜', value: state.date, min: d.minDate, max: d.today, name: 'date', shortcuts: [{ label: '오늘', value: d.today }], onchange: function (v) { state.date = v; } });
+      var startIn = el('input', { type: 'time' }); startIn.value = state.start; startIn.addEventListener('input', function () { state.start = startIn.value; });
+      var endIn = el('input', { type: 'time' }); endIn.value = state.end; endIn.addEventListener('input', function () { state.end = endIn.value; });
+      var startF = UI.field('시작', startIn, { name: 'start' }), endF = UI.field('끝나는 시각', endIn, { name: 'end' });
+      whenCard.appendChild(dateF);
+      whenCard.appendChild(el('div', { class: 'fc-times' }, [startF, endF]));
+      body.appendChild(whenCard);
+
+      var whoCard = el('div', { class: 'card' }, [el('h2', { text: '누구와 무엇을' })]);
+      var chosen = el('div', { class: 'fc-chosen' });
+      var search = el('input', { type: 'search', placeholder: '이름·초성(ㄱㄱㅇ)', autocomplete: 'off' });
+      var list = el('ul', { class: 'picker-list' });
+      var compF = UI.field('함께 쓴 학생(선택)', search, { name: 'companions', hint: '이름이나 초성으로 찾습니다. 이름만 보입니다.' });
+      var seq = 0, timer = null;
+      function drawChosen() {
+        clear(chosen);
+        state.companions.forEach(function (c) {
+          chosen.appendChild(el('button', { type: 'button', class: 'chip on', 'aria-label': c.name + ' 빼기', text: c.name + ' ✕', onclick: function () { state.companions = state.companions.filter(function (x) { return x.handle !== c.handle; }); drawChosen(); runSearch(); } }));
+        });
+      }
+      function runSearch() {
+        var q = search.value, mine = ++seq;
+        clear(list);
+        if (!q.replace(/\s+/g, '')) return;
+        call('searchFacilityStudents', q, dateF.getValue()).then(function (r) {
+          if (mine !== seq) return;
+          clear(list);
+          var hits = r.results.filter(function (s) { return !state.companions.some(function (c) { return c.handle === s.handle; }); });
+          if (!hits.length) { list.appendChild(el('li', { class: 'muted', text: '찾는 학생이 없습니다. 이름을 다시 확인해 주세요(그날 학사 입실 중인 학생만 찾습니다).' })); return; }
+          hits.forEach(function (s) {
+            list.appendChild(el('li', {}, [el('button', { type: 'button', class: 'picker-item', onclick: function () { state.companions.push(s); search.value = ''; compF.setError(''); clear(list); drawChosen(); } }, [el('span', { text: s.name })])]));
+          });
+          if (r.more) list.appendChild(el('li', { class: 'muted', text: '외 ' + r.more + '명. 더 적어서 좁혀 주세요.' }));
+        }).catch(fail);
+      }
+      search.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(runSearch, 250); });
+      var purposeIn = el('input', { type: 'text', maxlength: '100' }); purposeIn.value = state.purpose; purposeIn.addEventListener('input', function () { state.purpose = purposeIn.value; });
+      var purposeF = UI.field('목적(선택, 100자 이내)', purposeIn, { name: 'purpose' });
+      whoCard.appendChild(chosen); whoCard.appendChild(compF); whoCard.appendChild(list); whoCard.appendChild(purposeF);
+      drawChosen();
+      body.appendChild(whoCard);
+
+      function showErrors(errors) {
+        var map = { facility: { setError: function (m) { facFix.textContent = m || ''; } }, date: dateF, start: startF, end: endF, companions: compF, purpose: purposeF };
+        Object.keys(map).forEach(function (k) { map[k].setError(''); });
+        (errors || []).forEach(function (e) { if (map[e.field]) map[e.field].setError(e.message); else UI.toast(e.message, { kind: 'warn', ms: 5000 }); });
+      }
+      function payload(confirm) { return { facility: state.facility, date: dateF.getValue(), start: startIn.value, end: endIn.value, companions: state.companions.map(function (c) { return c.handle; }), purpose: purposeIn.value, confirmOverlap: !!confirm }; }
+      function save(confirm) {
+        if (state.busy) return; state.busy = true;
+        call('saveFacilityLog', payload(confirm)).then(function (r) {
+          state.busy = false;
+          if (r.needsConfirm) {
+            showErrors(r.errors);
+            UI.confirmSheet({ title: '같은 시간에 이미 쓴 기록이 있습니다', lead: r.warnings[0], lines: ['정말 같은 시간으로 저장하려면 [그래도 저장]을 누르세요.', '아니면 [취소]를 누르고 시간을 바꿔 주세요.'], confirmText: '그래도 저장', onconfirm: function () { save(true); } });
+            return;
+          }
+          if (!r.ok) { showErrors(r.errors); if (!r.errors) UI.toast(r.error || '저장하지 못했습니다.', { kind: 'warn', ms: 5000 }); return; }
+          UI.toast('시설 일지를 저장했습니다.');
+          state.facility = ''; state.start = ''; state.end = ''; state.purpose = ''; state.companions = []; state.date = '';
+          state.tab = 'mine'; load();
+        }).catch(function (err) { state.busy = false; fail(err); });
+      }
+      state.bar = UI.actionBar([
+        { text: '닫기', kind: 'secondary', onclick: function () { location.href = (document.querySelector('a.back') || {}).href || '#'; } },
+        { text: '일지 저장', kind: 'primary', onclick: function () { showErrors([]); save(false); } }
+      ], { mount: true });
+    }
+
+    /* ───────── 내 기록 ───────── */
+    function drawMine() {
+      var d = state.data;
+      var card = el('div', { class: 'card' }, [el('h2', { text: '내가 쓴 시설 일지' }), el('div', { class: 'muted', text: '최근 30일입니다. 잘못 썼으면 취소하고 새로 써 주세요(취소해도 기록은 "취소"로 남습니다).' })]);
+      if (!d.logs.length) { card.appendChild(UI.emptyState('아직 쓴 일지가 없습니다.')); body.appendChild(card); return; }
+      d.logs.forEach(function (l) {
+        var cancelled = l.status === '취소';
+        var row = el('div', { class: 'fc-log' + (cancelled ? ' fc-cancelled' : '') }, [
+          el('div', { class: 'fc-line' }, [el('b', { text: U.formatDateKo(l.date, false) + ' · ' + l.facility }), cancelled ? UI.statusPill('canceled', '취소') : null]),
+          el('div', { text: l.start + '–' + l.end }),
+          l.companions.length ? el('div', { class: 'muted', text: '함께 쓴 학생: ' + l.companions.join(', ') }) : null,
+          l.purpose ? el('div', { class: 'muted', text: l.purpose }) : null,
+          cancelled && l.cancelReason ? el('div', { class: 'muted', text: '취소 사유: ' + l.cancelReason }) : null
+        ]);
+        if (!cancelled) row.appendChild(el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:8px', text: '취소', onclick: function () { askCancel(l); } }));
+        card.appendChild(row);
+      });
+      body.appendChild(card);
+    }
+    function askCancel(l) {
+      UI.confirmWithReason({ title: '이 일지를 취소합니다', message: U.formatDateKo(l.date, false) + ' ' + l.facility + ' ' + l.start + '–' + l.end + ' — 삭제가 아니라 "취소"로 남습니다.', reasonLabel: '취소 사유', confirmText: '일지 취소', minLength: 2, danger: true,
+        onconfirm: function (reason) {
+          call('cancelFacilityLog', l.termId, l.id, reason).then(function (r) {
+            if (!r.ok) { UI.toast(r.error || (r.errors && r.errors[0].message) || '취소하지 못했습니다.', { kind: 'warn', ms: 5000 }); if (r.stale) load(); return; }
+            UI.toast('일지를 취소했습니다.'); load();
+          }).catch(fail);
+        } });
+    }
+  }
+</script>
