@@ -98,8 +98,8 @@ test('setup: 기간별 탭을 만들고 id 앞 8자가 겹치면 멈춘다 / 이
   sctx.openFile_ = () => ({});
   sctx.ensureSheet_ = (ss, kind, name) => { const had = made.has(name); made.add(name); return (had ? '[탭 유지] ' : '[탭 생성] ') + name; };
   const r1 = []; sctx.ensureTermSheets_(r1);
-  assert.deepStrictEqual(r1.map((x) => x.trim()), ['[탭 생성] exceptions_a1a1a1a1', '[탭 생성] violations_a1a1a1a1', '[탭 생성] student_docs_a1a1a1a1',
-    '[탭 생성] exceptions_a2a2a2a2', '[탭 생성] violations_a2a2a2a2', '[탭 생성] student_docs_a2a2a2a2']);
+  assert.deepStrictEqual(r1.map((x) => x.trim()), ['[탭 생성] exceptions_a1a1a1a1', '[탭 생성] violations_a1a1a1a1', '[탭 생성] student_docs_a1a1a1a1', '[탭 생성] facility_logs_a1a1a1a1',
+    '[탭 생성] exceptions_a2a2a2a2', '[탭 생성] violations_a2a2a2a2', '[탭 생성] student_docs_a2a2a2a2', '[탭 생성] facility_logs_a2a2a2a2']);
   const r2 = []; sctx.ensureTermSheets_(r2);
   assert.ok(r2.every((x) => x.includes('[탭 유지]')), '두 번째 실행은 유지');
   sctx.readAll_ = () => [{ id: 'aaaaaaaa-0001', name: 'A' }, { id: 'aaaaaaaa-0002', name: 'B' }];
@@ -128,7 +128,7 @@ test('2단계: 바뀐 탭의 전체 헤더가 5절 승인안 그대로(새 탭 3
   }
   assert.strictEqual(ctx.termTabBase_('violations_a1b2c3d4'), 'violations');
   assert.strictEqual(ctx.termTabBase_('violation_rules'), '', 'violation_rules는 기간별 탭이 아니다');
-  assert.deepStrictEqual(Object.keys(ctx.SCHEMA_TERM_TABS), ['exceptions', 'violations', 'student_docs']);
+  assert.deepStrictEqual(Object.keys(ctx.SCHEMA_TERM_TABS), ['exceptions', 'violations', 'student_docs', 'facility_logs']);
   // 탭 목록: 2단계에 더한 것은 duty_slots·violation_rules뿐(duty_swaps·meal_counts·out_dismissals는 만들지 않는다). 그 뒤는 3단계 결정 64의 3개(stage3_tabs.test.js)
   assert.deepStrictEqual(Object.keys(ctx.SCHEMA.db), ['users', 'terms', 'students', 'enrollments', 'guardian_links', 'audit_log',
     'status_changes', 'day_schedules', 'blocks', 'fixed_schedules', 'spaces', 'seats', 'seat_assignments', 'duty_slots', 'violation_rules', 'avoid_pairs', 'rooms', 'room_assignments', 'doc_types', 'programs', 'program_participants', 'events']);

@@ -36,6 +36,7 @@ var ROLE_PRIORITY = ['admin', 'attendance', 'hall_teacher', 'duty_manager', 'hom
  * 2단계(결정 41): duty_slots, violation_rules, 기간별 violations, counsel_notes·status_changes 열 추가.
  * 3단계(결정 64): avoid_pairs, rooms, room_assignments.
  * 5단계(결정 80): events(월별 일정).
+ * 7단계(결정 83): 기간별 facility_logs(시설 사용 일지, F10).
  * 4단계(결정 75·76): doc_types, programs, program_participants, 기간별 student_docs, students.phone, guardian_links.name·phone.
  */
 var SCHEMA = {
@@ -131,7 +132,9 @@ var DEFAULT_SETTINGS = [
   ['print.title', '신한학사 출석부', '출석부 머리말 제목'],
   ['print.vacant_label', '공석', '빈 좌석 표기'],
   // 5단계 C32(F12 상담일지). 쉼표 구분, 관리자가 수정. '2OUT 학부모 면담'은 예약어라 넣어도 빠진다
-  ['counsel.types', '학업,생활,진로,건강,가정,기타', '상담일지 상담 유형']
+  ['counsel.types', '학업,생활,진로,건강,가정,기타', '상담일지 상담 유형'],
+  // 7단계 결정 83(F10): 시설 사용 일지의 시설 목록(쉼표 구분, 관리자가 수정)
+  ['facility.names', '특강실,원형테이블', '시설 사용 일지 시설 목록']
 ];
 
 /** 탭의 전체 헤더(id + 본문 + 공통 꼬리) */
@@ -156,7 +159,10 @@ var SCHEMA_TERM_TABS = {
   violations: ['term_id', 'student_id', 'occurred_at', 'rule_id', 'rule_name', 'memo', 'detected_by', 'entered_by',
     'status', 'source', 'source_exception_id', 'cancel_reason'],
   // 학기 초 서류 체크리스트(결정 75). 학생·서류 종류마다 최대 1행, 행이 없으면 미제출. state: 제출·미제출·해당없음
-  student_docs: ['term_id', 'student_id', 'doc_type_id', 'state', 'submitted_date', 'memo']
+  student_docs: ['term_id', 'student_id', 'doc_type_id', 'state', 'submitted_date', 'memo'],
+  // 시설 사용 일지(결정 83, F10). 학생 본인이 쓰고 취소한다(삭제 없음). start·end = 'HH:mm', companions = 함께 쓴 학생 id 쉼표 목록,
+  // status: 유효·취소(취소는 cancel_reason 필수)
+  facility_logs: ['term_id', 'student_id', 'facility', 'date', 'start', 'end', 'companions', 'purpose', 'status', 'cancel_reason']
 };
 
 /** 기간별 탭 이름. 예: termSheetName_('exceptions', 'a1b2c3d4-…') → 'exceptions_a1b2c3d4' */
