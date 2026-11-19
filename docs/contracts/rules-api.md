@@ -164,6 +164,15 @@ function lunchOn_(changes, studentId, ymd, opts)   // (결정 79 후속) 그날 
 function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, vacation, opts)
         // (R12, vacation·lunch R19) → {groups:{'여1':{hall, dorm, nonDorm, breakfast, lunch, hallDinner, generalDinner}, …, '여 합계','남 합계','1학년'…'전체'},
         //    afterLeaveHallDinner, unknownGroup:[studentId], warnings}
+
+// src/rules/TimetableRules.gs (R23, F9) — DateRules·AttendanceRules(parseBlockSpec_·formatBlockSpec_)를 부른다
+function ttSubmitWindow_(today, cfg)            // cfg = {startDay, endDay}(settings timetable.submit_*) → {open, month(적용월), start, end, reason}
+function ttValidateEntries_(entries)            // [{weekday, blocks, code}] → {ok, errors:[], rows:[{weekday, blocks(정규 표기), code}]}
+function ttMonthState_(rows, studentId, month)  // → {status:''|'제출'|'동의'|'확정'|'반려'|'혼합', rows(살아 있는 행)}
+function ttTransition_(rows, studentId, month, action, ctx)
+        // action 'submit'|'withdraw'|'agree'|'unagree'|'confirm'|'unconfirm'|'reject', ctx = {now, entries, window}
+        // → {ok, reason, add:[fixed_schedules 행(id 없음)], update:[{id, set}], cancel:[id], warnings}
+function ttMissing_(rows, studentIds, month)    // → 그 달 살아 있는 행이 없거나 반려인 학생 id
 ```
 
 ## 동작 메모(R1, 2026-11-06)
@@ -403,3 +412,27 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, 
 - `roomViolations_`: 정원 초과·같은 학년은 방마다 한 줄, 떨어뜨릴 짝은 짝마다 한 줄(모두 `studentId ''`), 성별은 학생마다(`studentId` = 그 학생). 짝 상대는 서버가 권한에 따라 거른다(결정 64). 없는 방(취소 포함)·명단 밖 학생·겹친 배정 행은 건너뛰거나 한 번만 센다.
 - 정원이 남으면 '같으면 사람이 적은 방' 규칙 때문에 1~2명 방이 많이 생긴다(허용되는 동작 — 방을 가득 채우는 쪽을 원하면 규칙을 바꿔야 한다).
 - `roomBoard_`: 공석 = 방마다 max(0, 정원 − 인원)을 더한 값(정원 초과 방이 있어도 층·성별 합계 공석은 음수가 되지 않는다), 정원 초과는 인원 그대로. 층 줄은 (층, 성별)마다 방 순서대로, `byGrade` = {학년: 인원}. 가득 찬 경우(남 48·여 92, 4인실 35방) 시험 통과.
+
+## 동작 메모(R23, 2026-11-19)
+
+**TimetableRules** — F9 시간표 제출(학생 제출 → 학부모 동의 → 담당교사 확인). 열은 `fixed_schedules` 그대로(새 열 없음). 권한(누가 어떤 행동을 하는지)은 서버 `requirePermission_`이 정하고, 규칙은 상태와 기간만 본다.
+
+- 제출 기간 `ttSubmitWindow_`: 매월 `timetable.submit_start_day`(기본 25)일 ~ `timetable.submit_end_day`(기본 `last` = 말일)에 **다음 달** 시간표를 낸다. 설정이 1~31 정수·`last`가 아니면 기본값, 그 달 말일보다 크면 말일(시작 30 → 2월은 28·29일). 시작 > 끝이면 늘 닫힘(이유 '설정이 잘못'). 닫혀 있으면 `start·end·month`는 **다음** 기간과 그 적용월.
+- 입력 `ttValidateEntries_`: 요일 `월`~`일`, 구분 `학`·`가`만(`없음`은 학생이 고르지 않는다 — 빈 목록이 `없음` 행 1개가 된다, 결정 31), 블록은 `parseBlockSpec_`(ALL 또는 HH:mm-HH:mm;…)로 오류 없이 읽혀야 하고 저장은 정규 표기. 같은 요일 행끼리 겹치면 오류(ALL은 그 요일의 어떤 행과도 겹침, 맞닿기만 하면 괜찮음). 다른 요일은 상관없다.
+- 상태 기계 `ttTransition_`(한 학생·한 달의 살아 있는 행이 **함께** 움직인다):
+
+  | 지금 상태 | submit | withdraw | agree | unagree | confirm | unconfirm | reject |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | 없음 | 제출 | × | × | × | × | × | × |
+  | 제출 | 다시 제출 | 취소 | 동의 | × | × | × | 반려 |
+  | 동의 | 다시 제출 | 취소 | × | 제출 | 확정 | × | 반려 |
+  | 확정 | 다시 제출(경고) | × | × | × | × | 동의 | × |
+  | 반려 | 다시 제출 | 취소 | × | × | × | × | × |
+
+  - `submit`: 오늘(`ctx.now`의 날짜)이 제출 기간이고 `month`가 그 기간의 적용월이어야 한다. 살아 있는 행은 모두 `cancel`(취소, 삭제 없음), 새 행을 `add`(status `제출`, `submitted_at` = now, 동의·확인 빈칸) — **다시 내면 동의·확인은 처음부터**. 상태가 섞인 달(`혼합`, 옛 행·손으로 고친 시트)은 거부.
+  - `agree`·`confirm`은 `parent_agreed_at`·`teacher_confirmed_at` = now, `unagree`·`unconfirm`은 그 칸을 비운다. 동의·확인은 제출 기간 밖에도 된다(늦은 확인). `unconfirm`은 이미 시작한 달이면 경고(다시 확인할 때까지 출석부는 앞 달 확정 시간표).
+  - `ok:false`면 `reason`만 있고 바꿀 행은 없다. 잘못된 `month`·`now`·빈 학생·모르는 `action`은 Error.
+- "확정 전에는 기존 시간표 유지": 출석부는 지금처럼 `effectiveFixedRows_`를 쓴다(확정 행이 있고 제출·동의가 없는 가장 최근 달). 그래서 제출·동의·반려 중인 달(확정 행이 없음), 확인을 거둔 달, 확정 뒤 다시 낸 달은 앞 달 확정 시간표가 이어진다. 확정한 `없음` 달은 앞 달이 이어지지 않는다(결정 31).
+- `effectiveFixedRows_`는 바꾸지 않았다. 이 규칙은 달 단위로 움직여 확정·반려가 섞인 달을 만들지 않는다(R3의 행 단위 반려 동작은 그대로).
+- `ttMissing_`: 마감 뒤 담당교사에게 보일 미제출 학생 = 그 달 살아 있는 행이 없거나 `반려`인 학생.
+- ASSUMPTION(열린 질문): ① 기간을 놓치면 그 달에는 낼 수 없고 앞 달 확정 시간표가 그대로 이어진다(교사 대신 입력·기간 연장 없음). ② 학부모 동의 없이 교사가 바로 확정하지 않는다(0단계 진단 뒤 학부모 접속이 어려우면 다시 정한다). ③ PRD F9의 '평일 종료 유형(23:00/23:50)' 선택은 `fixed_schedules`에 열이 없어 이번 규칙에 넣지 않았다(지금은 `enrollments.end_type`).
