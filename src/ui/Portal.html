@@ -48,7 +48,7 @@
 
       var o = p.outs, live = o.items.filter(function (i) { return i.status === '유효'; });
       if (o.total >= 2 && !parent) {
-        root.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: '퇴실 대상입니다. OUT이 2번 쌓여서 학교를 나가야 하는 단계입니다. 담당 ' + (p.teacher ? p.teacher + '선생님' : '선생님') + '이 학부모님과 면담을 한 뒤 관리자가 정합니다. 궁금하면 담당 선생님께 먼저 물어보세요.' }));
+        root.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: '퇴실 대상입니다. OUT이 2번 쌓여서 학교를 나가야 하는 단계입니다. ' + (p.teacher ? '담당 ' + p.teacher + '님' : '담당 선생님') + '이 학부모님과 면담을 한 뒤 관리자가 정합니다. 궁금하면 담당 선생님께 먼저 물어보세요.' }));
       }
       var outKids = [pillsOf([o.total >= 2 ? UI.statusPill('out2', '퇴실 대상') : o.total === 1 ? UI.statusPill('out1', '1OUT') : UI.statusPill('mute', 'OUT 없음'), el('span', { text: '이번 기간 ' + o.total + '건' })])];
       live.slice(0, 3).forEach(function (i) { outKids.push(el('div', { class: 'pt-note', text: i.dateKo + ' ' + i.ruleName })); });
