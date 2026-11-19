@@ -7,7 +7,7 @@
  * 기능 PR이 병합될 때마다 이 파일에 그 화면의 흐름·행렬 단언을 붙인다.
  */
 const assert = require('assert');
-const { test } = require('../helpers/harness');
+const { test, plain } = require('../helpers/harness');
 const { createGasEnv } = require('../helpers/gas-fakes');
 const { portalAccounts, visibleIds, plantPhones, portalMatrix, portalLeaks, summarize } = require('../helpers/portal');
 
@@ -193,4 +193,70 @@ test('T7 시설 일지 권한·유출: 함께 쓴 학생 찾기 응답은 이름
   env.expectAllowed(ADMIN, 'getFacilityReport', { from: '2027-03-01', to: TODAY });
   env.expectDenied(duty, 'facility.report', 'getFacilityReport', { from: '2027-03-01', to: TODAY });
   env.expectDenied(acc.A.email, 'facility.report', 'getFacilityReport', { from: '2027-03-01', to: TODAY });
+});
+
+/* ───────────── 시간표(C37, F9) ───────────── */
+const MAR = [{ weekday: '수', blocks: '18:30-20:00', code: '학' }], APR = [{ weekday: '금', blocks: '18:30-20:00', code: '가' }];
+function ttEnv() {
+  const env = seededEnv();
+  const acc = portalAccounts(env);
+  const term = env.as(ADMIN, (c) => c.getCurrentTerm_());
+  const teacherOf = (sid) => env.rows('enrollments').find((e) => e.term_id === term.id && e.student_id === sid).teacher_email;
+  const fixed = (sid, ymd) => plain(env.as(ADMIN, (c) => c.effectiveFixedRows_(c.readAll_('fixed_schedules'), sid, ymd))).map((r) => r.weekday + ' ' + r.code);
+  const status = (sid, month) => env.as(ADMIN, (c) => c.ttMonthState_(c.readAll_('fixed_schedules'), sid, month).status);
+  const ok = (r, what) => { assert.strictEqual(r.ok, true, what + ' ' + JSON.stringify(r)); return r; };
+  return { env, acc, term, teacherOf, fixed, status, ok };
+}
+
+test('T7 시간표 권한: 학생은 본인 것만 냄(남의 id를 넣어도 본인 행), 학부모는 자기 자녀만 동의·동의하지 않음, 담당 아닌 교사·학생·학부모는 확인·돌려보냄 거부', () => {
+  const { env, acc, teacherOf, status, ok } = ttEnv();
+  env.setNow('2027-03-26T10:00:00');   // 4월 시간표 제출 기간
+  ok(env.call(acc.A.email, 'submitTimetable', { studentId: acc.B.id, month: '2027-04', entries: APR }), 'A 제출');
+  assert.deepStrictEqual([status(acc.A.id, '2027-04'), status(acc.B.id, '2027-04')], ['제출', ''], 'A 본인 행만 생기고 B는 그대로');
+  ok(env.call(acc.C.email, 'submitTimetable', { month: '2027-04', entries: APR }), 'C 제출');
+  env.expectDenied(acc.P2.email, 'timetable.agree', 'agreeTimetable', acc.A.id, '2027-04');
+  env.expectDenied(acc.P1.email, 'timetable.agree', 'agreeTimetable', acc.C.id, '2027-04');
+  env.expectDenied(acc.P1.email, 'timetable.agree', 'declineTimetable', acc.C.id, '2027-04', '가짜');
+  env.expectDenied(acc.P2.email, 'timetable.parent', 'getChildTimetable', acc.A.id);
+  for (const s of acc.students) env.expectDenied(s.email, 'timetable.agree', 'agreeTimetable', s.id, '2027-04');   // 학생 스스로 동의 못 함
+  assert.deepStrictEqual([status(acc.A.id, '2027-04'), status(acc.C.id, '2027-04')], ['제출', '제출'], '거부된 동의는 상태를 바꾸지 않는다');
+  ok(env.call(acc.P1.email, 'agreeTimetable', acc.A.id, '2027-04'), 'P1 동의');
+  const other = env.rows('users').find((u) => String(u.roles).split(',').includes('hall_teacher') && !String(u.roles).includes('admin') && u.email !== teacherOf(acc.A.id)).email;
+  env.expectDenied(other, 'timetable.confirm', 'confirmTimetable', acc.A.id, '2027-04');
+  env.expectDenied(other, 'timetable.confirm', 'returnTimetable', acc.A.id, '2027-04', '가짜 사유');
+  for (const x of acc.all) env.expectDenied(x.email, 'timetable.confirm', 'confirmTimetable', acc.A.id, '2027-04');
+  assert.strictEqual(status(acc.A.id, '2027-04'), '동의');
+});
+
+test('T7 시간표 흐름: 제출 → 동의 → 담당교사 확인(enrollments.end_type 그대로), 출석부는 확정 전까지 지난달 확정 시간표 / 제출 → 동의하지 않음 → 다시 냄은 처음부터(동의부터 다시)', () => {
+  const { env, acc, teacherOf, fixed, status, ok } = ttEnv();
+  const T = teacherOf(acc.A.id);
+  // 3월 시간표를 확정해 둔다(2월 제출 기간)
+  env.setNow('2027-02-26T10:00:00');
+  ok(env.call(acc.A.email, 'submitTimetable', { month: '2027-03', entries: MAR }), '3월 제출');
+  ok(env.call(acc.P1.email, 'agreeTimetable', acc.A.id, '2027-03'), '3월 동의');
+  ok(env.call(teacherOf(acc.A.id), 'confirmTimetable', acc.A.id, '2027-03'), '3월 확인');
+  // 4월: 제출 → 동의 → 확인
+  env.setNow('2027-03-26T10:00:00');
+  const enrBefore = env.rows('enrollments').filter((e) => e.student_id === acc.A.id).map((e) => e.end_type);
+  ok(env.call(acc.A.email, 'submitTimetable', { month: '2027-04', entries: APR }), '4월 제출');
+  assert.deepStrictEqual(fixed(acc.A.id, '2027-04-05'), ['수 학'], '확정 전: 4월 출석부는 3월 확정 시간표');
+  assert.strictEqual(env.call(T, 'confirmTimetable', acc.A.id, '2027-04').ok, false, '동의 없이 확인 안 됨');
+  ok(env.call(acc.P1.email, 'agreeTimetable', acc.A.id, '2027-04'), '4월 동의');
+  assert.deepStrictEqual(fixed(acc.A.id, '2027-04-05'), ['수 학'], '동의만으로는 아직 3월 것');
+  ok(env.call(T, 'confirmTimetable', acc.A.id, '2027-04'), '4월 확인');
+  assert.deepStrictEqual([status(acc.A.id, '2027-04'), fixed(acc.A.id, '2027-04-05'), fixed(acc.A.id, '2027-03-31')], ['확정', ['금 가'], ['수 학']], '확정 뒤 그 달부터 새 시간표');
+  assert.deepStrictEqual(env.rows('enrollments').filter((e) => e.student_id === acc.A.id).map((e) => e.end_type), enrBefore, '종료 유형은 그대로');
+
+  // 4월: C 제출 → P2 동의하지 않음 → 돌려보냄 → C 다시 냄 → 다시 동의부터
+  ok(env.call(acc.C.email, 'submitTimetable', { month: '2027-04', entries: APR }), 'C 제출');
+  ok(env.call(acc.P2.email, 'declineTimetable', acc.C.id, '2027-04', '가짜: 토요일 확인 필요'), 'P2 동의하지 않음');
+  assert.strictEqual(status(acc.C.id, '2027-04'), '반려');
+  assert.ok(env.rows('audit_log').some((a) => a.action === 'timetable:return' && a.created_by === acc.P2.email), '돌려보낸 사람·사유는 감사 기록에');
+  ok(env.call(acc.C.email, 'submitTimetable', { month: '2027-04', entries: MAR }), 'C 다시 냄');
+  assert.strictEqual(status(acc.C.id, '2027-04'), '제출', '다시 내면 제출부터');
+  assert.strictEqual(env.call(teacherOf(acc.C.id), 'confirmTimetable', acc.C.id, '2027-04').ok, false, '동의 없이 확인 안 됨');
+  ok(env.call(acc.P2.email, 'agreeTimetable', acc.C.id, '2027-04'), 'P2 다시 동의');
+  ok(env.call(teacherOf(acc.C.id), 'confirmTimetable', acc.C.id, '2027-04'), 'C 확인');
+  assert.deepStrictEqual(fixed(acc.C.id, '2027-04-05'), ['수 학'], '다시 낸 내용으로 확정');
 });
