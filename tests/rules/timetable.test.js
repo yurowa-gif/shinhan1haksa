@@ -126,9 +126,11 @@ test('ttTransition_ 되돌리기: 동의·확인 거두기, 반려, 거두기, �
   assert.match(re.warnings.join(), /다시 받아야/);
   rows = apply(rows, re);
   assert.deepStrictEqual(eff(rows, '2027-04-05'), ['화학'], '다시 내면 확정 전 — 앞 달');
-  // 반려 → 학생이 다시 낸다 / 반려 상태에서도 거둘 수 있다
-  rows = apply(rows, step(rows, 'reject', '2027-03-31T09:00:00'));
-  assert.strictEqual(ctx.ttMonthState_(rows, 's1', '2027-04').status, '반려');
+  // 학부모 돌려보냄(사유 선택) → 학생이 고쳐 다시 낸다 / 돌려보낸 상태에서도 거둘 수 있다
+  const pr = step(rows, 'parentReturn', '2027-03-31T09:00:00', { reason: '  금요일은\n 학원 없음 ' });
+  assert.deepStrictEqual([pr.update.map((u) => u.set), pr.returned], [[{ status: '반려' }], { by: '학부모', reason: '금요일은 학원 없음' }]);
+  rows = apply(rows, pr);
+  assert.deepStrictEqual(['status', 'returnedBy'].map((k) => ctx.ttMonthState_(rows, 's1', '2027-04')[k]), ['반려', '학부모']);
   assert.deepStrictEqual(eff(rows, '2027-04-05'), ['화학']);
   const w = step(rows, 'withdraw', '2027-03-31T10:00:00');
   assert.strictEqual(w.cancel.length, 1);
@@ -143,14 +145,14 @@ test('ttTransition_ 막힘: 상태표(지금 상태 × 행동)', () => {
   const at = (status) => status ? [{ id: 'x1', student_id: 's1', month: '2027-04', weekday: '월', blocks: 'ALL', code: '학', status },
     { id: 'x2', student_id: 's1', month: '2027-04', weekday: '화', blocks: 'ALL', code: '가', status }] : [];
   const OK = {
-    '':   { withdraw: 0, agree: 0, unagree: 0, confirm: 0, unconfirm: 0, reject: 0 },
-    '제출': { withdraw: 1, agree: 1, unagree: 0, confirm: 0, unconfirm: 0, reject: 1 },
-    '동의': { withdraw: 1, agree: 0, unagree: 1, confirm: 1, unconfirm: 0, reject: 1 },
-    '확정': { withdraw: 0, agree: 0, unagree: 0, confirm: 0, unconfirm: 1, reject: 0 },
-    '반려': { withdraw: 1, agree: 0, unagree: 0, confirm: 0, unconfirm: 0, reject: 0 },
+    '':   { withdraw: 0, agree: 0, unagree: 0, confirm: 0, unconfirm: 0, parentReturn: 0, teacherReturn: 0 },
+    '제출': { withdraw: 1, agree: 1, unagree: 0, confirm: 0, unconfirm: 0, parentReturn: 1, teacherReturn: 0 },
+    '동의': { withdraw: 1, agree: 0, unagree: 1, confirm: 1, unconfirm: 0, parentReturn: 0, teacherReturn: 1 },
+    '확정': { withdraw: 0, agree: 0, unagree: 0, confirm: 0, unconfirm: 1, parentReturn: 0, teacherReturn: 0 },
+    '반려': { withdraw: 1, agree: 0, unagree: 0, confirm: 0, unconfirm: 0, parentReturn: 0, teacherReturn: 0 },
   };
   Object.keys(OK).forEach((status) => Object.keys(OK[status]).forEach((action) => {
-    const r = step(at(status), action, '2027-03-28T10:00:00');
+    const r = step(at(status), action, '2027-03-28T10:00:00', { reason: '사유' });
     assert.strictEqual(r.ok, !!OK[status][action], status + ' × ' + action + ': ' + r.reason);
     if (!r.ok) assert.deepStrictEqual([r.add, r.update, r.cancel, !!r.reason], [[], [], [], true]);
     else if (action !== 'withdraw') assert.deepStrictEqual(r.update.map((u) => u.id), ['x1', 'x2']);
@@ -163,6 +165,47 @@ test('ttTransition_ 막힘: 상태표(지금 상태 × 행동)', () => {
   assert.strictEqual(step(mixed, 'confirm', '2027-03-28T10:00:00').ok, false);
 });
 
+test('ttTransition_ 담당교사 돌려보냄: 동의 단계에서만, 사유 필수, 동의 시각은 남겨 누가 돌려보냈는지 가린다 → 다시 내면 처음부터', () => {
+  let rows = apply(MARCH, step(MARCH, 'submit', '2027-03-26T21:00:00', { entries: ENTRIES }));
+  assert.match(step(rows, 'teacherReturn', '2027-03-27T09:00:00', { reason: '사유' }).reason, /지금 상태\(제출\)/, '학부모 동의 전에는 교사가 돌려보내지 않는다');
+  rows = apply(rows, step(rows, 'agree', '2027-03-27T08:00:00'));
+  ['', '   ', undefined].forEach((reason) => assert.match(step(rows, 'teacherReturn', '2027-03-27T09:00:00', { reason }).reason, /사유/));
+  const tr = step(rows, 'teacherReturn', '2027-03-27T09:00:00', { reason: '수요일 ALL은 학원 확인서 필요' });
+  assert.deepStrictEqual([tr.update[0].set, tr.returned], [{ status: '반려' }, { by: '담당교사', reason: '수요일 ALL은 학원 확인서 필요' }]);
+  rows = apply(rows, tr);
+  const st = plain(ctx.ttMonthState_(rows, 's1', '2027-04'));
+  assert.deepStrictEqual([st.status, st.returnedBy, st.rows[0].parent_agreed_at], ['반려', '담당교사', '2027-03-27T08:00:00']);
+  assert.deepStrictEqual(eff(rows, '2027-04-05'), ['화학'], '돌려보낸 달은 앞 달 유지');
+  assert.deepStrictEqual(plain(ctx.ttMissing_(rows, ['s1'], '2027-04')), ['s1'], '돌려보낸 학생은 미제출 목록에');
+  const re = step(rows, 'submit', '2027-03-28T10:00:00', { entries: ENTRIES });
+  assert.deepStrictEqual(re.add.map((x) => [x.status, x.parent_agreed_at, x.teacher_confirmed_at]), [['제출', '', ''], ['제출', '', '']]);
+  assert.strictEqual(re.cancel.length, 2);
+  rows = apply(rows, re);
+  assert.deepStrictEqual(['status', 'returnedBy'].map((k) => ctx.ttMonthState_(rows, 's1', '2027-04')[k]), ['제출', '']);
+});
+
+test('ttCopyPrevious_: 앞 달에 쓰던 확정 시간표를 초안으로(이어진 달 포함), 없음·미확정·없으면 빈 초안', () => {
+  const R = [
+    { id: 'a', student_id: 's1', month: '2027-02', weekday: '수', blocks: '20:00-22:00', code: '가', status: '확정' },
+    { id: 'b', student_id: 's1', month: '2027-02', weekday: '월', blocks: '18:00-19:00;19:00-20:30', code: '학', status: '확정' },
+    { id: 'c', student_id: 's1', month: '2027-03', weekday: '화', blocks: 'ALL', code: '학', status: '동의' },      // 3월은 미확정 → 2월이 이어짐
+    { id: 'd', student_id: 's1', month: '2027-05', weekday: '', blocks: '', code: '없음', status: '확정' },
+    { id: 'e', student_id: 's1', month: '2027-02', weekday: '금', blocks: 'ALL', code: '학', status: '취소' },
+    { id: 'f', student_id: 's2', month: '2027-03', weekday: '목', blocks: 'ALL', code: '학', status: '확정' },
+  ];
+  assert.deepStrictEqual(plain(ctx.ttCopyPrevious_(R, 's1', '2027-04')), { fromMonth: '2027-02',
+    entries: [{ weekday: '월', blocks: '18:00-20:30', code: '학' }, { weekday: '수', blocks: '20:00-22:00', code: '가' }] });
+  assert.deepStrictEqual(plain(ctx.ttCopyPrevious_(R, 's1', '2027-03')).fromMonth, '2027-02');
+  assert.deepStrictEqual(plain(ctx.ttCopyPrevious_(R, 's1', '2027-06')), { entries: [], fromMonth: '' }, "5월 '없음'");
+  assert.deepStrictEqual(plain(ctx.ttCopyPrevious_(R, 's1', '2027-02')), { entries: [], fromMonth: '' }, '앞 달 확정 없음');
+  assert.deepStrictEqual(plain(ctx.ttCopyPrevious_(R, 's2', '2027-04')).entries, [{ weekday: '목', blocks: 'ALL', code: '학' }]);
+  assert.deepStrictEqual(plain(ctx.ttCopyPrevious_([{ student_id: 's3', month: '2026-12', weekday: '토', blocks: 'ALL', code: '가', status: '확정' }], 's3', '2027-01')).fromMonth, '2026-12', '해 넘김');
+  // 가져온 초안은 그대로 낼 수 있다
+  const draft = ctx.ttCopyPrevious_(R, 's1', '2027-04').entries;
+  assert.ok(plain(ctx.ttTransition_(R, 's1', '2027-04', 'submit', { now: '2027-03-25T09:00:00', window: W, entries: draft })).ok);
+  assert.throws(() => ctx.ttCopyPrevious_(R, 's1', '2027-4'), /yyyy-MM/);
+});
+
 test('ttTransition_ 제출: 기간 밖·다른 달·입력 오류는 거부(가정: 놓치면 그 달은 낼 수 없다)', () => {
   assert.match(step([], 'submit', '2027-03-24T23:59:59', { entries: ENTRIES }).reason, /제출 기간이 아닙니다/);
   assert.match(step([], 'submit', '2027-04-01T00:00:00', { entries: ENTRIES }).reason, /제출 기간이 아닙니다/);
@@ -173,7 +216,7 @@ test('ttTransition_ 제출: 기간 밖·다른 달·입력 오류는 거부(가�
   assert.throws(() => ctx.ttTransition_([], 's1', '2027-13', 'agree', { now: '2027-03-26T10:00:00' }), /yyyy-MM/);
   assert.throws(() => ctx.ttTransition_([], 's1', '2027-04', 'agree', { now: '2027-03-26' }), /now/);
   assert.throws(() => ctx.ttTransition_([], '', '2027-04', 'agree', { now: '2027-03-26T10:00:00' }), /studentId/);
-  assert.throws(() => ctx.ttTransition_([], 's1', '2027-04', 'approve', { now: '2027-03-26T10:00:00' }), /action/);
+  assert.throws(() => ctx.ttTransition_([], 's1', '2027-04', 'reject', { now: '2027-03-26T10:00:00' }), /action/);
 });
 
 test('ttMissing_: 그 달 살아 있는 행이 없거나 반려인 학생, 중복·빈 id 제외', () => {
