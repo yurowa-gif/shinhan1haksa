@@ -239,6 +239,41 @@ test('5단계 선생님 확인 체크리스트: 번호(0-1~C24)가 겹치지 않
   ['sectionA', 'sectionB', 'sectionC', "a-cal-form-error", "b-not-mine", "c-save-bad-confirm"].forEach((t) => assert.ok(shots.indexOf(t) >= 0, t));
 });
 
+test('7단계 선생님 확인 체크리스트(D14): 번호(0-1~D22)가 겹치지 않고 모든 줄이 7칸이며, 사진은 docs/design/stage7-checks/ 에 있고 빠짐없이 쓰이며, 꼭 넣을 단계가 있다', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const doc = css.readFile('docs/design/stage7-teacher-checks.md');
+  const rows = doc.split('\n').filter((l) => /^\| (0-\d+|[A-D]\d+) \|/.test(l));
+  const ids = rows.map((l) => l.split('|')[1].trim());
+  assert.strictEqual(new Set(ids).size, ids.length, '번호 중복');
+  assert.ok(rows.length >= 50, '단계 수 ' + rows.length);
+  rows.forEach((l) => assert.strictEqual(l.replace(/\\\|/g, '').split('|').length, 8, l.slice(0, 40)));
+  ['0-1', 'A1', 'B1', 'C1', 'D1', 'A6', 'B9', 'C12', 'D22'].forEach((id) => assert.ok(ids.indexOf(id) >= 0, id + ' 가 없다'));
+  // 꼭 확인할 것(요청): 학생 본인만, 학부모 자녀 전환·다른 집 자녀 안 보임·전화번호·상담 내용 없음, 시설 일지, 시간표 흐름(확정 전 지난 시간표 유지·돌려보낸 뒤 다시 제출)
+  ['다른 학생 이름은 한 군데도 없다', '다른 집 학생(학생 B)의 이름은 **없다**', '날짜와 교사 이름만', '하나도 없다', '이 일지를 취소합니다', '시설 일지는 그날 근무 선생님만 볼 수 있습니다.', '지금은 시간표를 내는 기간이 아닙니다', '확정되기 전에는 지금 시간표가 그대로 쓰입니다', '3월 확정 시간표대로', '동의·확인이 처음부터 다시', '학생에게 돌려보내기', '총괄 확인 중', '마감을 놓친 학생', '돌려보낸 사유를 학생에게 보일지', '알려진 화면 문제'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
+  // 사진: 문서가 가리키는 파일이 모두 있고, 폴더의 파일이 모두 문서에 쓰인다
+  const dir = path.join(__dirname, '..', '..', 'docs', 'design', 'stage7-checks');
+  const imgs = [...doc.matchAll(/!\[[^\]]*\]\(stage7-checks\/([^)]+)\)/g)].map((m) => m[1]);
+  assert.ok(imgs.length >= 30, '사진 수 ' + imgs.length);
+  imgs.forEach((f) => assert.ok(fs.existsSync(path.join(dir, f)), f + ' 파일이 없다'));
+  fs.readdirSync(dir).forEach((f) => assert.ok(imgs.indexOf(f) >= 0, f + ' 가 문서에 쓰이지 않았다'));
+  // 사진은 360px 실제 화면(설명 한 줄이 문서에 있다) + 찍는 스크립트가 네 절을 모두 다룬다
+  assert.ok(doc.indexOf('360px') > 0 && doc.indexOf('design/preview/stage7-real.js') > 0);
+  const shots = css.readFile('design/preview/stage7-real.js') + css.readFile('design/preview/stage7-real-d.js');
+  ['sectionA', 'sectionB', 'sectionC', 'sectionD', 'a-student-noaccess', 'b-parent-x', 'c-day-notduty', 'd-parent-x', 'd-teacher-other', 'd-student-returned'].forEach((t) => assert.ok(shots.indexOf(t) >= 0, t));
+  // 시험 계정 표는 가짜 이메일만(실제 학교 주소가 없다) — 그리고 시설 일지·시간표 화면 이름이 실제 SCREENS 에 있다
+  assert.ok(!/@(goedu|sen|hs)\.[a-z.]+/.test(doc), '실제 주소처럼 보이는 글자');
+  const code = css.readFile('src/Code.gs');
+  ['facility:', 'facilityday:', 'timetable:'].forEach((k) => assert.ok(code.indexOf(k) >= 0, k));
+  // 시범 운영 안내서 7단계 절: 마감·동의 안 하면·학생·학부모 안내문, 열린 결정 두 가지는 "총괄 확인 중"
+  const guide = css.readFile('docs/plan/pilot-guide.md');
+  ['## 6. 7단계', 'stage7-teacher-checks.md', '**학생에게**', '**학부모께**', '매달 25일부터 말일까지', '동의하지 않으시면', '처음부터 다시', '지금 시간표가 그대로'].forEach((t) => assert.ok(guide.indexOf(t) >= 0, t));
+  assert.ok((guide.match(/\*\*총괄 확인 중\*\*/g) || []).length >= 2, '열린 결정 두 가지가 "총괄 확인 중"으로 표시되어야 한다');
+  // 마감 날짜가 설정 기본값(25 · last)과 어긋나지 않는다
+  const schema = css.readFile('src/Schema.gs');
+  assert.ok(/'timetable\.submit_start_day', '25'/.test(schema) && /'timetable\.submit_end_day', 'last'/.test(schema));
+});
+
 test('D13 7단계 시안(stage7-screens.js): 화면 이름이 stage7-screens.md 에 적혀 있고 사진이 있으며, 학생·학부모 화면에 다른 사람·전화·상담 내용이 없다', () => {
   const fs = require('fs');
   const path = require('path');
@@ -253,7 +288,7 @@ test('D13 7단계 시안(stage7-screens.js): 화면 이름이 stage7-screens.md 
   const imgs = [...doc.matchAll(/!\[[^\]]*\]\((stage7-photos\/[^)]+)\)/g)].map((m) => m[1]);
   assert.ok(imgs.length >= 23, '문서의 사진 수 ' + imgs.length);
   imgs.forEach((f) => assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'docs', 'design', f)), f + ' 파일이 없다'));
-  ['총괄 답', '지난달 시간표 그대로 가져오기', '돌려보낸 사람과 사유', '사유 한 줄', '미정·가정', '처음 쓰는 사람', '상담은 날짜·교사만', '삭제가 아니라 취소', '번호를 쓴다', '`facility.write`', '`facility.report`', '규칙 8절', '확인 못 한 것'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
+  ['총괄 답', '지난달 시간표 그대로 가져오기', '돌려보낸 사람과 사유', '사유 한 줄', '미정·가정', '처음 쓰는 사람', '상담은 날짜·교사만', '삭제가 아니라 취소', '번호를 쓴다', '`facility.write`', '`facility.report`', '규칙 8절', '확인 못 한 것', '처음부터 다시 받는다'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
   // 학생·학부모 시안 화면에는 전화번호·이메일·교사 메모 글자가 없다
   const studentParent = src.slice(src.indexOf('F14 학생 홈'), src.indexOf('F10 시설 사용 일지'));
   assert.ok(!/010-|@example|메모:|전화/.test(studentParent.replace(/\/\*[\s\S]*?\*\//g, '').replace(/note: '[^']*'/g, '')), '학생·학부모 시안에 전화·이메일·메모가 보인다');

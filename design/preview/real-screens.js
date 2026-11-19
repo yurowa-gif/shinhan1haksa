@@ -106,6 +106,8 @@ async function openPage(browser, app, o) {
     }
     window.google = { script: { run: runner(null, null) } };
   });
+  // 화면 쪽 new Date()도 가짜 서버와 같은 날로(옵션 clock:false면 실제 시계). 시계는 그 시각에서 흘러간다(멈추면 시트 두 번 누름 방지가 풀리지 않는다)
+  if (!(o && o.clock === false) && app.env.nowIso) await page.clock.install({ time: new Date(app.env.nowIso() + '+09:00') }).catch(() => {});
   await page.goto(APP_URL + (o.query ? '?' + o.query : ''));
   const settle = async () => {
     await page.waitForFunction(() => !document.querySelector('.loading'), null, { timeout: 15000 }).catch(() => {});
