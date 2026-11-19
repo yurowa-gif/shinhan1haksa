@@ -128,15 +128,15 @@ test('listTerms: 관리자만 canEdit(화면이 폼을 숨기는 데 쓴다, 서
   assert.throws(() => makeServer('s@example.com', ['student']).c.listTerms(), /권한이 없습니다/);
 });
 
-test('saveTerm: 새 기간을 만들면 그 기간의 기간별 탭(exceptions_·violations_·student_docs_)을 모두 만들고, 고칠 때는 만들지 않는다', () => {
+test('saveTerm: 새 기간을 만들면 그 기간의 기간별 탭(exceptions_·violations_·student_docs_·facility_logs_)을 모두 만들고, 고칠 때는 만들지 않는다', () => {
   const s = admin();
   const r = plain(s.c.saveTerm({ name: '2027 2학기', type: '학기', start_date: '2027-08-23', end_date: '2028-02-28' }));
   assert.strictEqual(r.ok, true);
-  assert.deepStrictEqual(s.tabs, ['exceptions:' + r.id, 'violations:' + r.id, 'student_docs:' + r.id]);
+  assert.deepStrictEqual(s.tabs, ['exceptions:' + r.id, 'violations:' + r.id, 'student_docs:' + r.id, 'facility_logs:' + r.id]);
   s.c.saveTerm({ id: r.id, token: s.c.termToken_(s.db.terms.find((t) => t.id === r.id)), name: '2027 2학기(수정)', type: '학기', start_date: '2027-08-23', end_date: '2028-02-28' });
-  assert.strictEqual(s.tabs.length, 3);
+  assert.strictEqual(s.tabs.length, 4);
   const bad = plain(s.c.saveTerm({ name: '', type: '학기' }));
-  assert.strictEqual(bad.ok, false); assert.strictEqual(s.tabs.length, 3);
+  assert.strictEqual(bad.ok, false); assert.strictEqual(s.tabs.length, 4);
 });
 
 test('낡은 화면 방지(saveTerm 수정): A가 읽고 B가 먼저 저장하면 A의 옛 화면 저장은 {stale:true}·쓰기 0, 새 기간 만들기는 표가 필요 없고, 새 표로는 된다', () => {

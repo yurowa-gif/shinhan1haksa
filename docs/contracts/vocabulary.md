@@ -112,6 +112,8 @@ Apps Script는 같은 전역 이름을 경고 없이 덮는다. 새 전역 이�
 | students | track | `문` · `이` · `''` |
 | events | status | `유효` · `취소` (취소는 `cancel_reason` 필수, 행은 지우지 않는다. 결정 80) |
 | events | kind | settings `event.kinds`의 값 그대로(기본 `시험` · `행사` · `특강` · `휴업` · `기타`). 끝날이 비면 시작일 하루 |
+| facility_logs_<기간> | status | `유효` · `취소` (취소는 `cancel_reason` 필수, 행은 지우지 않는다. 결정 83) |
+| facility_logs_<기간> | facility | settings `facility.names`의 값 그대로(기본 `특강실` · `원형테이블`). `start`·`end` = `HH:mm`(start < end), `companions` = 함께 쓴 학생 id 쉼표 목록(그 기간 학사생만, 본인 제외) |
 | doc_types | status | `유효` · `취소` |
 | student_docs_<기간> | state | `제출` · `미제출` · `해당없음` (학생·서류 종류마다 최대 1행, 행이 없으면 미제출) |
 | programs | status | `유효` · `취소` (blocks는 exceptions와 같은 표기: `ALL` 또는 `HH:mm-HH:mm;…`) |
@@ -137,6 +139,7 @@ Apps Script는 같은 전역 이름을 경고 없이 덮는다. 새 전역 이�
 | `exception.types` | 유형 이름 쉼표 목록 | Exceptions.gs `excSettings_`(F1 칩), 자동 OUT | DEFAULT_SETTINGS 11개 유형 | 시트 |
 | `exception.auto_out_types` | 유형 이름 쉼표 목록 | `excSettings_` → `reconcileAutoOuts_` autoTypes, `AUTO_OUT_SINCE` 넓힘 이력(결정 40) | `미인정지각,미인정조퇴,미인정결석` | 시트 |
 | `event.kinds` | 종류 이름 쉼표 목록 | Events.gs `evtKinds_`(월별 일정 등록 화면의 종류 목록) | `시험,행사,특강,휴업,기타`(결정 80) | 시트 |
+| `facility.names` | 시설 이름 쉼표 목록 | 시설 사용 일지 시설 목록(F10, C35에서 읽는다) | `특강실,원형테이블`(결정 83) | 시트 |
 | `exception.type_short` | `유형:약어` 쉼표 목록 | `excSettings_`·AttendanceSheet.gs `sheetSettings_` → `resolveCell_` typeShort | DEFAULT_SETTINGS 약어표 | 시트 |
 | `attendance.end_type_day_types` | 요일 유형 쉼표 목록(`mon_thu`·`holiday` 등) | `sheetSettings_` → `resolveCell_` endTypeDayTypes(R3 END) | `mon_thu` | 시트 |
 | `attendance.end_label` | 글자 | `sheetSettings_` → END 칸 글자 | `정상 종료` | 시트 |

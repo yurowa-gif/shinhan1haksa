@@ -238,3 +238,32 @@ test('5단계 선생님 확인 체크리스트: 번호(0-1~C24)가 겹치지 않
   const shots = css.readFile('design/preview/stage5-real.js');
   ['sectionA', 'sectionB', 'sectionC', "a-cal-form-error", "b-not-mine", "c-save-bad-confirm"].forEach((t) => assert.ok(shots.indexOf(t) >= 0, t));
 });
+
+test('D13 7단계 시안(stage7-screens.js): 화면 이름이 stage7-screens.md 에 적혀 있고 사진이 있으며, 학생·학부모 화면에 다른 사람·전화·상담 내용이 없다', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const src = css.readFile('design/preview/stage7-screens.js');
+  const doc = css.readFile('docs/design/stage7-screens.md');
+  const ids = [...src.matchAll(/^def\('([^']+)'/gm)].map((m) => m[1]);
+  assert.ok(ids.length >= 19, '시안 수 ' + ids.length);
+  ids.forEach((id) => {
+    assert.ok(doc.indexOf('`' + id + '`') >= 0, '`' + id + '` 가 문서에 없다');
+    assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'docs', 'design', 'stage7-photos', id + '.png')), id + ' 사진이 없다');
+  });
+  const imgs = [...doc.matchAll(/!\[[^\]]*\]\((stage7-photos\/[^)]+)\)/g)].map((m) => m[1]);
+  assert.ok(imgs.length >= 19, '문서의 사진 수 ' + imgs.length);
+  imgs.forEach((f) => assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'docs', 'design', f)), f + ' 파일이 없다'));
+  ['미정·가정', '처음 쓰는 사람', '상담은 날짜·교사만', '삭제가 아니라 취소', '번호를 쓴다', '`facility.write`', '`facility.report`', '규칙 8절', '확인 못 한 것'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
+  // 학생·학부모 시안 화면에는 전화번호·이메일·교사 메모 글자가 없다
+  const studentParent = src.slice(src.indexOf('F14 학생 홈'), src.indexOf('F10 시설 사용 일지'));
+  assert.ok(!/010-|@example|메모:|전화/.test(studentParent.replace(/\/\*[\s\S]*?\*\//g, '').replace(/note: '[^']*'/g, '')), '학생·학부모 시안에 전화·이메일·메모가 보인다');
+});
+
+test('D13 frontend-design 검토와 rules.md 8절: 라이선스·출처·판정(가져온다/가져오지 않는다)·rules 반영이 적혀 있고, 기존 규칙(문구·상태·확인 방식)이 그대로 있다', () => {
+  const review = css.readFile('docs/design/frontend-design-review.md');
+  ['anthropics/skills', 'skills/frontend-design/SKILL.md', 'Apache License 2.0', '코드를 복사하지 않고 원칙만', '가져온다', '가져오지 않는다', '바꿔 가져온다', '외부 라이브러리·웹폰트·애니메이션 없음', '4.5:1', 'rules.md 반영 제안', '확인 못 한 것'].forEach((t) => assert.ok(review.indexOf(t) >= 0, t));
+  const rules = css.readFile('docs/design/rules.md');
+  ['## 8. 화면을 그리기 전 한 줄 계획과 점검', '한 동작의 이름', '오류에 사과하지 않는다', '학생·학부모 화면', 'docs/design/frontend-design-review.md'].forEach((t) => assert.ok(rules.indexOf(t) >= 0, t));
+  // 기존 규칙이 남아 있다(이번 변경은 더한 것뿐)
+  ['## 4. 상태 표시', '## 6. 확인·사유 입력이 필요한 동작', '글자 대비 4.5:1', '개인 정보', '빈 상태'].forEach((t) => assert.ok(rules.indexOf(t) >= 0, t));
+});
