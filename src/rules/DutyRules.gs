@@ -47,7 +47,7 @@ function dutyOn_(rows, ymd, dayType) {
     var r = p.bySlot[slot];
     if (!r) return;
     var original = dutyEmail_(r.original_email), email = dutyEmail_(r.actual_email) || original;
-    if (!email) { warnings.push(ymd + ' ' + slot + ' 칸에 근무자가 없습니다'); return; }
+    if (!email) { warnings.push(ymd + ' ' + slot + ' 칸에 근무 선생님이 없습니다. 근무표에서 채워 주세요.'); return; }
     var from = original && original !== email ? original : '';
     if (slot === '예비') standby.push({ email: email, swappedFrom: from });
     else duty.push({ slot: slot, email: email, end: hmNorm_(r.end_time) || '', swappedFrom: from });
@@ -62,9 +62,9 @@ function dutyPick_(rows, ymd, dayType) {
   (rows || []).forEach(function (r) {
     if (!r || !ruleRowLive_(r) || ruleStr_(r.date) !== ymd) return;
     var slot = ruleStr_(r.slot);
-    if (['21:30조', '23:00조', '단독', '예비'].indexOf(slot) < 0) { warnings.push(ymd + ' 알 수 없는 근무 칸: ' + slot); return; }
-    if (frame.indexOf(slot) < 0 && !bySlot[slot]) warnings.push(ymd + ' 그 요일에 없는 근무 칸입니다: ' + slot);
-    if (bySlot[slot]) warnings.push(ymd + ' ' + slot + ' 칸이 여러 행입니다(가장 최근 수정 행을 씁니다)');
+    if (['21:30조', '23:00조', '단독', '예비'].indexOf(slot) < 0) { warnings.push(ymd + ' 근무 칸 이름을 알 수 없습니다(' + slot + '). 21:30조·23:00조·단독·예비 중 하나로 고쳐 주세요.'); return; }
+    if (frame.indexOf(slot) < 0 && !bySlot[slot]) warnings.push(ymd + '에는 ' + slot + ' 칸이 없습니다. 그 요일의 근무 칸으로 옮겨 주세요.');
+    if (bySlot[slot]) warnings.push(ymd + ' ' + slot + ' 칸이 여러 줄입니다. 가장 최근에 고친 줄을 씁니다.');
     if (!bySlot[slot] || ruleIso_(r.updated_at) >= ruleIso_(bySlot[slot].updated_at)) bySlot[slot] = r;
   });
   return { bySlot: bySlot, warnings: warnings };
@@ -107,7 +107,7 @@ function dutyRecord_(rows, month, opts) {
   Object.keys(byDate).sort().forEach(function (date) {
     var day = dutyOn_(byDate[date], date, (opts.dayTypeByDate || {})[date]);
     warnings = warnings.concat(day.warnings);
-    if ((opts.operatingByDate || {})[date] === false && (day.duty.length || day.standby.length)) warnings.push(date + ' 운영 안 하는 날의 근무 행을 셌습니다');
+    if ((opts.operatingByDate || {})[date] === false && (day.duty.length || day.standby.length)) warnings.push(date + '은 운영하지 않는 날인데 근무 기록이 있어 함께 셌습니다.');
     day.duty.forEach(function (d) {
       var t = teacher(d.email);
       t.total++; t.bySlot[d.slot]++;

@@ -93,7 +93,7 @@ test('정원: 방 정원을 넘기지 않고, 남는 학생은 unplaced + 경고
   assert.strictEqual(occupants(r, 'A').length, 2);
   assert.deepStrictEqual(occupants(r, 'W'), ['f1']);
   assert.strictEqual(r.unplaced.length, 1);
-  assert.deepStrictEqual(r.warnings, [r.unplaced[0] + ' 학생: 들어갈 방이 없습니다(정원)']);
+  assert.deepStrictEqual(r.warnings, [r.unplaced[0] + ' 학생이 들어갈 방이 없습니다(정원이 찼습니다). 정원을 늘리거나 직접 배정해 주세요.']);
   const r2 = draft([ROOM('A', 3, 1, '남', 4), ROOM('E', 3, 2, '', 4)], [STU('f1', '여', 1), STU('x', '', 1)], [CH('f1', '입실'), CH('x', '입실')]);
   assert.deepStrictEqual([r2.assignments, r2.unplaced.sort()], [[], ['f1', 'x']]);   // 성별 빈 방은 아무도 받지 않는다(가정)
 });

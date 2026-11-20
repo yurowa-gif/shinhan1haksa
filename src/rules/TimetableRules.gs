@@ -19,6 +19,11 @@ function ttDayNum_(v, dim, fallback) {
   return Math.min(n, dim);
 }
 
+/** 저장 상태 → 화면 이름(R25): 반려 = 돌려보냄, 동의 = 학부모 동의. */
+function ttStatusKo_(status) {
+  return { '반려': '돌려보냄', '동의': '학부모 동의' }[status] || status;
+}
+
 /** 'yyyy-MM' 다음 달. */
 function ttNextMonth_(ym) {
   var y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7));
@@ -43,11 +48,11 @@ function ttSubmitWindow_(today, cfg) {
   if (!ymdIsValid_(today)) throw new Error('today는 yyyy-MM-dd여야 합니다: ' + today);
   cfg = cfg || {};
   var ym = today.slice(0, 7), w = ttWindowIn_(ym, cfg);
-  if (!w) return { open: false, month: '', start: '', end: '', reason: '시간표 제출 기간 설정이 잘못되었습니다(시작일이 마감일보다 늦음)' };
+  if (!w) return { open: false, month: '', start: '', end: '', reason: '시간표 제출 기간 설정에서 시작일이 마감일보다 늦습니다. 관리자 선생님께 알려 주세요.' };
   if (today >= w.start && today <= w.end) return { open: true, month: ttNextMonth_(ym), start: w.start, end: w.end, reason: '' };
   var nym = today < w.start ? ym : ttNextMonth_(ym), nw = today < w.start ? w : ttWindowIn_(nym, cfg);
   return { open: false, month: ttNextMonth_(nym), start: nw.start, end: nw.end,
-    reason: '지금은 시간표 제출 기간이 아닙니다. 다음 제출 기간: ' + nw.start + ' ~ ' + nw.end + '(' + ttNextMonth_(nym) + ' 시간표)' };
+    reason: '지금은 시간표를 내는 기간이 아닙니다. ' + ymKo_(ttNextMonth_(nym), today) + ' 시간표는 ' + ymdKo_(nw.start, today) + '부터 ' + ymdKo_(nw.end, today) + '까지 내 주세요.' };
 }
 
 /**
@@ -64,8 +69,8 @@ function ttValidateEntries_(entries) {
     e = e || {};
     var tag = (i + 1) + '번째 줄: ', wd = ruleStr_(e.weekday), code = ruleStr_(e.code), p = parseBlockSpec_(e.blocks);
     var bad = false;
-    if (TT_WEEKDAYS.indexOf(wd) < 0) { errors.push(tag + '요일은 월~일 중 하나여야 합니다: ' + wd); bad = true; }
-    if (code !== '학' && code !== '가') { errors.push(tag + "구분은 '학'(학원) 또는 '가'(가정)여야 합니다: " + code); bad = true; }
+    if (TT_WEEKDAYS.indexOf(wd) < 0) { errors.push(tag + '요일은 월~일 중 하나여야 합니다' + ruleNowText_(wd) + '. 요일을 다시 골라 주세요.'); bad = true; }
+    if (code !== '학' && code !== '가') { errors.push(tag + "구분은 '학'(학원) 또는 '가'(가정)여야 합니다. 둘 중 하나를 골라 주세요."); bad = true; }
     p.errors.forEach(function (m) { errors.push(tag + m); bad = true; });
     if (!bad) rows.push({ weekday: wd, blocks: formatBlockSpec_(p), code: code, _p: p, _i: i });
   });
@@ -77,7 +82,7 @@ function ttValidateEntries_(entries) {
         var hit = x.all || y.all || x.ranges.some(function (r) {
           return y.ranges.some(function (q) { return hmToMin_(r.start) < hmToMin_(q.end) && hmToMin_(q.start) < hmToMin_(r.end); });
         });
-        if (hit) errors.push(wd + '요일 ' + (same[a]._i + 1) + '번째 줄과 ' + (same[b]._i + 1) + '번째 줄의 시간이 겹칩니다');
+        if (hit) errors.push(wd + '요일 ' + (same[a]._i + 1) + '번째 줄과 ' + (same[b]._i + 1) + '번째 줄의 시간이 겹칩니다. 한쪽 시간을 고쳐 주세요.');
       }
     }
   });
@@ -143,7 +148,8 @@ function ttTransition_(rows, studentId, month, action, ctx) {
   var fail = function (reason) { return { ok: false, reason: reason, add: [], update: [], cancel: [], warnings: [], returned: null }; };
   var note = ruleStr_(ctx.reason).replace(/\s+/g, ' ');
   var need = function (allowed, what) {
-    return allowed.indexOf(cur) >= 0 ? '' : (cur ? '지금 상태(' + cur + ')에서는 ' + what + ' 수 없습니다' : '제출한 시간표가 없습니다');
+    return allowed.indexOf(cur) >= 0 ? '' : (cur ? '지금 상태(' + ttStatusKo_(cur) + ')에서는 ' + what + ' 수 없습니다. 화면을 새로 불러와 지금 상태를 확인해 주세요.'
+      : '낸 시간표가 없습니다. 화면을 새로 불러와 확인해 주세요.');
   };
   var setAll = function (set) { ids.forEach(function (id) { out.update.push({ id: id, set: set }); }); };
   var started = now.slice(0, 7) >= mo;
@@ -154,8 +160,8 @@ function ttTransition_(rows, studentId, month, action, ctx) {
       var w = ttSubmitWindow_(now.slice(0, 10), ctx.window);
       // ASSUMPTION(열린 질문): 기간을 놓치면 그 달에는 낼 수 없고 앞 달 확정 시간표가 그대로 이어진다(effectiveFixedRows_). 교사 대신 입력·기간 연장 없음.
       if (!w.open) return fail(w.reason);
-      if (w.month !== mo) return fail('이번 제출 기간에는 ' + w.month + ' 시간표만 낼 수 있습니다');
-      if (cur === '혼합') return fail('이 달 시간표 행의 상태가 섞여 있습니다. 담당교사에게 알려 주세요');
+      if (w.month !== mo) return fail('지금은 ' + ymKo_(w.month, now) + ' 시간표만 낼 수 있습니다. ' + ymKo_(w.month, now) + ' 시간표를 골라 주세요.');
+      if (cur === '혼합') return fail('이 달 시간표 기록의 상태가 섞여 있습니다. 담당 선생님께 알려 주세요.');
       var v = ttValidateEntries_(ctx.entries);
       if (!v.ok) return fail(v.errors.join('\n'));
       out.cancel = ids;
@@ -163,13 +169,13 @@ function ttTransition_(rows, studentId, month, action, ctx) {
         out.add.push({ student_id: sid, month: mo, weekday: r.weekday, blocks: r.blocks, code: r.code,
           submitted_at: now, parent_agreed_at: '', teacher_confirmed_at: '', status: '제출' });
       });
-      if (cur === '확정') out.warnings.push('확정된 ' + mo + ' 시간표를 다시 냈습니다. 학부모 동의·담당교사 확인을 다시 받아야 합니다');
+      if (cur === '확정') out.warnings.push('확정된 ' + ymKo_(mo, now) + ' 시간표를 다시 냈습니다. 학부모 동의와 담당 선생님 확인을 다시 받아야 합니다.');
       return out;
     case 'teacherEnter':
       // ASSUMPTION(결정 84 보충): 대신 입력은 이번 달·다음 달만(지난달은 출석부에 쓰일 날이 없다, 그 뒤 달은 학생 제출 기간이 아직 안 왔다).
       var thisMo = now.slice(0, 7);
-      if (mo !== thisMo && mo !== ttNextMonth_(thisMo)) return fail('대신 입력은 이번 달(' + thisMo + ')·다음 달(' + ttNextMonth_(thisMo) + ') 시간표만 할 수 있습니다');
-      if (cur === '혼합') return fail('이 달 시간표 행의 상태가 섞여 있습니다. 관리자에게 알려 주세요');
+      if (mo !== thisMo && mo !== ttNextMonth_(thisMo)) return fail('대신 입력은 이번 달(' + ymKo_(thisMo, now) + ')과 다음 달(' + ymKo_(ttNextMonth_(thisMo), now) + ') 시간표만 할 수 있습니다. 둘 중 한 달을 골라 주세요.');
+      if (cur === '혼합') return fail('이 달 시간표 기록의 상태가 섞여 있습니다. 관리자 선생님께 알려 주세요.');
       var tv = ttValidateEntries_(ctx.entries);
       if (!tv.ok) return fail(tv.errors.join('\n'));
       out.cancel = ids;
@@ -177,9 +183,9 @@ function ttTransition_(rows, studentId, month, action, ctx) {
         out.add.push({ student_id: sid, month: mo, weekday: r.weekday, blocks: r.blocks, code: r.code,
           submitted_at: '', parent_agreed_at: '', teacher_confirmed_at: now, status: '확정' });
       });
-      if (cur && cur !== '확정') out.warnings.push('학생이 낸 ' + mo + ' 시간표(' + cur + ')를 대신합니다');
-      if (cur === '확정') out.warnings.push('확정된 ' + mo + ' 시간표를 바꿉니다');
-      if (mo === thisMo && now.slice(8, 10) !== '01') out.warnings.push(now.slice(0, 10) + '부터 출석부에 반영합니다. 그 전 날은 지금까지의 시간표 그대로입니다');
+      if (cur && cur !== '확정') out.warnings.push('학생이 낸 ' + ymKo_(mo, now) + ' 시간표(' + ttStatusKo_(cur) + ')를 대신합니다.');
+      if (cur === '확정') out.warnings.push('확정된 ' + ymKo_(mo, now) + ' 시간표를 바꿉니다.');
+      if (mo === thisMo && now.slice(8, 10) !== '01') out.warnings.push(ymdKo_(now.slice(0, 10)) + '부터 출석부에 들어갑니다. 그 전 날은 지금까지의 시간표 그대로입니다.');
       return out;
     case 'withdraw':
       if ((why = need(['제출', '동의', '반려'], '제출을 거둘'))) return fail(why);
@@ -200,9 +206,9 @@ function ttTransition_(rows, studentId, month, action, ctx) {
       return out;
     case 'unconfirm':
       if ((why = need(['확정'], '확인을 거둘'))) return fail(why);
-      if (st.enteredBy === '담당교사') return fail('담당교사가 대신 입력한 시간표는 확인을 거둘 수 없습니다. 다시 대신 입력해 고쳐 주세요');
+      if (st.enteredBy === '담당교사') return fail('담당 선생님이 대신 입력한 시간표는 확인을 거둘 수 없습니다. 다시 대신 입력해 고쳐 주세요.');
       setAll({ status: '동의', teacher_confirmed_at: '' });
-      if (started) out.warnings.push(mo + '은 이미 시작한 달입니다. 다시 확인할 때까지 출석부는 앞 달 확정 시간표를 씁니다');
+      if (started) out.warnings.push(ymKo_(mo, now) + '은 이미 시작한 달입니다. 다시 확인할 때까지 출석부는 앞 달 확정 시간표를 씁니다.');
       return out;
     case 'parentReturn':
       if ((why = need(['제출'], '돌려보낼'))) return fail(why);
@@ -211,7 +217,7 @@ function ttTransition_(rows, studentId, month, action, ctx) {
       return out;
     case 'teacherReturn':
       if ((why = need(['동의'], '돌려보낼'))) return fail(why);
-      if (!note) return fail('돌려보내는 사유를 적어 주세요');
+      if (!note) return fail('돌려보내는 사유가 비어 있습니다. 사유를 적어 주세요.');
       setAll({ status: '반려' });
       out.returned = { by: '담당교사', reason: note };
       return out;

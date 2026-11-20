@@ -113,7 +113,7 @@ test('운영 안 하는 날에 근무 행이 남아 있으면 세고 경고(R8),
   const closed = x.slots.find((s) => s.date === '2027-01-01');
   x.env.asOwner((c) => c.updateRecord_('duty_slots', closed.id, { status: '유효' }, ADMIN));
   const r = rec(x, DUTY);
-  assert.ok(r.warnings.some((w) => w.includes('운영 안 하는 날')), JSON.stringify(r.warnings));
+  assert.ok(r.warnings.some((w) => w.includes('운영하지 않는 날인데 근무 기록이 있어')), JSON.stringify(r.warnings));
   const empty = rec(x, DUTY, '2027-05');
   assert.deepStrictEqual([empty.teachers, empty.swaps, empty.totals.total], [[], [], 0]);
 });
@@ -162,13 +162,13 @@ test('운영 안 한 1/1에 근무 행을 되살리면 경고가 PDF에 한 번�
   const x = makeEnv();
   const closed = x.slots.find((s) => s.date === '2027-01-01' && s.slot !== '예비');
   x.env.asOwner((c) => c.updateRecord_('duty_slots', closed.id, { status: '유효' }, ADMIN));
-  const n = (h) => (text(h).match(/근무가 기록되어 있습니다|근무 행을 셌습니다/g) || []).length;   // 렌더러 문구 + R8 문구(범례의 '운영 안 하는 날입니다'는 세지 않는다)
+  const n = (h) => (text(h).match(/근무가 기록되어 있습니다|근무 기록이 있어 함께 셌습니다/g) || []).length;   // 렌더러 문구 + R8 문구(범례의 '운영 안 하는 날입니다'는 세지 않는다)
   assert.strictEqual(n(file(x, DUTY, MON, 'pdf').html), 1, '근무 행 + 칸 표시 중복 없이 한 번');
   const y = makeEnv();
   y.env.asOwner((c) => c.appendRecord_('duty_slots', { date: '2027-01-01', slot: '예비', end_time: '', original_email: T1, actual_email: T1, swapped_at: '', swapped_by: '', status: '유효', memo: '' }, ADMIN));
   const f = file(y, DUTY, MON, 'pdf');
   assert.ok(n(f.html) >= 1, '예비만 있는 날 경고가 PDF에: ' + text(f.html).slice(-300));
-  assert.ok(f.r.warnings.some((w) => w.includes('운영 안 하는 날')) && f.r.warnings.every((w) => !/\d{4}-\d{2}-\d{2}/.test(w)), JSON.stringify(f.r.warnings));
+  assert.ok(f.r.warnings.some((w) => w.includes('운영하지 않는 날인데 근무 기록이 있어')) && f.r.warnings.every((w) => !/\d{4}-\d{2}-\d{2}/.test(w)), JSON.stringify(f.r.warnings));
   assert.ok(rec(y, DUTY).warnings.every((w) => !/\d{4}-\d{2}-\d{2}/.test(w)), '화면 경고에도 숫자 날짜 없음');
 });
 

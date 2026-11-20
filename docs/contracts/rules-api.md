@@ -36,10 +36,13 @@ function hmIsValid_(hm)                     // 'HH:mm'(00:00~23:59, '24:00') 인
 function hmToMin_(hm)                       // 'HH:mm' → 분, '24:00' = 1440
 function minToHm_(min)
 function isoLocalSplit_(iso)                // → {date:'yyyy-MM-dd', min:Number, sec:Number}(sec는 R1 추가)
+function ymdKo_(ymd, base)                  // (R25) 화면 문구용 '3월 26일(금)', base와 해가 다르면 'yyyy년 '. 날짜가 아니면 그대로
+function ymKo_(ym, base)                    // (R25) 화면 문구용 '4월'('2028년 1월')
 // 모든 규칙 파일이 함께 쓰는 헬퍼(R7 추가 — 파일마다 따로 있던 같은 함수를 합침)
 function ruleStr_(v)       // 셀 값 → trim한 문자열(undefined·null은 '')
 function ruleIso_(v)       // 일시 비교용: 'yyyy-MM-dd HH:mm:ss' → 'T' 형식
 function ruleRowLive_(r)   // status 빈칸·'유효'
+function ruleNowText_(v)   // (R25) 문구용 '(지금 값)', 빈 값은 '(빈칸)'
 function hmNorm_(v)        // 'H:mm'·'HH:mm:00' → 'HH:mm', 빈칸 '', 시각 아님 null(ScheduleRules.schedNormHm_은 features/Schedule.gs가 부르는 같은 함수)
 
 // src/rules/DutyRules.gs (R8)
@@ -448,3 +451,13 @@ function ttMissing_(rows, studentIds, month)    // → 그 달 살아 있는 행
 - `ttCopyPrevious_`: 적용월의 **앞 달에 출석부가 쓰던** 확정 시간표(`effectiveFixedRows_(…, 앞 달 말일)` — R24: 달 중간 대신 입력도 반영 — 앞 달을 새로 확정하지 않았으면 그보다 앞 달에서 이어진 것)를 제출 초안 `entries`로(정규화·정렬). 저장하지 않는다. 확정 시간표가 없거나 `없음` 달이면 빈 초안·`fromMonth ''`. 옛 행이 지금 입력 검사에 걸리면 빈 초안.
 - `ttMissing_`: 마감 뒤 담당교사에게 보일 미제출 학생 = 그 달 살아 있는 행이 없거나 `반려`인 학생.
 - ASSUMPTION(열린 질문): ① 기간을 놓치면 그 달에는 낼 수 없고 앞 달 확정 시간표가 그대로 이어진다(교사 대신 입력·기간 연장 없음). ② 학부모 동의 없이 교사가 바로 확정하지 않는다(0단계 진단 뒤 학부모 접속이 어려우면 다시 정한다). ③ PRD F9의 '평일 종료 유형(23:00/23:50)' 선택은 `fixed_schedules`에 열이 없어 이번 규칙에 넣지 않았다(지금은 `enrollments.end_type`).
+
+## 동작 메모(R25, 2026-11-20) — 규칙 문구 정리
+
+`docs/design/writing.md`를 기준으로 규칙 함수가 화면에 내보내는 글(`errors`·`warnings`·`reason`·`blocked`·`note`)만 고쳤다. **반환 모양·키·저장 값은 그대로다.**
+- 그대로 둔 것: 시트에 저장하는 값(`cancel_reason`의 `[자동] …`, OUT 자동 취소 사유, status_changes의 `reason`·`memo`, `[일괄]`·`[임시]` 머리말), 코드로 비교하는 판정 값(`outDismissalGate_.reason`, 좌석 `vacant.reason`, 위반 `kind`, ambiguous `reason`), 개발자 오류(`throw new Error` — 부르는 쪽 버그).
+- 틀: "무엇이 → 어떻게 고치나" 두 문장, 마침표로 끝냄, 합니다체, 사과·탓·시스템 말 없음, 기계 조사(`을(를)` 등) 없음(시험 `tests/rules/wording.test.js`가 지킨다), '이 기간' → '운영 기간', 학생 화면 상태 이름은 '돌려보냄'·'학부모 동의'(`ttStatusKo_`), 출처 코드는 '입퇴실'·'급식 변경'·'명단 업로드'(`mealSourceKo_`), 요일 유형은 '월~목'·'금요일'…(`schedDayTypeKo_`).
+- 날짜는 `ymdKo_`(예: 3월 26일(금)), 달은 `ymKo_`(예: 4월). 기준일(today 등)을 아는 곳은 해가 다르면 연도를 붙인다.
+- **예외: 근무(DutyRules) 경고는 앞머리에 'yyyy-MM-dd'를 그대로 둔다** — `Duty.gs`가 앞 10글자로 날짜를 읽고 `dtyWarnText_`로 바꿔 보인다.
+- 글자로 맞추는 곳: MoveRules는 MealRules의 '덮는 기록' 경고를 `mealCoverWarnHead_`(한 곳)로 찾는다. 기능 쪽 `Duty.gs`(운영 안 하는 날 근무 경고)·`Roster.gs`(기록과 명단이 다른 경고)·`Meals.gs`(' 학생의 ')·`Rooms.gs`·`SeatDraft.gs`(학생·좌석 id를 이름으로 바꿈)가 문구 조각을 쓴다 — 이 PR에서 Duty.gs·Roster.gs의 찾는 글자를 새 문구에 맞췄다.
+- ScheduleRules의 "방학 블록이 모두 잘못돼 학기 블록을 씀" 경고는 경고 글자 대신 경고 수로 판정한다(같은 동작).

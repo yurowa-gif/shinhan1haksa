@@ -91,7 +91,7 @@ function roomDraft_(rooms, students, changes, avoids, ymd, seed) {
       var ps = inRoom[r.id], c = (score(ps.concat([pid])) - score(ps)) * 1000 + ps.length;   // 점수 증가 먼저, 같으면 사람이 적은 방
       if (c < bc) { bc = c; best = r; }
     });
-    if (!best) { unplaced.push(pid); warnings.push(pid + ' 학생: 들어갈 방이 없습니다(정원)'); return; }
+    if (!best) { unplaced.push(pid); warnings.push(pid + ' 학생이 들어갈 방이 없습니다(정원이 찼습니다). 정원을 늘리거나 직접 배정해 주세요.'); return; }
     inRoom[best.id].push(pid);
   });
   // 개선: 학생을 같은 성별 다른 방의 학생과 맞바꾸거나 그 방 빈자리로 옮겨 두 방 점수 합이 줄면 한다(같은 성별 방끼리라 맞바꿔도 성별이 맞다).

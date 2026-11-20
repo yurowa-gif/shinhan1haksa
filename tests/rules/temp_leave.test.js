@@ -70,7 +70,7 @@ test('moveReentryBan_: 가장 늦은 기록된 퇴실이 기준 — 자진 뒤(�
 test('movePlan_ 학사 입실: 자진 퇴실 뒤면 "퇴실(날짜)로 …까지" 오류, 임시 퇴실 뒤 복귀는 허용(재입실 급식 = 퇴실 전 값)', () => {
   const move = { type: '학사 입실', effectiveDate: '2027-05-03', requestedAt: '2027-05-01T09:00:00' };
   const self = plan(BASE().concat([CH('학사', '퇴실', '2027-04-10', { reason: '개인 사정' })]), move, '2027-05-01');
-  assert.deepStrictEqual(self.errors, ['퇴실(4월 10일)로 2028년 3월 1일까지 다시 들어올 수 없습니다']);
+  assert.deepStrictEqual(self.errors, ['4월 10일(토)에 퇴실해 2028년 3월 1일(수)까지 다시 들어올 수 없습니다.']);
   const tp = plan(BASE(), { type: '학사 임시 퇴실', effectiveDate: '2027-04-10', requestedAt: '2027-04-09T09:00:00', returnDate: '2027-05-03' }, '2027-04-09');
   const saved = BASE().concat(tp.rows.map((r, i) => Object.assign(CH(r.item, r.value, r.effective_date), r, { id: 'p' + i })));
   const back = plan(saved, move, '2027-05-01');
@@ -101,16 +101,16 @@ test('movePlan_ 학사 및 기숙사 임시 퇴실: 기숙사 퇴실 연결 행�
   assert.deepStrictEqual(p.rows.slice(0, 2).map((r) => [r.item, r.value, r.reason, r.memo]), [['학사', '퇴실', '임시 퇴실', '[임시] return:2027-05-03'], ['기숙사', '퇴실', '임시 퇴실', undefined]]);
   assert.ok(p.rows.some((r) => r.item === '조식' && r.value === '미실시' && r.effective_date === '2027-04-14'));   // 조식은 바로
   const e = plan(BASE(), { type: '학사 및 기숙사 임시 퇴실', effectiveDate: '2027-04-14', requestedAt: '2027-04-13T09:00:00', returnDate: '2027-05-03' }, '2027-04-13');
-  assert.deepStrictEqual(e.errors, ['2027-04-14에 기숙사 입실 상태가 아닙니다']);
+  assert.deepStrictEqual(e.errors, ['4월 14일(수)에 기숙사 입실 상태가 아닙니다. 학사 퇴실만 골라 주세요.']);
   const d = plan(dorm, { type: '학사 임시 퇴실', effectiveDate: '2027-04-14', requestedAt: '2027-04-13T09:00:00', returnDate: '2027-05-03' }, '2027-04-13');
-  assert.deepStrictEqual(d.errors, ["기숙사생입니다. '학사 및 기숙사 퇴실'로 처리해 주세요"]);
+  assert.deepStrictEqual(d.errors, ["기숙사생입니다. '학사 및 기숙사 퇴실'을 골라 주세요."]);
 });
 
 table('movePlan_ 임시 퇴실: 복귀 예정일이 없거나·틀리거나·퇴실일 이하면 오류', [
-  [undefined, '임시 퇴실은 복귀 예정일이 필요합니다(yyyy-MM-dd): '],
-  ['2027-02-30', '임시 퇴실은 복귀 예정일이 필요합니다(yyyy-MM-dd): 2027-02-30'],
-  ['2027-04-14', '복귀 예정일은 퇴실일 뒤여야 합니다: 2027-04-14'],
-  ['2027-04-01', '복귀 예정일은 퇴실일 뒤여야 합니다: 2027-04-01']
+  [undefined, '임시 퇴실은 복귀 예정일이 있어야 합니다. 복귀 예정일을 골라 주세요.'],
+  ['2027-02-30', '임시 퇴실은 복귀 예정일이 있어야 합니다. 복귀 예정일을 골라 주세요.'],
+  ['2027-04-14', '복귀 예정일 4월 14일(수)이 퇴실일보다 앞이거나 같습니다. 퇴실일 뒤 날짜로 골라 주세요.'],
+  ['2027-04-01', '복귀 예정일 4월 1일(목)이 퇴실일보다 앞이거나 같습니다. 퇴실일 뒤 날짜로 골라 주세요.']
 ], ([ret, msg]) => {
   const p = plan(BASE(), { type: '학사 임시 퇴실', effectiveDate: '2027-04-14', requestedAt: '2027-04-13T09:00:00', returnDate: ret }, '2027-04-13');
   assert.deepStrictEqual([p.errors, p.rows], [[msg], []]);

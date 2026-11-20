@@ -72,24 +72,24 @@ function validateBlocks_(blocks) {
     if (!b || schedIsCancelled_(b)) return;
     var termType = ruleStr_(b.term_type), dayType = ruleStr_(b.day_type);
     if (termType !== '학기' && termType !== '방학') {
-      errors.push({ index: i, message: '기간 유형은 학기 또는 방학이어야 합니다: ' + termType });
+      errors.push({ index: i, message: '운영 기간 종류는 학기 또는 방학이어야 합니다' + ruleNowText_(termType) + '. 종류를 다시 골라 주세요.' });
     }
-    if (!dayType) errors.push({ index: i, message: '요일 유형이 비어 있습니다' });
+    if (!dayType) errors.push({ index: i, message: '요일 유형이 비어 있습니다. 요일 유형을 골라 주세요.' });
     var seq = ruleStr_(b.seq);
     var seqOk = /^[1-9]\d*$/.test(seq);
-    if (!seqOk) errors.push({ index: i, message: '순서는 1 이상의 정수여야 합니다: ' + seq });
+    if (!seqOk) errors.push({ index: i, message: '순서는 1 이상의 정수여야 합니다' + ruleNowText_(seq) + '. 순서를 고쳐 주세요.' });
     var start = hmNorm_(b.start), end = hmNorm_(b.end);
     var timeOk = true;
     if (!start || start === '24:00') {
-      errors.push({ index: i, message: '시작 시각 형식이 아닙니다(HH:mm): ' + ruleStr_(b.start) });
+      errors.push({ index: i, message: '시작 시각을 읽을 수 없습니다(' + ruleStr_(b.start) + '). 18:30처럼 적어 주세요.' });
       timeOk = false;
     }
     if (!end) {
-      errors.push({ index: i, message: '끝 시각 형식이 아닙니다(HH:mm, 24:00 허용): ' + ruleStr_(b.end) });
+      errors.push({ index: i, message: '끝 시각을 읽을 수 없습니다(' + ruleStr_(b.end) + '). 20:00처럼 적어 주세요(자정은 24:00).' });
       timeOk = false;
     }
     if (timeOk && hmToMin_(start) >= hmToMin_(end)) {
-      errors.push({ index: i, message: '시작이 끝보다 앞이어야 합니다: ' + start + '–' + end });
+      errors.push({ index: i, message: '시작이 끝보다 늦거나 같습니다(' + start + '–' + end + '). 시각을 고쳐 주세요.' });
       timeOk = false;
     }
     var key = termType + '|' + dayType;
@@ -102,7 +102,7 @@ function validateBlocks_(blocks) {
     list.forEach(function (x) {
       if (!x.seqOk) return;
       if (seenSeq[x.seq] !== undefined) {
-        errors.push({ index: x.index, message: '순서 ' + x.seq + '이(가) 겹칩니다(' + (seenSeq[x.seq] + 1) + '번째 행과 같음)' });
+        errors.push({ index: x.index, message: '순서 ' + x.seq + '번이 ' + (seenSeq[x.seq] + 1) + '번째 줄과 겹칩니다. 순서를 고쳐 주세요.' });
       } else {
         seenSeq[x.seq] = x.index;
       }
@@ -113,8 +113,8 @@ function validateBlocks_(blocks) {
     for (var j = 1; j < timed.length; j++) {
       for (var k = 0; k < j; k++) {
         if (hmToMin_(timed[j].start) < hmToMin_(timed[k].end)) {
-          errors.push({ index: timed[j].index, message: '시간이 겹칩니다: ' + timed[k].start + '–' + timed[k].end +
-            ' / ' + timed[j].start + '–' + timed[j].end });
+          errors.push({ index: timed[j].index, message: '시간이 겹칩니다(' + timed[k].start + '–' + timed[k].end +
+            ', ' + timed[j].start + '–' + timed[j].end + '). 한쪽 시각을 고쳐 주세요.' });
           break;
         }
       }
@@ -122,8 +122,8 @@ function validateBlocks_(blocks) {
     var ordered = timed.filter(function (x) { return x.seqOk; });
     for (var v = 1; v < ordered.length; v++) {
       if (+ordered[v].seq < +ordered[v - 1].seq) {
-        errors.push({ index: ordered[v].index, message: '순서 번호가 시각 순서와 다릅니다: ' + ordered[v].seq + '번(' +
-          ordered[v].start + ')이 ' + ordered[v - 1].seq + '번(' + ordered[v - 1].start + ')보다 늦게 시작합니다' });
+        errors.push({ index: ordered[v].index, message: '순서 번호가 시각 순서와 다릅니다. ' + ordered[v].seq + '번(' +
+          ordered[v].start + ')이 ' + ordered[v - 1].seq + '번(' + ordered[v - 1].start + ')보다 늦게 시작하니 순서를 바꿔 주세요.' });
       }
     }
   });
@@ -159,7 +159,7 @@ function resolveDayPlan_(ymd, src) {
   var ds = src.daySchedule || null;
   if (ds && schedIsCancelled_(ds)) ds = null;
   if (ds && ruleStr_(ds.date) !== ymd) {
-    warnings.push('다른 날짜(' + ruleStr_(ds.date) + ')의 일정 행이 넘어와 무시했습니다');
+    warnings.push(ymdKo_(ruleStr_(ds.date)) + ' 일정이 섞여 들어와 쓰지 않았습니다.');
     ds = null;
   }
   var dayType = (ds && ruleStr_(ds.day_type)) || baseDayType_(ymd);
@@ -167,19 +167,18 @@ function resolveDayPlan_(ymd, src) {
   if (ds) {
     var op = schedOperatingParse_(ds.operating);
     operating = op.value;
-    if (!op.known) warnings.push('운영 여부 값을 알 수 없어 운영 안 함으로 보았습니다: ' + ruleStr_(ds.operating));
+    if (!op.known) warnings.push('운영 여부 값(' + ruleStr_(ds.operating) + ')을 알 수 없어 운영하지 않는 날로 보았습니다. 운영 여부를 다시 골라 주세요.');
   }
   var memo = ds ? String(ds.memo || '') : '';
   var termType = ruleStr_(src.termType) || '학기';
 
+  var w0 = warnings.length;
   var rows = schedBlocksFor_(src.blocks, termType, dayType, warnings);
   if (!rows.length && termType === '방학') {
     // ASSUMPTION: 방학 블록을 따로 정하지 않았으면 같은 요일 유형의 학기 블록을 쓴다(stage1 4절 6번).
-    var before = warnings.length;
+    var vacWarned = warnings.length > w0;   // 방학 블록 행이 있었지만 모두 읽을 수 없었다
     rows = schedBlocksFor_(src.blocks, '학기', dayType, warnings);
-    if (before > 0 && warnings.some(function (w) { return w.indexOf('방학 ' + dayType) >= 0; })) {
-      warnings.push('쓸 수 있는 방학 블록이 없어 학기 블록을 썼습니다(' + dayType + ')');
-    }
+    if (vacWarned) warnings.push('쓸 수 있는 방학 블록이 없어 학기 블록을 썼습니다(' + schedDayTypeKo_(dayType) + ').');
   }
 
   var def = (src.defaults || {})[dayType] || null;
@@ -187,26 +186,26 @@ function resolveDayPlan_(ymd, src) {
   var end = schedPickHm_(ds && ds.end, '종료', false, warnings) || schedPickHm_(def && def.end, '기본 종료', false, warnings);
   var isBase = ['mon_thu', 'fri', 'sat', 'sun'].indexOf(dayType) >= 0;
   if ((!start || !end) && rows.length) {
-    if (isBase && operating) warnings.push('기본 자습 시각이 없어 블록 시각을 썼습니다(' + dayType + ')');
+    if (isBase && operating) warnings.push('기본 자습 시각이 없어 블록 시각을 썼습니다(' + schedDayTypeKo_(dayType) + ').');
     if (!start) start = rows[0].start;
     if (!end) end = rows.reduce(function (m, r) { return hmToMin_(r.end) > hmToMin_(m) ? r.end : m; }, rows[0].end);
   }
   if (operating) {
-    if (!start || !end) warnings.push('자습 시작·종료 시각을 정할 수 없습니다(요일 유형 ' + dayType + ')');
+    if (!start || !end) warnings.push('자습 시작·종료 시각을 정할 수 없습니다(' + schedDayTypeKo_(dayType) + '). 자습 일정에 시작·종료 시각을 넣어 주세요.');
     if (start && end && hmToMin_(start) >= hmToMin_(end)) {
-      warnings.push('시작 ' + start + '이(가) 종료 ' + end + '보다 늦습니다');
+      warnings.push('자습 시작(' + start + ')이 종료(' + end + ')보다 늦거나 같습니다. 시각을 고쳐 주세요.');
     }
   }
 
   var blocks = [];
   if (operating) {
-    if (!rows.length) warnings.push('블록이 없습니다(' + termType + ', ' + dayType + ')');
+    if (!rows.length) warnings.push('출석 블록이 없습니다(' + termType + ' ' + schedDayTypeKo_(dayType) + '). 자습 블록 설정에서 블록을 넣어 주세요.');
     var endMin = end ? hmToMin_(end) : 1440;
     rows.forEach(function (r) {
       if (hmToMin_(r.start) >= endMin) return; // 종료 뒤에 시작하는 블록은 뺀다
       var prev = blocks[blocks.length - 1];
       if (prev && hmToMin_(r.start) < hmToMin_(prev.end)) {
-        warnings.push('블록 시간이 겹칩니다: ' + prev.key + ' / ' + r.start + '-' + r.end);
+        warnings.push('블록 시간이 겹칩니다(' + prev.key + ', ' + r.start + '–' + r.end + '). 자습 블록 설정에서 시각을 고쳐 주세요.');
       }
       blocks.push({
         seq: blocks.length + 1,
@@ -230,7 +229,7 @@ function schedPickHm_(v, what, isStart, warnings) {
   var hm = hmNorm_(v);
   if (hm === '') return '';
   if (hm && !(isStart && hm === '24:00')) return hm;
-  warnings.push(what + ' 시각 형식이 아니라 무시했습니다: ' + ruleStr_(v));
+  warnings.push(what + ' 시각(' + ruleStr_(v) + ')을 읽을 수 없어 쓰지 않았습니다.');
   return '';
 }
 
@@ -243,16 +242,22 @@ function schedBlocksFor_(rows, termType, dayType, warnings) {
     var seq = ruleStr_(r.seq);
     var start = hmNorm_(r.start), end = hmNorm_(r.end);
     if (!/^[1-9]\d*$/.test(seq) || !start || start === '24:00' || !end || hmToMin_(start) >= hmToMin_(end)) {
-      warnings.push('잘못된 블록을 건너뛰었습니다: ' + termType + ' ' + dayType + ' ' + seq + ' ' +
-        ruleStr_(r.start) + '–' + ruleStr_(r.end));
+      warnings.push('읽을 수 없는 블록을 건너뛰었습니다(' + termType + ' ' + schedDayTypeKo_(dayType) + ' ' + seq + '번, ' +
+        ruleStr_(r.start) + '–' + ruleStr_(r.end) + ').');
       return;
     }
     var prev = bySeq[seq];
-    if (prev) warnings.push('같은 순서의 블록이 둘 이상입니다(최근 수정한 것을 씀): ' + termType + ' ' + dayType + ' ' + seq);
+    if (prev) warnings.push('같은 순서의 블록이 2개 이상입니다(' + termType + ' ' + schedDayTypeKo_(dayType) + ' ' + seq + '번). 가장 최근에 고친 것을 씁니다.');
     if (!prev || ruleStr_(r.updated_at) >= ruleStr_(prev.row.updated_at)) {
       bySeq[seq] = { row: r, seq: +seq, start: start, end: end, label: ruleStr_(r.label) };
     }
   });
   return Object.keys(bySeq).map(function (k) { return bySeq[k]; })
     .sort(function (a, b) { return hmToMin_(a.start) - hmToMin_(b.start) || a.seq - b.seq; });
+}
+
+/** 요일 유형 코드 → 화면 이름(R25). 특별 유형(exam 등)은 코드 그대로. */
+function schedDayTypeKo_(dayType) {
+  var d = ruleStr_(dayType);
+  return { 'mon_thu': '월~목', 'fri': '금요일', 'sat': '토요일', 'sun': '일요일', 'holiday': '휴일' }[d] || d;
 }

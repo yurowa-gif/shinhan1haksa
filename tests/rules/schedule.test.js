@@ -94,7 +94,7 @@ table('알 수 없는 운영 값(오타)은 운영 안 함 + 경고(가정: 잘�
   const p = plan('2027-03-03', { daySchedule: ds('2027-03-03', { operating: v }) });
   assert.strictEqual(p.operating, false);
   assert.deepStrictEqual(p.blocks, []);
-  assert.ok(p.warnings.some((w) => w.indexOf('운영 여부 값을 알 수 없어') >= 0), p.warnings.join('/'));
+  assert.ok(p.warnings.some((w) => w.indexOf('을 알 수 없어 운영하지 않는 날로 보았습니다') >= 0), p.warnings.join('/'));
   assert.strictEqual(ctx.schedOperatingValue_(v), false);
 });
 
@@ -159,7 +159,7 @@ test('다른 날짜의 일정 행이 넘어오면 무시하고 경고', () => {
   const p = plan('2027-03-03', { daySchedule: ds('2027-03-04', { operating: 'FALSE' }) });
   assert.strictEqual(p.operating, true);
   assert.strictEqual(p.blocks.length, 3);
-  assert.ok(p.warnings.some((w) => w.indexOf('다른 날짜') >= 0));
+  assert.ok(p.warnings.some((w) => w.indexOf('일정이 섞여 들어와 쓰지 않았습니다') >= 0));
 });
 
 test('기본 요일 유형인데 기본 시각이 없으면 블록 시각을 쓰고 경고', () => {
@@ -267,7 +267,7 @@ test('잘못된 블록 행은 건너뛰고 경고', () => {
     blk('학기', 'mon_thu', 0, '08:00', '09:00'), blk('학기', 'mon_thu', 6, '17:00', '16:00')]);
   const p = plan('2027-03-03', { blocks: rows });
   assert.strictEqual(p.blocks.length, 3);
-  assert.strictEqual(p.warnings.filter((w) => w.indexOf('잘못된 블록') >= 0).length, 4);
+  assert.strictEqual(p.warnings.filter((w) => w.indexOf('읽을 수 없는 블록') >= 0).length, 4);
 });
 
 test('날짜별 일정의 잘못된 시각은 무시하고 기본값 + 경고', () => {
@@ -276,7 +276,7 @@ test('날짜별 일정의 잘못된 시각은 무시하고 기본값 + 경고', 
   assert.strictEqual(p.start, '18:30');
   assert.strictEqual(p.warnings.length, 2);
   const q = plan('2027-03-03', { daySchedule: ds('2027-03-03', { start: '23:00', end: '22:00' }) });
-  assert.ok(q.warnings.some((w) => w.indexOf('늦습니다') >= 0));
+  assert.ok(q.warnings.some((w) => w.indexOf('늦거나 같습니다') >= 0));
 });
 
 test('취소된 날짜별 일정을 넘겨도 무시한다', () => {
@@ -330,12 +330,12 @@ table('validateBlocks_: 형식 오류와 겹침을 행 위치와 함께 찾는�
   // [행들, 문제가 있는 index 목록, 메시지에 들어갈 낱말]
   [[blk('학기', 'mon_thu', 1, '18:00', '20:00'), blk('학기', 'mon_thu', 2, '19:00', '22:00')], [1], '겹칩니다'],
   [[blk('학기', 'mon_thu', 1, '18:00', '20:00'), blk('학기', 'mon_thu', 1, '20:00', '22:00')], [1], '순서 1'],
-  [[blk('학기', 'mon_thu', 1, '20:00', '18:00')], [0], '앞이어야'],
-  [[blk('학기', 'mon_thu', 1, '20:00', '20:00')], [0], '앞이어야'],
+  [[blk('학기', 'mon_thu', 1, '20:00', '18:00')], [0], '늦거나 같습니다'],
+  [[blk('학기', 'mon_thu', 1, '20:00', '20:00')], [0], '늦거나 같습니다'],
   [[blk('학기', 'mon_thu', 1, '8:0', '10:00')], [0], '시작 시각'],
   [[blk('학기', 'mon_thu', 1, '1899-12-30', '1899-12-30')], [0], '시작 시각'],
-  [[blk('', 'mon_thu', 1, '18:00', '20:00')], [0], '기간 유형'],
-  [[blk('여름방학', 'mon_thu', 1, '18:00', '20:00')], [0], '기간 유형'],
+  [[blk('', 'mon_thu', 1, '18:00', '20:00')], [0], '운영 기간 종류는 학기 또는 방학이어야 합니다(빈칸)'],
+  [[blk('여름방학', 'mon_thu', 1, '18:00', '20:00')], [0], '운영 기간 종류는 학기 또는 방학이어야 합니다(지금 여름방학)'],
   [[blk('학기', '', 1, '18:00', '20:00')], [0], '요일 유형'],
   // 순서가 잘못된 행도 시각이 맞으면 겹침을 함께 알려 준다
   [[blk('학기', 'mon_thu', 1, '18:00', '20:00'), blk('학기', 'mon_thu', '', '19:00', '21:00')], [1], '겹칩니다'],

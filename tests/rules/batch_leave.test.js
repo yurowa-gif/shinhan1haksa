@@ -45,7 +45,7 @@ test('moveBatchPlan_: 학생마다 movePlan_과 같은 계획, 기숙사생은 �
 test('moveBatchPlan_: 오류 학생(이미 퇴실·없는 학생)은 skipped로 빼고 나머지는 계획, 같은 id 두 번은 한 번, 순수(두 번 불러도 같은 결과)', () => {
   const r = batch(BASE(), ['a', 'c', 'a', 'zz', '']);
   assert.deepStrictEqual(r.plans.map((p) => p.studentId), ['a']);
-  assert.deepStrictEqual(r.skipped, [{ studentId: 'c', reason: '2027-11-19에 학사 입실 상태가 아닙니다' }, { studentId: 'zz', reason: '2027-11-19에 학사 입실 상태가 아닙니다' }]);
+  assert.deepStrictEqual(r.skipped, [{ studentId: 'c', reason: '11월 19일(금)에 학사 입실 상태가 아닙니다. 날짜나 학생을 확인해 주세요.' }, { studentId: 'zz', reason: '11월 19일(금)에 학사 입실 상태가 아닙니다. 날짜나 학생을 확인해 주세요.' }]);
   assert.deepStrictEqual(batch(BASE(), ['a', 'b']), batch(BASE(), ['a', 'b']));
   assert.throws(() => ctx.moveBatchPlan_(BASE(), ['a'], MOVE, { today: '2027-11-18' }), /batchId/);
   assert.throws(() => ctx.moveBatchPlan_(BASE(), ['a'], MOVE, { today: '2027-11-18', batchId: 'B 1' }), /batchId/);

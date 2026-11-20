@@ -139,7 +139,7 @@ test('재입실이 있는 퇴실을 취소하면 재입실·기숙사 입실 기
   const ctx = env.call(ADMIN, 'getMoveContext', dorm, '2027-03-08');
   saveOk(env, ADMIN, input(dorm, '학사 입실', '2027-03-03T15:30:00', '2027-03-08', { meals: ctx.reentry.meals }));
   const c = cancel(env, ADMIN, leave.id, '퇴실 자체가 잘못');
-  assert.ok(c.p.warnings.some((w) => /재입실 기록\(\d+월 \d+일\)도 함께 취소됩니다/.test(w)), JSON.stringify(c.p.warnings));
+  assert.ok(c.p.warnings.some((w) => /\d+월 \d+일\(.\) 재입실 기록도 함께 취소됩니다/.test(w)), JSON.stringify(c.p.warnings));
   assert.ok(c.p.warnings.every((w) => !/\d{4}-\d{2}-\d{2}/.test(w)), '경고 속 날짜는 월·일로');
   assert.strictEqual(c.r.ok, true, JSON.stringify(c.r));
   assert.strictEqual(snap(env, dorm), before);

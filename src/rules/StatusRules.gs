@@ -142,7 +142,7 @@ function seatMapOn_(seats, assignments, enrollments, changes, termId, ymd) {
     var sid = ruleStr_(a.student_id);
     var prev = seatOfStudent[sid];
     if (!prev) { seatOfStudent[sid] = id; return; }
-    warnings.push('한 학생이 같은 날 두 자리에 배정되어 있습니다(날짜를 좁힌 배정·최근 배정을 씀): ' + sid);
+    warnings.push(sid + ' 학생이 같은 날 좌석 2곳에 배정되어 있습니다. 날짜를 좁힌 배정, 그다음 최근 배정을 씁니다.');
     if (statAssignmentWins_(a, pick[prev])) {
       pick[prev] = null;
       seatOfStudent[sid] = id;

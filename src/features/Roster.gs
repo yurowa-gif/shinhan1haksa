@@ -250,11 +250,11 @@ function rosterApplyBan_(diff, ctx, ymd) {
   diff.createChanges = diff.createChanges.filter(function (r) { return !gone(r.student_id); });
   diff.updateEnrollments = diff.updateEnrollments.filter(function (u) { return !info[enrStudent[u.id]]; });
   diff.updateStudents = diff.updateStudents.filter(function (u) { return !info[u.id]; });
-  // "기록과 명단이 다릅니다 … 입퇴실로 처리해 주세요" 안내는 막힌 학생에게는 틀린 길이다(입퇴실도 막힌다) — 그 학생의 줄은 뺀다
+  // "기록과 명단에서 다릅니다 … 입퇴실·급식 화면에서 바꿔 주세요" 안내는 막힌 학생에게는 틀린 길이다(입퇴실도 막힌다) — 그 학생의 줄은 뺀다
   var names = {};
   list.forEach(function (b) { names[b.name] = true; });
   diff.warnings = diff.warnings.filter(function (w) {
-    var m = /줄: (.+?) (학사|기숙사|조식|석식)이\(가\) 기록\(/.exec(String(w));
+    var m = /줄: (.+?)의 (학사|기숙사|조식|석식) 값이 기록\(/.exec(String(w));   // RosterRules diffRoster_ 경고(R25 문구)
     return !(m && names[m[1]]);
   });
   return list;

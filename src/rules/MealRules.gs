@@ -190,17 +190,17 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
   var from = statusOn_(rows, sid, it, cand.date);
   var out = { kind: mealChangeKind_(it, from, to), date: cand.date, rule: cand.rule, autoDate: autoDate, from: from, blocked: '', superseded: false,
     supersededBy: [], toCancel: [], followUps: [], warnings: [] };
-  if (rule === 'manual' && to === '미실시' && manual < autoDate) out.warnings.push('고친 적용일(' + manual + ')이 미실시 규칙의 날(' + autoDate + ')보다 이릅니다');
+  if (rule === 'manual' && to === '미실시' && manual < autoDate) out.warnings.push('고친 적용일 ' + ymdKo_(manual, today) + '은 급식실 준비 기간보다 이릅니다(규칙대로라면 ' + ymdKo_(autoDate, today) + '). 그래도 저장하면 고친 날짜로 적용됩니다.');
   // 입실일(entry_date)은 고친 날이 아니다 — 늦은 입력 경고는 movePlan_이 한다
-  if (rule === 'manual' && manual < today) out.warnings.push('고친 적용일(' + manual + ')이 오늘보다 이릅니다: 지난 식수가 바뀝니다');
-  if (lunch && cand.date > ruleStr_(opts.vacation.end_date)) out.warnings.push('적용일(' + cand.date + ')이 방학 끝날(' + ruleStr_(opts.vacation.end_date) + ') 뒤라 이번 방학 중식에 반영되지 않습니다');
+  if (rule === 'manual' && manual < today) out.warnings.push('고친 적용일 ' + ymdKo_(manual, today) + '은 지난 날입니다. 저장하면 지난 식수가 바뀝니다.');
+  if (lunch && cand.date > ruleStr_(opts.vacation.end_date)) out.warnings.push('적용일 ' + ymdKo_(cand.date, today) + '은 방학이 끝난 ' + ymdKo_(ruleStr_(opts.vacation.end_date), today) + ' 뒤라 이번 방학 중식에 들어가지 않습니다.');
 
   // 퇴실 상태인 날의 학사생 값: 조식은 늘, 석식은 퇴실 기록보다 뒤에 신청했거나(신청 일시 순서 — 입력 순서와 무관) 중단일 이후면 막는다.
   // 먼저 신청한 석식이 중단일 전에 적용되면 그대로 두고 아래 followUps가 중단일에 끝낸다(F6 정리가 중단일 이후 행만 취소하는 것과 같다).
   var leave = mealIsHallOnly_(it, to) ? mealLeaveFor_(rows, sid, it, cand.date, req) : null;
   if (leave && leave.date <= cand.date && (it === '조식' || leave.at <= req || cand.date >= leave.stop)) {
     out.kind = 'none'; out.date = ''; out.rule = '';
-    out.blocked = cand.date + '에는 학사 퇴실 상태라 ' + it + ' ' + to + '을(를) 새로 신청할 수 없습니다';
+    out.blocked = ymdKo_(cand.date, today) + '에는 학사 퇴실 상태라 ' + it + ' ' + to + ' 신청을 받을 수 없습니다. 학사 입실 날짜를 먼저 확인해 주세요.';
     return out;
   }
   // 늦게 입력한 이전 신청서: 더 새 신청이 이미 그 전에 적용되면 이 신청은 영영 적용되지 않는다
@@ -218,8 +218,8 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
       var ea = ruleStr_(a.effective_date), eb = ruleStr_(b.effective_date);
       return ea !== eb ? (ea > eb ? -1 : 1) : ruleIso_(a.requested_at) > ruleIso_(b.requested_at) ? -1 : 1;
     }).map(function (c) { return ruleStr_(c.id); });
-    out.warnings.push('더 새 신청(' + newer.map(function (c) { return ruleStr_(c.effective_date) + ' ' + ruleStr_(c.value); }).join(', ') +
-      ')이 먼저 적용되어 이 신청은 적용되지 않습니다');
+    out.warnings.push('나중에 낸 신청(' + newer.map(function (c) { return ymdKo_(ruleStr_(c.effective_date), today) + ' ' + ruleStr_(c.value); }).join(', ') +
+      ')이 있어 이 신청은 적용되지 않습니다.');
     return out;
   }
   out.toCancel = mealPendingToCancel_(rows, sid, it, cand.date, { source: 'F7', requestedAt: requestedAt, newValue: to });
@@ -244,8 +244,8 @@ function mealPlanChange_(changes, studentId, item, toValue, requestedAt, opts) {
     if (cancelled[ruleStr_(c.id)]) return;
     var e = ruleStr_(c.effective_date), v = ruleStr_(c.value);
     if (v === to) return;
-    if (e > cand.date) out.warnings.push(e + '부터 ' + v + '(으)로 바뀌는 행이 있어 이 신청을 덮습니다(' + (ruleStr_(c.source) || '기록') + ')');
-    else if (e > today && e < cand.date && ruleStr_(c.source) !== '명단업로드') out.warnings.push(e + '부터 ' + v + '(으)로 바뀌는 대기 중인 신청이 먼저 적용됩니다(필요하면 직접 취소)');
+    if (e > cand.date) out.warnings.push(mealCoverWarnHead_(e, v) + ' 그날부터는 그 기록을 따릅니다(' + mealSourceKo_(c.source) + ').');
+    else if (e > today && e < cand.date && ruleStr_(c.source) !== '명단업로드') out.warnings.push(ymdKo_(e) + '부터 ' + v + ' 신청이 먼저 적용됩니다. 필요 없으면 그 신청을 취소 처리해 주세요.');
   });
 
   // 학사생 값이 퇴실 뒤 중단일까지 이어지면 퇴실 정리 행을 함께 쓴다(none이어도 — 이전 미실시 대기 행을 취소한 경우).
@@ -435,7 +435,7 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, 
     var s = byId[sid], g = ruleStr_(s && s.gender), gr = ruleStr_(s && s.grade);
     if (!s || (g !== '남' && g !== '여') || !/^\d+$/.test(gr)) {
       out.unknownGroup.push(sid);
-      out.warnings.push(sid + ' 학생의 성별·학년을 알 수 없어 식수 줄에 넣지 않았습니다');
+      out.warnings.push(sid + ' 학생의 성별·학년이 비어 있어 식수에 넣지 않았습니다. 명단에서 성별·학년을 채워 주세요.');
       return;
     }
     grades[gr] = true;
@@ -453,4 +453,18 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, 
     r.keys.forEach(function (k) { Object.keys(r.v).forEach(function (m) { groups[k][m] += r.v[m]; }); });
   });
   return out;
+}
+
+/**
+ * 새 신청을 뒤에서 덮는 기록 경고의 앞부분(R25). MoveRules가 같은 앞부분으로 자기가 취소한 행의 경고를 걸러 내므로 한 곳에서 만든다.
+ * 날짜에는 해를 붙이지 않는다(기준일 없이 같은 글자가 나와야 한다).
+ */
+function mealCoverWarnHead_(effectiveDate, value) {
+  return ymdKo_(ruleStr_(effectiveDate)) + '부터 ' + ruleStr_(value) + ' 기록이 있습니다.';
+}
+
+/** status_changes.source → 화면 이름(R25). 모르는 값은 그대로, 빈칸은 '기록'. */
+function mealSourceKo_(source) {
+  var s = ruleStr_(source);
+  return { 'F6': '입퇴실', 'F7': '급식 변경', '명단업로드': '명단 업로드' }[s] || s || '기록';
 }
