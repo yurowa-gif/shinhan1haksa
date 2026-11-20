@@ -226,6 +226,10 @@ var UI = {};
       document.body.appendChild(bar);
       var main = document.querySelector('main');
       if (main) main.classList.add('has-actionbar');
+      // 바 높이는 글자 크기·버튼 줄바꿈에 따라 달라진다(글자 150%에서 마지막 내용이 가려지던 것). 실제 높이를 --bar-h로 알려 main의 아래 여백이 따라가게 한다
+      var fit = function () { var h = bar.offsetHeight; if (h) document.documentElement.style.setProperty('--bar-h', h + 'px'); };
+      fit();
+      if (typeof ResizeObserver !== 'undefined') { try { new ResizeObserver(fit).observe(bar); } catch (e) { window.addEventListener('resize', fit); } } else window.addEventListener('resize', fit);
     }
     return bar;
   };
@@ -347,7 +351,7 @@ var UI = {};
   UI.segmented = function (opts) {
     opts = opts || {};
     var value = opts.value !== undefined ? opts.value : (opts.options && opts.options[0] ? opts.options[0].value : '');
-    var wrap = el('div', { class: 'segmented', role: 'radiogroup', 'aria-label': opts.label || '선택' });
+    var wrap = el('div', { class: (opts.options || []).length >= 5 ? 'segmented dense' : 'segmented', role: 'radiogroup', 'aria-label': opts.label || '선택' });
     function draw() {
       while (wrap.firstChild) wrap.removeChild(wrap.firstChild);
       (opts.options || []).forEach(function (o) {

@@ -45,7 +45,7 @@
       rows.forEach(function (s) {
         box.appendChild(el('div', { class: 'cn-row' }, [
           el('span', { text: label(s) + (s.mine || !anyMine ? '' : ' (담당 아님)') }),
-          el('button', { type: 'button', class: 'btn secondary row-btn', text: '상담 보기', onclick: function () { Nav.go('s:' + s.id); openStudent(s.id, true); } })
+          el('button', { type: 'button', class: 'btn secondary row-btn row-open', text: '상담 보기', onclick: function () { Nav.go('s:' + s.id); openStudent(s.id, true); } })
         ]));
       });
     }
