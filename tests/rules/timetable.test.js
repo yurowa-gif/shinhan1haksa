@@ -142,8 +142,9 @@ test('ttTransition_ 되돌리기: 동의·확인 거두기, 반려, 거두기, �
 });
 
 test('ttTransition_ 막힘: 상태표(지금 상태 × 행동)', () => {
-  const at = (status) => status ? [{ id: 'x1', student_id: 's1', month: '2027-04', weekday: '월', blocks: 'ALL', code: '학', status },
-    { id: 'x2', student_id: 's1', month: '2027-04', weekday: '화', blocks: 'ALL', code: '가', status }] : [];
+  const agreed = (status) => status === '동의' || status === '확정' ? { parent_agreed_at: '2027-03-27T08:00:00' } : {};   // 보통 흐름(학생 제출)
+  const at = (status) => status ? [Object.assign({ id: 'x1', student_id: 's1', month: '2027-04', weekday: '월', blocks: 'ALL', code: '학', status }, agreed(status)),
+    Object.assign({ id: 'x2', student_id: 's1', month: '2027-04', weekday: '화', blocks: 'ALL', code: '가', status }, agreed(status))] : [];
   const OK = {
     '':   { withdraw: 0, agree: 0, unagree: 0, confirm: 0, unconfirm: 0, parentReturn: 0, teacherReturn: 0 },
     '제출': { withdraw: 1, agree: 1, unagree: 0, confirm: 0, unconfirm: 0, parentReturn: 1, teacherReturn: 0 },
@@ -157,7 +158,8 @@ test('ttTransition_ 막힘: 상태표(지금 상태 × 행동)', () => {
     if (!r.ok) assert.deepStrictEqual([r.add, r.update, r.cancel, !!r.reason], [[], [], [], true]);
     else if (action !== 'withdraw') assert.deepStrictEqual(r.update.map((u) => u.id), ['x1', 'x2']);
   }));
-  // 모든 상태에서 기간 안 제출은 된다(혼합 제외)
+  // 모든 상태에서 기간 안 제출·담당교사 대신 입력은 된다(혼합 제외)
+  ['', '제출', '동의', '확정', '반려'].forEach((s) => assert.ok(step(at(s), 'teacherEnter', '2027-04-10T10:00:00', { entries: ENTRIES }).ok, 'teacherEnter ' + s));
   ['', '제출', '동의', '확정', '반려'].forEach((s) => assert.ok(step(at(s), 'submit', '2027-03-28T10:00:00', { entries: ENTRIES }).ok, s));
   const mixed = [{ id: 'y1', student_id: 's1', month: '2027-04', status: '확정' }, { id: 'y2', student_id: 's1', month: '2027-04', status: '제출' }];
   assert.strictEqual(ctx.ttMonthState_(mixed, 's1', '2027-04').status, '혼합');
@@ -225,4 +227,95 @@ test('ttMissing_: 그 달 살아 있는 행이 없거나 반려인 학생, 중�
     { id: 'c', student_id: 's3', month: '2027-04', status: '반려' }, { id: 'd', student_id: 's4', month: '2027-03', status: '확정' },
     { id: 'e', student_id: 's5', month: '2027-04', status: '확정', code: '없음' }];
   assert.deepStrictEqual(plain(ctx.ttMissing_(rows, ['s1', 's2', 's3', 's4', 's5', 's2', ''], '2027-04')), ['s2', 's3', 's4']);
+});
+
+/* ───────── R24 결정 84: 담당교사 대신 입력 ───────── */
+
+// 저장 흉내 + 취소 시각(updated_at) — Db bulkUpdateRecords_처럼
+function applyAt(rows, r, at) {
+  assert.ok(r.ok, r.reason);
+  const cancel = new Set(r.cancel);
+  const upd = new Map(r.update.map((u) => [u.id, u.set]));
+  return rows.map((x) => cancel.has(x.id) ? Object.assign({}, x, { status: '취소', updated_at: at }) : upd.has(x.id) ? Object.assign({}, x, upd.get(x.id), { updated_at: at }) : x)
+    .concat(r.add.map((x) => Object.assign({ id: 'n' + (++seq), created_at: at, updated_at: at }, x)));
+}
+const tstep = (rows, month, action, now, extra) => plain(ctx.ttTransition_(rows, 's1', month, action, Object.assign({ now, window: W }, extra || {})));
+const FRI = [{ weekday: '금', blocks: '19:00-22:00', code: '학' }];
+const at4 = (status, extra) => [Object.assign({ id: 'z1', student_id: 's1', month: '2027-04', weekday: '목', blocks: 'ALL', code: '가', status,
+  submitted_at: '2027-03-26T10:00:00' }, extra || {})];
+
+test('teacherEnter: 기간 밖에도 이번 달·다음 달만, 학부모 동의 없이 바로 확정, 누가 입력했는지(담당교사)', () => {
+  const r = tstep(MARCH, '2027-04', 'teacherEnter', '2027-04-02T09:00:00', { entries: ENTRIES });   // 제출 기간(3/25~31) 지남
+  assert.deepStrictEqual([r.cancel, r.update], [[], []]);
+  assert.deepStrictEqual(r.add.map((x) => [x.weekday, x.status, x.submitted_at, x.parent_agreed_at, x.teacher_confirmed_at]),
+    [['월', '확정', '', '', '2027-04-02T09:00:00'], ['수', '확정', '', '', '2027-04-02T09:00:00']]);
+  assert.match(r.warnings.join(), /2027-04-02부터 출석부에 반영/);
+  const rows = applyAt(MARCH, r, '2027-04-02T09:00:00');
+  assert.deepStrictEqual(['status', 'enteredBy'].map((k) => ctx.ttMonthState_(rows, 's1', '2027-04')[k]), ['확정', '담당교사']);
+  // 다음 달분은 경고 없이 1일부터
+  const nx = tstep(MARCH, '2027-05', 'teacherEnter', '2027-04-20T09:00:00', { entries: [] });
+  assert.deepStrictEqual([nx.add.map((x) => [x.code, x.status]), nx.warnings], [[['없음', '확정']], []]);
+  // 지난달·다다음 달·입력 오류·모르는 상태는 거부
+  assert.match(tstep(MARCH, '2027-03', 'teacherEnter', '2027-04-02T09:00:00', { entries: ENTRIES }).reason, /이번 달\(2027-04\)·다음 달\(2027-05\)/);
+  assert.match(tstep(MARCH, '2027-06', 'teacherEnter', '2027-04-02T09:00:00', { entries: ENTRIES }).reason, /이번 달/);
+  assert.ok(tstep(MARCH, '2028-01', 'teacherEnter', '2027-12-31T23:00:00', { entries: ENTRIES }).ok, '해 넘김 다음 달');
+  assert.match(tstep(MARCH, '2027-04', 'teacherEnter', '2027-04-02T09:00:00', { entries: [{ weekday: '월', blocks: 'x', code: '학' }] }).reason, /블록 표기/);
+  // 보통 흐름으로 확정한 달은 학생이 낸 것
+  assert.strictEqual(ctx.ttMonthState_(MARCH.map((x) => Object.assign({}, x, { parent_agreed_at: '2027-02-26T10:00:00' })), 's1', '2027-03').enteredBy, '학생');
+  assert.strictEqual(ctx.ttMonthState_([], 's1', '2027-03').enteredBy, '');
+  assert.strictEqual(ctx.ttMonthState_(at4('제출'), 's1', '2027-04').enteredBy, '학생');
+});
+
+test('teacherEnter: 진행 중(제출·동의·돌려보냄)·확정인 달을 대체 — 옛 행 취소 + 새 확정 행, 삭제 없음, 경고', () => {
+  ['제출', '동의', '반려'].forEach((st) => {
+    const r = tstep(at4(st), '2027-04', 'teacherEnter', '2027-03-30T10:00:00', { entries: FRI });
+    assert.deepStrictEqual([r.cancel, r.add.length], [['z1'], 1], st);
+    assert.match(r.warnings.join(), new RegExp('학생이 낸 2027-04 시간표\\(' + st + '\\)를 대신합니다'));
+  });
+  const r = tstep(at4('확정', { parent_agreed_at: '2027-03-27T10:00:00', teacher_confirmed_at: '2027-03-28T10:00:00' }), '2027-04', 'teacherEnter', '2027-03-30T10:00:00', { entries: FRI });
+  assert.deepStrictEqual([r.cancel, r.warnings], [['z1'], ['확정된 2027-04 시간표를 바꿉니다']]);
+  // 대신 입력한 달은 확인을 거두지 못하고 다시 대신 입력한다
+  const mine = applyAt([], tstep([], '2027-04', 'teacherEnter', '2027-03-30T10:00:00', { entries: FRI }), '2027-03-30T10:00:00');
+  assert.match(tstep(mine, '2027-04', 'unconfirm', '2027-03-31T10:00:00').reason, /대신 입력한 시간표는 확인을 거둘 수 없습니다/);
+  const again = tstep(mine, '2027-04', 'teacherEnter', '2027-03-31T10:00:00', { entries: ENTRIES });
+  assert.deepStrictEqual([again.cancel.length, again.add.length], [1, 2]);
+  // 학생은 제출 기간 안이면 대신 입력한 달도 다시 낼 수 있다(그러면 동의·확인을 다시)
+  assert.ok(tstep(mine, '2027-04', 'submit', '2027-03-31T10:00:00', { entries: ENTRIES }).ok);
+  // 혼합 달은 거부
+  assert.match(tstep([...at4('확정'), ...at4('제출').map((x) => Object.assign({}, x, { id: 'z2' }))], '2027-04', 'teacherEnter', '2027-03-30T10:00:00', { entries: FRI }).reason, /섞여/);
+});
+
+test('effectiveFixedRows_(결정 84): 달 중간 대신 입력은 입력한 날부터, 그 전 날은 옛 시간표 그대로(지난 출석부가 바뀌지 않는다)', () => {
+  // 3월 확정(화 학) → 4월은 마감을 놓쳐 3월 유지 → 4/15에 담당교사가 4월 대신 입력(월 학·수 가)
+  let rows = applyAt(MARCH, tstep(MARCH, '2027-04', 'teacherEnter', '2027-04-15T13:00:00', { entries: ENTRIES }), '2027-04-15T13:00:00');
+  assert.deepStrictEqual(eff(rows, '2027-04-14'), ['화학'], '입력 전날은 3월 시간표');
+  assert.deepStrictEqual(eff(rows, '2027-04-15'), ['월학', '수가'], '입력한 날부터');
+  assert.deepStrictEqual(eff(rows, '2027-05-03'), ['월학', '수가'], '다음 달에도 이어진다');
+  // 4/20에 다시 대신 입력(금 학): 4/15~19는 첫 입력, 4/20부터 새 입력
+  rows = applyAt(rows, tstep(rows, '2027-04', 'teacherEnter', '2027-04-20T08:00:00', { entries: FRI }), '2027-04-20T08:00:00');
+  assert.deepStrictEqual(['2027-04-14', '2027-04-15', '2027-04-19', '2027-04-20', '2027-04-30'].map((d) => eff(rows, d)),
+    [['화학'], ['월학', '수가'], ['월학', '수가'], ['금학'], ['금학']]);
+  // 학생이 보통 흐름으로 확정한 4월(4/1부터)을 4/10에 대신 입력으로 바꾸면 4/1~9는 학생 시간표 그대로
+  let st = applyAt(MARCH, step(MARCH, 'submit', '2027-03-26T21:00:00', { entries: ENTRIES }), '2027-03-26T21:00:00');
+  st = applyAt(st, step(st, 'agree', '2027-03-27T08:00:00'), '2027-03-27T08:00:00');
+  st = applyAt(st, step(st, 'confirm', '2027-03-28T08:00:00'), '2027-03-28T08:00:00');
+  st = applyAt(st, tstep(st, '2027-04', 'teacherEnter', '2027-04-10T09:00:00', { entries: FRI }), '2027-04-10T09:00:00');
+  assert.deepStrictEqual(['2027-03-31', '2027-04-01', '2027-04-09', '2027-04-10'].map((d) => eff(st, d)), [['화학'], ['월학', '수가'], ['월학', '수가'], ['금학']]);
+  // 다음 달분 대신 입력은 그 달 1일부터(입력한 날은 앞 달)
+  const nx = applyAt(MARCH, tstep(MARCH, '2027-04', 'teacherEnter', '2027-03-20T09:00:00', { entries: FRI }), '2027-03-20T09:00:00');
+  assert.deepStrictEqual(['2027-03-31', '2027-04-01'].map((d) => eff(nx, d)), [['화학'], ['금학']]);
+  // 보통 흐름에서 늦게 확인(4/3)한 달은 지금처럼 1일부터(대신 입력만 입력한 날부터)
+  let late = applyAt(MARCH, step(MARCH, 'submit', '2027-03-26T21:00:00', { entries: ENTRIES }), '2027-03-26T21:00:00');
+  late = applyAt(late, step(late, 'agree', '2027-03-27T08:00:00'), '2027-03-27T08:00:00');
+  assert.deepStrictEqual(eff(late, '2027-04-02'), ['화학'], '동의만 — 앞 달');
+  const lateOk = applyAt(late, step(late, 'confirm', '2027-04-03T08:00:00'), '2027-04-03T08:00:00');
+  assert.deepStrictEqual(eff(lateOk, '2027-04-01'), ['월학', '수가'], '보통 흐름 확정은 1일부터');
+  // 동의 단계(확정 전)에서 4/15에 대신 입력: 4/1~14는 확정된 적 없는 학생 행을 쓰지 않고 3월 시간표
+  const repl = applyAt(late, tstep(late, '2027-04', 'teacherEnter', '2027-04-15T09:00:00', { entries: FRI }), '2027-04-15T09:00:00');
+  assert.deepStrictEqual(['2027-04-10', '2027-04-15'].map((d) => eff(repl, d)), [['화학'], ['금학']]);
+  // 확정 전에 취소된 행·updated_at 없는 취소 행은 쓰지 않는다
+  const noTs = st.map((x) => x.status === '취소' ? Object.assign({}, x, { updated_at: '' }) : x);
+  assert.deepStrictEqual(eff(noTs, '2027-04-05'), ['화학'], '취소 시각을 모르면 그 행은 없던 것으로');
+  // 지난달 가져오기는 앞 달 말일 기준(달 중간 대신 입력 반영)
+  assert.deepStrictEqual(plain(ctx.ttCopyPrevious_(rows, 's1', '2027-05')), { entries: [{ weekday: '금', blocks: '19:00-22:00', code: '학' }], fromMonth: '2027-04' });
 });
