@@ -16,12 +16,14 @@
  *   잘림     overflow가 숨김인 글 요소에서 scrollWidth > clientWidth(글이 잘려 안 보임)
  *   포커스   Tab으로 갈 때 보이지 않는 요소에 가거나, 포커스 표시(outline·box-shadow)가 없거나, tabindex>0
  *   콘솔     콘솔 오류·페이지 오류
+ *   줄길이   노트북·데스크톱 칸에서 글 덩어리의 가장 긴 한 줄이 45em·760px 중 작은 값을 넘음(line-length.js)
  */
 const fs = require('fs');
 const path = require('path');
 const { makeApp, openPage } = require('./real-screens.js');
 const { launchKo } = require('./browser.js');
 const { isHarnessNoise } = require('./console-filter.js');
+const { LINE_SELECTOR, LINE_SKIP, longLines } = require('./line-length.js');
 
 const OUT = path.join(__dirname, 'out', 'devices');
 const NOW = '2027-03-26T10:00:00', TODAY = '2027-03-26';   // 시간표 제출 기간이 열린 날(stage7-real.js와 같음)
@@ -36,6 +38,7 @@ const DEVICES = [
   { id: 'iphone-375', w: 375, h: 667, phone: true, context: MOBILE, note: '아이폰 SE 크기(Chromium 흉내)' },
   { id: 'android-360-font150', w: 360, h: 800, phone: true, context: MOBILE, font150: true, note: '360px + 기기 글자 150%(html 27px)' },
   { id: 'tablet-768', w: 768, h: 1024, phone: false, context: MOBILE, note: '태블릿 세로' },
+  { id: 'laptop-1093', w: 1093, h: 615, phone: false, note: '1366 노트북 + 윈도우 배율 125%(윈도우 크롬)' },
   { id: 'laptop-1366', w: 1366, h: 768, phone: false, note: '노트북(윈도우 크롬)' },
   { id: 'laptop-1536', w: 1536, h: 864, phone: false, note: '노트북 125% 배율(윈도우 크롬)' },
   { id: 'desktop-1920', w: 1920, h: 1080, phone: false, note: '데스크톱' }
@@ -64,7 +67,7 @@ function seed(env) {
 
 /** 페이지 안에서 판정 → {넘침, 작은칸:[…], 입력글자:[…], 가림:[…], 잘림:[…]} */
 async function inspect(page, dev) {
-  return page.evaluate(([phone, devW]) => {
+  return page.evaluate(([phone, devW, sel, skip]) => {
     const vis = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none' && !el.closest('[hidden],[aria-hidden="true"]'); };
     const label = (el) => (el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '') + ' "' + ((el.innerText || el.value || el.getAttribute('aria-label') || el.placeholder || '').trim().replace(/\s+/g, ' ').slice(0, 16)) + '"');
     // 휴대폰 흉내(isMobile)에서는 내용이 넓으면 창 폭(innerWidth)까지 늘어나 축소 보기가 된다 → 기기 폭과 비교
@@ -108,8 +111,25 @@ async function inspect(page, dev) {
       if (lastBottom > barTop + 1) out.covered.push('마지막 내용(아래 ' + Math.round(lastBottom - barTop) + 'px 가림)');
       window.scrollTo(0, 0);
     }
+    // 줄 길이(노트북·데스크톱): 글 덩어리마다 실제로 그려진 가장 긴 한 줄의 폭(Range의 줄 상자)
+    if (devW >= 1000) {
+      out.lines = [];
+      document.querySelectorAll(sel).forEach((el) => {
+        if (!vis(el) || el.closest(skip) || !(el.innerText || '').trim()) return;
+        const rows = new Map();   // 줄(위치 top)마다 왼쪽 끝·오른쪽 끝 — 글자(텍스트 노드)만 잰다(안의 상자 폭은 줄이 아님)
+        const rects = [], tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        for (let n = tw.nextNode(); n; n = tw.nextNode()) { if (!n.textContent.trim()) continue; const rg = document.createRange(); rg.selectNodeContents(n); rects.push(...rg.getClientRects()); }
+        rects.forEach((r) => {
+          if (!(r.width > 0)) return;
+          const k = Math.round(r.top), row = rows.get(k) || { l: r.left, r: r.right };
+          rows.set(k, { l: Math.min(row.l, r.left), r: Math.max(row.r, r.right) });
+        });
+        const max = Math.max(0, ...[...rows.values()].map((x) => x.r - x.l));
+        if (max > 0) out.lines.push({ what: label(el), linePx: max, fontPx: parseFloat(getComputedStyle(el).fontSize) });
+      });
+    }
     return out;
-  }, [!!dev.phone, dev.w]);
+  }, [!!dev.phone, dev.w, LINE_SELECTOR, LINE_SKIP]);
 }
 
 /** Tab 순서·포커스 표시: Tab을 최대 n번 눌러 포커스가 간 요소마다 본다 */
@@ -155,6 +175,8 @@ async function checkOne(browser, app, sc, dev) {
     if (r.covered.length) fails['가림'] = r.covered;
     if (r.clipped.length) fails['잘림'] = r.clipped;
     if (focus.length) fails['포커스'] = focus;
+    const long = longLines(r.lines);
+    if (long.length) fails['줄길이'] = long;
     const errs = consoleErr.concat(s.errors.map((e) => 'pageerror: ' + e.slice(0, 120)));
     if (errs.length) fails['콘솔'] = errs;
     let shot = null;
@@ -185,7 +207,7 @@ function compare(base, results, screens) {
 }
 
 function reportMd(results, screens) {
-  const codes = ['넘침', '작은칸', '입력글자', '가림', '잘림', '포커스', '콘솔'];
+  const codes = ['넘침', '작은칸', '입력글자', '가림', '잘림', '포커스', '콘솔', '줄길이'];
   const lines = ['# 기기 행렬 점검 결과', '', '실행: `npm run devices` · 기준 시각(가짜) ' + NOW + ' · 브라우저: Chromium만(아이폰 칸은 크기·터치 흉내, Safari 아님)', '',
     '칸: `통과` 또는 실패 이유 코드(개수). 코드 뜻은 design/preview/devices.js 머리말.', '',
     '| 화면 | ' + DEVICES.map((d) => d.id).join(' | ') + ' |', '| --- |' + DEVICES.map(() => ' --- |').join('')];
@@ -222,7 +244,7 @@ function reportMd(results, screens) {
 }
 
 /**
- * 판정 도구 자체 점검(매번 먼저): 일곱 가지 문제를 일부러 심은 페이지에서 모두 잡고, 깨끗한 페이지에서는 하나도 잡지 않아야 한다.
+ * 판정 도구 자체 점검(매번 먼저): 여덟 가지 문제를 일부러 심은 페이지에서 모두 잡고, 깨끗한 페이지에서는 하나도 잡지 않아야 한다.
  */
 const BAD_PAGE = `<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><style>body{margin:0;font:16px sans-serif}
   .wide{width:600px;height:10px} .bar{position:fixed;left:0;right:0;bottom:0;height:80px;background:#ccc}
@@ -245,9 +267,20 @@ async function selfTest(browser) {
     return { 넘침: r.over, 작은칸: r.small.length > 0, 입력글자: r.inputFont.length > 0, 가림: r.covered.length > 0, 잘림: r.clipped.length > 0, 포커스: f.length > 0, 콘솔: errs.length > 0 };
   };
   const bad = await run(BAD_PAGE), good = await run(GOOD_PAGE);
+  // 줄 길이: 1093px 노트북에서 화면 끝까지 가는 글은 실패, 720px 판에 담은 글은 통과(안에 넓은 상자가 있어도 글자만 잰다)
+  const longText = '가나다라마바사 아자차카타파하 '.repeat(30);
+  const lineOf = async (html) => {
+    const page = await browser.newPage({ viewport: { width: 1093, height: 615 } });
+    await page.setContent('<style>body{margin:16px;font:18px sans-serif}</style>' + html);
+    const r = await inspect(page, { phone: false, w: 1093 });
+    await page.close();
+    return longLines(r.lines).length > 0;
+  };
+  bad['줄길이'] = await lineOf('<p>' + longText + '</p>');
+  good['줄길이'] = await lineOf('<div style="max-width:720px"><p>' + longText + '</p><ul><li>짧은 항목<div style="width:1000px;height:4px"></div></li></ul></div>');
   const missed = Object.keys(bad).filter((k) => !bad[k]), noisy = Object.keys(good).filter((k) => good[k]);
   if (missed.length || noisy.length) throw new Error('판정 도구 자체 점검 실패 — 못 잡음: ' + missed.join(',') + ' / 깨끗한 페이지에서 잡음: ' + noisy.join(','));
-  console.log('판정 도구 자체 점검: 일곱 가지 모두 잡고, 깨끗한 페이지는 통과');
+  console.log('판정 도구 자체 점검: 여덟 가지 모두 잡고, 깨끗한 페이지는 통과');
 }
 
 async function main() {

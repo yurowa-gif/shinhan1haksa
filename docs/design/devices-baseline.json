@@ -58,6 +58,13 @@
    "note": "태블릿 세로"
   },
   {
+   "id": "laptop-1093",
+   "w": 1093,
+   "h": 615,
+   "phone": false,
+   "note": "1366 노트북 + 윈도우 배율 125%(윈도우 크롬)"
+  },
+  {
    "id": "laptop-1366",
    "w": 1366,
    "h": 768,
@@ -278,6 +285,10 @@
     "fails": {},
     "shot": null
    },
+   "laptop-1093": {
+    "fails": {},
+    "shot": null
+   },
    "laptop-1366": {
     "fails": {},
     "shot": null
@@ -335,6 +346,10 @@
     "fails": {},
     "shot": null
    },
+   "laptop-1093": {
+    "fails": {},
+    "shot": null
+   },
    "laptop-1366": {
     "fails": {},
     "shot": null
@@ -386,6 +401,10 @@
     "shot": "home-attendance__android-360-font150.png"
    },
    "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1093": {
     "fails": {},
     "shot": null
    },
@@ -451,6 +470,10 @@
     "fails": {},
     "shot": null
    },
+   "laptop-1093": {
+    "fails": {},
+    "shot": null
+   },
    "laptop-1366": {
     "fails": {},
     "shot": null
@@ -505,6 +528,10 @@
     "fails": {},
     "shot": null
    },
+   "laptop-1093": {
+    "fails": {},
+    "shot": null
+   },
    "laptop-1366": {
     "fails": {},
     "shot": null
@@ -556,6 +583,10 @@
     "shot": "home-student__android-360-font150.png"
    },
    "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1093": {
     "fails": {},
     "shot": null
    },
@@ -616,6 +647,10 @@
     "fails": {},
     "shot": null
    },
+   "laptop-1093": {
+    "fails": {},
+    "shot": null
+   },
    "laptop-1366": {
     "fails": {},
     "shot": null
@@ -650,6 +685,10 @@
     "fails": {},
     "shot": null
    },
+   "laptop-1093": {
+    "fails": {},
+    "shot": null
+   },
    "laptop-1366": {
     "fails": {},
     "shot": null
@@ -681,6 +720,10 @@
     "shot": null
    },
    "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1093": {
     "fails": {},
     "shot": null
    },
@@ -748,6 +791,10 @@
     "fails": {},
     "shot": null
    },
+   "laptop-1093": {
+    "fails": {},
+    "shot": null
+   },
    "laptop-1366": {
     "fails": {},
     "shot": null
@@ -802,6 +849,14 @@
     },
     "shot": "sheet__tablet-768.png"
    },
+   "laptop-1093": {
+    "fails": {
+     "포커스": [
+      "포커스 표시 없음: iframe \"\""
+     ]
+    },
+    "shot": "sheet__laptop-1093.png"
+   },
    "laptop-1366": {
     "fails": {
      "포커스": [
@@ -848,6 +903,10 @@
     "fails": {},
     "shot": null
    },
+   "laptop-1093": {
+    "fails": {},
+    "shot": null
+   },
    "laptop-1366": {
     "fails": {},
     "shot": null
@@ -879,6 +938,10 @@
     "shot": null
    },
    "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1093": {
     "fails": {},
     "shot": null
    },
@@ -946,6 +1009,10 @@
     "fails": {},
     "shot": null
    },
+   "laptop-1093": {
+    "fails": {},
+    "shot": null
+   },
    "laptop-1366": {
     "fails": {},
     "shot": null
@@ -977,6 +1044,10 @@
     "shot": null
    },
    "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1093": {
     "fails": {},
     "shot": null
    },
@@ -1014,6 +1085,10 @@
     "fails": {},
     "shot": null
    },
+   "laptop-1093": {
+    "fails": {},
+    "shot": null
+   },
    "laptop-1366": {
     "fails": {},
     "shot": null
@@ -1045,6 +1120,10 @@
     "shot": null
    },
    "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1093": {
     "fails": {},
     "shot": null
    },
@@ -1083,6 +1162,10 @@
     "shot": "moves__android-360-font150.png"
    },
    "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1093": {
     "fails": {},
     "shot": null
    },
@@ -1140,6 +1223,10 @@
     "fails": {},
     "shot": null
    },
+   "laptop-1093": {
+    "fails": {},
+    "shot": null
+   },
    "laptop-1366": {
     "fails": {},
     "shot": null
@@ -1171,6 +1258,10 @@
     "shot": null
    },
    "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1093": {
     "fails": {},
     "shot": null
    },
@@ -1208,6 +1299,10 @@
     "fails": {},
     "shot": null
    },
+   "laptop-1093": {
+    "fails": {},
+    "shot": null
+   },
    "laptop-1366": {
     "fails": {},
     "shot": null
@@ -1239,6 +1334,10 @@
     "shot": null
    },
    "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1093": {
     "fails": {},
     "shot": null
    },
@@ -1276,6 +1375,10 @@
     "fails": {},
     "shot": null
    },
+   "laptop-1093": {
+    "fails": {},
+    "shot": null
+   },
    "laptop-1366": {
     "fails": {},
     "shot": null
@@ -1307,6 +1410,10 @@
     "shot": null
    },
    "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1093": {
     "fails": {},
     "shot": null
    },
@@ -1348,6 +1455,10 @@
     "fails": {},
     "shot": null
    },
+   "laptop-1093": {
+    "fails": {},
+    "shot": null
+   },
    "laptop-1366": {
     "fails": {},
     "shot": null
@@ -1379,6 +1490,10 @@
     "shot": null
    },
    "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1093": {
     "fails": {},
     "shot": null
    },
@@ -1416,6 +1531,10 @@
     "fails": {},
     "shot": null
    },
+   "laptop-1093": {
+    "fails": {},
+    "shot": null
+   },
    "laptop-1366": {
     "fails": {},
     "shot": null
@@ -1447,6 +1566,10 @@
     "shot": null
    },
    "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1093": {
     "fails": {},
     "shot": null
    },
@@ -1484,6 +1607,10 @@
     "fails": {},
     "shot": null
    },
+   "laptop-1093": {
+    "fails": {},
+    "shot": null
+   },
    "laptop-1366": {
     "fails": {},
     "shot": null
@@ -1518,6 +1645,10 @@
     "fails": {},
     "shot": null
    },
+   "laptop-1093": {
+    "fails": {},
+    "shot": null
+   },
    "laptop-1366": {
     "fails": {},
     "shot": null
@@ -1549,6 +1680,10 @@
     "shot": null
    },
    "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1093": {
     "fails": {},
     "shot": null
    },
