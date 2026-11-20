@@ -125,6 +125,43 @@ test('rowLink·cardClass(결정 85): 줄 링크는 href면 a, onclick이면 butt
   delete ctx.el;
 });
 
+test('layoutHome(D15 ②): 맨 위 카드는 head, todo·key 카드는 할 일 열, 나머지는 참고 열로 옮기고(다시 만들지 않는다), 할 일이 없으면 한 줄 안내를 쓴다', () => {
+  // 아주 작은 가짜 DOM: 자식 목록·class·appendChild·removeChild만
+  function node(tag, attrs, kids) {
+    const n = { tag, attrs: attrs || {}, children: [], parent: null,
+      classList: { contains: (c) => String((n.attrs.class || '')).split(/\s+/).indexOf(c) >= 0 },
+      appendChild(c) { if (c.parent) c.parent.removeChild(c); c.parent = n; n.children.push(c); return c; },
+      removeChild(c) { n.children.splice(n.children.indexOf(c), 1); c.parent = null; return c; } };
+    (kids || []).forEach((k) => n.appendChild(k));
+    return n;
+  }
+  ctx.el = node;
+  const card = (cls, id) => node('div', { class: cls, id });
+  const run = (cards) => { const root = node('div', {}); cards.forEach((c) => root.appendChild(c)); const r = UI.layoutHome(root); return { root, r }; };
+  const a = card('card', 'today'), b = card('card todo', 'docs'), c = card('card', 'sheet'), d = card('card key', 'out'), e = card('card', 'seats');
+  const { root, r } = run([a, b, c, d, e]);
+  assert.deepStrictEqual(plain(r), { head: 1, main: 2, todo: 1, side: 2 });
+  const [head, cols] = root.children;
+  assert.strictEqual(head.attrs.class, 'home-head');
+  assert.deepStrictEqual(head.children.map((x) => x.attrs.id), ['today']);
+  const [mainBox, sideBox] = cols.children;
+  assert.deepStrictEqual(mainBox.children.slice(1).map((x) => x.attrs.id), ['docs', 'out'], '할 일 열은 todo·key 카드가 원래 순서로');
+  assert.strictEqual(mainBox.children[0].attrs.text, '해야 할 일 1건');
+  assert.deepStrictEqual(sideBox.children.slice(1).map((x) => x.attrs.id), ['sheet', 'seats']);
+  assert.strictEqual(b.parent, mainBox, '카드는 옮겨졌을 뿐 같은 노드');
+  // 할 일이 하나도 없으면 한 줄 안내, 참고 카드가 없으면 참고 열을 만들지 않는다
+  const z = run([card('card', 'today'), card('card key', 'out')]);
+  const zMain = z.root.children[1].children[0];
+  assert.strictEqual(zMain.children[0].attrs.text, '오늘 해야 할 일');
+  assert.strictEqual(zMain.children[1].attrs.text, '지금 처리할 일이 없습니다.');
+  assert.strictEqual(z.root.children[1].children.length, 1);
+  // 오류·안내 줄(card가 아닌 것)은 맨 위
+  const err = node('div', { class: 'error' });
+  const y = run([err, card('card', 'today'), card('card', 'x')]);
+  assert.deepStrictEqual(y.root.children[0].children.map((x) => x.attrs.class), ['error', 'card']);
+  delete ctx.el;
+});
+
 /* ───── 스타일 ───── */
 
 const rules = css.parseRules(css.styleText(css.readFile('src/ui/Styles.html')));
