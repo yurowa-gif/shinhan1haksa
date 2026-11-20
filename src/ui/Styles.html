@@ -35,11 +35,11 @@
 
   /* ───────── 바탕 ───────── */
   * { box-sizing: border-box; }
-  html { font-size: 18px; -webkit-text-size-adjust: 100%; }
+  html { font-size: 18px; -webkit-text-size-adjust: 100%; scrollbar-gutter: stable; }   /* 윈도우 크롬: 스크롤바가 생겨도 화면이 옆으로 밀리지 않게 */
   /* 글꼴 파일은 내려받지 않는다(rules 3절): Pretendard는 깔린 기기에서만, 나머지는 기기 기본 한글 글꼴 */
   body { margin: 0; background: var(--bg); color: var(--text); letter-spacing: -.012em;
     font-family: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; line-height: 1.5;
-    overflow-wrap: anywhere; }
+    overflow-wrap: anywhere; word-break: keep-all; min-height: 100vh; min-height: 100dvh; }   /* 한국어는 낱말 중간에서 끊지 않는다. 휴대폰 주소창이 움직여도 높이가 맞게 dvh */
   img, table { max-width: 100%; }
   :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
   .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
@@ -48,7 +48,7 @@
   /* ───────── 화면 틀: 위 머리 · 본문 · 아래 작업 바 ───────── */
   /* 머리줄(결정 85): 코발트 면 + 흰 글자. 앱 이름이 한눈에 보이게 색을 여기 한 곳에 몰아 쓴다 */
   header.top { position: sticky; top: 0; z-index: 2; background: var(--accent); color: #fff; border-bottom: 0;
-    padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    padding: 14px 16px; padding-top: max(14px, env(safe-area-inset-top, 0px)); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   header.top h1 { font-size: 1.15rem; font-weight: 800; letter-spacing: -.03em; margin: 0; color: #fff; }
   header.top .who { font-size: .82rem; color: #dbe5ff; text-align: right; word-break: keep-all; white-space: nowrap; }
   header.top :focus-visible { outline-color: #fff; }
@@ -154,7 +154,8 @@
   .pill.todo::before { content: "●"; font-size: .7em; }
   .pill.mute { color: var(--muted-ink); background: var(--muted-weak); }
   /* 중요한 숫자(.key 카드의 OUT)는 크게 */
-  .card.key *:not(li) > .pill.out-1, .card.key *:not(li) > .pill.out-2 { font-size: 1.6rem; padding: 4px 16px; }
+  .card.key *:not(li) > .pill.out-1, .card.key *:not(li) > .pill.out-2 { font-size: var(--font-lg); padding: 4px 14px; }   /* 교사 화면: 조금 크게 */
+  body.tone-soft .card.key *:not(li) > .pill.out-1, body.tone-soft .card.key *:not(li) > .pill.out-2 { font-size: 1.6rem; padding: 4px 16px; }   /* 학생·학부모 화면: 내 OUT은 크게 */
 
   /* 알림 개수 배지(숫자는 글자로 함께 쓴다) */
   .count { display: inline-block; min-width: 1.6em; padding: 0 .45em; border-radius: var(--radius-pill);
@@ -194,7 +195,7 @@
   .toast.info { background: var(--accent-weak); color: var(--accent-ink); border-color: var(--accent); }
   .toast.info::before { content: "ⓘ"; }
   .sheet-scrim { position: fixed; inset: 0; z-index: 10; background: rgba(29, 35, 48, .5); display: flex; align-items: flex-end; justify-content: center; }
-  .sheet { width: 100%; max-width: 720px; max-height: 85vh; overflow-y: auto; background: var(--card); border-radius: var(--radius) var(--radius) 0 0;
+  .sheet { width: 100%; max-width: 720px; max-height: 85vh; max-height: 85dvh; overflow-y: auto; background: var(--card); border-radius: var(--radius) var(--radius) 0 0;
     padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
   .sheet h2 { font-size: var(--font-lg); margin: 0 0 8px; }
   /* 한국어는 낱말 중간에서 끊지 않고 띄어쓰기에서만 줄을 바꾼다(360px). 낱말 하나가 줄보다 길 때(긴 영문·숫자)만 강제로 끊는다 */
@@ -205,11 +206,18 @@
   .sheet-lead { font-size: var(--font-xl); font-weight: 700; line-height: 1.3; color: var(--accent-ink); }
   .sheet-body ul.list li { padding: 8px 4px; }
   /* 표(식수 집계 등): 화면은 안 밀리고 표 안에서만 가로로 민다. 첫 열 고정, 합계 줄은 굵게+회색 바탕 */
-  .tablewrap { overflow-x: auto; max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); margin-bottom: 12px; }
+  /* 표·격자: 상자 높이를 제한해 아래쪽 가로 스크롤바가 늘 보이게 하고, 머리 행·이름 열을 고정(불투명 바탕)한다. 가로로 더 있으면 오른쪽 가장자리에 그림자 단서 */
+  .tablewrap { overflow: auto; max-width: 100%; max-height: 70vh; max-height: 70dvh; border: 1px solid var(--line); border-radius: var(--radius-sm); margin-bottom: 12px;
+    background: linear-gradient(to right, var(--card) 30%, rgba(255, 255, 255, 0)) left center / 36px 100% no-repeat local,
+      linear-gradient(to left, var(--card) 30%, rgba(255, 255, 255, 0)) right center / 36px 100% no-repeat local,
+      linear-gradient(to right, rgba(16, 24, 40, .22), rgba(16, 24, 40, 0)) left center / 12px 100% no-repeat scroll,
+      linear-gradient(to left, rgba(16, 24, 40, .22), rgba(16, 24, 40, 0)) right center / 12px 100% no-repeat scroll,
+      var(--card); }
   table.data { border-collapse: collapse; width: 100%; font-size: 1rem; }
   table.data th, table.data td { padding: 10px 12px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  table.data th:first-child, table.data td:first-child { text-align: left; position: sticky; left: 0; background: var(--card); }
-  table.data thead th, table.data thead th:first-child { background: var(--muted-weak); color: var(--muted-ink); font-size: var(--font-sm); }
+  table.data th:first-child, table.data td:first-child { text-align: left; position: sticky; left: 0; z-index: 1; background: var(--card); }
+  table.data thead th, table.data thead th:first-child { background: var(--muted-weak); color: var(--muted-ink); font-size: var(--font-sm); position: sticky; top: 0; z-index: 2; }
+  table.data thead th:first-child { left: 0; z-index: 3; }   /* 왼쪽 위 칸은 머리와 이름 열 둘 다에 고정 */
   table.data.compact th, table.data.compact td { padding: 10px 6px; }
   table.data tr.total th, table.data tr.total td { font-weight: 700; background: var(--muted-weak); }
   /* 월 달력: 날짜 칸 48px 이상, 칸 안에서만 가로로 민다 */
@@ -231,6 +239,7 @@
   .picker-chosen .picker-name { font-weight: 700; }
   .seatgrid-wrap { overflow-x: auto; max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); }
   table.seatgrid { border-collapse: separate; border-spacing: 4px; }
+  .seatgrid-wrap { max-height: 70vh; max-height: 70dvh; overflow: auto; }
   .seatgrid td { padding: 0; height: var(--tap); min-width: 76px; text-align: center; vertical-align: middle; font-size: var(--font-xs); color: var(--muted-ink); }
   .seatgrid td.pillar { background: var(--muted-weak); }
   .seatgrid td.door, .seatgrid td.window { border: 1px dashed var(--muted-ink); }
@@ -270,4 +279,63 @@
   body.tone-soft .field input, body.tone-soft .field select, body.tone-soft .field textarea { border: 0; background: var(--bg); padding: 8px 14px; }
   body.tone-soft .segmented { background: var(--bg); }
   body.tone-soft .actionbar > .btn { padding: 14px 18px; font-size: 1.05rem; }
+
+  /* ───────── 반응형·마우스·키보드(D15 ②, docs/design/refresh/responsive.md) ─────────
+     중단점 3개: 휴대폰 ~599px / 태블릿·좁은 창 600~839px / 노트북 840px~. 스타일은 휴대폰 기준으로 쓰고 넓어질 때만 더한다. */
+  iframe:focus, iframe:focus-visible, iframe:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }   /* 출석부 미리보기 같은 iframe도 Tab으로 갔을 때 보인다 */
+  .tabular, .stat .n, .count, .pill, table.data td { font-variant-numeric: tabular-nums; }
+  /* 홈: 맨 위 한 줄(.home-head) + 해야 할 일(.home-main) + 참고(.home-side). 휴대폰은 위에서 아래로 한 줄, 넓은 화면은 두 열 */
+  .home-head { margin-bottom: 4px; }
+  .home-h { font-size: var(--font-sm); font-weight: 800; letter-spacing: 0; color: var(--muted-ink); margin: 14px 4px 4px; }
+  .home-none { color: var(--muted); margin: 4px 4px 12px; }
+  .home-cols, .pt-cols { display: block; }
+  .pt-a, .pt-b { min-width: 0; }   /* 학생·학부모 홈의 왼쪽 열(할 일·OUT·출결)과 오른쪽 열(자리·급식·상담·일정) */
+  /* 글 덩어리(설명·안내·힌트)는 넓은 화면에서도 한 줄 45자(45em, 한글 1자 ≈ 1em)를 넘기지 않는다. 표·격자·목록 행(li·td·th 안)은 제외 */
+  main p, main .muted:not(li *):not(td *):not(th *), main .hint, main .notice, main .pt-note, main .error { max-width: 45em; }
+  @media (hover: hover) {
+    .btn:hover { filter: brightness(.94); }
+    .btn.secondary:hover { background: var(--accent-weak); filter: none; }
+    .row-link:hover { background: var(--accent-weak); }
+    .card.todo > .row-link:not(.row-link ~ .row-link):hover { background: var(--accent); filter: brightness(.94); }
+    .chip:hover, .tab:hover, .picker-item:hover { background: var(--accent-weak); }
+    .chip.on:hover, .tab.on:hover { background: var(--accent); filter: brightness(.94); }
+    table.data tbody tr:hover td { background: var(--accent-weak); }
+    .back:hover { text-decoration: underline; }
+  }
+  @media (min-width: 600px) {
+    main { max-width: 760px; padding: 16px 24px; }
+    .card.todo, .card.key { padding: 18px 20px 16px; }
+  }
+  @media (min-width: 840px) {
+    /* 홈과 넓은 화면용 화면(main.home·main.wide)은 두 칸. 폼 화면은 읽기 좋은 폭(880px)에서 멈춘다 */
+    main { max-width: 880px; padding: 20px 32px 24px; }
+    main.home, main.wide { max-width: 1180px; }
+    /* 머리줄의 글자는 본문 폭에 맞춘다(--hw = 본문 최대 폭): 폼 화면 880px, 홈·넓은 화면 1180px, 학생·학부모 화면 760px */
+    header.top { --hw: 880px; padding-left: max(16px, calc((100vw - var(--hw)) / 2 + 32px)); padding-right: max(16px, calc((100vw - var(--hw)) / 2 + 32px)); }
+    body:has(main.home) header.top, body:has(main.wide) header.top { --hw: 1180px; }
+    body.tone-soft:has(main) header.top { --hw: 760px; }
+    body.tone-soft:has(main.home) header.top { --hw: 960px; }
+    .home-cols { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 0 28px; align-items: start; }
+    .home-main, .home-side { min-width: 0; }
+    .home-side { position: sticky; top: 80px; }
+    /* 역할이 둘 이상이면 왼쪽에 역할 메뉴(레일). 역할 하나면 만들지 않는다 */
+    main.home:has(> nav.tabs) { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 0 28px; align-items: start; }
+    main.home > nav.tabs { flex-direction: column; position: sticky; top: 80px; padding: 8px 0; overflow: visible; }
+    main.home > nav.tabs .tab { border-radius: var(--radius-sm); justify-content: flex-start; }
+    /* 확인·입력 시트는 가운데 대화창으로(화면 폭 전체 바텀 시트는 휴대폰에서만) */
+    .sheet-scrim { align-items: center; }
+    .sheet { max-width: 560px; border-radius: var(--radius); padding: 22px 24px calc(20px + env(safe-area-inset-bottom, 0px)); max-height: 85vh; max-height: 85dvh; }
+    .sheet-actions { justify-content: flex-end; }
+    .sheet-actions .btn { flex: 0 0 auto; min-width: 140px; }
+    /* 아래 고정 바는 내용 폭에 맞춰 오른쪽 끝으로 */
+    .actionbar { justify-content: flex-end; padding-left: max(16px, calc((100vw - 880px) / 2 + 32px)); padding-right: max(16px, calc((100vw - 880px) / 2 + 32px)); }
+    main.wide ~ .actionbar, main.home ~ .actionbar { padding-left: max(16px, calc((100vw - 1180px) / 2 + 32px)); padding-right: max(16px, calc((100vw - 1180px) / 2 + 32px)); }
+    .actionbar > .btn { flex: 0 0 auto; min-width: 160px; max-width: none; }
+    .toast { left: auto; right: 32px; margin: 0; }
+    body.tone-soft main { max-width: 760px; margin: 24px auto; padding: 8px 28px 18px; }
+    body.tone-soft main.home { max-width: 960px; }   /* 학생·학부모 홈: 가운데 960px 판 안에서 두 열 */
+    .pt-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 32px; align-items: start; }
+    .pt-cols > div > .card:first-child { border-top: 0; padding-top: 8px; }
+    body.tone-soft .actionbar { padding-left: max(16px, calc((100vw - 760px) / 2 + 32px)); padding-right: max(16px, calc((100vw - 760px) / 2 + 32px)); }
+  }
 </style>

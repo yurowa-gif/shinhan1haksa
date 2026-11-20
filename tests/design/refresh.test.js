@@ -96,3 +96,39 @@ test('docs/design/refresh/apply.md(D15 2단계 ①): 바꾼 것·할 일 기준�
   // 학생·학부모 화면은 tone-soft 클래스를 붙인다
   assert.ok(/tone-soft/.test(css.readFile('src/ui/Index.html')) && /tone-soft/.test(css.readFile('src/ui/screen_shell.html')));
 });
+
+test('D15 ②(반응형): Styles.html 에 중단점 두 곳(600·840)·홈 두 열·가운데 대화창·아래 바 끝 정렬·표 머리 고정·hover·포커스(iframe)·scrollbar-gutter 가 있고, 홈은 layoutHome 을 부르며, responsive.md 사진이 모두 있고 모두 쓰인다', () => {
+  const styles = css.readFile('src/ui/Styles.html');
+  assert.ok(/@media \(min-width: 600px\)/.test(styles) && /@media \(min-width: 840px\)/.test(styles), '중단점 600·840');
+  assert.ok(/\.home-cols \{ display: grid; grid-template-columns: minmax\(0, 3fr\) minmax\(0, 2fr\)/.test(styles), '840px 이상 홈 두 열');
+  assert.ok(/\.sheet-scrim \{ align-items: center; \}/.test(styles) && /\.sheet \{ max-width: 560px;/.test(styles), '가운데 대화창 560px');
+  assert.ok(/\.actionbar \{ justify-content: flex-end;/.test(styles), '아래 바 오른쪽 끝');
+  assert.ok(/table\.data thead th[^{]*\{[^}]*position: sticky; top: 0/.test(styles) && /table\.data th:first-child, table\.data td:first-child \{[^}]*position: sticky; left: 0/.test(styles), '표 머리·이름 열 고정');
+  assert.ok(/@media \(hover: hover\)/.test(styles) && /\.row-link:hover/.test(styles), 'hover');
+  assert.ok(/iframe:focus/.test(styles) && /scrollbar-gutter: stable/.test(styles) && /100dvh/.test(styles) && /85dvh/.test(styles) && /safe-area-inset-top/.test(styles), '포커스·스크롤바·dvh·safe-area');
+  assert.ok(/main\.home:has\(> nav\.tabs\)/.test(styles), '역할이 둘 이상일 때 왼쪽 메뉴');
+  assert.ok(/body\.tone-soft main\.home \{ max-width: 960px; \}/.test(styles) && /\.pt-cols \{ display: grid; grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\)/.test(styles), '학생·학부모 홈 960px 판 두 열');
+  assert.ok(/max-width: 720px; \}   \/\* 넓은 화면에서도/.test(styles), '학생·학부모 판은 넓은 화면에서 720px를 넘지 않는 기본값');
+  assert.ok(/main p, main \.muted:not\(li \*\):not\(td \*\):not\(th \*\), main \.hint, main \.notice, main \.pt-note, main \.error \{ max-width: 45em; \}/.test(styles), '글 덩어리 한 줄 45em(표·목록 행 제외)');
+  assert.ok(/UI\.layoutPortal\(root\)/.test(css.readFile('src/ui/Portal.html')), 'Portal이 두 열 배치를 부른다');
+  // 식수·교사 홈이 쓰는 홈 틀: Index.html 이 main.home 을 쓰고 교사 홈에서 layoutHome 을 부른다(학생·학부모는 부르지 않는다)
+  const index = css.readFile('src/ui/Index.html');
+  assert.ok(/<main class="home">/.test(index) && /role !== 'student' && role !== 'parent'\) UI\.layoutHome\(root\)/.test(index));
+  // 출석부 미리보기 iframe은 Tab 순서에서 뺀다(눌러도 되는 것이 없다)
+  assert.ok(/class: 'sheet-frame'[^)]*tabindex: '-1'/.test(css.readFile('src/ui/screen_sheet.html')));
+  // 교사 홈 OUT 알약: 0명이면 빨강이 아니라 회색
+  ['home_admin', 'home_attendance', 'home_hall_teacher'].forEach((f) => assert.ok(/d\.out\.out2 \? UI\.statusPill\('out2'/.test(css.readFile('src/ui/' + f + '.html')), f + ' 퇴실 대상 0명이 빨강'));
+  // 문서
+  const dir = path.join(ROOT, 'docs', 'design', 'refresh');
+  const doc = fs.readFileSync(path.join(dir, 'responsive.md'), 'utf8');
+  ['색 타령만 하지 말고', '~599 휴대폰', '840~ 노트북', '가운데 대화창', '머리 행', 'scrollbar-gutter', '1093×560', '1920×1080', 'UI.layoutPortal', '45em', '40px을 허용할지', '나빠진 칸 0', '건너뛴 것·확인 못 한 것', '실제 윈도우 노트북', '목록 + 옆 상세'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
+  const imgs = [...doc.matchAll(/!\[[^\]]*\]\((responsive\/[^)]+\.png)\)/g)].map((m) => m[1]);
+  assert.strictEqual(imgs.length, 20, '사진 수 ' + imgs.length);
+  imgs.forEach((f) => assert.ok(fs.existsSync(path.join(dir, f)), f + ' 파일이 없다'));
+  fs.readdirSync(path.join(dir, 'responsive')).filter((f) => f.endsWith('.png')).forEach((f) => assert.ok(imgs.indexOf('responsive/' + f) >= 0, f + ' 가 문서에 쓰이지 않았다'));
+  ['phone', 'laptop'].forEach((k) => ['home-hall', 'home-admin', 'home-owner', 'home-student', 'home-parent', 'facility-write', 'mealcount', 'results', 'seats', 'timetable-confirm'].forEach((sc) => assert.ok(imgs.indexOf('responsive/compare-' + k + '-' + sc + '.png') >= 0, k + ' ' + sc)));
+  assert.ok(fs.existsSync(path.join(ROOT, 'design/preview/refresh-responsive.js')) && fs.existsSync(path.join(ROOT, 'design/preview/refresh-responsive-compare.js')));
+  // rules.md 2-1절이 같은 중단점을 말한다
+  const rules = css.readFile('docs/design/rules.md');
+  ['### 2-1. 반응형', '~599px', '600~839px', '840px~', '제안(미적용)', 'UI.layoutHome'].forEach((t) => assert.ok(rules.indexOf(t) >= 0, 'rules.md ' + t));
+});

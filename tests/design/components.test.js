@@ -125,6 +125,75 @@ test('rowLink·cardClass(결정 85): 줄 링크는 href면 a, onclick이면 butt
   delete ctx.el;
 });
 
+test('layoutHome(D15 ②): 맨 위 카드는 head, todo·key 카드는 할 일 열, 나머지는 참고 열로 옮기고(다시 만들지 않는다), 할 일이 없으면 한 줄 안내를 쓴다', () => {
+  // 아주 작은 가짜 DOM: 자식 목록·class·appendChild·removeChild만
+  function node(tag, attrs, kids) {
+    const n = { tag, attrs: attrs || {}, children: [], parent: null,
+      classList: { contains: (c) => String((n.attrs.class || '')).split(/\s+/).indexOf(c) >= 0 },
+      appendChild(c) { if (c.parent) c.parent.removeChild(c); c.parent = n; n.children.push(c); return c; },
+      removeChild(c) { n.children.splice(n.children.indexOf(c), 1); c.parent = null; return c; } };
+    (kids || []).forEach((k) => n.appendChild(k));
+    return n;
+  }
+  ctx.el = node;
+  const card = (cls, id) => node('div', { class: cls, id });
+  const run = (cards) => { const root = node('div', {}); cards.forEach((c) => root.appendChild(c)); const r = UI.layoutHome(root); return { root, r }; };
+  const a = card('card', 'today'), b = card('card todo', 'docs'), c = card('card', 'sheet'), d = card('card key', 'out'), e = card('card', 'seats');
+  const { root, r } = run([a, b, c, d, e]);
+  assert.deepStrictEqual(plain(r), { head: 1, main: 2, todo: 1, side: 2 });
+  const [head, cols] = root.children;
+  assert.strictEqual(head.attrs.class, 'home-head');
+  assert.deepStrictEqual(head.children.map((x) => x.attrs.id), ['today']);
+  const [mainBox, sideBox] = cols.children;
+  assert.deepStrictEqual(mainBox.children.slice(1).map((x) => x.attrs.id), ['docs', 'out'], '할 일 열은 todo·key 카드가 원래 순서로');
+  assert.strictEqual(mainBox.children[0].attrs.text, '해야 할 일 1건');
+  assert.deepStrictEqual(sideBox.children.slice(1).map((x) => x.attrs.id), ['sheet', 'seats']);
+  assert.strictEqual(b.parent, mainBox, '카드는 옮겨졌을 뿐 같은 노드');
+  // 할 일이 하나도 없으면 한 줄 안내, 참고 카드가 없으면 참고 열을 만들지 않는다
+  const z = run([card('card', 'today'), card('card key', 'out')]);
+  const zMain = z.root.children[1].children[0];
+  assert.strictEqual(zMain.children[0].attrs.text, '오늘 해야 할 일');
+  assert.strictEqual(zMain.children[1].attrs.text, '지금 처리할 일이 없습니다.');
+  assert.strictEqual(z.root.children[1].children.length, 1);
+  // 목록(ul.list)이 든 첫 카드(담임 홈의 우리 반 명단)는 머리가 아니라 참고 열로
+  const listCard = node('div', { class: 'card', id: 'cls' }, [node('ul', { class: 'list' })]);
+  listCard.querySelector = (sel) => (sel === 'ul.list' ? listCard.children[0] : null);
+  const w = run([listCard, card('card todo', 't'), card('card', 'o')]);
+  assert.deepStrictEqual(plain(w.r), { head: 0, main: 1, todo: 1, side: 2 });
+  // 오류·안내 줄(card가 아닌 것)은 맨 위
+  const err = node('div', { class: 'error' });
+  const y = run([err, card('card', 'today'), card('card', 'x')]);
+  assert.deepStrictEqual(y.root.children[0].children.map((x) => x.attrs.class), ['error', 'card']);
+  delete ctx.el;
+});
+
+test('layoutPortal(D15 ②): 맨 위 카드(이름)·안내 줄은 위에 두고 나머지를 왼쪽(할 일·OUT·출결) / 오른쪽(side 카드)으로 옮긴다, side가 없으면 그대로', () => {
+  function node(tag, attrs, kids) {
+    const n = { tag, attrs: attrs || {}, children: [], parent: null,
+      classList: { contains: (c) => String((n.attrs.class || '')).split(/\s+/).indexOf(c) >= 0 },
+      appendChild(c) { if (c.parent) c.parent.removeChild(c); c.parent = n; n.children.push(c); return c; },
+      removeChild(c) { n.children.splice(n.children.indexOf(c), 1); c.parent = null; return c; } };
+    (kids || []).forEach((k) => n.appendChild(k));
+    return n;
+  }
+  ctx.el = node;
+  const card = (cls, id) => node('div', { class: cls, id });
+  const root = node('div', {});
+  ['card', 'notice warn', 'card todo', 'card key', 'card', 'card side', 'card side'].forEach((c, i) => root.appendChild(card(c, 'n' + i)));
+  const r = UI.layoutPortal(root);
+  assert.deepStrictEqual(plain(r), { head: 2, a: 3, b: 2 });
+  const [h1, h2, cols] = root.children;
+  assert.deepStrictEqual([h1.attrs.id, h2.attrs.id], ['n0', 'n1']);
+  assert.strictEqual(cols.attrs.class, 'pt-cols');
+  assert.deepStrictEqual(cols.children[0].children.map((x) => x.attrs.id), ['n2', 'n3', 'n4']);
+  assert.deepStrictEqual(cols.children[1].children.map((x) => x.attrs.id), ['n5', 'n6']);
+  const plainRoot = node('div', {});
+  ['card', 'card todo', 'card'].forEach((c, i) => plainRoot.appendChild(card(c, 'p' + i)));
+  assert.deepStrictEqual(plain(UI.layoutPortal(plainRoot)), { head: 1, a: 2, b: 0 });
+  assert.strictEqual(plainRoot.children.length, 3, 'side가 없으면 손대지 않는다');
+  delete ctx.el;
+});
+
 /* ───── 스타일 ───── */
 
 const rules = css.parseRules(css.styleText(css.readFile('src/ui/Styles.html')));

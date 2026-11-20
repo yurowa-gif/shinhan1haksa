@@ -10,7 +10,7 @@
     <h1>신한1학사 · <span style="white-space:nowrap"><?= roleLabel ?></span></h1>
     <div class="who"><?= userName ?></div>
   </header>
-  <main>
+  <main class="home">
     <? if (roleTabs.length > 1) { ?>
       <nav class="tabs" aria-label="역할 전환">
         <? for (var i = 0; i < roleTabs.length; i++) { ?>
@@ -35,7 +35,7 @@
       var root = document.getElementById('home');
       var role = document.body.getAttribute('data-role');
       call('getHomeData', role)
-        .then(function (data) { clear(root); renderHome(data, root); })
+        .then(function (data) { clear(root); renderHome(data, root); if (role !== 'student' && role !== 'parent') UI.layoutHome(root); })
         .catch(function (err) { clear(root); showError(root, err); });
     })();
   </script>
