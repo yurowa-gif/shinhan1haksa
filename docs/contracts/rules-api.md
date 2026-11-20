@@ -67,6 +67,7 @@ function parseBlockSpec_(spec)              // 'ALL' | 'HH:mm-HH:mm;…' → {al
 function formatBlockSpec_(parsed)
 function blockSpecCovers_(spec, block)      // 겹치면 true
 function effectiveFixedRows_(rows, studentId, ymd)
+function attFixedStart_(r)                 // (R24, 결정 84) 고정 일정 행이 출석부에 쓰이기 시작하는 날 'yyyy-MM-dd'
 /** c = {block:{seq,start,end}, isLastBlock, dayType, weekdayKo, exceptions:rows[], fixedRows:rows[], endType:'23:00'|'23:50'|'', dayEnd:'HH:mm'(R3 추가, 선택),
  *        opts:{endTypeDayTypes:['mon_thu'], endTime:'23:00', typeShort:{유형:약어}, endLabel:'정상 종료'}}
  *  → {code:'EXC'|'FIXED'|'END'|'NONE', text, exceptionId, more} */
@@ -168,9 +169,9 @@ function mealCountsOn_(students, enrollments, changes, termId, ymd, prevTermId, 
 // src/rules/TimetableRules.gs (R23, F9) — DateRules·AttendanceRules(parseBlockSpec_·formatBlockSpec_)를 부른다
 function ttSubmitWindow_(today, cfg)            // cfg = {startDay, endDay}(settings timetable.submit_*) → {open, month(적용월), start, end, reason}
 function ttValidateEntries_(entries)            // [{weekday, blocks, code}] → {ok, errors:[], rows:[{weekday, blocks(정규 표기), code}]}
-function ttMonthState_(rows, studentId, month)  // → {status:''|'제출'|'동의'|'확정'|'반려'|'혼합', rows(살아 있는 행), returnedBy:''|'학부모'|'담당교사'}
+function ttMonthState_(rows, studentId, month)  // → {status:''|'제출'|'동의'|'확정'|'반려'|'혼합', rows(살아 있는 행), returnedBy:''|'학부모'|'담당교사', enteredBy:''|'학생'|'담당교사'}
 function ttTransition_(rows, studentId, month, action, ctx)
-        // action 'submit'|'withdraw'|'agree'|'unagree'|'confirm'|'unconfirm'|'parentReturn'|'teacherReturn', ctx = {now, entries, window, reason}
+        // action 'submit'|'withdraw'|'agree'|'unagree'|'confirm'|'unconfirm'|'parentReturn'|'teacherReturn'|'teacherEnter'(R24), ctx = {now, entries, window, reason}
         // → {ok, reason, add:[fixed_schedules 행(id 없음)], update:[{id, set}], cancel:[id], warnings, returned:{by, reason}|null}
 function ttCopyPrevious_(rows, studentId, month) // [지난달 시간표 그대로 가져오기] → {entries(제출 초안), fromMonth:'yyyy-MM'|''}
 function ttMissing_(rows, studentIds, month)    // → 그 달 살아 있는 행이 없거나 반려인 학생 id
@@ -234,7 +235,7 @@ function ttMissing_(rows, studentIds, month)    // → 그 달 살아 있는 행
 **AttendanceRules**
 - 블록 표기: `'ALL'`(대소문자·공백 무시) 또는 `'HH:mm-HH:mm;…'`. "15:00부터 귀가" = `'15:00-24:00'`. 한 자리 시(`9:00`)·`–`·`~`도 읽는다. `parseBlockSpec_`은 범위를 시작 순으로 정렬하고 겹치거나 맞닿은 범위를 합친다. 잘못된 조각은 `errors`에 적고 뺀다(C5 입력 화면은 `errors`가 있으면 저장을 막는다). 저장은 `formatBlockSpec_(parseBlockSpec_(입력))`으로 정규 표기를 쓴다.
 - `blockSpecCovers_`: 겹치면 true, 맞닿기만 하면(18:00-20:00 / 20:00-22:00) false. 잘못된 표기는 false.
-- `effectiveFixedRows_`(결정 31): 적용월 ≤ 그날의 달 중 **확정 행이 있고 `제출`·`동의` 행이 남아 있지 않은 가장 최근 달**의 확정 `학`·`가` 행. 그 달이 `없음` 행뿐이면 `[]`(앞 달 시간표가 이어지지 않는다). 확정 행이 있는 달이 없으면 `[]`. 한 달의 일부만 확정된 동안은 앞 달을 유지한다(ASSUMPTION, R3). 요일은 `resolveCell_`이 고른다.
+- `effectiveFixedRows_`(결정 31·84): 적용월 ≤ 그날의 달 중 **그날 살아 있던 확정 행이 있고 `제출`·`동의` 행이 남아 있지 않은 가장 최근 달**의 그 행 중 `학`·`가`. 그날 살아 있던 확정 행(R24) = `attFixedStart_(행) ≤ 그날`이고, `확정`이거나 `취소`인데 확정된 적이 있고(`teacher_confirmed_at`) 취소한 날(`updated_at`의 날짜) > 그날. `attFixedStart_` = 적용월 1일, 단 담당교사 대신 입력 행(`parent_agreed_at` 빈칸·`teacher_confirmed_at` 있음)은 1일과 입력한 날 중 늦은 날. 그 달이 `없음` 행뿐이면 `[]`(앞 달 시간표가 이어지지 않는다). 확정 행이 있는 달이 없으면 `[]`. 한 달의 일부만 확정된 동안은 앞 달을 유지한다(ASSUMPTION, R3). 요일은 `resolveCell_`이 고른다.
 - `resolveCell_` 우선순위: 확정 특이사항(EXC) > 확정 고정 일정 `학`·`가`(FIXED) > 23:00 종료(END) > 빈칸(NONE). 특이사항 `요청`·`취소`, 고정 일정 `제출`·`동의`·`반려`·`취소`는 무시.
   - EXC가 여럿이면 가장 최근 확정(`confirmed_at` → `updated_at` → 나중 행) 1건의 약어 + `' 외 N'`, `more = N`, `exceptionId` = 그 건(가정 c).
   - 약어: `opts.typeShort`(설정 `exception.type_short`, 없으면 sheet-model 기본표). 행의 유형 그대로 찾고, 없으면 **양쪽(행의 유형과 약어표 키) 모두 끝의 괄호 설명을 뗀 이름끼리** 비교하고(관리자가 괄호 설명을 고쳐도 옛 행이 약어로 나오게), 그래도 없으면 괄호를 뗀 이름을 그대로 쓴다.
@@ -420,15 +421,21 @@ function ttMissing_(rows, studentIds, month)    // → 그 달 살아 있는 행
 
 - 제출 기간 `ttSubmitWindow_`: 매월 `timetable.submit_start_day`(기본 25)일 ~ `timetable.submit_end_day`(기본 `last` = 말일)에 **다음 달** 시간표를 낸다. 설정이 1~31 정수·`last`가 아니면 기본값, 그 달 말일보다 크면 말일(시작 30 → 2월은 28·29일). 시작 > 끝이면 늘 닫힘(이유 '설정이 잘못'). 닫혀 있으면 `start·end·month`는 **다음** 기간과 그 적용월.
 - 입력 `ttValidateEntries_`: 요일 `월`~`일`, 구분 `학`·`가`만(`없음`은 학생이 고르지 않는다 — 빈 목록이 `없음` 행 1개가 된다, 결정 31), 블록은 `parseBlockSpec_`(ALL 또는 HH:mm-HH:mm;…)로 오류 없이 읽혀야 하고 저장은 정규 표기. 같은 요일 행끼리 겹치면 오류(ALL은 그 요일의 어떤 행과도 겹침, 맞닿기만 하면 괜찮음). 다른 요일은 상관없다.
-- 상태 기계 `ttTransition_`(한 학생·한 달의 살아 있는 행이 **함께** 움직인다):
+- 상태 기계 `ttTransition_`(한 학생·한 달의 살아 있는 행이 **함께** 움직인다, `enteredBy`는 R24):
 
-  | 지금 상태 | submit(학생) | withdraw(학생) | agree(학부모) | unagree(학부모) | parentReturn(학부모) | confirm(교사) | unconfirm(교사) | teacherReturn(교사) |
-  | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-  | 없음 | 제출 | × | × | × | × | × | × | × |
-  | 제출 | 다시 제출 | 취소 | 동의 | × | 돌려보냄(학부모, 사유 선택) | × | × | × |
-  | 동의 | 다시 제출 | 취소 | × | 제출 | × | 확정 | × | 돌려보냄(담당교사, **사유 필수**) |
-  | 확정 | 다시 제출(경고) | × | × | × | × | × | 동의 | × |
-  | 돌려보냄(`반려`) | 다시 제출 | 취소 | × | × | × | × | × | × |
+  | 지금 상태 | submit(학생) | withdraw(학생) | agree(학부모) | unagree(학부모) | parentReturn(학부모) | confirm(교사) | unconfirm(교사) | teacherReturn(교사) | teacherEnter(교사·관리자, R24) |
+  | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+  | 없음 | 제출 | × | × | × | × | × | × | × | 확정(대신 입력) |
+  | 제출 | 다시 제출 | 취소 | 동의 | × | 돌려보냄(학부모, 사유 선택) | × | × | × | 대체 → 확정(경고) |
+  | 동의 | 다시 제출 | 취소 | × | 제출 | × | 확정 | × | 돌려보냄(담당교사, **사유 필수**) | 대체 → 확정(경고) |
+  | 확정(학생) | 다시 제출(경고) | × | × | × | × | × | 동의 | × | 대체 → 확정(경고) |
+  | 확정(대신 입력) | 다시 제출(경고) | × | × | × | × | × | × (다시 대신 입력) | × | 대체 → 확정(경고) |
+  | 돌려보냄(`반려`) | 다시 제출 | 취소 | × | × | × | × | × | × | 대체 → 확정(경고) |
+
+  - **대신 입력 `teacherEnter`**(결정 84, R24): 선생님 답 "마감 놓치면 지난달 그대로가 원칙, 필요하면 담당교사가 대신 입력". 학생 제출(`submit`)은 그대로 기간 안에만. 담당교사·관리자는 **기간과 상관없이 이번 달·다음 달** 시간표를 넣는다(ASSUMPTION: 지난달·다다음 달은 거부). 살아 있는 행을 모두 `cancel`, 새 행을 바로 `확정`(`submitted_at`·`parent_agreed_at` 빈칸, `teacher_confirmed_at` = now — 학부모 동의 단계 없음). 빈 목록은 `없음` 행. 대체하면 경고, 이번 달 2일 이후면 "그날부터 반영" 경고.
+  - **새 열 없음.** 누가 입력했는지(`ttMonthState_.enteredBy`)는 `확정` + `parent_agreed_at` 빈칸 = '담당교사'(보통 흐름 확정은 늘 학부모 동의 시각이 있다). 적용 시작일은 `teacher_confirmed_at`, 바뀌기 전 시간표의 마지막 날은 취소 행의 `updated_at`(Db가 적는 취소 시각)으로 정한다 — 그래서 달 중간에 바꿔도 **지난 날의 출석부·격자가 바뀌지 않는다**. 누가 넣었는지(이메일)는 공통 열 `created_by`와 audit_log.
+  - 대신 입력한 달은 `unconfirm` 불가(동의 없는 '동의' 상태가 생기므로) — 다시 대신 입력해 고친다. 학생은 제출 기간 안이면 그 달도 다시 낼 수 있다(그러면 동의·확인을 다시).
+  - 보통 흐름에서 늦게 확인한 달(예: 4/3 확인)은 지금처럼 적용월 1일부터 쓴다(학부모 동의 시각이 있으므로).
 
   - **돌려보냄**(총괄 보충): 저장 값은 기존 어휘 `반려`, 화면 이름은 '돌려보냄'. 학부모 [동의하지 않습니다]는 제출 단계에서, 담당교사는 확인(동의) 단계에서 돌려보낸다. 담당교사가 돌려보내도 `parent_agreed_at`은 남긴다 — `ttMonthState_.returnedBy`는 이것으로 누가 돌려보냈는지 가린다(비어 있으면 학부모). 사유는 `returned.reason`(공백·줄바꿈은 한 칸으로). 학생이 고쳐 다시 내면 동의·확인은 처음부터. 돌려보낸 달은 앞 달 시간표 유지, 미제출 목록(`ttMissing_`)에 든다.
   - ASSUMPTION(열린 질문): `fixed_schedules`에 사유 열이 없다. 지금은 저장 쪽(C37)이 `returned`를 audit_log 등에 남긴다. 학생 화면에 사유를 보이려면 열(예: `return_reason`)을 더할지 총괄이 정한다(시트 구조 변경).
@@ -437,7 +444,7 @@ function ttMissing_(rows, studentIds, month)    // → 그 달 살아 있는 행
   - `agree`·`confirm`은 `parent_agreed_at`·`teacher_confirmed_at` = now, `unagree`·`unconfirm`은 그 칸을 비운다. 동의·확인은 제출 기간 밖에도 된다(늦은 확인). `unconfirm`은 이미 시작한 달이면 경고(다시 확인할 때까지 출석부는 앞 달 확정 시간표).
   - `ok:false`면 `reason`만 있고 바꿀 행은 없다. 잘못된 `month`·`now`·빈 학생·모르는 `action`은 Error.
 - "확정 전에는 기존 시간표 유지": 출석부는 지금처럼 `effectiveFixedRows_`를 쓴다(확정 행이 있고 제출·동의가 없는 가장 최근 달). 그래서 제출·동의·반려 중인 달(확정 행이 없음), 확인을 거둔 달, 확정 뒤 다시 낸 달은 앞 달 확정 시간표가 이어진다. 확정한 `없음` 달은 앞 달이 이어지지 않는다(결정 31).
-- `effectiveFixedRows_`는 바꾸지 않았다. 이 규칙은 달 단위로 움직여 확정·반려가 섞인 달을 만들지 않는다(R3의 행 단위 반려 동작은 그대로).
-- `ttCopyPrevious_`: 적용월의 **앞 달에 출석부가 쓰던** 확정 시간표(`effectiveFixedRows_(…, 앞 달 1일)` — 앞 달을 새로 확정하지 않았으면 그보다 앞 달에서 이어진 것)를 제출 초안 `entries`로(정규화·정렬). 저장하지 않는다. 확정 시간표가 없거나 `없음` 달이면 빈 초안·`fromMonth ''`. 옛 행이 지금 입력 검사에 걸리면 빈 초안.
+- R23은 `effectiveFixedRows_`의 달 고르기를 바꾸지 않았다(확정·반려가 섞인 달을 만들지 않음, R3의 행 단위 반려 동작은 그대로). R24에서 그날 살아 있던 행·적용 시작일만 더했다.
+- `ttCopyPrevious_`: 적용월의 **앞 달에 출석부가 쓰던** 확정 시간표(`effectiveFixedRows_(…, 앞 달 말일)` — R24: 달 중간 대신 입력도 반영 — 앞 달을 새로 확정하지 않았으면 그보다 앞 달에서 이어진 것)를 제출 초안 `entries`로(정규화·정렬). 저장하지 않는다. 확정 시간표가 없거나 `없음` 달이면 빈 초안·`fromMonth ''`. 옛 행이 지금 입력 검사에 걸리면 빈 초안.
 - `ttMissing_`: 마감 뒤 담당교사에게 보일 미제출 학생 = 그 달 살아 있는 행이 없거나 `반려`인 학생.
 - ASSUMPTION(열린 질문): ① 기간을 놓치면 그 달에는 낼 수 없고 앞 달 확정 시간표가 그대로 이어진다(교사 대신 입력·기간 연장 없음). ② 학부모 동의 없이 교사가 바로 확정하지 않는다(0단계 진단 뒤 학부모 접속이 어려우면 다시 정한다). ③ PRD F9의 '평일 종료 유형(23:00/23:50)' 선택은 `fixed_schedules`에 열이 없어 이번 규칙에 넣지 않았다(지금은 `enrollments.end_type`).
