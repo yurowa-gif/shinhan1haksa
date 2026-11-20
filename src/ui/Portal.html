@@ -15,6 +15,7 @@
    * 화면: 홈 → [내 OUT 자세히] · [출결 기록 전체 보기] · [월별 일정 열기](같은 자리에서 바뀌고 [← 돌아가기]로 홈).
    */
   function renderPortal(root, studentId, month, view) {
+    var viewerParent = false;   // 화면 문구가 학부모일 때만 달라지는 곳(상태 이름)
     clear(root).appendChild(el('div', { class: 'loading', text: '불러오는 중…' }));
     call('getPortalStudent', studentId, month || '').then(function (p) { draw(p, view || 'home'); }).catch(function (err) { clear(root); showError(root, err); });
 
@@ -27,7 +28,8 @@
     function pillsOf(list) { return el('div', { class: 'pt-pills' }, list); }
     function typeKind(t) { return /^병/.test(t) ? 'byung' : /^학원/.test(t) ? 'hak' : /^가정/.test(t) ? 'ga' : 'mute'; }
     function stateKind(s) { return s === '확정' ? 'confirmed' : s === '취소' ? 'canceled' : 'requested'; }
-    function excRow(e) { return row(e.dateKo, pillsOf([UI.statusPill(typeKind(e.type), e.type.replace(/\s*\(.*$/, '')), UI.statusPill(stateKind(e.state), e.state === '확인 대기' ? '요청' : e.state)])); }
+    function stateText(s) { return s === '요청' && viewerParent ? '확인 중' : s; }   // 저장 값은 요청·확정·취소 — 학부모에게만 '확인 중'(writing.md 7절)
+    function excRow(e) { return row(e.dateKo, pillsOf([UI.statusPill(typeKind(e.type), e.type.replace(/\s*\(.*$/, '')), UI.statusPill(stateKind(e.state), stateText(e.state))])); }
     function ymd(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
     function weekOf(today) {
       var p = today.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2]);
@@ -38,6 +40,7 @@
     function draw(p, view) {
       clear(root);
       var s = p.student, st = p.status || {}, parent = p.viewer === 'parent';
+      viewerParent = parent;
       var back = function () { return el('button', { type: 'button', class: 'btn secondary', style: 'margin-bottom:12px', text: '← 돌아가기', onclick: function () { renderPortal(root, studentId, '', 'home'); } }); };
       if (view === 'outs') return outsView(p, back);
       if (view === 'exceptions') return exceptionsView(p, back);
@@ -58,7 +61,7 @@
       }
       var o = p.outs, live = o.items.filter(function (i) { return i.status === '유효'; });
       if (o.total >= 2 && !parent) {
-        root.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: '퇴실 대상입니다. OUT이 2번 쌓여서 학교를 나가야 하는 단계입니다. ' + (p.teacher ? '담당 ' + p.teacher + '님' : '담당 선생님') + '이 학부모님과 면담을 한 뒤 관리자가 정합니다. 궁금하면 담당 선생님께 먼저 물어보세요.' }));
+        root.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: '퇴실 대상입니다. OUT이 2번 쌓여서 학교를 나가야 하는 단계입니다. ' + (p.teacher ? '담당 ' + p.teacher + ' 선생님' : '담당 선생님') + '이 학부모님과 면담을 한 뒤 관리자가 정합니다. 궁금하면 담당 선생님께 먼저 물어보세요.' }));
       }
       var outKids = [pillsOf([o.total >= 2 ? UI.statusPill('out2', '퇴실 대상') : o.total === 1 ? UI.statusPill('out1', '1OUT') : UI.statusPill('mute', 'OUT 없음'), el('span', { text: '이번 기간 ' + o.total + '건' })])];
       live.slice(0, 3).forEach(function (i) { outKids.push(el('div', { class: 'pt-note', text: i.dateKo + ' ' + i.ruleName })); });
@@ -69,7 +72,7 @@
       var wk = weekOf(p.today), shown = p.exceptions.filter(function (e) { return parent || (e.date >= wk[0] && e.date <= wk[1]); }).filter(function (e) { return e.state !== '취소'; });
       if (parent) shown = shown.slice(0, 5);
       var exKids = shown.length ? shown.map(excRow) : [UI.emptyState(parent ? '출결 기록이 없습니다.' : '이번 주 출결 기록이 없습니다.')];
-      exKids.push(note('요청은 선생님이 확인하면 확정으로 바뀝니다.'));
+      exKids.push(note(parent ? '확인 중인 기록은 선생님이 확인하면 확정으로 바뀝니다.' : '요청은 선생님이 확인하면 확정으로 바뀝니다.'));
       if (!parent) exKids.push(link('출결 기록 전체 보기', function () { renderPortal(root, studentId, '', 'exceptions'); }));
       root.appendChild(card(parent ? '출결 기록' : '이번 주 출결 기록', exKids));
 
@@ -86,7 +89,7 @@
         root.appendChild(card('급식과 기숙사', meal));
         var cn = p.counsel || [], cnKids = [];
         if (!cn.length) cnKids.push(el('div', { class: 'pt-note', text: '아직 상담 기록이 없습니다.' }));
-        cn.slice(0, 5).forEach(function (c) { cnKids.push(el('div', { class: 'pt-note', text: c.dateKo + (c.teacher ? ' ' + c.teacher + '님과' : '') + ' 상담이 있었습니다.' })); });
+        cn.slice(0, 5).forEach(function (c) { cnKids.push(el('div', { class: 'pt-note', text: c.dateKo + (c.teacher ? ' ' + c.teacher + ' 선생님과' : '') + ' 상담이 있었습니다.' })); });
         cnKids.push(note('상담 내용은 학교에서만 봅니다. 자세한 이야기는 담당 선생님께 직접 물어봐 주세요.'));
         root.appendChild(card('상담', cnKids));
       }
