@@ -1,6 +1,7 @@
 /**
  * T8 기기 행렬 자동 점검: **모든 실제 화면 × 기기 크기**를 크로미움으로 띄워 자동으로 판정한다(real-screens.js 하네스, 가짜 데이터만).
  * 실행: npm run devices [-- 화면이름 …] [--base=기준선.json]   (예: npm run devices -- home:student timetable)
+ *   --strict 를 주면 실패·오류 칸이 하나라도 있을 때 끝 코드 1(모든 칸 통과가 기준, D15 ③ 뒤)
  *   --base=docs/design/devices-baseline.json 을 주면 기준선과 칸마다 비교해 '나빠진 칸·좋아진 칸'을 report.md 맨 위에 적는다(D15 PR마다)
  *   → design/preview/out/devices/report.md(화면 × 기기 표) · report.json · 실패한 칸만 사진(<화면>__<기기>.png)
  * 느려서(수 분) npm test 기본에는 넣지 않는다. 화면 새 단장(D15) 전후를 같은 잣대로 재는 데 쓴다.
@@ -287,6 +288,7 @@ async function main() {
   const args = process.argv.slice(2);
   const baseArg = (args.find((a) => a.startsWith('--base=')) || '').slice(7);
   const want = args.filter((a) => !a.startsWith('--'));
+  const strict = args.includes('--strict');
   fs.rmSync(OUT, { recursive: true, force: true });
   fs.mkdirSync(OUT, { recursive: true });
   const app = makeApp({ now: NOW, seed });
@@ -311,6 +313,12 @@ async function main() {
   fs.writeFileSync(path.join(OUT, 'report.md'), cmp + reportMd(results, screens));
   if (cmp) console.log(cmp.split('\n').slice(2, 3).join(''));
   console.log('끝: ' + screens.length + '화면 × ' + DEVICES.length + '기기, ' + Math.round((Date.now() - t0) / 1000) + '초 → ' + path.relative(process.cwd(), path.join(OUT, 'report.md')));
+  if (strict) {
+    const bad = [];
+    for (const sc of screens) for (const d of DEVICES) { const r = results[sc.id][d.id]; if (r.error || Object.keys(r.fails).length) bad.push(sc.id + ' · ' + d.id + ': ' + (r.error ? '오류' : Object.keys(r.fails).join(','))); }
+    if (bad.length) { console.log('--strict: 통과하지 못한 칸 ' + bad.length + '개\n  ' + bad.slice(0, 20).join('\n  ')); process.exitCode = 1; }
+    else console.log('--strict: 모든 칸 통과');
+  }
 }
 
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
