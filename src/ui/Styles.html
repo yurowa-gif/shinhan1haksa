@@ -24,7 +24,7 @@
     --out1-ink: #8a3200; --out1-weak: #ffe5d2; --out1-line: #d9661a;
     --out2: #b3261e; --out2-ink: #fff;
     /* 크기 */
-    --font-base: 18px; --font-sm: .9rem; --font-xs: .8rem; --font-lg: 1.1rem; --font-xl: 1.5rem;
+    --font-base: 18px; --font-sm: .9rem; --font-xs: var(--font-sm); --font-lg: 1.1rem; --font-xl: 1.5rem;
     --tap: 48px;          /* 누르는 칸 최소 높이·너비 */
     --bar-h: 72px;        /* 하단 작업 바 높이(안전 영역 제외) */
     --gap: 12px; --gap-sm: 8px; --gap-lg: 16px;
@@ -50,7 +50,7 @@
   header.top { position: sticky; top: 0; z-index: 2; background: var(--accent); color: #fff; border-bottom: 0;
     padding: 14px 16px; padding-top: max(14px, env(safe-area-inset-top, 0px)); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   header.top h1 { font-size: 1.15rem; font-weight: 800; letter-spacing: -.03em; margin: 0; color: #fff; }
-  header.top .who { font-size: .82rem; color: #dbe5ff; text-align: right; word-break: keep-all; white-space: nowrap; }
+  header.top .who { font-size: var(--font-sm); color: #dbe5ff; text-align: right; word-break: keep-all; white-space: nowrap; }
   header.top :focus-visible { outline-color: #fff; }
   .back { display: inline-flex; align-items: center; min-height: var(--tap); color: #fff; font-weight: 700;
     text-decoration: none; white-space: nowrap; }
@@ -65,7 +65,7 @@
   .actionbar > .btn { flex: 1 1 0; max-width: 360px; }
   .tabs { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 12px; }
   .tab { flex: 0 0 auto; padding: 10px 16px; border-radius: var(--radius-pill); border: 1px solid var(--line);
-    background: var(--card); color: var(--text); text-decoration: none; font-size: .95rem; font-weight: 600; cursor: pointer;
+    background: var(--card); color: var(--text); text-decoration: none; font-size: 1rem; font-weight: 600; cursor: pointer;
     min-height: var(--tap); display: inline-flex; align-items: center; }
   .tab.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 
@@ -83,7 +83,7 @@
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
   .stat { background: var(--card); border-radius: var(--radius-sm); padding: 12px; }
   .stat .n { font-size: 2.5rem; font-weight: 800; letter-spacing: -.05em; line-height: 1.05; color: var(--accent-ink); }
-  .stat .l { font-size: .85rem; color: var(--muted); }
+  .stat .l { font-size: var(--font-sm); color: var(--muted); }
   ul.list { list-style: none; margin: 0; padding: 0; }
   ul.list li { padding: 12px 4px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 8px; }
   ul.list li:last-child { border-bottom: 0; }
@@ -93,7 +93,7 @@
   dl.kv dd { margin: 0; }
   .soon { border: 1px dashed var(--muted); color: var(--muted); }
   .loading { color: var(--muted); padding: 16px 0; }
-  footer { text-align: center; padding: 24px 16px; font-size: .8rem; color: var(--muted); }
+  footer { text-align: center; padding: 24px 16px; font-size: var(--font-sm); color: var(--muted); }
   footer a { color: var(--muted); display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 6px; }   /* 처음으로·접속 진단도 누르는 칸 48px */
 
   /* ───────── 버튼: 모두 48px 이상, 주 버튼은 한 화면에 하나 ───────── */
@@ -118,7 +118,7 @@
   .field input, .field select, .field textarea { width: 100%; min-height: var(--tap); padding: 8px 12px; font: inherit;
     border: 1px solid #c4cbe0; border-radius: var(--radius-sm); background: var(--card); color: var(--text); }
   .field textarea { min-height: 96px; }
-  .field .hint { color: var(--muted); font-size: .85rem; margin-top: 4px; }
+  .field .hint { color: var(--muted); font-size: var(--font-sm); margin-top: 4px; }
   .field .fix { color: var(--warn); font-size: .9rem; margin-top: 4px; }
   .field.invalid input, .field.invalid select, .field.invalid textarea { border-color: var(--warn); border-width: 2px; }
 

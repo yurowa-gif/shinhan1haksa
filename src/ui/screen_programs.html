@@ -108,7 +108,7 @@
         ctx = null; loadDay(c.date);
       }).catch(function (err) { clear(root); showError(root, err); });
 
-      bar = UI.actionBar([{ text: '확인하고 저장', kind: 'primary', disabled: true, onclick: onSave }], { mount: true });
+      bar = UI.actionBar([{ text: '확인하고 저장', kind: 'primary', enter: true, disabled: true, onclick: onSave }], { mount: true });
       function payload() { return { name: name.value, date: dateField ? dateField.getValue() : '', blocks: blocks.spec, memo: memo.value, studentIds: ids }; }
       function showErrors(errors) {
         var fields = { name: nameField, memo: memoField };
