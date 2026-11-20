@@ -2,7 +2,7 @@
   /** 2단계 A 카드(CODING-A: 근무·OUT·면담). 이 함수의 몸통만 고친다(docs/plan/stage2.md 1절) */
   function renderStage2A(d, root) {
     if (d.out && d.out.canRecord) {
-      root.appendChild(el('div', { class: UI.cardClass(d.out.targets && (d.out.targets.need + d.out.targets.ready) > 0 ? 'todo' : 'key') }, [
+      root.appendChild(el('div', { class: UI.cardClass(d.out.targets && (d.out.targets.need + d.out.targets.ready) > 0 ? 'todo' : (d.out.out1 || d.out.out2) ? 'key' : '') }, [
         el('h2', { text: 'OUT 기록' }),
         el('div', { class: 'muted', text: '오늘 적발한 학생의 OUT을 30초 안에 기록합니다.' }),
         el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin:8px 0' }, [

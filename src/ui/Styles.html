@@ -267,7 +267,7 @@
   .rg-cell.off { background: var(--muted-weak); border-style: dashed; color: var(--muted-ink); cursor: not-allowed; }
   /* ───────── 학생·학부모 화면(body.tone-soft, 결정 85): 흰 판 하나 + 큰 글씨 + 더 둥근 모서리. 색은 교사 화면과 같은 코발트 ───────── */
   body.tone-soft { font-size: 1.04rem; }
-  body.tone-soft main { background: var(--card); border-radius: 22px; margin: 12px; padding: 6px 18px 14px; max-width: none; }
+  body.tone-soft main { background: var(--card); border-radius: 22px; margin: 12px max(12px, calc((100vw - 720px) / 2)); padding: 6px 18px 14px; max-width: 720px; }   /* 넓은 화면에서도 한 줄이 720px를 넘지 않는다(넘으면 읽기 힘들다) */
   body.tone-soft main.has-actionbar { padding-bottom: calc(var(--bar-h) + 24px + env(safe-area-inset-bottom, 0px)); }   /* 아래 작업 바에 마지막 내용이 가리지 않게(위 main 규칙보다 우선) */
   body.tone-soft .card { padding: 16px 0 8px; margin: 0; border-top: 1px solid var(--line); }
   body.tone-soft .card:first-child { border-top: 0; padding-top: 10px; }
