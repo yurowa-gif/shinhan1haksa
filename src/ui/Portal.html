@@ -14,6 +14,14 @@
    * 학생 홈은 본인 id, 학부모 홈은 고른 자녀 id로 부른다. 서버(getPortalStudent)가 본인·연결된 자녀인지 다시 확인하고, 이 파일은 서버가 준 것만 그린다.
    * 화면: 홈 → [내 OUT 자세히] · [출결 기록 전체 보기] · [월별 일정 열기](같은 자리에서 바뀌고 [← 돌아가기]로 홈).
    */
+  /** 저장 값 → 학부모 화면 표기(writing.md 7절 '학부모 화면 표기'). 급식·기숙사 표기는 이 함수 한 곳에서만 바꾼다 */
+  function ptlFoodLabel(item, value) {
+    if (!value) return '신청 안 함';
+    if (item === '조식' || item === '중식') return value === '실시' ? '먹음' : value === '미실시' ? '먹지 않음' : value;
+    if (item === '석식') return value === '미실시' ? '먹지 않음' : value;
+    return value;   // 기숙사: 입실·퇴실
+  }
+
   function renderPortal(root, studentId, month, view) {
     var viewerParent = false;
     /** 화면 바꾸기(C39): 기록을 남겨 안드로이드 뒤로 가기가 포털 홈으로 오게 한다. 학부모 홈은 PORTAL_NAV로 자녀 id를 키에 넣는다 */
@@ -59,12 +67,12 @@
       } else if (td && td.kind === 'returned') {
         root.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all' }, [document.createTextNode(td.monthKo + ' 시간표가 돌려보내졌습니다. 고쳐서 ' + td.endKo + '까지 다시 내 주세요. '), el('a', { href: base + '?page=timetable&role=student', text: '시간표 열기' })]));
       } else if (td && td.kind === 'agree') {
-        root.appendChild(el('div', { class: UI.cardClass('todo') }, [el('h2', { text: '시간표에 동의해 주세요' }), el('div', { class: 'pt-note', text: s.name + ' 학생이 ' + td.monthKo + ' 시간표를 냈습니다. 동의하면 담당 선생님이 확인한 뒤 ' + td.monthKo + ' 1일부터 적용됩니다.' }),
+        root.appendChild(el('div', { class: UI.cardClass('todo') }, [el('h2', { text: '시간표에 동의해 주세요' }), el('div', { class: 'pt-note', text: '자녀가 ' + td.monthKo + ' 시간표를 냈습니다. 동의하면 담당 선생님이 확인한 뒤 ' + td.monthKo + ' 1일부터 적용됩니다.' }),
           UI.rowLink({ href: base + '?page=timetable&role=parent&student=' + encodeURIComponent(s.id), text: '시간표 보고 동의하기' })]));
       }
       var o = p.outs, live = o.items.filter(function (i) { return i.status === '유효'; });
       if (o.total >= 2 && !parent) {
-        root.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: '퇴실 대상입니다. OUT이 2번 쌓여서 학교를 나가야 하는 단계입니다. ' + (p.teacher ? '담당 ' + p.teacher + ' 선생님' : '담당 선생님') + '이 학부모님과 면담을 한 뒤 관리자가 정합니다. 궁금하면 담당 선생님께 먼저 물어보세요.' }));
+        root.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: 'OUT이 2번 쌓여 퇴실 대상이 되었습니다. ' + (p.teacher ? '담당 ' + p.teacher + ' 선생님이' : '담당 선생님이') + ' 학부모님과 면담한 뒤 관리자 선생님이 퇴실을 정합니다. 궁금한 점은 담당 선생님께 먼저 물어봐 주세요.' }));
       }
       var outKids = [pillsOf([o.total >= 2 ? UI.statusPill('out2', '퇴실 대상') : o.total === 1 ? UI.statusPill('out1', '1OUT') : UI.statusPill('mute', 'OUT 없음'), el('span', { text: '이번 기간 ' + o.total + '건' })])];
       live.slice(0, 3).forEach(function (i) { outKids.push(el('div', { class: 'pt-note', text: i.dateKo + ' ' + i.ruleName })); });
@@ -84,11 +92,11 @@
         var ph = [p.seat ? row('자습 자리', p.seat.space + ' ' + p.seat.label) : null, p.room ? row('기숙사', p.room.floor + '층 ' + p.room.roomNo + '호') : null].filter(Boolean);
         root.appendChild(card('내 자리와 방', ph.length ? ph : [note('아직 자습 자리와 기숙사 방이 정해지지 않았습니다.')], 'side'));
       } else {
-        var meal = [row('기숙사', st['기숙사'] || '없음'), row('조식', st['조식'] || '없음'), row('석식', st['석식'] || '없음')];
-        if (st['중식']) meal.push(row('중식', st['중식']));
+        var meal = [row('기숙사', ptlFoodLabel('기숙사', st['기숙사'])), row('조식', ptlFoodLabel('조식', st['조식'])), row('석식', ptlFoodLabel('석식', st['석식']))];
+        if (st['중식']) meal.push(row('중식', ptlFoodLabel('중식', st['중식'])));
         if ((p.pending || []).length) {
           meal.push(el('div', { class: 'pt-k', style: 'margin-top:8px', text: '바뀌는 것' }));
-          p.pending.forEach(function (c) { meal.push(el('div', { class: 'pt-note', text: c.dateKo + '부터 ' + c.item + ' ' + c.value })); });
+          p.pending.forEach(function (c) { meal.push(el('div', { class: 'pt-note', text: c.dateKo + '부터 ' + c.item + ': ' + ptlFoodLabel(c.item, c.value) })); });
         }
         root.appendChild(card('급식과 기숙사', meal, 'side'));
         var cn = p.counsel || [], cnKids = [];
