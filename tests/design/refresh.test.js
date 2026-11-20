@@ -152,3 +152,15 @@ test('D15 ③(화면 전수 점검): 줄 끝 열기 ›·탭 5개 이상 축소�
   fs.readdirSync(path.join(dir, 'screens')).filter((f) => f.endsWith('.png')).forEach((f) => assert.ok(imgs.indexOf('screens/' + f) >= 0, f + ' 가 문서에 쓰이지 않았다'));
   assert.ok(fs.existsSync(path.join(ROOT, 'design/preview/refresh-tour.js')) && fs.existsSync(path.join(ROOT, 'design/preview/refresh-tour-sheets.js')));
 });
+
+// D15 ④ 시안: list-detail.md 가 사진 9장을 모두 싣고, 시안 단계라고 밝히며, 선택지·건너뛴 것을 적는다
+test('D15 ④ 시안 문서: 사진 전부 참조, 시안 단계 명시, 선택지·건너뛴 것', () => {
+  const dir = path.join(ROOT, 'docs', 'design', 'refresh');
+  const md = fs.readFileSync(path.join(dir, 'list-detail.md'), 'utf8');
+  const pics = fs.readdirSync(path.join(dir, 'list-detail')).filter((f) => f.endsWith('.png'));
+  assert.ok(pics.length >= 9, '사진 9장 이상');
+  pics.forEach((f) => assert.ok(md.includes('list-detail/' + f), f + ' 문서에 없음'));
+  assert.match(md, /시안 단계입니다/);
+  assert.match(md, /선택지와 권장/);
+  assert.match(md, /건너뛴 것·확인 못 한 것/);
+});
