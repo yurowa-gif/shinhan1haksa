@@ -52,8 +52,7 @@ test('방향 시안 CSS: 포커스 표시·48px·상태 알약 앞 글자를 지
   });
   // 글꼴 예외는 B 하나뿐
   assert.ok(/Pretendard/.test(dirCss('b')) && !/Pretendard/.test(dirCss('a')) && !/Pretendard/.test(dirCss('c')));
-  // 이 PR은 화면 코드·공통 스타일을 바꾸지 않는다(시안 CSS가 Styles.html 안에 섞여 들어오지 않았다)
-  assert.ok(css.readFile('src/ui/Styles.html').indexOf('--signal') < 0, 'Styles.html 에 시안 토큰이 들어왔다');
+  // (2단계에서 결정 85대로 B 토큰이 Styles.html에 들어왔다 — 그쪽은 styles.test.js가 지킨다. 여기서는 시안 CSS 자체만 본다)
 });
 
 test('docs/design/refresh/refresh.md: 방향 셋·토큰 표·장단점·글꼴 결과·규칙 변경·총괄 추천·확인 못 한 것이 있고, 사진이 모두 있고 모두 쓰인다', () => {
@@ -77,4 +76,23 @@ test('docs/design/refresh/refresh.md: 방향 셋·토큰 표·장단점·글꼴 
   });
   // 시안 스크립트가 있다
   ['design/preview/refresh.js', 'design/preview/refresh-compare.js'].forEach((f) => assert.ok(fs.existsSync(path.join(ROOT, f)), f));
+});
+
+test('docs/design/refresh/apply.md(D15 2단계 ①): 바꾼 것·할 일 기준·지금/새 사진 10장·점검·확인할 것·건너뛴 것이 있고, 사진이 모두 있고 모두 쓰인다', () => {
+  const dir = path.join(ROOT, 'docs', 'design', 'refresh');
+  const doc = fs.readFileSync(path.join(dir, 'apply.md'), 'utf8');
+  ['결정 85', '`UI.rowLink`', '`UI.cardClass`', '`body.tone-soft`', '노란 띠는 진짜 할 일', '48px 미만 0개', '글자 150%', '선생님이 확인하실 것', '건너뛴 것·확인 못 한 것', 'PR ②', 'Pretendard는 쓰지 않았습니다'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
+  const imgs = [...doc.matchAll(/!\[[^\]]*\]\((apply\/[^)]+\.png)\)/g)].map((m) => m[1]);
+  assert.strictEqual(imgs.length, 10, '사진 수 ' + imgs.length);
+  imgs.forEach((f) => assert.ok(fs.existsSync(path.join(dir, f)), f + ' 파일이 없다'));
+  fs.readdirSync(path.join(dir, 'apply')).filter((f) => f.endsWith('.png')).forEach((f) => assert.ok(imgs.indexOf('apply/' + f) >= 0, f + ' 가 문서에 쓰이지 않았다'));
+  // 문서의 "할 일" 표가 실제 코드와 같다: 홈 파일마다 UI.cardClass('todo') 가 건수 조건과 함께 있고, 홈의 .btn 링크는 UI.rowLink 로 바뀌었다
+  ['home_admin', 'home_attendance', 'home_duty_manager', 'home_hall_teacher', 'home_homeroom'].forEach((f) => {
+    const src = css.readFile('src/ui/' + f + '.html');
+    assert.ok(/UI\.cardClass\(.*'todo'/.test(src), f + ' 에 할 일 카드가 없다');
+    assert.ok(!/class: 'btn( secondary)?'[^}]*href:/.test(src), f + ' 에 이동용 .btn 이 남아 있다(UI.rowLink 로)');
+  });
+  assert.ok(/UI\.cardClass\('todo'\)/.test(css.readFile('src/ui/Portal.html')), 'Portal 할 일 카드');
+  // 학생·학부모 화면은 tone-soft 클래스를 붙인다
+  assert.ok(/tone-soft/.test(css.readFile('src/ui/Index.html')) && /tone-soft/.test(css.readFile('src/ui/screen_shell.html')));
 });

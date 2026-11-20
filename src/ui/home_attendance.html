@@ -6,42 +6,41 @@
       el('h2', { text: '오늘 ' + d.today }),
       el('div', { class: 'muted', text: d.termName + ' · 학사생 ' + d.studentCount + '명' })
     ]));
-    root.appendChild(el('div', { class: 'card' }, [
+    root.appendChild(el('div', { class: UI.cardClass(x.pending ? 'todo' : '') }, [
       el('h2', {}, ['특이사항 요청 ', UI.badge(x.pending)]),
       el('div', { class: 'muted', text: x.pending ? '확정할 요청이 ' + x.pending + '건 있습니다.' : '확정할 요청이 없습니다.' }),
-      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=exceptions&tab=requests', text: '요청 처리' })
+      UI.rowLink({ href: d.appUrl + '?page=exceptions&tab=requests', text: '요청 처리' })
     ]));
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '오늘·내일 특이사항' }),
       el('div', { class: 'muted', text: '오늘 ' + x.today + '명 · 내일 ' + x.tomorrow + '명' }),
-      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=exceptions', text: '특이사항 입력' }),
-      el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=results', text: '출결 결과 정리' }),
-      el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=programs', text: '학사 프로그램 열기' })
+      UI.rowLink({ href: d.appUrl + '?page=exceptions', text: '특이사항 입력' }),
+      UI.rowLink({ href: d.appUrl + '?page=results', text: '출결 결과 정리' }),
+      UI.rowLink({ href: d.appUrl + '?page=programs', text: '학사 프로그램 열기' })
     ]));
-    if (d.out && !d.out.error) root.appendChild(el('div', { class: 'card' }, [
+    if (d.out && !d.out.error) root.appendChild(el('div', { class: UI.cardClass('key') }, [
       el('h2', { text: 'OUT 현황' }),
       el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin:8px 0' }, [UI.statusPill('out1', '1OUT ' + (d.out.out1 || 0) + '명'), UI.statusPill('out2', '퇴실 대상 ' + (d.out.out2 || 0) + '명')]),
-      el('a', { class: 'btn secondary', style: 'margin-top:4px', href: d.appUrl + '?page=outs&tab=term', text: (d.out.periodWord === '이번 기간' ? '이번 기간 보기' : '이번 학기 보기') })
+      UI.rowLink({ href: d.appUrl + '?page=outs&tab=term', text: (d.out.periodWord === '이번 기간' ? '이번 기간 보기' : '이번 학기 보기') })
     ]));
     if (d.docs && !d.docs.error) {
-      root.appendChild(el('div', { class: 'card' }, [
+      root.appendChild(el('div', { class: UI.cardClass(d.docs.items ? 'todo' : '') }, [
         el('h2', { text: '서류 체크리스트' }),
         el('div', { style: 'margin:8px 0' }, [d.docs.items ? UI.statusPill('todo', '미제출 ' + d.docs.items + '건 · 학생 ' + d.docs.students + '명') : UI.statusPill('confirmed', d.docs.types ? '모두 제출' : '서류 종류 없음')]),
         el('div', { class: 'muted', text: '학기 초 서류(동의서 등)를 냈는지 표시합니다.' }),
-        el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=docs', text: '서류 체크리스트 열기' })
+        UI.rowLink({ href: d.appUrl + '?page=docs', text: '서류 체크리스트 열기' })
       ]));
     }
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '출석부' }),
       el('div', { class: 'muted', text: '날짜를 고르면 그날 출석부를 미리 보고 PDF로 받습니다.' }),
-      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=sheet', text: '출석부 열기' })
+      UI.rowLink({ href: d.appUrl + '?page=sheet', text: '출석부 열기' })
     ]));
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '좌석표' }),
       el('div', { class: 'muted', text: '학사생 자리를 확인합니다(배정은 학사 교사·관리자).' }),
-      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=seats', text: '좌석표 열기' })
+      UI.rowLink({ href: d.appUrl + '?page=seats', text: '좌석표 열기' })
     ]));
-    root.appendChild(soonCard('출결 결과 격자 정리', '5단계(F11)에서 만듭니다.'));
   }
   /** 월별 일정 카드(C34, 결정 80): 오늘 일정과 다음 일정. 맨 아래에 붙인다 */
   (function () {
@@ -56,7 +55,7 @@
       e.next.forEach(function (x) { lines.push(el('div', { class: 'muted' }, [md(x.start) + ' ' + x.title + ' (' + x.kind + ')'])); });
       if (!lines.length) lines.push(el('div', { class: 'muted', text: '오늘과 앞으로 2주 안에 등록된 일정이 없습니다.' }));
       root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '월별 일정' })].concat(lines, [
-        el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=calendar', text: '월별 일정 열기' })])));
+        UI.rowLink({ href: d.appUrl + '?page=calendar', text: '월별 일정 열기' })])));
     };
   })();
 </script>

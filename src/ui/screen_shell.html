@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <?!= include('ui/Styles') ?>
 </head>
-<body>
+<body<? if (screenFile === 'ui/screen_facility') { ?> class="tone-soft"<? } ?>>
   <!-- 화면 틀: 뒤로 · 제목 · 본문. 화면 조각(screen_*.html)은 renderScreen(root)만 만든다. -->
   <header class="top">
     <a class="back" href="<?= appUrl ?>" aria-label="처음으로">← 처음으로</a>
@@ -15,7 +15,7 @@
 
   <?!= include('ui/Client') ?>
   <?!= include('ui/Components') ?>
-  <script>var SCREEN_PARAMS = <?!= screenParams ?>; var SCREEN_TAB = SCREEN_PARAMS.tab || ''; var SCREEN_DATE = SCREEN_PARAMS.date || ''; var SCREEN_STUDENT = SCREEN_PARAMS.student || '';</script>
+  <script>var SCREEN_PARAMS = <?!= screenParams ?>; if (SCREEN_PARAMS.role === 'student' || SCREEN_PARAMS.role === 'parent') document.body.classList.add('tone-soft'); var SCREEN_TAB = SCREEN_PARAMS.tab || ''; var SCREEN_DATE = SCREEN_PARAMS.date || ''; var SCREEN_STUDENT = SCREEN_PARAMS.student || '';</script>
   <?!= include(screenFile) ?>
   <script>
     (function () {
