@@ -9,7 +9,8 @@
     border: 1px solid var(--line); border-radius: 0; margin: 0 -1px -1px 0; background: var(--card); color: var(--text); font: inherit; cursor: pointer; }
   .cal-cell.off { background: #eceff3; color: var(--muted); }
   .cal-cell.today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-  .cal-cell.sel { background: var(--accent-weak); }
+  .cal-cell.sel { box-shadow: inset 0 -4px 0 var(--accent); }   /* 고른 날 = 아래 굵은 줄(배경색은 일정 있는 날 .has가 쓴다) */
+  .cal-cell.today.sel { box-shadow: inset 0 0 0 1px var(--accent), inset 0 -4px 0 var(--accent); }
   .cal-cell.blank { border: 0; background: transparent; cursor: default; }
   .cal-short { font-size: .72rem; color: var(--muted-ink, var(--muted)); line-height: 1.1; white-space: nowrap; overflow: hidden; max-width: 100%; }
   .cal-cell.has { background: var(--accent-weak); }
@@ -76,7 +77,7 @@
           onclick: function () { state.day = d.date; drawGrid(); drawDay(); } }, [el('span', { text: String(+d.date.slice(8, 10)) }), dots]));
       });
       gridBox.appendChild(grid);
-      gridBox.appendChild(el('div', { class: 'muted', style: 'margin-top:8px', text: '칸 = 날짜 + 일정 제목 앞 두 글자(여럿이면 "N건"). 회색 "쉼" = 자습 운영 안 하는 날(자습 일정에서 정합니다). 굵은 테두리 = 지금 고른 날.' }));
+      gridBox.appendChild(el('div', { class: 'muted', style: 'margin-top:8px', text: '칸 = 날짜 + 일정 제목 앞 두 글자(여럿이면 "N건"). 회색 "쉼" = 자습 운영 안 하는 날(자습 일정에서 정합니다). 굵은 테두리 = 오늘, 파란 칸 = 일정이 있는 날, 아래 굵은 줄 = 고른 날.' }));
     }
 
     function eventRow(e, withCancel) {
