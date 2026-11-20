@@ -346,9 +346,9 @@
       var want = prefillId; prefillId = '';
       call('confirmOutDismissal', want).then(function (r) {
         if (!alive) return;
-        if (r.ok) dismiss = r.prefill; else dismissMsg = '2OUT 퇴실 확정을 열 수 없습니다: ' + String(r.reason).replace(/\.$/, '') + '. OUT 화면의 [퇴실 대상]에서 확인해 주세요.';
+        if (r.ok) dismiss = r.prefill; else dismissMsg = '2OUT 퇴실 신청서를 열지 못했습니다. ' + String(r.reason).replace(/\.$/, '') + '. OUT 화면의 [퇴실 대상] 탭에서 상태를 확인해 주세요.';
         draw();
-      }).catch(function (err) { if (!alive) return; dismissMsg = '2OUT 퇴실 확정을 열 수 없습니다: ' + ((err && err.message) || err); draw(); });
+      }).catch(function (err) { if (!alive) return; dismissMsg = '2OUT 퇴실 신청서를 열지 못했습니다. 잠시 뒤 다시 해 보고, 또 안 되면 관리자 선생님께 알려 주세요.'; draw(); });
     }).catch(function (err) { if (!alive) return; clear(body); showError(body, err); });
 
     function draw() {
@@ -492,7 +492,7 @@
       function gateClosed(p) {
         var g = dismiss && (p.errors || []).filter(function (e) { return e.field === 'gate'; })[0];
         if (!g) return false;
-        dismiss = null; dismissMsg = '2OUT 퇴실 확정을 열 수 없습니다: ' + String(g.message).replace(/\.$/, '') + '. OUT 화면의 [퇴실 대상]에서 확인해 주세요.';
+        dismiss = null; dismissMsg = '2OUT 퇴실 신청서를 열지 못했습니다. ' + String(g.message).replace(/\.$/, '') + '. OUT 화면의 [퇴실 대상] 탭에서 상태를 확인해 주세요.';
         draw(); return true;
       }
       function confirmSave() {

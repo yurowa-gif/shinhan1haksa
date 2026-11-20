@@ -69,7 +69,7 @@ function prgStudentChecks_(d, term, date, ids, rows, blocks) {
   d.enrollments.forEach(function (e) { if (e.term_id === term.id) enr[e.student_id] = e; });
   ids.forEach(function (id) {
     var s = byId[id];
-    if (!s) { errors.push({ field: 'studentIds', message: '찾을 수 없는 학생이 있습니다. 새로 고친 뒤 다시 해 주세요.' }); return; }
+    if (!s) { errors.push({ field: 'studentIds', message: '찾을 수 없는 학생이 있습니다. 새로 불러온 뒤 다시 해 주세요.' }); return; }
     if (!enr[id]) { errors.push({ field: 'studentIds', message: s.name + ' 학생은 "' + term.name + '" 명단에 없습니다. 명단 올리기에서 먼저 등록해 주세요.' }); return; }
     if (!isActiveOn_(d.changes, enr[id], date)) inactive++;
     if (excOverlapWarnings_(rows, id, [date], blocks).length) overlap++;

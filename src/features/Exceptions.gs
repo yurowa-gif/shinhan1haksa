@@ -200,7 +200,7 @@ function excRows_(term) {
 
 function excDenied_(user, action, why) {
   logDenied_(user.email, action, why);
-  throw new Error('권한이 없습니다.');
+  throw new Error(DENIED_MESSAGE);
 }
 
 /* ───────────── 화면에서 부르는 서버 함수 ───────────── */

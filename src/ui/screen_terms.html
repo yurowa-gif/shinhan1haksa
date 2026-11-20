@@ -127,7 +127,7 @@
       sel.value = terms[terms.length - 1].id;
       carryBox.appendChild(UI.field('이어받을 새 학기', sel, { name: 'carry' }));
       var out = el('div');
-      var preview = el('button', { type: 'button', class: 'btn secondary', text: '미리보기' });
+      var preview = el('button', { type: 'button', class: 'btn secondary', text: '미리 보기' });
       var go = el('button', { type: 'button', class: 'btn', text: '이어받기', disabled: 'disabled' });
       go.disabled = true;
       carryBox.appendChild(el('div', { class: 'term-actions' }, [preview, go]));

@@ -109,7 +109,7 @@
       go.addEventListener('click', function () {
         field.setError('');
         if (why.value.trim().length < 2) { field.setError('취소 사유를 2자 이상 적어 주세요.'); return; }
-        UI.confirmSheet({ title: '이 일정을 취소할까요?', lead: e.title, lines: ['모든 교사 달력에서 사라집니다.', '기록은 지워지지 않고 "취소"로 남습니다.'], confirmText: '일정 취소', danger: true, onconfirm: function () {
+        UI.confirmSheet({ title: '일정 취소', lead: e.title, lines: ['모든 선생님의 달력에서 사라집니다.', '기록은 지워지지 않고 "취소"로 남습니다.'], confirmText: '일정 취소', cancelText: '돌아가기', danger: true, onconfirm: function () {
           if (state.busy) return; state.busy = true;
           call('cancelEvent', e.id, why.value, state.data.token).then(function (r) {
             state.busy = false;

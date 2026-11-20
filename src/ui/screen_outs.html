@@ -237,7 +237,7 @@
       clear(tabsBox);
       var opts = [];
       if (state.ctx && state.ctx.canRecord) opts.push({ value: 'record', label: '기록' });
-      opts.push({ value: 'term', label: state.ctx && state.ctx.periodWord === '이번 기간' ? '기간' : '학기' }, { value: 'today', label: '오늘' }, { value: 'dismiss', label: '2OUT' });
+      opts.push({ value: 'term', label: state.ctx && state.ctx.periodWord === '이번 기간' ? '기간' : '학기' }, { value: 'today', label: '오늘' }, { value: 'dismiss', label: '퇴실 대상' });
       if (state.ctx && state.ctx.isAdmin) opts.push({ value: 'rules', label: '항목' });
       tabsBox.appendChild(UI.segmented({ label: '화면', value: state.tab, options: opts, onchange: function (v) { state.tab = v; state.afterConfirm = null; showTab(); } }));
     }
@@ -397,8 +397,8 @@
     function drawTargets(r) {
       if (state.afterConfirm) {
         var ac = state.afterConfirm;
-        listBox.appendChild(el('div', { class: 'card' }, [el('h2', { text: ac.who + ' 퇴실 확정 관문을 통과했습니다' }),
-          el('div', { class: 'muted', style: 'margin:4px 0 12px', text: '다음에 할 일: 입퇴실 화면에서 학사 퇴실 신청서를 마무리해 주세요(사유 \'2OUT 퇴실\', 적용일은 내일이 기본).' }),
+        listBox.appendChild(el('div', { class: 'card' }, [el('h2', { text: ac.who + ' 퇴실 신청서를 저장해 주세요' }),
+          el('div', { class: 'muted', style: 'margin:4px 0 12px', text: '아직 퇴실이 기록되지 않았습니다. 입퇴실 신청서를 열어 저장해야 퇴실합니다. 사유는 "2OUT 퇴실", 적용일은 내일로 미리 채워 둡니다.' }),
           el('a', { class: 'btn', target: '_top', href: ac.href, text: '입퇴실 신청서 열기' })]));
       }
       var hasMine = r.summary.some(function (x) { return x.isMine; });
@@ -461,12 +461,12 @@
     }
     function confirmDismissal(x) {
       var tomorrow = dayKo(addDaysYmd(state.ctx ? state.ctx.today : (state.list && state.list.date) || '', 1));
-      UI.confirmSheet({ title: '퇴실을 확정합니다', lead: UI.util.studentLabel(x.student) + ' · 2OUT 퇴실',
-        lines: ['면담이 기록되어 있습니다(' + dayKo(x.meeting.date) + ' · ' + x.meeting.teacher + ')', '확정하면 입퇴실 신청서가 미리 채워집니다', '적용일은 확정 다음 날, ' + tomorrow + '이고 다음 화면에서 고칠 수 있습니다', '유예는 없습니다'],
-        confirmText: '퇴실 확정', danger: true,
+      UI.confirmSheet({ title: '퇴실 확정', lead: UI.util.studentLabel(x.student) + ' · 2OUT 퇴실',
+        lines: ['학부모 면담: ' + dayKo(x.meeting.date) + ' · ' + x.meeting.teacher + ' 선생님', '확정하면 입퇴실 신청서가 미리 채워집니다.', '적용일은 확정 다음 날(' + tomorrow + ')이고, 다음 화면에서 고칠 수 있습니다.', '유예 기간은 없습니다.'],
+        confirmText: '퇴실 확정', cancelText: '돌아가기', danger: true,
         onconfirm: function () {
           call('confirmOutDismissal', x.studentId).then(function (r) {
-            if (!r.ok) { if (state.tab === 'dismiss') loadList(r.reason + ' — 상태가 바뀌었습니다. 새로 고쳤습니다.', true); return; }
+            if (!r.ok) { if (state.tab === 'dismiss') loadList(String(r.reason).replace(/\.$/, '') + '. 그사이 상태가 바뀌어 목록을 새로 불러왔습니다. 다시 확인해 주세요.', true); return; }
             // 이동은 사용자가 직접 누르는 링크로(콜백 안에서 top을 옮기면 막힐 수 있다)
             var back = document.querySelector('a.back'), base = back ? back.href : '';
             state.afterConfirm = { who: UI.util.studentLabel(x.student), href: base + '?page=moves&student=' + encodeURIComponent(x.studentId) + '&prefill=out2' };

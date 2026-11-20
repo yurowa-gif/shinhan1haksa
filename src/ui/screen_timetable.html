@@ -219,7 +219,7 @@
       var content = el('div', {}, [el('p', { text: '학생에게 시간표가 "돌려보냄"으로 돌아갑니다. 학생이 고쳐서 다시 내면 다시 동의를 부탁드립니다.' }), UI.field('사유(적지 않아도 됩니다)', input, { name: 'reason' })]);
       var sheet = UI.bottomSheet({ title: '동의하지 않습니다', content: content, actions: [{ text: '돌아가기', kind: 'secondary', onclick: function () { sheet.close(); } },
         { text: '학생에게 돌려보내기', onclick: function () {
-          call('declineTimetable', kid.id, v.month, input.value).then(function (x) { if (!x.ok) { sheet.close(); ttErrors(status, x); return; } sheet.close(); UI.toast('학생에게 돌려보냈습니다.'); show(kid, tabs.querySelector('.on') || tabs.firstChild); }).catch(function (er) { sheet.close(); clear(status); showError(status, er); });
+          call('declineTimetable', kid.id, v.month, input.value).then(function (x) { if (!x.ok) { sheet.close(); ttErrors(status, x); return; } sheet.close(); UI.toast('시간표가 자녀에게 돌아갔습니다. 자녀가 고쳐서 다시 내면 다시 동의해 주세요.', { ms: 6000 }); show(kid, tabs.querySelector('.on') || tabs.firstChild); }).catch(function (er) { sheet.close(); clear(status); showError(status, er); });
         } }] });
       sheet.open();
     }

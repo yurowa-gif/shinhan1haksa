@@ -159,7 +159,7 @@ function facStaffOne_(s) { return { id: s.id, name: s.name, grade: +s.grade, cla
 
 function facDenied_(user, action, why) {
   logDenied_(user.email, action, why);
-  throw new Error('권한이 없습니다.');
+  throw new Error(DENIED_MESSAGE);
 }
 
 /* ───────────── 학생: 쓰기·내 기록·취소 ───────────── */

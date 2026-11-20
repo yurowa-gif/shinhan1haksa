@@ -149,7 +149,7 @@ function submitTimetable(input) {
   if (!sid) return ttcFail_('학생 명단에서 내 계정을 찾지 못했습니다.');
   input = input || {};
   var month = String(input.month || '');
-  if (!ttcMonthOk_(month)) return ttcFail_('적용월을 확인할 수 없습니다. 새로 고친 뒤 다시 해 주세요.', 'month');
+  if (!ttcMonthOk_(month)) return ttcFail_('적용월을 확인할 수 없습니다. 새로 불러온 뒤 다시 해 주세요.', 'month');
   return withLock_(function () {
     var d = ttcLoad_();
     var plan = ttTransition_(d.rows, sid, month, 'submit', { now: nowIso_(), entries: Array.isArray(input.entries) ? input.entries : [], window: ttcCfg_() });
@@ -314,11 +314,11 @@ function enterTimetableForStudent(studentId, month, entries, expect) {
   var user = requirePermission_('timetable.enter', { studentId: studentId });
   var sid = String(studentId || '');
   if (!ttcMonthOk_(month)) return ttcFail_('적용월을 확인할 수 없습니다.');
-  if (!expect) return ttcFail_('화면을 새로 고친 뒤 다시 해 주세요.');
+  if (!expect) return ttcFail_('화면을 새로 불러온 뒤 다시 해 주세요.');
   return withLock_(function () {
     var d = ttcLoad_();
     var before = ttcView_(d.rows, sid, String(month));
-    if (before.token !== String(expect)) return { ok: false, stale: true, errors: [{ field: '', message: '그 사이 시간표가 바뀌었습니다. 새로 고친 뒤 다시 해 주세요.' }] };
+    if (before.token !== String(expect)) return { ok: false, stale: true, errors: [{ field: '', message: '그 사이 시간표가 바뀌었습니다. 새로 불러온 뒤 다시 해 주세요.' }] };
     var plan = ttTransition_(d.rows, sid, String(month), 'teacherEnter', { now: nowIso_(), entries: Array.isArray(entries) ? entries : [] });
     if (!plan.ok) return ttcFail_(plan.reason);
     ttcApply_(plan, user.email);

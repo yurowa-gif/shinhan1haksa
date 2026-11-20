@@ -344,7 +344,7 @@
       function save() {
         if (busy || !dirty()) return;
         busy = true; refresh(); err('');
-        if (opChanged() && !wantOn() && x.operating && !d.canOperate) return fail(new Error('권한이 없습니다.'));
+        if (opChanged() && !wantOn() && x.operating && !d.canOperate) return fail(new Error('이 기능을 쓸 권한이 없습니다. 필요하면 관리자 선생님께 요청해 주세요.'));
         if (opChanged()) saveOp(null); else saveSlots(false);
       }
       sheet = UI.bottomSheet({

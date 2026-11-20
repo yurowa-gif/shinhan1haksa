@@ -282,7 +282,7 @@ function saveMove(input, expect) {
     if (!c.plan || c.errors.length) return { ok: false, errors: c.errors };
     var rec = c.rec, plan = c.plan, head = plan.rows[0];
     var s = inoutSummary_(rec, plan, d.changes);
-    if (String(expect || '') !== inoutSignature_(plan)) return { ok: false, stale: true, error: '확인한 뒤 다른 변경이 있었습니다. 다시 확인해 주세요.' };
+    if (String(expect || '') !== inoutSignature_(plan)) return { ok: false, stale: true, error: STALE_MESSAGE };
     var w = foodWrite_({
       student_id: rec.studentId, item: head.item, value: head.value, requested_at: head.requested_at, effective_date: head.effective_date,
       effective_date_auto: head.effective_date_auto, reason: rec.temp ? head.reason : rec.reason, doc_submitted: rec.doc ? 'TRUE' : 'FALSE', source: 'F6',
@@ -362,7 +362,7 @@ function cancelMove(headId, reason, expect) {
     if (c.already) return { ok: true, already: true };
     if (c.error) return { ok: false, errors: [{ field: '', message: c.error }] };
     if (why.length < 2 || why.length > EXC_REASON_MAX) return { ok: false, errors: [{ field: 'reason', message: '취소 사유를 2자 이상 ' + EXC_REASON_MAX + '자 안으로 적어 주세요.' }] };
-    if (String(expect || '') !== inoutUndoSignature_(c.plan)) return { ok: false, stale: true, error: '확인한 뒤 다른 변경이 있었습니다. 다시 확인해 주세요.' };
+    if (String(expect || '') !== inoutUndoSignature_(c.plan)) return { ok: false, stale: true, error: STALE_MESSAGE };
     var tag = function (x) { var r = String(x.cancel_reason || ''); return /^\[자동\] /.test(r) ? r : '[자동] ' + c.head.id + ' ' + (r || '퇴실 취소로 함께 취소'); };
     var patches = [{ id: c.head.id, patch: { status: '취소', cancel_reason: why } }];
     c.plan.toCancel.forEach(function (x) { if (x.id !== c.head.id) patches.push({ id: x.id, patch: { status: '취소', cancel_reason: tag(x) } }); });
@@ -446,7 +446,7 @@ function convertTempLeave(headId, expect) {
     var c = inoutConvertCheck_(headId);
     if (c.error) return { ok: false, errors: [{ field: '', message: c.error }] };
     if (c.plan.errors.length) return { ok: false, errors: c.plan.errors.map(function (m) { return { field: '', message: m }; }) };
-    if (String(expect || '') !== inoutConvertSignature_(c)) return { ok: false, stale: true, error: '확인한 뒤 다른 변경이 있었습니다. 다시 확인해 주세요.' };
+    if (String(expect || '') !== inoutConvertSignature_(c)) return { ok: false, stale: true, error: STALE_MESSAGE };
     var head = c.plan.rows[0], old = c.head;
     var human = String(old.memo || '').replace(/^\[임시\] return:\d{4}-\d{2}-\d{2}\s*/, '');
     var cancels = [{ id: old.id, cancel_reason: '일반 퇴실로 바꿈' }], seen = {};
