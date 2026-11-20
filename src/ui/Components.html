@@ -161,7 +161,7 @@ var UI = {};
     kids.forEach(function (n) {
       if (!isCard(n)) head.push(n);                                 // 오류·안내 줄은 맨 위
       else if (has(n, 'todo') || has(n, 'key')) main.push(n);
-      else if (!seenCard) head.push(n);                             // 맨 위 카드(오늘·전체 현황)
+      else if (!seenCard && !(n.querySelector && n.querySelector('ul.list'))) head.push(n);   // 맨 위 카드(오늘·전체 현황). 목록(ul.list)이 든 카드(담임 홈의 우리 반 명단)는 머리가 아니라 참고 열로
       else side.push(n);
       if (isCard(n)) seenCard = true;
     });

@@ -155,6 +155,11 @@ test('layoutHome(D15 ②): 맨 위 카드는 head, todo·key 카드는 할 일 �
   assert.strictEqual(zMain.children[0].attrs.text, '오늘 해야 할 일');
   assert.strictEqual(zMain.children[1].attrs.text, '지금 처리할 일이 없습니다.');
   assert.strictEqual(z.root.children[1].children.length, 1);
+  // 목록(ul.list)이 든 첫 카드(담임 홈의 우리 반 명단)는 머리가 아니라 참고 열로
+  const listCard = node('div', { class: 'card', id: 'cls' }, [node('ul', { class: 'list' })]);
+  listCard.querySelector = (sel) => (sel === 'ul.list' ? listCard.children[0] : null);
+  const w = run([listCard, card('card todo', 't'), card('card', 'o')]);
+  assert.deepStrictEqual(plain(w.r), { head: 0, main: 1, todo: 1, side: 2 });
   // 오류·안내 줄(card가 아닌 것)은 맨 위
   const err = node('div', { class: 'error' });
   const y = run([err, card('card', 'today'), card('card', 'x')]);

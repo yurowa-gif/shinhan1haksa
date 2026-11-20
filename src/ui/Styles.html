@@ -290,7 +290,8 @@
   .home-none { color: var(--muted); margin: 4px 4px 12px; }
   .home-cols, .pt-cols { display: block; }
   .pt-a, .pt-b { min-width: 0; }   /* 학생·학부모 홈의 왼쪽 열(할 일·OUT·출결)과 오른쪽 열(자리·급식·상담·일정) */
-  .card p, .card .muted, .pt-note, .notice { max-width: 45em; }   /* 본문 한 줄 40~45자를 넘기지 않는다(한글 1자 ≈ 1em) */
+  /* 글 덩어리(설명·안내·힌트)는 넓은 화면에서도 한 줄 45자(45em, 한글 1자 ≈ 1em)를 넘기지 않는다. 표·격자·목록 행(li·td·th 안)은 제외 */
+  main p, main .muted:not(li *):not(td *):not(th *), main .hint, main .notice, main .pt-note, main .error { max-width: 45em; }
   @media (hover: hover) {
     .btn:hover { filter: brightness(.94); }
     .btn.secondary:hover { background: var(--accent-weak); filter: none; }

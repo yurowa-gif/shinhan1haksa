@@ -109,7 +109,7 @@ test('D15 ②(반응형): Styles.html 에 중단점 두 곳(600·840)·홈 두 �
   assert.ok(/main\.home:has\(> nav\.tabs\)/.test(styles), '역할이 둘 이상일 때 왼쪽 메뉴');
   assert.ok(/body\.tone-soft main\.home \{ max-width: 960px; \}/.test(styles) && /\.pt-cols \{ display: grid; grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\)/.test(styles), '학생·학부모 홈 960px 판 두 열');
   assert.ok(/max-width: 720px; \}   \/\* 넓은 화면에서도/.test(styles), '학생·학부모 판은 넓은 화면에서 720px를 넘지 않는 기본값');
-  assert.ok(/\.card p, \.card \.muted, \.pt-note, \.notice \{ max-width: 45em; \}/.test(styles), '본문 한 줄 45em');
+  assert.ok(/main p, main \.muted:not\(li \*\):not\(td \*\):not\(th \*\), main \.hint, main \.notice, main \.pt-note, main \.error \{ max-width: 45em; \}/.test(styles), '글 덩어리 한 줄 45em(표·목록 행 제외)');
   assert.ok(/UI\.layoutPortal\(root\)/.test(css.readFile('src/ui/Portal.html')), 'Portal이 두 열 배치를 부른다');
   // 식수·교사 홈이 쓰는 홈 틀: Index.html 이 main.home 을 쓰고 교사 홈에서 layoutHome 을 부른다(학생·학부모는 부르지 않는다)
   const index = css.readFile('src/ui/Index.html');
