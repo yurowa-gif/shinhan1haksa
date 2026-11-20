@@ -46,7 +46,7 @@ function vioSyncAuto_(term, studentIds, actorEmail, since, touchedGroups) {
   var violations = missing ? [] : readAll_(vsheet);
   // 특이사항 탭이 없거나 이름이 바뀌었으면 아무것도 바꾸지 않는다(연결이 끊긴 것으로 보고 자동 OUT을 모두 취소하면, 탭을 되돌릴 때 새 id로 다시 생겨 면담 연결(결정 51)이 끊긴다)
   if (exr.missing) {
-    if (violations.some(function (v) { return ruleRowLive_(v) && String(v.source) === 'F1자동'; })) throw new Error('그 기간의 특이사항 탭을 찾을 수 없어 자동 OUT을 맞추지 않았습니다. 시트를 확인해 주세요.');
+    if (violations.some(function (v) { return ruleRowLive_(v) && String(v.source) === 'F1자동'; })) throw new Error('그 운영 기간의 특이사항 탭을 찾을 수 없어 자동 OUT을 맞추지 않았습니다. 시트를 확인해 주세요.');
     return { created: 0, canceled: 0, updated: 0, mails: [], level: {} };
   }
   var ex = exr.rows;
@@ -138,6 +138,6 @@ function vioAfterExceptionWrite_(term, studentIds, actorEmail, since, touchedGro
     return { out: { created: r.created, canceled: r.canceled, level: r.level }, mails: r.mails };
   } catch (e) {
     console.error('자동 OUT 맞추기 실패: ' + e.message);
-    return { out: { error: '특이사항은 저장했지만 1OUT을 기록하지 못했습니다. 관리자에게 알려 주세요(시트 소유자가 편집기에서 syncAutoOutsAll을 실행하면 맞춰집니다).' }, mails: [] };
+    return { out: { error: '특이사항은 저장했지만 1OUT을 기록하지 못했습니다. 관리자 선생님께 알려 주세요(시트 소유자가 편집기에서 syncAutoOutsAll을 실행하면 맞춰집니다).' }, mails: [] };
   }
 }

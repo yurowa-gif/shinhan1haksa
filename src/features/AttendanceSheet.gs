@@ -115,7 +115,7 @@ function sheetBuildModel_(src) {
   if (!model.spaces.length) model.warnings.push('사용 중인 공간이 없습니다. 좌석표에서 공간을 먼저 만들어 주세요.');
   // 이 기간의 배정으로 판정한다(공간·좌석은 기간과 무관하게 남아 있으므로 전역 공간 유무로는 알 수 없다)
   else if (!src.assignments.some(function (a) { return a.term_id === src.term.id && String(a.status || '').trim() !== '취소' && liveSeatIds[a.seat_id]; })) {
-    model.warnings.push('이 기간에 좌석 배정이 없습니다. 좌석표에서 학생을 자리에 앉혀 주세요.');
+    model.warnings.push('이 운영 기간에 배정된 좌석이 없습니다. 좌석표에서 학생을 좌석에 배정해 주세요.');
   }
   model.unseated = map.unseated.map(function (id) { return studentById[id]; }).filter(function (s) { return s; })
     .sort(function (a, b) { return (+a.grade - +b.grade) || String(a.name).localeCompare(String(b.name)); })
@@ -231,7 +231,7 @@ function sheetRender_(ymd, names, timer) {
   // dutySource: 머리말 이름의 출처('근무표'·'손 입력'·''). 모델이 아니라 응답에 둔다(렌더러는 모른다)
   var base = { date: ymd, weekdayKo: model.weekdayKo, warnings: model.warnings, dutySource: built.dutySource, dutyNames: model.dutyNames, standbyNames: model.standbyNames };
   if (!model.operating) {
-    return Object.assign(base, { ok: true, operating: false, message: ymd + '(' + model.weekdayKo + ')은(는) 운영하지 않는 날입니다. 출석부는 만들지 않습니다.' });
+    return Object.assign(base, { ok: true, operating: false, message: ymd + '(' + model.weekdayKo + ')에는 운영하지 않는 날이라 출석부를 만들지 않습니다.' });
   }
   if (!model.blocks.length) {
     return Object.assign(base, { ok: false, operating: true, error: '이 날은 출석 블록이 없어 출석부를 만들 수 없습니다. 자습 일정·블록에서 블록을 확인해 주세요.' });

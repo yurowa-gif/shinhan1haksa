@@ -58,7 +58,7 @@ function termValidate_(input, terms) {
   if (startOk && endOk && rec.start_date <= rec.end_date) {
     others.forEach(function (t) {
       if (t.start_date && t.end_date && rec.start_date <= t.end_date && t.start_date <= rec.end_date) {
-        warnings.push('"' + t.name + '"(' + t.start_date + ' ~ ' + t.end_date + ')과 날짜가 겹칩니다.');
+        warnings.push('"' + t.name + '" 운영 기간(' + termDateKo_(t.start_date) + ' ~ ' + termDateKo_(t.end_date) + ')과 날짜가 겹칩니다.');
       }
     });
   }
@@ -117,7 +117,7 @@ function saveTerm(input) {
     if (id) {
       var curTerm = findById_('terms', id);
       if (!curTerm) throw new Error('수정할 기간을 찾을 수 없습니다. 목록을 새로 불러와 주세요.');
-      if (typeof input.token !== 'string' || input.token !== termToken_(curTerm)) return { ok: false, stale: true, error: '다른 관리자가 먼저 바꿨습니다. 새로 불러온 뒤 다시 해 주세요.' };
+      if (typeof input.token !== 'string' || input.token !== termToken_(curTerm)) return { ok: false, stale: true, error: '다른 선생님이 먼저 바꿨습니다. 새로 불러온 뒤 다시 해 주세요.' };
       saved = updateRecord_('terms', id, check.record, user.email);
     } else {
       saved = appendRecord_('terms', check.record, user.email);
@@ -198,4 +198,10 @@ function commitCarryOver(termId, expectCount) {
     }), user.email);
     return { ok: true, count: plan.count };
   });
+}
+
+/** 운영 기간 안내 문장용 날짜: 2027년 3월 2일(해가 달라질 수 있어 연도를 붙인다). */
+function termDateKo_(ymd) {
+  var p = String(ymd).split('-');
+  return p[0] + '년 ' + (+p[1]) + '월 ' + (+p[2]) + '일';
 }

@@ -70,7 +70,7 @@
         namesCard.appendChild(el('h2', { text: '인쇄할 이름(근무표에서)' }));
         var emptyDuty = !(r.dutyNames || []).length;
         namesCard.appendChild(kv([['근무 교사', (r.dutyNames || []).join(', ') || '(비어 있음)'], ['예비 감독', (r.standbyNames || []).join(', ') || '(없음)']]));
-        if (emptyDuty) namesCard.appendChild(el('div', { class: 'sheet-warn', text: '이 날 근무 교사가 비어 있습니다. ' + (r.dutyCanEdit ? '근무표에서 편성해 주세요.' : '근무표 담당자에게 알려 주세요.') }));
+        if (emptyDuty) namesCard.appendChild(el('div', { class: 'sheet-warn', text: '이 날 근무 교사가 비어 있습니다. ' + (r.dutyCanEdit ? '근무표에서 편성해 주세요.' : '근무표 담당 선생님께 알려 주세요.') }));
         var back = document.querySelector('a.back'), base = back ? back.getAttribute('href') : '';
         // 시트의 날짜 주로 열린다. 근무표를 고칠 수 없는 역할(출결 담당·학사 교사)에게는 "보기"
         namesCard.appendChild(el('a', { class: 'btn secondary', style: 'margin-top:8px', href: base + '?page=duty&date=' + encodeURIComponent(r.date), text: r.dutyCanEdit ? '근무표에서 고치기' : '근무표 보기' }));
@@ -98,9 +98,9 @@
         if (!r.operating) { preview.appendChild(el('div', { class: 'muted', text: r.message })); return; }
         preview.appendChild(kv([
           ['날짜', r.date + '(' + r.weekdayKo + ')'], ['쪽 수', r.pageCount + '쪽'],
-          ['자리', r.seatCount + '석 (공석 ' + r.vacantCount + ')'], ['블록', r.blockLabels.join(' · ')]
+          ['좌석', r.seatCount + '석 · 빈 좌석 ' + r.vacantCount + '석'], ['블록', r.blockLabels.join(' · ')]
         ]));
-        if (r.unseatedCount) preview.appendChild(el('div', { class: 'sheet-warn', text: '자리가 없는 학생 ' + r.unseatedCount + '명이 있습니다. 좌석 배치를 확인해 주세요.' }));
+        if (r.unseatedCount) preview.appendChild(el('div', { class: 'sheet-warn', text: '좌석이 없는 학생이 ' + r.unseatedCount + '명 있습니다. 좌석표에서 배정해 주세요.' }));
         var box = el('div', { class: 'sheet-box' });
         var frame = el('iframe', { class: 'sheet-frame', title: '출석부 미리보기', scrolling: 'no', tabindex: '-1' });   // 눌러도 되는 것이 없는 미리보기라 Tab 순서에서 뺀다(iframe은 포커스가 안으로 들어가면 바깥 포커스 표시가 안 보인다)
         frame.setAttribute('sandbox', 'allow-same-origin');   // 스크립트는 못 돌고, 높이만 읽는다

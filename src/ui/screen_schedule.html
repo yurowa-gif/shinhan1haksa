@@ -92,7 +92,7 @@
       ]));
       d.warnings.forEach(function (w) { dayBox.appendChild(el('div', { class: 'cal-warn', text: w })); });
       if (note) dayBox.appendChild(el('div', { class: 'cal-ok', text: note }));
-      if (!state.data.canEdit) { dayBox.appendChild(el('div', { class: 'muted', text: '일정 수정은 관리자만 할 수 있습니다.' })); return; }
+      if (!state.data.canEdit) { dayBox.appendChild(el('div', { class: 'muted', text: '일정 수정은 관리자 선생님만 할 수 있습니다.' })); return; }
 
       var operating = el('select', {}, [el('option', { value: 'TRUE', text: '운영' }), el('option', { value: 'FALSE', text: '운영 안 함' })]);
       var start = el('input', { type: 'text', inputmode: 'numeric', placeholder: '비우면 기본 ' + (state.data.defaults[d.dayType] ? state.data.defaults[d.dayType].start : '') });
@@ -147,7 +147,7 @@
     function drawBatch() {
       clear(batchBox);
       batchBox.appendChild(el('h2', { text: '기간 일괄 설정' }));
-      if (!state.data.canEdit) { batchBox.appendChild(el('div', { class: 'muted', text: '일괄 설정은 관리자만 할 수 있습니다.' })); return; }
+      if (!state.data.canEdit) { batchBox.appendChild(el('div', { class: 'muted', text: '일괄 설정은 관리자 선생님만 할 수 있습니다.' })); return; }
       batchBox.appendChild(el('div', { class: 'muted', text: '기간과 요일을 고르고 요일 유형·시작·종료를 한꺼번에 정합니다(예: 매주 수요일 18:00 시작, 공휴일을 "휴일"로). 비워 둔 칸은 바꾸지 않습니다. 운영 안 하는 날은 건너뜁니다.' }));
       var from = el('input', { type: 'date' }), to = el('input', { type: 'date' });
       var start = el('input', { type: 'text', inputmode: 'numeric', placeholder: '예 18:00', maxlength: '5' }), end = el('input', { type: 'text', inputmode: 'numeric', placeholder: '예 23:00', maxlength: '5' });
@@ -233,7 +233,7 @@
       var add = el('button', { type: 'button', class: 'btn secondary', text: '블록 추가', onclick: function () { rows.push({ start: '', end: '' }); redraw(); } });
       var save = el('button', { type: 'button', class: 'btn', text: '블록 저장' });
       blkBox.appendChild(el('div', { class: 'cal-actions' }, state.data.canEdit ? [add, save] : []));
-      if (!state.data.canEdit) blkBox.appendChild(el('div', { class: 'muted', text: '블록 수정은 관리자만 할 수 있습니다.' }));
+      if (!state.data.canEdit) blkBox.appendChild(el('div', { class: 'muted', text: '블록 수정은 관리자 선생님만 할 수 있습니다.' }));
       if (note) blkBox.appendChild(el('div', { class: 'cal-ok', text: note }));
       save.addEventListener('click', function () {
         save.disabled = true; clear(msg);

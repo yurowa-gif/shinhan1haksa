@@ -360,40 +360,20 @@
   },
   "home:homeroom": {
    "android-360": {
-    "fails": {
-     "작은칸": [
-      "a \"한새봄\" 53×27",
-      "a \"권보람\" 53×27"
-     ]
-    },
-    "shot": "home-homeroom__android-360.png"
+    "fails": {},
+    "shot": null
    },
    "iphone-390": {
-    "fails": {
-     "작은칸": [
-      "a \"한새봄\" 53×27",
-      "a \"권보람\" 53×27"
-     ]
-    },
-    "shot": "home-homeroom__iphone-390.png"
+    "fails": {},
+    "shot": null
    },
    "iphone-375": {
-    "fails": {
-     "작은칸": [
-      "a \"한새봄\" 53×27",
-      "a \"권보람\" 53×27"
-     ]
-    },
-    "shot": "home-homeroom__iphone-375.png"
+    "fails": {},
+    "shot": null
    },
    "android-360-font150": {
-    "fails": {
-     "작은칸": [
-      "a \"한새봄\" 80×41",
-      "a \"권보람\" 80×41"
-     ]
-    },
-    "shot": "home-homeroom__android-360-font150.png"
+    "fails": {},
+    "shot": null
    },
    "tablet-768": {
     "fails": {},
@@ -608,46 +588,16 @@
   },
   "schedule": {
    "android-360": {
-    "fails": {
-     "작은칸": [
-      "label \"일\" 40×54",
-      "label \"월\" 40×54",
-      "label \"화\" 40×54",
-      "label \"수\" 40×54",
-      "label \"목\" 40×54",
-      "label \"금\" 40×54",
-      "label \"토\" 40×54"
-     ]
-    },
-    "shot": "schedule__android-360.png"
+    "fails": {},
+    "shot": null
    },
    "iphone-390": {
-    "fails": {
-     "작은칸": [
-      "label \"일\" 40×54",
-      "label \"월\" 40×54",
-      "label \"화\" 40×54",
-      "label \"수\" 40×54",
-      "label \"목\" 40×54",
-      "label \"금\" 40×54",
-      "label \"토\" 40×54"
-     ]
-    },
-    "shot": "schedule__iphone-390.png"
+    "fails": {},
+    "shot": null
    },
    "iphone-375": {
-    "fails": {
-     "작은칸": [
-      "label \"일\" 40×54",
-      "label \"월\" 40×54",
-      "label \"화\" 40×54",
-      "label \"수\" 40×54",
-      "label \"목\" 40×54",
-      "label \"금\" 40×54",
-      "label \"토\" 40×54"
-     ]
-    },
-    "shot": "schedule__iphone-375.png"
+    "fails": {},
+    "shot": null
    },
    "android-360-font150": {
     "fails": {},
@@ -790,50 +740,20 @@
   },
   "seats": {
    "android-360": {
-    "fails": {
-     "작은칸": [
-      "button.seg \"남\" 42×48",
-      "button.seg \"여\" 42×48",
-      "button.seg \"1\" 34×48",
-      "button.seg \"2\" 34×48",
-      "button.seg \"3\" 34×48"
-     ]
-    },
-    "shot": "seats__android-360.png"
+    "fails": {},
+    "shot": null
    },
    "iphone-390": {
-    "fails": {
-     "작은칸": [
-      "button.seg \"남\" 42×48",
-      "button.seg \"여\" 42×48",
-      "button.seg \"1\" 34×48",
-      "button.seg \"2\" 34×48",
-      "button.seg \"3\" 34×48"
-     ]
-    },
-    "shot": "seats__iphone-390.png"
+    "fails": {},
+    "shot": null
    },
    "iphone-375": {
-    "fails": {
-     "작은칸": [
-      "button.seg \"남\" 42×48",
-      "button.seg \"여\" 42×48",
-      "button.seg \"1\" 34×48",
-      "button.seg \"2\" 34×48",
-      "button.seg \"3\" 34×48"
-     ]
-    },
-    "shot": "seats__iphone-375.png"
+    "fails": {},
+    "shot": null
    },
    "android-360-font150": {
-    "fails": {
-     "작은칸": [
-      "button.seg \"1\" 39×57",
-      "button.seg \"2\" 39×57",
-      "button.seg \"3\" 39×57"
-     ]
-    },
-    "shot": "seats__android-360-font150.png"
+    "fails": {},
+    "shot": null
    },
    "tablet-768": {
     "fails": {},
@@ -984,12 +904,8 @@
     "shot": null
    },
    "android-360-font150": {
-    "fails": {
-     "가림": [
-      "마지막 내용(아래 23px 가림)"
-     ]
-    },
-    "shot": "moves__android-360-font150.png"
+    "fails": {},
+    "shot": null
    },
    "tablet-768": {
     "fails": {},
@@ -1014,40 +930,20 @@
   },
   "mealcount": {
    "android-360": {
-    "fails": {
-     "작은칸": [
-      "a \"서류 미제출 3건 ▸\" 140×44"
-     ]
-    },
-    "shot": "mealcount__android-360.png"
+    "fails": {},
+    "shot": null
    },
    "iphone-390": {
-    "fails": {
-     "작은칸": [
-      "a \"서류 미제출 3건 ▸\" 140×44"
-     ]
-    },
-    "shot": "mealcount__iphone-390.png"
+    "fails": {},
+    "shot": null
    },
    "iphone-375": {
-    "fails": {
-     "작은칸": [
-      "a \"서류 미제출 3건 ▸\" 140×44"
-     ]
-    },
-    "shot": "mealcount__iphone-375.png"
+    "fails": {},
+    "shot": null
    },
    "android-360-font150": {
-    "fails": {
-     "작은칸": [
-      "a \"서류 미제출 3건 ▸\" 210×44"
-     ],
-     "가림": [
-      "a \"서류 미제출 3건 ▸\"",
-      "마지막 내용(아래 63px 가림)"
-     ]
-    },
-    "shot": "mealcount__android-360-font150.png"
+    "fails": {},
+    "shot": null
    },
    "tablet-768": {
     "fails": {},
@@ -1274,12 +1170,8 @@
     "shot": null
    },
    "android-360-font150": {
-    "fails": {
-     "가림": [
-      "마지막 내용(아래 23px 가림)"
-     ]
-    },
-    "shot": "batch__android-360-font150.png"
+    "fails": {},
+    "shot": null
    },
    "tablet-768": {
     "fails": {},

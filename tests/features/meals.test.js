@@ -348,7 +348,7 @@ test('setDocSubmitted 권한: 남의 학생 행 id → denied:status.edit(락 �
 function guided(env, who, fn, ...args) {
   Object.keys(env.cache).filter((k) => k.indexOf('script:deny:') === 0).forEach((k) => delete env.cache[k]);
   const before = env.rows('audit_log').length;
-  assert.throws(() => env.call(who, fn, ...args), /이 신청\(적용일 .*\)은 .* 담당교사나 관리자가 합니다/);
+  assert.throws(() => env.call(who, fn, ...args), /이 신청\(적용일 .*\)은 .* 담당 선생님이나 관리자 선생님이 합니다/);
   assert.ok(env.rows('audit_log').slice(before).some((r) => r.action === 'denied:status.edit' && r.created_by === who), '거부 기록은 남는다');
 }
 
@@ -393,7 +393,7 @@ test('결정 60: 기간은 적용일이 속한 기간 — 3/1(기간 사이)에�
   // 적용일이 끝난 기간이면 그대로 거부
   const env3 = makeEnv('2027-03-03T12:00:00');
   const late = prev(env3, ADMIN, input(pick(env3).a, 'd_off', '2027-02-10T10:00:00'));   // 2/10(수) → 2/22 월요일: 끝난 기간
-  assert.strictEqual(late.ok, false); assert.ok(late.errors.some((e) => e.message.includes('끝난 기간')));
+  assert.strictEqual(late.ok, false); assert.ok(late.errors.some((e) => e.message.includes('이미 끝났습니다')));
 });
 
 test('경고·막힘 문구는 규칙 원문이 아니라 교사용 말이고 숫자 날짜(yyyy-MM-dd)가 없다. 덮인 신청서 안내는 한 번만', () => {
@@ -707,7 +707,7 @@ test('안내 문구 조건: 그 기간이 끝났거나·학생이 그 기간 명
   guided(env, OLD, 'previewMealChange', input(a, 'd_off', '2027-03-03T10:00:00'));
   // 적용일이 끝난 기간(2/22)이면 안내 대신 맨 거부가 아니라 "끝난 기간" 오류(관리자)·권한 거부(OLD는 대상 기간 담당이라 그 기간으로는 허용되나 끝난 기간 오류)
   const ended = env.call(ADMIN, 'previewMealChange', input(a, 'd_off', '2027-02-10T10:00:00'));
-  assert.ok(ended.errors.some((e) => e.message.includes('끝난 기간')), JSON.stringify(ended.errors));
+  assert.ok(ended.errors.some((e) => e.message.includes('이미 끝났습니다')), JSON.stringify(ended.errors));
 });
 
 test('기간 대체 순서(T5·T6): 첫 등록 기간 전 적용일의 신입생은 거부, 3기간(A·B 등록, C 아님)에서 오늘이 B이고 적용일이 C면 B 담당이 저장(가장 이른 A가 아님)', () => {
@@ -837,7 +837,7 @@ test('대체 기간이 끝난 학생의 오류 문구는 적용일 기간 이름
   const st = env.asOwner((c) => c.appendRecord_('students', { student_no: '39991', name: '가짜졸업2', gender: '남', grade: '3', class_no: '1', number: '91', track: '', email: '', memo: '가짜' }, env.owner));
   env.asOwner((c) => c.appendRecord_('enrollments', { term_id: t1.id, student_id: st.id, teacher_email: HALL, veritas: 'FALSE', commute_type: '일반', end_type: '23:00', memo: '' }, env.owner));
   const p = env.call(ADMIN, 'previewMealChange', input(st.id, 'd_off', '2027-03-03T10:00:00'));   // 적용일 3/15 = 1학기, 이 학생은 2학기(끝남)만 등록
-  assert.deepStrictEqual(p.errors.map((e) => e.message), ['"2027 1학기" 명단에 없는 학생입니다. 관리자에게 명단 등록을 요청해 주세요.']);
+  assert.deepStrictEqual(p.errors.map((e) => e.message), ['"2027 1학기" 명단에 없는 학생입니다. 관리자 선생님께 명단 등록을 요청해 주세요.']);
 });
 
 test('사이 날(3/1)에도 다음 기간에만 등록된 신입생을 학생 기록 picker에서 고르면 열린다(ymd = 그 기간 안 날짜)', () => {

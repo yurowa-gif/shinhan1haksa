@@ -97,7 +97,7 @@
 
     function draw() {
       clear(head); clear(main); removeBar();
-      if (!data.canEdit) { head.appendChild(el('div', { class: 'notice info', text: '이 기간의 방 배정은 볼 수만 있습니다.' })); }
+      if (!data.canEdit) { head.appendChild(el('div', { class: 'notice info', text: '이 운영 기간의 방 배정은 볼 수만 있습니다.' })); }
       head.appendChild(el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px' }, [
         el('span', { class: 'muted', style: 'word-break:keep-all', text: data.term.name + ' · 기숙 ' + data.dormCount + '명(남 ' + view.board.male.count + ' · 여 ' + view.board.female.count + '명 배정)' }),
         dirty ? (function () { var a = { type: 'button', class: 'btn secondary', style: 'flex:0 0 auto;white-space:nowrap', text: '되돌리기', onclick: load }; if (busy) a.disabled = 'disabled'; return el('button', a); })() : null]));
@@ -186,7 +186,7 @@
         } }, [el('span', { style: 'word-break:keep-all', text: roomLabel(r) + ' · ' + r.count + '/' + r.capacity + '명' }),
           full ? el('b', { style: 'color:var(--warn);white-space:nowrap', text: '⚠ 정원 초과' }) : UI.statusPill('confirmed', (r.capacity - r.count) + '자리 남음')])]));
       });
-      sheet = UI.bottomSheet({ title: m.member.display + '을(를) 어느 방으로 옮길까요?', content: el('div', {}, [el('div', { class: 'muted', style: 'margin-bottom:8px', text: m.room ? '지금 ' + roomLabel(m.room) + ' (' + gender + ')' : '지금 방 없음 (' + gender + ')' }), list]),
+      sheet = UI.bottomSheet({ title: '방 옮기기 · ' + m.member.display, content: el('div', {}, [el('div', { class: 'muted', style: 'margin-bottom:8px', text: m.room ? '지금 ' + roomLabel(m.room) + ' (' + gender + ')' : '지금 방 없음 (' + gender + ')' }), list]),
         actions: [{ text: '취소', kind: 'secondary', onclick: function () { sheet.close(); } }] });
       sheet.open();
     }

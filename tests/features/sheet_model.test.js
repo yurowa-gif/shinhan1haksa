@@ -194,9 +194,9 @@ test('경고에 학생 UUID 대신 "학년. 이름", "이 기간 좌석 배치�
   fresh.seedFake({ stage1: true });
   fresh.rows('seat_assignments').forEach((a) => fresh.asOwner((c) => c.updateRecord_('seat_assignments', a.id, { status: '취소' }, ADMIN)));
   const fw = plain(fresh.asOwner((c) => c.sheetModelFor_(WED))).model.warnings;
-  assert.ok(fw.some((x) => x.includes('이 기간에 좌석 배정이 없습니다')), JSON.stringify(fw));
+  assert.ok(fw.some((x) => x.includes('이 운영 기간에 배정된 좌석이 없습니다')), JSON.stringify(fw));
   assert.ok(!fw.some((x) => x.includes('공간이 없습니다')));
-  assert.ok(!m().warnings.some((x) => x.includes('좌석 배정이 없습니다')), '배정이 있으면 경고 없음');
+  assert.ok(!m().warnings.some((x) => x.includes('배정된 좌석이 없습니다')), '배정이 있으면 경고 없음');
 });
 
 test('단계별 소요 시간(timings)이 응답에 있다 — 캐시 없이 실측용(개인정보 없음)', () => {

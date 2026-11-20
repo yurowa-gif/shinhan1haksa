@@ -188,7 +188,7 @@ function vioValidate_(input, user) {
   var enrollment = null;
   if (student && term) {
     enrollment = readAll_('enrollments').filter(function (e) { return e.term_id === term.id && e.student_id === student.id; })[0] || null;
-    if (!enrollment || !isActiveOn_(readAll_('status_changes'), enrollment, when.ymd)) add('studentId', '그날 학사생이 아닙니다(그 기간 명단에 없거나 입실 전·퇴실 뒤).');
+    if (!enrollment || !isActiveOn_(readAll_('status_changes'), enrollment, when.ymd)) add('studentId', '그날 학사생이 아닙니다(그 운영 기간 명단에 없거나 입실 전·퇴실 뒤).');
   }
   var rule = readAll_('violation_rules').filter(function (r) { return String(r.id) === String(input.ruleId || ''); })[0] || null;
   if (!rule || vioPickableRules_([rule]).length === 0) {

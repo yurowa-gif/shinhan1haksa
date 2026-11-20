@@ -91,9 +91,9 @@
       statusBox = el('div');   // 오류·결과는 이 상자 하나에만(쌓이지 않게)
       body.appendChild(statusBox);
       if (note) statusBox.appendChild(el('div', { class: 'notice ' + (noteWarn ? 'warn' : 'info'), text: note }));
-      if (!c.term) { body.appendChild(UI.emptyState('운영 기간이 없습니다. 관리자에게 운영 기간을 만들어 달라고 요청해 주세요.')); return; }
+      if (!c.term) { body.appendChild(UI.emptyState('운영 기간이 없습니다. 관리자 선생님께 운영 기간을 만들어 달라고 요청해 주세요.')); return; }
       if (!c.canRecord) {
-        body.appendChild(el('div', { class: 'card' }, [el('h2', { text: 'OUT 기록' }), el('div', { class: 'muted', text: 'OUT은 담당교사·근무교사·관리자가 기록합니다. 이 계정은 보기만 할 수 있습니다.' })]));
+        body.appendChild(el('div', { class: 'card' }, [el('h2', { text: 'OUT 기록' }), el('div', { class: 'muted', text: 'OUT은 담당교사·근무교사·관리자 선생님이 기록합니다. 이 계정은 보기만 할 수 있습니다.' })]));
         return;
       }
       if (c.dutyYesterday && c.date === c.today) body.appendChild(el('div', { class: 'notice info', text: '어제 근무하셨습니다. 어제 밤 적발한 OUT은 날짜를 [어제]로 바꾸면 학사생 전체에서 고를 수 있습니다.' }));
@@ -108,7 +108,7 @@
       errSetters.occurredAt = dateField.setError;
       if (!c.dateOk) {   // 역할은 되는데 이 날짜는 안 되는 경우: 날짜 칸은 남겨 다른 날로 갈 수 있게
         body.appendChild(el('div', { class: 'card' }, [el('h2', { text: '언제' }), dateField,
-          el('div', { class: 'notice warn', style: 'margin-top:12px', text: '이 날짜는 기록할 수 없습니다(' + (c.dateReason || '운영 기간 밖·끝난 기간').replace(/\.$/, '') + '). ' + (state.date === addDaysYmd(c.today, -1) ? '다른 날짜를 골라 주세요.' : '날짜를 [어제]나 다른 날로 바꿔 주세요.') })]));
+          el('div', { class: 'notice warn', style: 'margin-top:12px', text: '이 날짜는 기록할 수 없습니다(' + (c.dateReason || '운영 기간 밖·끝난 운영 기간').replace(/\.$/, '') + '). ' + (state.date === addDaysYmd(c.today, -1) ? '다른 날짜를 골라 주세요.' : '날짜를 [어제]나 다른 날로 바꿔 주세요.') })]));
         return;
       }
       var studentCard = el('div', { class: 'card' }, [el('h2', { text: '학생' })]);
@@ -237,7 +237,7 @@
       clear(tabsBox);
       var opts = [];
       if (state.ctx && state.ctx.canRecord) opts.push({ value: 'record', label: '기록' });
-      opts.push({ value: 'term', label: state.ctx && state.ctx.periodWord === '이번 기간' ? '기간' : '학기' }, { value: 'today', label: '오늘' }, { value: 'dismiss', label: '퇴실 대상' });
+      opts.push({ value: 'term', label: state.ctx && state.ctx.periodWord === '이번 기간' ? '운영 기간' : '학기' }, { value: 'today', label: '오늘' }, { value: 'dismiss', label: '퇴실 대상' });
       if (state.ctx && state.ctx.isAdmin) opts.push({ value: 'rules', label: '항목' });
       tabsBox.appendChild(UI.segmented({ label: '화면', value: state.tab, options: opts, onchange: function (v) { state.tab = v; state.afterConfirm = null; showTab(); } }));
     }
@@ -273,7 +273,7 @@
       if (note) listBox.appendChild(el('div', { class: 'notice ' + (noteWarn ? 'warn' : 'info'), text: note }));
       if (!r.term) { listBox.appendChild(UI.emptyState('운영 기간이 없습니다.')); return; }
       var head = el('div', { class: 'card' }, [el('h2', { text: r.term.name }),
-        el('div', { class: 'muted', text: dayKo(r.term.start_date) + ' ~ ' + dayKo(r.term.end_date) + (r.term.closed ? ' · 끝난 기간(조회만)' : '') })]);
+        el('div', { class: 'muted', text: dayKo(r.term.start_date) + ' ~ ' + dayKo(r.term.end_date) + (r.term.closed ? ' · 끝난 운영 기간(조회만)' : '') })]);
       if (r.terms.length > 1 && state.tab === 'term') {
         var sel = el('select', { 'aria-label': '운영 기간' }, r.terms.map(function (t) { return el('option', { value: t.id, text: t.name }); }));
         sel.value = r.term.id;
@@ -292,7 +292,7 @@
       }
       var rows = r.summary.filter(function (x) { return !hasMine || state.scope === 'all' || x.isMine; });
       var card = el('div', { class: 'card' });
-      if (!rows.length) card.appendChild(UI.emptyState(hasMine && state.scope === 'mine' ? '내 담당 학생 중 OUT이 기록된 학생이 없습니다.' : '이 기간에 기록된 OUT이 없습니다.'));
+      if (!rows.length) card.appendChild(UI.emptyState(hasMine && state.scope === 'mine' ? '내 담당 학생 중 OUT이 기록된 학생이 없습니다.' : '이 운영 기간에 기록된 OUT이 없습니다.'));
       else {
         var ul = el('ul', { class: 'list' });
         rows.forEach(function (x) { ul.appendChild(studentRow(x, r)); });
@@ -346,7 +346,7 @@
       }
       if (x.instant) { send(); return; }
       UI.confirmSheet({ title: '즉시 퇴실 항목으로 정합니다', lead: x.name,
-        lines: ['지금부터 기록되는 이 항목의 위반부터 OUT 한 번이 바로 2OUT(퇴실 대상)이 됩니다.', '이미 기록된 위반은 그대로 셉니다(소급하지 않습니다).', '퇴실 확정은 지금처럼 학부모 면담 기록 뒤 관리자가 합니다.'],
+        lines: ['지금부터 기록되는 이 항목의 위반부터 OUT 한 번이 바로 2OUT(퇴실 대상)이 됩니다.', '이미 기록된 위반은 그대로 셉니다(소급하지 않습니다).', '퇴실 확정은 지금처럼 학부모 면담 기록 뒤 관리자 선생님이 합니다.'],
         confirmText: '즉시 퇴실로 정하기', onconfirm: send });
     }
     function openRule(x) {
@@ -381,10 +381,10 @@
         el('div', { class: 'muted', text: '2OUT · ' + (outs || 'OUT ' + x.count + '건') })
       ]);
       var msg = '';
-      if (!st) msg = '면담 기록은 담당교사·담임·관리자만 봅니다.';
-      else if (x.staleMeeting) msg = '이전 면담은 연결된 OUT이 취소되어 인정되지 않습니다. ' + (x.canMeeting ? '면담을 새로 기록해 주세요.' : '담당교사가 면담을 새로 기록해야 합니다.');
-      else if (st === 'need') msg = x.canMeeting ? '학부모 면담을 하고 기록해 주세요. 기록이 있어야 관리자가 퇴실을 확정할 수 있습니다.' : '담당교사가 학부모 면담을 기록하면 관리자가 퇴실을 확정합니다.';
-      else if (st === 'recorded') msg = '면담 ' + dayKo(x.meeting.date) + ' · ' + x.meeting.teacher + (x.canConfirm ? '' : ' — 관리자가 퇴실을 확정합니다.');
+      if (!st) msg = '면담 기록은 담당교사·담임·관리자 선생님만 봅니다.';
+      else if (x.staleMeeting) msg = '이전 면담은 연결된 OUT이 취소되어 인정되지 않습니다. ' + (x.canMeeting ? '면담을 새로 기록해 주세요.' : '담당 선생님이 면담을 새로 기록해야 합니다.');
+      else if (st === 'need') msg = x.canMeeting ? '학부모 면담을 하고 기록해 주세요. 기록이 있어야 관리자 선생님이 퇴실을 확정할 수 있습니다.' : '담당 선생님이 학부모 면담을 기록하면 관리자 선생님이 퇴실을 확정합니다.';
+      else if (st === 'recorded') msg = '면담 ' + dayKo(x.meeting.date) + ' · ' + x.meeting.teacher + (x.canConfirm ? '' : ' — 관리자 선생님이 퇴실을 확정합니다.');
       if (x.tempLeave && !x.left) msg = (msg ? msg + ' ' : '') + '임시 퇴실 중이라 복귀 뒤에 확정합니다' + (x.tempLeave.returnKo ? '(복귀 예정 ' + x.tempLeave.returnKo + (x.tempLeave.overdue ? ', 예정일이 지났습니다' : '') + ').' : '.');   // 결정 77③
       if (msg) card.appendChild(el('div', { style: 'margin:8px 0', text: msg }));
       if (x.prevExit) card.appendChild(el('div', { class: 'muted', text: '이전 퇴실 처리됨(' + dayKo(x.prevExit) + ')' }));
@@ -412,7 +412,7 @@
         left.forEach(function (x) { d.appendChild(el('div', { style: 'padding:8px 0', text: UI.util.studentLabel(x.student) })); });
         listBox.appendChild(d);
       }
-      listBox.appendChild(el('div', { class: 'muted', text: '2OUT이 되면 담당교사가 학부모 면담을 기록하고, 그 뒤 관리자가 퇴실을 확정합니다(유예 없음).' }));
+      listBox.appendChild(el('div', { class: 'muted', text: '2OUT이 되면 담당 선생님이 학부모 면담을 기록하고, 그 뒤 관리자 선생님이 퇴실을 확정합니다(유예 없음).' }));
     }
     function openMeeting(x) {
       var sheet = null, busy = false;
@@ -421,7 +421,7 @@
       var minYmd = x.trigger ? x.trigger.occurredAt.slice(0, 10) : '';
       if (x.prevExit) { var pe = addDaysYmd(x.prevExit, 1); if (pe > minYmd) minYmd = pe; }   // 둘째 OUT 날과 이전 퇴실 다음 날 중 늦은 날
       var content = el('textarea', { maxlength: '2000', rows: '5', 'aria-label': '면담 내용' });
-      var fc = UI.field('면담 내용', content, { hint: '면담 내용은 담당교사와 관리자만 볼 수 있습니다. 입퇴실 기록에는 면담 날짜도 쓰이지 않습니다.' });
+      var fc = UI.field('면담 내용', content, { hint: '면담 내용은 담당 선생님과 관리자 선생님만 볼 수 있습니다. 입퇴실 기록에는 면담 날짜도 쓰이지 않습니다.' });
       var trig = x.trigger ? dayKo(x.trigger.occurredAt) + ' ' + x.trigger.ruleName : '';
       if (minYmd) { var mn = dateIn.querySelector('input[type=date]'); if (mn) mn.min = minYmd; }
       var body = el('div', {}, [el('div', { text: UI.util.studentLabel(x.student) + ' 학부모 면담' }), trig ? el('div', { class: 'muted', style: 'margin:4px 0 8px', text: '연결 OUT(2번째): ' + trig }) : null, dateIn, fc]);
@@ -435,7 +435,7 @@
           call('saveOutMeeting', { studentId: x.studentId, date: dateIn.getValue(), content: content.value.trim() }).then(function (r) {
             busy = false;
             if (!r.ok) { refresh(); r.errors.forEach(function (e) { (e.field === 'date' ? dateIn : fc).setError(e.message); }); return; }
-            sheet.close(); UI.toast('면담을 기록했습니다.'); loadList('면담을 기록했습니다. 관리자가 퇴실을 확정할 수 있습니다.'); window.scrollTo(0, 0);
+            sheet.close(); UI.toast('면담을 기록했습니다.'); loadList('면담을 기록했습니다. 관리자 선생님이 퇴실을 확정할 수 있습니다.'); window.scrollTo(0, 0);
           }).catch(function (e) { busy = false; refresh(); fc.setError((e && e.message) || String(e)); });
         } }] });
       sheet.open(); refresh();

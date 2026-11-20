@@ -41,7 +41,7 @@
     function drawWrite() {
       var d = state.data;
       if (!d.term) { body.appendChild(el('div', { class: 'notice warn', text: '지금 운영 중인 기간이 없어 일지를 쓸 수 없습니다.' })); return; }
-      if (d.enrolled === false) { body.appendChild(el('div', { class: 'notice warn', text: '이번 기간 학사생 명단에 없어 일지를 쓸 수 없습니다. 담당 선생님께 알려 주세요.' })); return; }
+      if (d.enrolled === false) { body.appendChild(el('div', { class: 'notice warn', text: '이번 운영 기간 학사생 명단에 없어 일지를 쓸 수 없습니다. 담당 선생님께 알려 주세요.' })); return; }
       body.appendChild(el('div', { class: 'notice info', text: '먼저 오늘 근무 선생님께 말씀드린 뒤 적어 주세요.' }));
 
       var whereCard = el('div', { class: 'card' }, [el('h2', { text: '어디서' })]);
