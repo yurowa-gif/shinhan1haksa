@@ -68,15 +68,19 @@ function blockSpecCovers_(spec, block) {
 }
 
 /**
- * 그날 쓸 고정 일정 행(F9 "확정 전에는 기존 시간표 유지", 결정 31, vocabulary.md fixed_schedules).
- * 그 학생의 적용월(month) <= ymd의 달 중 확정 행이 있는 가장 최근 달을 고르고, 그 달의 확정 '학'·'가' 행을 돌려준다
+ * 그날 쓸 고정 일정 행(F9 "확정 전에는 기존 시간표 유지", 결정 31·84, vocabulary.md fixed_schedules).
+ * 그 학생의 적용월(month) <= ymd의 달 중 그날 살아 있던 확정 행이 있는 가장 최근 달을 고르고, 그 달의 그 행 중 '학'·'가'를 돌려준다
  * (요일은 resolveCell_이 고른다). 그 달이 code '없음' 행뿐이면 [] — 앞 달 시간표가 이어지지 않는다(결정 31).
  * 확정 행이 있는 달이 없으면 []. 적용월이 'yyyy-MM'이 아닌 행은 무시.
+ * 그날 살아 있던 확정 행(결정 84, R24): 적용 시작일(attFixedStart_) <= ymd 이고,
+ *   status '확정'이거나, status '취소'인데 확정된 적이 있고(teacher_confirmed_at) 취소한 날(updated_at의 날짜) > ymd —
+ *   담당교사가 달 중간에 대신 입력해 바꾼 시간표는 그 전 날까지 옛 확정 시간표가 그대로 쓰인다(지난 출석부·격자가 바뀌지 않게).
+ * ASSUMPTION: 취소 행의 updated_at = 취소한 시각(Db bulkUpdateRecords_가 적는다). updated_at이 없거나 틀린 취소 행은 쓰지 않는다.
  * ASSUMPTION: 한 달의 일부 행만 확정되고 나머지가 아직 제출·동의 상태이면(교사가 행마다 확정하는 중)
  *   그 달로 바꾸지 않고 앞 달을 유지한다(결정 31의 "확정 행이 있는 가장 최근 달"에 더한 조건, R3에서 총괄 승인).
  */
 function effectiveFixedRows_(rows, studentId, ymd) {
-  var sid = ruleStr_(studentId), ym = ruleStr_(ymd).slice(0, 7);
+  var sid = ruleStr_(studentId), day = ruleStr_(ymd), ym = day.slice(0, 7);
   var byMonth = {};
   (rows || []).forEach(function (r) {
     if (!r || ruleStr_(r.student_id) !== sid) return;
@@ -84,8 +88,11 @@ function effectiveFixedRows_(rows, studentId, ymd) {
     if (!/^\d{4}-\d{2}$/.test(mo) || mo > ym) return;
     var m = byMonth[mo] = byMonth[mo] || { confirmed: [], pending: false };
     var st = ruleStr_(r.status);
-    if (st === '확정') m.confirmed.push(r);
-    else if (st === '제출' || st === '동의') m.pending = true;
+    if (st === '제출' || st === '동의') { m.pending = true; return; }
+    if (attFixedStart_(r) > day) return;
+    if (st === '확정') { m.confirmed.push(r); return; }
+    var off = ruleIso_(r.updated_at).slice(0, 10);
+    if (st === '취소' && ruleStr_(r.teacher_confirmed_at) && ymdIsValid_(off) && off > day) m.confirmed.push(r);
   });
   var months = Object.keys(byMonth).filter(function (mo) {
     return byMonth[mo].confirmed.length && !byMonth[mo].pending;
@@ -95,6 +102,17 @@ function effectiveFixedRows_(rows, studentId, ymd) {
     var code = ruleStr_(r.code);
     return code === '학' || code === '가';
   });
+}
+
+/**
+ * 고정 일정 행이 출석부에 쓰이기 시작하는 날(결정 84, R24). 보통은 적용월 1일.
+ * 담당교사가 대신 입력한 행(학부모 동의 없이 확정 — parent_agreed_at 빈칸, teacher_confirmed_at 있음)은
+ * 적용월 1일과 입력한 날(teacher_confirmed_at의 날짜) 중 늦은 날 — 달 중간에 넣으면 그날부터.
+ */
+function attFixedStart_(r) {
+  var first = ruleStr_(r.month) + '-01', at = ruleIso_(r.teacher_confirmed_at).slice(0, 10);
+  if (ruleStr_(r.parent_agreed_at) || !ymdIsValid_(at)) return first;
+  return at > first ? at : first;
 }
 
 /** 유형 약어 기본값(sheet-model.md, 설정 exception.type_short). */

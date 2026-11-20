@@ -37,7 +37,8 @@
       if (state.tab === 'stats') {
         var to = state.range === 'week' ? addDays(weekFrom(state.date || todayGuess()), 6) : monthEnd(state.date || todayGuess());
         var from = state.range === 'week' ? weekFrom(state.date || todayGuess()) : (state.date || todayGuess()).slice(0, 8) + '01';
-        call('getFacilityReport', { from: from, to: to }).then(function (r) { state.rep = r; state.isAdmin = true; drawHead(); drawStats(); })   // 누적표는 관리자만 열린다(서버 판정).catch(function (err) { clear(body); showError(body, err); });
+        call('getFacilityReport', { from: from, to: to }).then(function (r) { state.rep = r; state.isAdmin = true; drawHead(); drawStats(); })
+          .catch(function (err) { clear(body); drawHead(); body.appendChild(el('div', { class: 'notice warn', text: /권한/.test((err && err.message) || '') ? '누적표는 관리자만 볼 수 있습니다.' : ((err && err.message) || String(err)) })); });   // 누적표는 관리자만 열린다(서버 판정)
       } else {
         call('getFacilityDay', state.date).then(function (r) { state.day = r; if (r.ok) { state.date = r.date; state.isAdmin = r.isAdmin; } drawHead(); drawDay(); }).catch(function (err) { clear(body); showError(body, err); });
       }

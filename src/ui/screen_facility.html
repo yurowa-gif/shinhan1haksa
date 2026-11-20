@@ -2,8 +2,10 @@
   .fc-log { padding: 12px 0; border-bottom: 1px solid var(--line); word-break: keep-all; }
   .fc-log:last-child { border-bottom: 0; }
   .fc-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .fc-times { display: flex; gap: 8px; }
-  .fc-times .field { flex: 1 1 0; }
+  /* 시작·끝 시각 두 칸: input[type=time]은 고유 너비가 커서 flex로는 카드 밖으로 나간다 → 두 칸 grid minmax(0,1fr) + 칸 안 input은 width 100%·min-width 0 */
+  .fc-times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .fc-times .field { min-width: 0; }
+  .fc-times .field input { width: 100%; min-width: 0; }
   .fc-chosen { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px; }
   .fc-cancelled { color: var(--muted); }
 </style>
