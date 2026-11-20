@@ -105,10 +105,10 @@ function cancelOutMeeting(noteId, reason) {
     if (term0) invalidate_('db', termSheetName_('violations', term0.id));
     invalidate_('counsel', 'counsel_notes');
     var note = findById_('counsel_notes', String(noteId || ''), 'counsel');
-    if (!note || String(note.type).trim() !== CNS_TYPE_OUT2) return err('noteId', '면담 기록을 찾을 수 없습니다. 새로 고친 뒤 다시 해 주세요.');
+    if (!note || String(note.type).trim() !== CNS_TYPE_OUT2) return err('noteId', '면담 기록을 찾을 수 없습니다. 새로 불러온 뒤 다시 해 주세요.');
     if (normalizeEmail_(note.teacher_email) !== user.email) {
       logDenied_(user.email, 'counsel.cancel', '남이 쓴 면담');
-      throw new Error('권한이 없습니다.');
+      throw new Error(DENIED_MESSAGE);
     }
     requirePermission_('counsel.save', { studentId: note.student_id });   // 지금도 그 학생의 담당교사여야 한다
     if (!ruleRowLive_(note)) return err('noteId', '이미 취소된 면담입니다.');

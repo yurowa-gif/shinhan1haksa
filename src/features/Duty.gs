@@ -466,11 +466,11 @@ function swapDuty(slotId, toUserId, opts) {
     // 없는 칸·취소된 칸·낡은 화면(그 사이 칸이 바뀜)·같은 (날짜, 칸)에 살아 있는 행이 둘일 때의 옛 행은 공격이 아니라 "화면이 낡음"이다.
     // R8(dutyOn_)이 쓰는 최신 행만(같은 물리 줄까지 비교) 교대할 수 있다 — 옛 행 id로 남의 근무를 빼앗는 길을 막는다
     var current = row && ruleRowLive_(row) ? dutyPick_(all, String(row.date).trim()).bySlot[String(row.slot).trim()] : null;
-    if (!current || current._row !== row._row || current.id !== row.id) throw new Error('근무표가 바뀌었습니다. 새로 고친 뒤 다시 해 주세요.');
+    if (!current || current._row !== row._row || current.id !== row.id) throw new Error('근무표가 바뀌었습니다. 새로 불러온 뒤 다시 해 주세요.');
     var denyIf = function (c) {
       if (!c.denied) return;
       logDenied_(user.email, 'duty.swap', c.why + ' ' + JSON.stringify({ slotId: String(slotId || ''), toUserId: String(toUserId || '') }));
-      throw new Error('권한이 없습니다.');
+      throw new Error(DENIED_MESSAGE);
     };
     var plan = dtyPlan_(String(row.date).trim(), calLoadCtx_());
     var swapCtx = { email: user.email, canEdit: canEdit, today: today_(), started: dtySlotStarted_(row, plan, nowIso_()) };

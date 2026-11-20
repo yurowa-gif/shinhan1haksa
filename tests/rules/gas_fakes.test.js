@@ -164,7 +164,7 @@ test('errorOf(): Node 쪽 Error로 돌려준다(assert.throws(…, Error)와 함
   env.seedFake();
   const e = env.errorOf('test.student@example.com', (c) => c.getHomeData('admin'));
   assert.ok(e instanceof Error);
-  assert.strictEqual(e.message, '권한이 없습니다.');
+  assert.strictEqual(e.message, env.ctx.DENIED_MESSAGE);
 });
 
 test('범위 판정: 출결 담당만 가진 계정은 이번 기간 학사생 전체, 등록 없는 학생은 거부', () => {
@@ -277,7 +277,7 @@ test('학부모가 남의 학생으로 getStudentSummary → 거부 + audit_log�
   assert.ok(myChild && other);
   const before = env.auditActions('denied').length;
   const e = env.errorOf('test.parent@example.com', (c) => c.getStudentSummary(other.id));
-  assert.ok(e && e.message === '권한이 없습니다.', e && e.message);
+  assert.ok(e && e.message === env.ctx.DENIED_MESSAGE, e && e.message);
   const denied = env.rows('audit_log').filter((r) => r.action === 'denied:student.view');
   assert.strictEqual(env.auditActions('denied').length, before + 1);
   assert.strictEqual(denied[0].created_by, 'test.parent@example.com');
@@ -318,7 +318,7 @@ table('공개 함수 권한 표(허용·거부)', [
   const e = env.errorOf(who, call);
   if (allowed) assert.strictEqual(e, null, e && e.stack);
   else {
-    assert.ok(e && e.message === '권한이 없습니다.', e ? e.message : '허용됨');
+    assert.ok(e && e.message === env.ctx.DENIED_MESSAGE, e ? e.message : '허용됨');
     assert.ok(env.rows('audit_log').some((r) => r.action.indexOf('denied:') === 0 && r.created_by === (who || '(이메일 없음)')), '그 사람의 거부 기록');
   }
 });

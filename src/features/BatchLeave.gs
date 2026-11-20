@@ -151,7 +151,7 @@ function previewBatchLeave(input) {
 function saveBatchLeave(input, expect) {
   var user = requirePermission_('batch.leave');
   var ex = batParseExpect_(expect);
-  if (!ex) return { ok: false, stale: true, error: '확인한 뒤 다시 저장해 주세요. 미리보기부터 다시 해 주세요.' };
+  if (!ex) return { ok: false, stale: true, error: '저장 전 미리 보기 내용이 없습니다. 미리 보기를 다시 한 뒤 저장해 주세요.' };
   return withLock_(function () {
     ['terms', 'students', 'enrollments', 'status_changes'].forEach(function (n) { invalidate_('db', n); });
     invalidate_('config', 'settings');
@@ -163,7 +163,7 @@ function saveBatchLeave(input, expect) {
     if (v.errors.length) return { ok: false, errors: v.errors };
     var c = batPlan_(v.rec, d, ex.b);
     if (!c.plan.plans.length) return { ok: false, errors: [{ field: 'grade', message: '퇴실시킬 학생이 없습니다. 다시 미리보기를 해 주세요.' }] };
-    if (batSignature_(ex.b, c) !== ex.s) return { ok: false, stale: true, error: '확인한 뒤 다른 변경이 있었습니다. 미리보기부터 다시 해 주세요.' };
+    if (batSignature_(ex.b, c) !== ex.s) return { ok: false, stale: true, error: STALE_MESSAGE };
     var rows = [], patches = [];
     c.plan.plans.forEach(function (p) {
       var headId = Utilities.getUuid(), h = p.rows[0];
@@ -245,7 +245,7 @@ function undoBatchLeave(batchId, reason, expect) {
     ['terms', 'students', 'enrollments', 'status_changes'].forEach(function (n) { invalidate_('db', n); });
     var c = batUndoCheck_(batchId);
     if (c.error) return { ok: false, errors: [{ field: '', message: c.error }] };
-    if (String(expect || '') !== batUndoSignature_(c)) return { ok: false, stale: true, error: '확인한 뒤 다른 변경이 있었습니다. 다시 확인해 주세요.' };
+    if (String(expect || '') !== batUndoSignature_(c)) return { ok: false, stale: true, error: STALE_MESSAGE };
     var patches = [], seen = {};
     c.undo.plans.forEach(function (p) {
       var tag = function (x) { var r = String(x.cancel_reason || ''); return /^\[자동\] /.test(r) ? r : '[자동] ' + p.headId + ' ' + (r || '일괄 퇴실 되돌리기로 함께 취소'); };

@@ -156,7 +156,7 @@ function foodCutoff_(settingRows) {
   (settingRows || []).forEach(function (r) { if (String(r.key || '').trim() === 'meal.morning_cutoff') raw = String(r.value || '').trim(); });
   if (!raw) DEFAULT_SETTINGS.forEach(function (s) { if (s[0] === 'meal.morning_cutoff') raw = s[1]; });
   var hm = hmNorm_(raw);
-  if (!hm) throw new Error('설정 "meal.morning_cutoff" 값("' + raw + '")이 시각(예: 11:30)이 아닙니다. 설정을 고친 뒤 다시 시도해 주세요.');
+  if (!hm) throw new Error('급식 마감 시각 설정("' + raw + '")이 시각 모양이 아닙니다. 관리자 선생님께 11:30처럼 고쳐 달라고 요청해 주세요.');
   return hm;
 }
 
@@ -369,7 +369,7 @@ function foodAuthorize_(input, c) {
     // 안내는 틀리지 않을 때만: 역할은 되는 교사(출결 전용 계정 등 제외)가 그 학생의 다른 기간 담당이고, 대상 기간이 끝나지 않았고 학생이 그 기간 명단에 있을 때
     var mine = readAll_('enrollments').filter(function (en) { return en.student_id === sid && normalizeEmail_(en.teacher_email) === u.email; });
     var inTerm = c.term ? readAll_('enrollments').some(function (en) { return en.term_id === c.term.id && en.student_id === sid; }) : false;
-    if (c.term && c.eff && e.message === '권한이 없습니다.' && c.term.end_date >= today_() && inTerm && mine.length && hasAnyAllowedRole_(u.roles, permissions_()['status.edit'].roles)) {
+    if (c.term && c.eff && e.message === DENIED_MESSAGE && c.term.end_date >= today_() && inTerm && mine.length && hasAnyAllowedRole_(u.roles, permissions_()['status.edit'].roles)) {
       throw new Error('이 신청(적용일 ' + foodDateKo_(c.eff) + ')은 ' + c.term.name + ' 담당교사나 관리자가 합니다.');
     }
     throw e;
@@ -573,7 +573,7 @@ function saveMealChange(input, expect) {
     }
     if (c.blocked) return { ok: false, blocked: c.blocked };
     if (String(expect || '') !== foodSignature_(plan, c.warnings)) {
-      return { ok: false, stale: true, error: '확인한 뒤 다른 변경이 있었습니다. 다시 확인해 주세요.' };
+      return { ok: false, stale: true, error: STALE_MESSAGE };
     }
     // 결정 58: 더 새 신청에 덮인 신청서도 종이 기록으로 남긴다(status 취소). 덮은 행이 나중에 취소되면 되살릴 수 있다.
     // supersededBy는 규칙(R11a)이 주는 필드 — 아직 없으면 id 없이 꼬리표만 쓴다.

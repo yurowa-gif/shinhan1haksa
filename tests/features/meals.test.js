@@ -227,7 +227,7 @@ test('설정 meal.morning_cutoff가 잘못되면 기본값으로 바꾸지 않�
   const { a } = pick(env);
   const s = env.rows('settings', 'config').find((r) => r.key === 'meal.morning_cutoff');
   env.asOwner((c) => c.updateRecord_('settings', s.id, { value: '아침' }, env.owner, 'config'));
-  assert.throws(() => prev(env, ADMIN, input(a, 'd_hall', '2027-03-03T10:00:00')), /meal\.morning_cutoff/);
+  assert.throws(() => prev(env, ADMIN, input(a, 'd_hall', '2027-03-03T10:00:00')), /급식 마감 시각 설정\("아침"\)이 시각 모양이 아닙니다/);
   env.asOwner((c) => c.updateRecord_('settings', s.id, { value: '10:00' }, env.owner, 'config'));
   assert.strictEqual(prev(env, ADMIN, input(a, 'd_hall', '2027-03-03T10:30:00')).date, '2027-03-04', '마감 10:00이면 10:30 신청은 다음 날');
 });

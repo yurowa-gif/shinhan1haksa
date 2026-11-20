@@ -54,7 +54,7 @@
     }
 
     function askCancel(p, names) {
-      UI.confirmSheet({ title: '이 짝을 취소할까요?', lead: names, lines: ['다음 초안부터 이 둘을 떨어뜨리지 않습니다.', '기록은 지워지지 않고 "취소됨"으로 남습니다.'], confirmText: '짝 취소', danger: true,
+      UI.confirmSheet({ title: '취소 처리', lead: names, lines: ['다음 초안부터 이 둘을 떨어뜨리지 않습니다.', '기록은 지워지지 않고 "취소됨"으로 남습니다.'], confirmText: '취소 처리', cancelText: '돌아가기', danger: true,
         onconfirm: function () {
           if (busy) return; busy = true;
           call('cancelAvoidPair', p.id).then(function (r) {

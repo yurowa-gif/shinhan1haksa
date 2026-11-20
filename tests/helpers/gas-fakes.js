@@ -667,7 +667,7 @@ function createGasEnv(opts) {
       return r === undefined ? null : JSON.parse(JSON.stringify(r));
     },
     /**
-     * 거부를 확인한다: 오류 문구가 정확히 '권한이 없습니다.'이고, 이번 호출로 audit_log에 그 사람의
+     * 거부를 확인한다: 오류 문구가 공통 거부 문구(Auth.gs DENIED_MESSAGE)이고, 이번 호출로 audit_log에 그 사람의
      * 'denied:<action>' 행이 새로 생겼다. (10분 거부 기록 제한에 걸리지 않게 거부 기록 캐시를 먼저 비운다.)
      * 권한 검사 없이 다른 이유로 실패한 것을 거부로 잘못 세지 않게 한다. → 새로 생긴 audit 행
      */
@@ -677,7 +677,7 @@ function createGasEnv(opts) {
       let err = null;
       try { env.call(email, fnName, ...args); } catch (e) { err = e; }
       if (!err) throw new Error('[gas-fakes] 거부되어야 하는데 허용됨: ' + email + ' ' + fnName);
-      if (err.message !== '권한이 없습니다.') throw new Error('[gas-fakes] 권한 거부가 아닌 오류: ' + err.message);
+      if (err.message !== env.ctx.DENIED_MESSAGE) throw new Error('[gas-fakes] 권한 거부가 아닌 오류: ' + err.message);
       const added = env.rows('audit_log').slice(before).filter((r) => r.action === 'denied:' + action);
       if (added.length !== 1 || added[0].created_by !== (email.toLowerCase() || '(이메일 없음)')) {
         throw new Error('[gas-fakes] denied:' + action + ' 기록이 없음(새 행: ' + JSON.stringify(env.rows('audit_log').slice(before).map((r) => [r.action, r.created_by])) + ')');
