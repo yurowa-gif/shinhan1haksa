@@ -147,7 +147,7 @@
       body.appendChild(card);
     }
     function askCancel(l) {   // 사유 없이 확인만(총괄 결정). 삭제가 아니라 '취소'로 남는다
-      UI.confirmSheet({ title: '이 일지를 취소합니다', lead: U.formatDateKo(l.date, false) + ' ' + l.facility + ' ' + l.start + '–' + l.end, lines: ['삭제가 아니라 "취소"로 남습니다.'], confirmText: '일지 취소', danger: true,
+      UI.confirmSheet({ title: '일지 취소 처리', lead: U.formatDateKo(l.date, false) + ' ' + l.facility + ' ' + l.start + '–' + l.end, lines: ['기록은 지워지지 않고 "취소"로 남습니다. 다시 쓰려면 새로 써 주세요.'], confirmText: '취소 처리', cancelText: '돌아가기', danger: true,
         onconfirm: function () {
           call('cancelFacilityLog', l.termId, l.id).then(function (r) {
             if (!r.ok) { UI.toast(r.error || '취소하지 못했습니다.', { kind: 'warn', ms: 5000 }); if (r.stale) load(); return; }
