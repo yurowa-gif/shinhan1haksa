@@ -60,6 +60,30 @@ function ymdWeekdayKo_(ymd) {
   return ['일', '월', '화', '수', '목', '금', '토'][ymdWeekday_(ymd)];
 }
 
+/**
+ * 화면 문구용 날짜(R25, docs/design/writing.md 5절): 'yyyy-MM-dd' → '3월 26일(금)'.
+ * base('yyyy-MM-dd' 또는 'yyyy-MM')와 해가 다르면 앞에 'yyyy년 '. 날짜가 아니면 받은 글자 그대로.
+ */
+function ymdKo_(ymd, base) {
+  var s = ruleStr_(ymd);
+  if (!ymdIsValid_(s)) return s;
+  var y = base && ruleStr_(base).slice(0, 4) !== s.slice(0, 4) ? Number(s.slice(0, 4)) + '년 ' : '';
+  return y + Number(s.slice(5, 7)) + '월 ' + Number(s.slice(8, 10)) + '일(' + ymdWeekdayKo_(s) + ')';
+}
+
+/** 화면 문구용 '지금 값' 괄호(R25): 값이 있으면 '(지금 값)', 비어 있으면 '(빈칸)'. */
+function ruleNowText_(v) {
+  var s = ruleStr_(v);
+  return s ? '(지금 ' + s + ')' : '(빈칸)';
+}
+
+/** 화면 문구용 달: 'yyyy-MM' → '4월'(base와 해가 다르면 '2028년 1월'). 달이 아니면 그대로. */
+function ymKo_(ym, base) {
+  var s = ruleStr_(ym);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(s)) return s;
+  return (base && ruleStr_(base).slice(0, 4) !== s.slice(0, 4) ? Number(s.slice(0, 4)) + '년 ' : '') + Number(s.slice(5, 7)) + '월';
+}
+
 /** 월~일을 한 주로 볼 때 그 주의 월요일(일요일이면 6일 전 월요일). */
 function ymdMondayOf_(ymd) {
   var w = ymdWeekday_(ymd);

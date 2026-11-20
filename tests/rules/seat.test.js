@@ -20,7 +20,7 @@ test('성별 구역: 남·여 공간에는 같은 성별만, 혼성은 누구나
   const r = draft(spaces, seats, [STU('a', '여', 1), STU('b', '남', 1), STU('c', '여', 2)]);
   assert.deepStrictEqual([seatOf(r, 'a') || seatOf(r, 'c'), seatOf(r, 'b')].map((s) => s && s[0]), ['F', 'M']);
   assert.strictEqual(r.unplaced.length, 1);
-  assert.ok(r.warnings.some((w) => /앉을 자리가 없습니다/.test(w)));
+  assert.ok(r.warnings.some((w) => /앉을 좌석이 없습니다/.test(w)));
   assert.deepStrictEqual(r.violations, []);
 });
 
@@ -32,7 +32,7 @@ test('베리타스 = 같은 성별 SA실, 모자라면 1층으로 넘기고 경�
   assert.ok(['v1', 'v2'].some((p) => seatOf(r, p) === 'SA3-1-1'));
   assert.ok(['v1', 'v2'].some((p) => /^F1/.test(seatOf(r, p))));
   assert.ok(/^F1/.test(seatOf(r, 'n')));
-  assert.strictEqual(r.warnings.filter((w) => /SA실 자리가 모자라 1층/.test(w)).length, 1);
+  assert.strictEqual(r.warnings.filter((w) => /SA실 좌석이 모자라 1층/.test(w)).length, 1);
 });
 
 test('3학년은 지난 기간 자리 유지(비어 있고 성별·구역이 맞을 때), 고정 자리가 우선, 3학년 아니면 유지하지 않음', () => {
@@ -149,7 +149,7 @@ test('지난 자리 유지는 3학년만(2학년은 seed에 따라 다른 자리
   const places = new Set(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((seed) => seatOf(draft(spaces, seats, [STU('z2', '남', 2)], [{ seat_id: 'R-1-1', student_id: 'z2' }], [], [], seed), 'z2')));
   assert.deepStrictEqual([...places].sort(), ['R-1-1', 'R-1-3']);
   const r = draft(spaces, seats, [STU('a', '여', 1)], [], [{ seat_id: 'nope', student_id: 'a' }]);
-  assert.ok(/^R-/.test(seatOf(r, 'a')) && r.warnings.some((w) => /고정 자리\(nope\)를 쓸 수 없어/.test(w)), JSON.stringify(r));
+  assert.ok(/^R-/.test(seatOf(r, 'a')) && r.warnings.some((w) => /고정 좌석\(nope\)을 쓸 수 없어/.test(w)), JSON.stringify(r));
 });
 
 const SEEDS = Array.from({ length: 20 }, (_, i) => 'q' + i);
@@ -161,12 +161,12 @@ test('1층이 모자라면 베리타스 아닌 학생을 같은 성별 SA실 남
     const r = draft(spaces, seats, [STU('v1', '여', 1, true), STU('n1', '여', 2), STU('n2', '여', 3)], [], [], [], seed);
     assert.strictEqual(seatOf(r, 'v1').split('-')[0], 'SA3', seed);
     assert.deepStrictEqual(['n1', 'n2'].map((p) => seatOf(r, p).split('-')[0]).sort(), ['F1', 'SA3'], seed);
-    assert.deepStrictEqual([r.unplaced, r.warnings], [[], ['1층 자리가 모자라 1명을 SA실에 앉혔습니다']], seed);
+    assert.deepStrictEqual([r.unplaced, r.warnings], [[], ['1층 좌석이 모자라 1명을 SA실에 배정했습니다.']], seed);
   }
   // 남 학생 둘: 하나는 1층, 하나는 남 SA실(여 SA실에는 앉히지 않음) / 셋이면 하나는 unplaced
   const r2 = draft(spaces, seats, [STU('a', '남', 1), STU('b', '남', 2), STU('c', '남', 3)]);
   assert.deepStrictEqual([r2.assignments.map((x) => x.seat_id.split('-')[0]).sort(), r2.unplaced.length], [['F1', 'SA1'], 1]);
-  assert.ok(r2.warnings.includes('1층 자리가 모자라 1명을 SA실에 앉혔습니다'));
+  assert.ok(r2.warnings.includes('1층 좌석이 모자라 1명을 SA실에 배정했습니다.'));
 });
 
 test('베리타스를 먼저 앉힌다 — SA 1석·1층 1석에 베리타스 둘·아닌 학생 하나면 못 앉는 학생은 늘 베리타스 아닌 학생', () => {

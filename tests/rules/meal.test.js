@@ -426,7 +426,7 @@ test('수동 적용일 기준으로 toCancel·followUps·blocked를 계산한다
   assert.strictEqual(plan(rows, '조식', '실시', '2027-03-05T09:00:00', { today: '2027-03-05', effectiveDate: '2027-03-18' }).toCancel.length, 1);
   const later = plan(rows, '조식', '실시', '2027-03-05T09:00:00', { today: '2027-03-05', effectiveDate: '2027-03-25' });
   assert.strictEqual(later.toCancel.length, 0);
-  assert.ok(later.warnings.some((w) => /2027-03-20부터 미실시.*먼저 적용/.test(w)), JSON.stringify(later.warnings));
+  assert.ok(later.warnings.some((w) => /3월 20일\(토\)부터 미실시.*먼저 적용/.test(w)), JSON.stringify(later.warnings));
   // blocked: 퇴실(3/10) 뒤 날짜로 고친 조식 실시는 막힘, 퇴실 전 날짜면 followUps(퇴실일 미실시)
   const leave = saveLeave([CH('학사', '입실', '2027-03-01'), CH('조식', '미실시', '2027-03-01')], '2027-03-10', '2027-03-08T10:00:00');
   assert.ok(plan(leave, '조식', '실시', '2027-03-02T09:00:00', { today: '2027-03-09', effectiveDate: '2027-03-12' }).blocked);
@@ -477,9 +477,9 @@ test('P6: 퇴실 3/10 → 재입실 3/20 → 퇴실 4/5, 조식 실시(3/2 신�
 test('결정 52: 고친 미실시 날짜가 미실시 규칙의 날보다 이르거나 오늘보다 이르면 경고(허용)', () => {
   const rows = [CH('조식', '실시', '2027-03-01')];
   const early = plan(rows, '조식', '미실시', '2027-03-03T13:00:00', { today: '2027-03-03', effectiveDate: '2027-03-05' });
-  assert.ok(early.warnings.some((w) => /미실시 규칙의 날\(2027-03-15\)보다 이릅니다/.test(w)));
+  assert.ok(early.warnings.some((w) => /급식실 준비 기간보다 이릅니다\(규칙대로라면 3월 15일\(월\)\)/.test(w)));
   const past = plan(rows, '조식', '미실시', '2027-03-01T09:00:00', { today: '2027-03-05', effectiveDate: '2027-03-02' });
-  assert.ok(past.warnings.some((w) => /오늘보다 이릅니다/.test(w)));
+  assert.ok(past.warnings.some((w) => /은 지난 날입니다\. 저장하면 지난 식수가 바뀝니다/.test(w)));
   assert.ok(!plan(rows, '조식', '미실시', '2027-03-03T13:00:00', { today: '2027-03-03', effectiveDate: '2027-03-20' }).warnings.some((w) => /이릅니다/.test(w)));
 });
 

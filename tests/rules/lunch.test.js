@@ -31,7 +31,7 @@ test('방학 시작 전에 낸 신청은 방학 시작일부터(vacation_start),
   assert.strictEqual(plan(HALL, '실시', '2027-07-12T09:00:00', { effectiveDate: '2027-07-20' }).date, '2027-07-20');
   const late = plan(HALL, '실시', '2027-08-20T13:00:00');
   assert.strictEqual(late.date, '2027-08-21');
-  assert.ok(late.warnings.some((w) => /방학 끝날\(2027-08-20\) 뒤/.test(w)), late.warnings.join('|'));
+  assert.ok(late.warnings.some((w) => /방학이 끝난 8월 20일\(금\) 뒤/.test(w)), late.warnings.join('|'));
   assert.deepStrictEqual(plan(HALL, '실시', '2027-08-20T09:00:00').warnings, []);
 });
 

@@ -27,7 +27,7 @@ test('ttSubmitWindow_: 25일~말일에 다음 달 시간표, 기간 밖이면 �
     assert.deepStrictEqual([r.open, r.month, r.start, r.end], [open, month, start, end], today + ' ' + JSON.stringify(cfg));
     assert.strictEqual(!!r.reason, !open, today + ' reason');
   });
-  assert.match(ctx.ttSubmitWindow_('2027-04-01', W).reason, /2027-04-25 ~ 2027-04-30\(2027-05 시간표\)/);
+  assert.match(ctx.ttSubmitWindow_('2027-04-01', W).reason, /^지금은 시간표를 내는 기간이 아닙니다\. 5월 시간표는 4월 25일\(일\)부터 4월 30일\(금\)까지 내 주세요\.$/);
   const bad = plain(ctx.ttSubmitWindow_('2027-03-25', { startDay: '28', endDay: '20' }));
   assert.deepStrictEqual([bad.open, bad.month], [false, '']);
   assert.match(bad.reason, /설정/);
@@ -52,7 +52,7 @@ test('ttValidateEntries_: 요일·구분(학·가)·블록 표기·같은 요일
     [[{ weekday: '월요일', blocks: '18:00-19:00', code: '학' }], /요일/],
     [[{ weekday: '월', blocks: '18:00-19:00', code: '없음' }], /구분/],
     [[{ weekday: '월', blocks: '18:00-19:00', code: '' }], /구분/],
-    [[{ weekday: '월', blocks: '19:00-18:00', code: '학' }], /블록 표기/],
+    [[{ weekday: '월', blocks: '19:00-18:00', code: '학' }], /읽을 수 없는 시간입니다\(19:00-18:00\)/],
     [[{ weekday: '월', blocks: '', code: '학' }], /비어/],
     [[{ weekday: '월', blocks: '18:00-20:00', code: '학' }, { weekday: '월', blocks: '19:30-21:00', code: '가' }], /월요일 1번째 줄과 2번째 줄/],
     [[{ weekday: '토', blocks: 'ALL', code: '가' }, { weekday: '토', blocks: '09:00-10:00', code: '학' }], /토요일/],
@@ -209,11 +209,11 @@ test('ttCopyPrevious_: 앞 달에 쓰던 확정 시간표를 초안으로(이어
 });
 
 test('ttTransition_ 제출: 기간 밖·다른 달·입력 오류는 거부(가정: 놓치면 그 달은 낼 수 없다)', () => {
-  assert.match(step([], 'submit', '2027-03-24T23:59:59', { entries: ENTRIES }).reason, /제출 기간이 아닙니다/);
-  assert.match(step([], 'submit', '2027-04-01T00:00:00', { entries: ENTRIES }).reason, /제출 기간이 아닙니다/);
+  assert.match(step([], 'submit', '2027-03-24T23:59:59', { entries: ENTRIES }).reason, /지금은 시간표를 내는 기간이 아닙니다/);
+  assert.match(step([], 'submit', '2027-04-01T00:00:00', { entries: ENTRIES }).reason, /지금은 시간표를 내는 기간이 아닙니다/);
   assert.ok(step([], 'submit', '2027-03-31T23:59:59', { entries: ENTRIES }).ok);
-  assert.match(plain(ctx.ttTransition_([], 's1', '2027-05', 'submit', { now: '2027-03-26T10:00:00', window: W, entries: ENTRIES })).reason, /2027-04 시간표만/);
-  assert.match(step([], 'submit', '2027-03-26T10:00:00', { entries: [{ weekday: '월', blocks: 'x', code: '학' }] }).reason, /블록 표기/);
+  assert.match(plain(ctx.ttTransition_([], 's1', '2027-05', 'submit', { now: '2027-03-26T10:00:00', window: W, entries: ENTRIES })).reason, /지금은 4월 시간표만 낼 수 있습니다\. 4월 시간표를 골라 주세요\./);
+  assert.match(step([], 'submit', '2027-03-26T10:00:00', { entries: [{ weekday: '월', blocks: 'x', code: '학' }] }).reason, /읽을 수 없는 시간입니다\(x\)/);
   assert.throws(() => ctx.ttTransition_([], 's1', '2027-4', 'agree', { now: '2027-03-26T10:00:00' }), /yyyy-MM/);
   assert.throws(() => ctx.ttTransition_([], 's1', '2027-13', 'agree', { now: '2027-03-26T10:00:00' }), /yyyy-MM/);
   assert.throws(() => ctx.ttTransition_([], 's1', '2027-04', 'agree', { now: '2027-03-26' }), /now/);
@@ -249,17 +249,17 @@ test('teacherEnter: 기간 밖에도 이번 달·다음 달만, 학부모 동의
   assert.deepStrictEqual([r.cancel, r.update], [[], []]);
   assert.deepStrictEqual(r.add.map((x) => [x.weekday, x.status, x.submitted_at, x.parent_agreed_at, x.teacher_confirmed_at]),
     [['월', '확정', '', '', '2027-04-02T09:00:00'], ['수', '확정', '', '', '2027-04-02T09:00:00']]);
-  assert.match(r.warnings.join(), /2027-04-02부터 출석부에 반영/);
+  assert.match(r.warnings.join(), /4월 2일\(금\)부터 출석부에 들어갑니다/);
   const rows = applyAt(MARCH, r, '2027-04-02T09:00:00');
   assert.deepStrictEqual(['status', 'enteredBy'].map((k) => ctx.ttMonthState_(rows, 's1', '2027-04')[k]), ['확정', '담당교사']);
   // 다음 달분은 경고 없이 1일부터
   const nx = tstep(MARCH, '2027-05', 'teacherEnter', '2027-04-20T09:00:00', { entries: [] });
   assert.deepStrictEqual([nx.add.map((x) => [x.code, x.status]), nx.warnings], [[['없음', '확정']], []]);
   // 지난달·다다음 달·입력 오류·모르는 상태는 거부
-  assert.match(tstep(MARCH, '2027-03', 'teacherEnter', '2027-04-02T09:00:00', { entries: ENTRIES }).reason, /이번 달\(2027-04\)·다음 달\(2027-05\)/);
+  assert.match(tstep(MARCH, '2027-03', 'teacherEnter', '2027-04-02T09:00:00', { entries: ENTRIES }).reason, /대신 입력은 이번 달\(4월\)과 다음 달\(5월\) 시간표만 할 수 있습니다/);
   assert.match(tstep(MARCH, '2027-06', 'teacherEnter', '2027-04-02T09:00:00', { entries: ENTRIES }).reason, /이번 달/);
   assert.ok(tstep(MARCH, '2028-01', 'teacherEnter', '2027-12-31T23:00:00', { entries: ENTRIES }).ok, '해 넘김 다음 달');
-  assert.match(tstep(MARCH, '2027-04', 'teacherEnter', '2027-04-02T09:00:00', { entries: [{ weekday: '월', blocks: 'x', code: '학' }] }).reason, /블록 표기/);
+  assert.match(tstep(MARCH, '2027-04', 'teacherEnter', '2027-04-02T09:00:00', { entries: [{ weekday: '월', blocks: 'x', code: '학' }] }).reason, /읽을 수 없는 시간입니다\(x\)/);
   // 보통 흐름으로 확정한 달은 학생이 낸 것
   assert.strictEqual(ctx.ttMonthState_(MARCH.map((x) => Object.assign({}, x, { parent_agreed_at: '2027-02-26T10:00:00' })), 's1', '2027-03').enteredBy, '학생');
   assert.strictEqual(ctx.ttMonthState_([], 's1', '2027-03').enteredBy, '');
@@ -270,10 +270,10 @@ test('teacherEnter: 진행 중(제출·동의·돌려보냄)·확정인 달을 �
   ['제출', '동의', '반려'].forEach((st) => {
     const r = tstep(at4(st), '2027-04', 'teacherEnter', '2027-03-30T10:00:00', { entries: FRI });
     assert.deepStrictEqual([r.cancel, r.add.length], [['z1'], 1], st);
-    assert.match(r.warnings.join(), new RegExp('학생이 낸 2027-04 시간표\\(' + st + '\\)를 대신합니다'));
+    assert.match(r.warnings.join(), new RegExp('학생이 낸 4월 시간표\\(' + { '제출': '제출', '동의': '학부모 동의', '반려': '돌려보냄' }[st] + '\\)를 대신합니다'));
   });
   const r = tstep(at4('확정', { parent_agreed_at: '2027-03-27T10:00:00', teacher_confirmed_at: '2027-03-28T10:00:00' }), '2027-04', 'teacherEnter', '2027-03-30T10:00:00', { entries: FRI });
-  assert.deepStrictEqual([r.cancel, r.warnings], [['z1'], ['확정된 2027-04 시간표를 바꿉니다']]);
+  assert.deepStrictEqual([r.cancel, r.warnings], [['z1'], ['확정된 4월 시간표를 바꿉니다.']]);
   // 대신 입력한 달은 확인을 거두지 못하고 다시 대신 입력한다
   const mine = applyAt([], tstep([], '2027-04', 'teacherEnter', '2027-03-30T10:00:00', { entries: FRI }), '2027-03-30T10:00:00');
   assert.match(tstep(mine, '2027-04', 'unconfirm', '2027-03-31T10:00:00').reason, /대신 입력한 시간표는 확인을 거둘 수 없습니다/);

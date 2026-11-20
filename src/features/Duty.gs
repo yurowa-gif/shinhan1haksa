@@ -320,7 +320,7 @@ function dtyRecordModel_(d) {
     generatedAt: dtyStamp_(nowIso_()), lastChangedAt: d.lastChangedAt,
     // 운영 안 하는 날의 근무 경고는 그날 근무 칸이 있으면 렌더러가 칸에서 찾아 같은 말로 적는다(중복 방지). 예비만 있는 날은 렌더러가 못 보므로 경고를 남긴다
     warnings: d.rec.warnings.filter(function (w) {
-      if (w.indexOf('운영 안 하는 날의 근무 행을 셌습니다') < 0) return true;
+      if (w.indexOf('은 운영하지 않는 날인데 근무 기록이 있어') < 0) return true;   // DutyRules dutyRecord_ 경고(R25 문구)
       var date = w.slice(0, 10);
       return !d.rec.teachers.some(function (t) { return t.dates.some(function (x) { return x.date === date; }); });
     }).map(dtyWarnText_)

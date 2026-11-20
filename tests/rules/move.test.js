@@ -96,7 +96,7 @@ table('상태 검사: 이미 같은 상태·기숙사생의 학사만 퇴실·�
   ['기숙사 입실', () => [CH('학사', '퇴실', '2027-03-01')], /학사생만/],
   ['기숙사 입실', DORM, /이미 기숙사 입실/],
   ['학사 퇴실', () => [CH('학사', '퇴실', '2027-03-01')], /학사 입실 상태가 아닙니다/],
-  ['학사 입장', HALL, /유형이 아닙니다/]
+  ['학사 입장', HALL, /종류를 알 수 없습니다/]
 ], ([type, rows, re]) => {
   const p = plan(rows(), { type, effectiveDate: '2027-03-05', requestedAt: '2027-03-03T15:00:00' });
   assert.ok(p.errors.some((e) => re.test(e)), JSON.stringify(p.errors));
@@ -322,14 +322,14 @@ test('기숙사 퇴실 조식 미실시는 기숙사 퇴실일보다 이르지 �
 test('적용일 뒤에 입퇴실 기록이 있으면 오류(재현 G: 3/20 학사 퇴실이 잡힌 학생의 3/10 기숙사 입실)', () => {
   const rows = HALL().concat([CH('학사', '퇴실', '2027-03-20', { source: 'F6', requested_at: '2027-03-02T10:00:00' })]);
   const p = plan(rows, { type: '기숙사 입실', effectiveDate: '2027-03-10', requestedAt: '2027-03-03T15:00:00' });
-  assert.ok(p.errors.some((e) => /이후 날짜에 입퇴실 기록/.test(e)));
+  assert.ok(p.errors.some((e) => / 뒤에 입퇴실 기록이 있습니다/.test(e)));
   assert.deepStrictEqual(p.rows, []);
 });
 
 test('C16 후속: 명단 초기 행(명단업로드)은 "대기 중인 신청 — 직접 취소" 경고에 넣지 않는다', () => {
   const rows = [CH('조식', '실시', '2027-03-10')];   // 기간 시작 3/10 명단 초기값
   const p = plain(ctx.mealPlanChange_(rows, 's1', '조식', '미실시', '2027-03-03T09:00:00', { today: '2027-03-03' }));
-  assert.ok(!p.warnings.some((w) => /대기 중인 신청/.test(w)), JSON.stringify(p.warnings));
+  assert.ok(!p.warnings.some((w) => /신청이 먼저 적용됩니다/.test(w)), JSON.stringify(p.warnings));
 });
 
 /* ───── 총괄 검토(#57) ───── */
@@ -353,7 +353,7 @@ test('재입실일 뒤에 기록된 학사 퇴실이 있으면 오류(그 퇴실
   const rows = [CH('학사', '입실', '2027-03-01'), CH('학사', '퇴실', '2027-03-05', { source: 'F6', requested_at: '2027-03-03T10:00:00' }),
     CH('학사', '퇴실', '2027-03-20', { source: 'F6', requested_at: '2027-03-18T10:00:00' })];
   const p = plan(rows, { type: '학사 입실', effectiveDate: '2027-03-10', requestedAt: '2027-03-19T09:00:00' }, '2027-03-19');
-  assert.ok(p.errors.some((e) => /이후 날짜에 입퇴실 기록/.test(e)));
+  assert.ok(p.errors.some((e) => / 뒤에 입퇴실 기록이 있습니다/.test(e)));
 });
 
 test('재입실 급식은 재입실일 값만 정한다: 퇴실 기록 전에 학생이 낸 대기 신청(F7)은 취소하지 않는다(총괄 결정)', () => {
@@ -433,7 +433,7 @@ test("'일반 석식으로': 퇴실 전에 신청한 학사 석식(일반 석식
   const move = { type: '학사 퇴실', effectiveDate: '2027-03-05', requestedAt: '2027-03-03T15:00:00', dinner: '일반 석식' };
   const p = plan(rows, move, '2027-03-04');
   assert.deepStrictEqual(['x12', 'x20'].map((id) => p.toCancel.some((c) => c.id === id)), [true, true], JSON.stringify(p.toCancel));
-  assert.ok(!p.warnings.some((w) => /덮습니다/.test(w)), JSON.stringify(p.warnings));   // 이 계획이 취소하는 행을 가리키는 경고는 없다
+  assert.ok(!p.warnings.some((w) => /그날부터는 그 기록을 따릅니다/.test(w)), JSON.stringify(p.warnings));   // 이 계획이 취소하는 행을 가리키는 경고는 없다
   assert.strictEqual(at(saveLeaveP(rows, move, '2027-03-04'), '석식', '2027-04-30'), '일반 석식');
 });
 
@@ -483,7 +483,7 @@ test('재입실일 경계(지름길 Y): F6 재입실(3/25, 급식 미실시) 뒤
 test('같은 날 재입실의 신청 일시가 퇴실보다 이르면 오류(학사 상태가 바뀌지 않는데 정리만 취소되지 않게)', () => {
   const left = saveMove(HALL(), { type: '학사 퇴실', effectiveDate: '2027-03-10', requestedAt: '2027-03-09T12:00:00' }, '2027-03-09');
   const p = plan(left.rows, { type: '학사 입실', effectiveDate: '2027-03-10', requestedAt: '2027-03-09T10:00:00' }, '2027-03-09');
-  assert.ok(p.errors.some((e) => /같은 날\(2027-03-10\) 기록보다 신청 일시가 이릅니다/.test(e)), JSON.stringify(p.errors));
+  assert.ok(p.errors.some((e) => /같은 날\(3월 10일\(수\)\) 기록보다 신청 일시가 이릅니다/.test(e)), JSON.stringify(p.errors));
   assert.deepStrictEqual([p.rows, p.toCancel, p.toRestore], [[], [], []]);
 });
 
@@ -491,10 +491,10 @@ test('결정 59: 재입실이 있는 퇴실을 취소하면 재입실과 그 연
   const left = saveMove(HALL(), { type: '학사 퇴실', effectiveDate: '2027-03-10', requestedAt: '2027-03-08T10:00:00' }, '2027-03-08');
   const back = saveMove(left.rows, { type: '학사 입실', effectiveDate: '2027-03-15', requestedAt: '2027-03-09T10:00:00' }, '2027-03-09');
   const blocked = plan(back.rows, { type: '학사 퇴실', effectiveDate: '2027-03-11', requestedAt: '2027-03-09T11:00:00' }, '2027-03-09');
-  assert.ok(blocked.errors.some((e) => /2027-03-15 학사 입실.*\[퇴실 취소\].*재입실도 함께/.test(e)), JSON.stringify(blocked.errors));
+  assert.ok(blocked.errors.some((e) => /3월 15일\(월\) 학사 입실.*\[퇴실 취소\].*재입실도 함께/.test(e)), JSON.stringify(blocked.errors));
   const u = undo(back.rows, left.head);
   assert.ok(u.toCancel.some((c) => c.id === back.head) && back.rows.filter((r) => r.linked_change_id === back.head).every((r) => u.toCancel.some((c) => c.id === r.id)));
-  assert.ok(u.warnings.some((w) => w === '재입실 기록(2027-03-15)도 함께 취소됩니다'), JSON.stringify(u.warnings));
+  assert.ok(u.warnings.some((w) => w === '3월 15일(월) 재입실 기록도 함께 취소됩니다.'), JSON.stringify(u.warnings));
   const s = applyUndo(back.rows, u);
   for (const d of ['2027-03-10', '2027-03-15', '2027-03-30']) assert.deepStrictEqual([at(s, '학사', d), at(s, '조식', d), at(s, '석식', d)], ['입실', '실시', '학사 석식'], d);
   assert.deepStrictEqual(plan(s, { type: '학사 퇴실', effectiveDate: '2027-03-11', requestedAt: '2027-03-09T11:00:00' }, '2027-03-09').errors, []);
@@ -577,7 +577,7 @@ test('superseded: supersededBy는 적용일이 늦은 순, 같으면 신청 일�
   // 퇴실(일반 석식으로)의 일반 석식 신청이 더 새 미실시(3/4)에 가려지면: '쓰지 않습니다' 한 줄만, mealPlanChange_의 '먼저 적용되어' 경고는 없음
   const hall = HALL().concat([CH('석식', '미실시', '2027-03-04', { source: 'F7', requested_at: '2027-03-03T16:00:00' })]);
   const m = plan(hall, { type: '학사 퇴실', effectiveDate: '2027-03-04', requestedAt: '2027-03-03T15:00:00', dinner: '일반 석식' }, '2027-03-03');
-  assert.ok(m.warnings.some((w) => /석식 일반 석식 신청은 쓰지 않습니다: 더 새 신청이 있습니다/.test(w)), JSON.stringify(m.warnings));
+  assert.ok(m.warnings.some((w) => /석식 일반 석식 신청은 쓰지 않습니다\. 나중에 낸 신청이 있습니다/.test(w)), JSON.stringify(m.warnings));
   assert.ok(!m.warnings.some((w) => /먼저 적용되어/.test(w)), JSON.stringify(m.warnings));
 });
 
@@ -636,7 +636,7 @@ test("자기 취소가 이 계획이 쓸 '일반 석식으로' 행을 겨누면 
   assert.ok(p.toCancel.every((c) => r.some((x) => x.id === c.id)), JSON.stringify(p.toCancel));
   assert.deepStrictEqual(p.toCancel.filter((c) => p.toRestore.some((t) => t.id === c.id)), []);
   assert.ok(!p.rows.some((x) => x.value === '일반 석식') && p.warnings.some((w) => /일반 석식 신청은 쓰지 않습니다/.test(w)), JSON.stringify(p));
-  assert.ok(!p.warnings.some((w) => /덮습니다/.test(w)), JSON.stringify(p.warnings));   // 쓰지 않는 신청의 경고도 뺀다(#55 nit)
+  assert.ok(!p.warnings.some((w) => /그날부터는 그 기록을 따릅니다/.test(w)), JSON.stringify(p.warnings));   // 쓰지 않는 신청의 경고도 뺀다(#55 nit)
   assert.strictEqual(at(saveLeaveP(r, move, '2027-03-05'), '석식', '2027-03-10'), '미실시');
 });
 
@@ -657,7 +657,7 @@ test('결정 59: 같은 날 재입실(입실일 = 퇴실일, 나중에 기록)�
   const left = saveMove(HALL(), { type: '학사 퇴실', effectiveDate: '2027-03-10', requestedAt: '2027-03-09T10:00:00' }, '2027-03-09');
   const back = saveMove(left.rows, { type: '학사 입실', effectiveDate: '2027-03-10', requestedAt: '2027-03-09T12:00:00' }, '2027-03-09');
   const u = undo(back.rows, left.head);
-  assert.ok(u.toCancel.some((c) => c.id === back.head) && u.warnings.includes('재입실 기록(2027-03-10)도 함께 취소됩니다'), JSON.stringify(u));
+  assert.ok(u.toCancel.some((c) => c.id === back.head) && u.warnings.includes('3월 10일(수) 재입실 기록도 함께 취소됩니다.'), JSON.stringify(u));
 });
 
 test('재입실 행은 되살림 덮임에서도 퇴실 전 신청을 덮지 않는다 — 두 번째 퇴실(늦은 입력)과 X의 두 순서가 같다', () => {
@@ -678,7 +678,7 @@ test('결정 59 보충(기숙사생): 학사 및 기숙사 퇴실을 취소하�
   r = saveMove(r.rows, { type: '학사 입실', effectiveDate: '2027-03-15', requestedAt: '2027-03-09T10:00:00' }, '2027-03-09');
   const dorm = saveMove(r.rows, { type: '기숙사 입실', effectiveDate: '2027-03-15', requestedAt: '2027-03-09T11:00:00' }, '2027-03-09');
   const u = undo(dorm.rows, head);
-  assert.ok(u.warnings.includes('재입실 기록(2027-03-15)도 함께 취소됩니다') && u.warnings.includes('기숙사 입실 기록(2027-03-15)도 함께 취소됩니다'), JSON.stringify(u.warnings));
+  assert.ok(u.warnings.includes('3월 15일(월) 재입실 기록도 함께 취소됩니다.') && u.warnings.includes('3월 15일(월) 기숙사 입실 기록도 함께 취소됩니다.'), JSON.stringify(u.warnings));
   const s = applyUndo(dorm.rows, u);
   assert.deepStrictEqual(['2027-03-12', '2027-03-20'].map((d) => [at(s, '학사', d), at(s, '기숙사', d)]), [['입실', '입실'], ['입실', '입실']]);
   assert.deepStrictEqual(plan(s, { type: '학사 및 기숙사 퇴실', effectiveDate: '2027-03-11', requestedAt: '2027-03-09T12:00:00' }, '2027-03-09').errors, []);
@@ -779,7 +779,7 @@ test('기숙사 퇴실 대표 취소: 뒤따른 기숙사 입실도 함께(경�
   const left = saveMove(DORM(), { type: '기숙사 퇴실', effectiveDate: '2027-03-10', requestedAt: '2027-03-08T10:00:00' }, '2027-03-08');
   const din = saveMove(left.rows, { type: '기숙사 입실', effectiveDate: '2027-03-15', requestedAt: '2027-03-09T10:00:00' }, '2027-03-09');
   const u = undo(din.rows, left.head, '2027-03-09');
-  assert.ok(u.toCancel.some((c) => c.id === din.head) && u.warnings.includes('기숙사 입실 기록(2027-03-15)도 함께 취소됩니다'), JSON.stringify(u));
+  assert.ok(u.toCancel.some((c) => c.id === din.head) && u.warnings.includes('3월 15일(월) 기숙사 입실 기록도 함께 취소됩니다.'), JSON.stringify(u));
   assert.deepStrictEqual(plan(applyUndo(din.rows, u), { type: '기숙사 퇴실', effectiveDate: '2027-03-11', requestedAt: '2027-03-09T11:00:00' }, '2027-03-09').errors, []);
 });
 
@@ -935,13 +935,13 @@ test('movePlan_ 학사 입실: terms를 주면 2OUT 막힘 오류(날짜 표시)
   const rows = HALL().concat([OUT2('2027-04-10')]);
   const move = { type: '학사 입실', effectiveDate: '2027-05-03', requestedAt: '2027-05-01T09:00:00' };
   const p = plain(ctx.movePlan_(rows, 's1', move, { today: '2027-05-01', terms: TERMS }));
-  assert.deepStrictEqual([p.errors, p.rows], [['2OUT 퇴실로 2028년 3월 1일까지 다시 들어올 수 없습니다'], []]);
+  assert.deepStrictEqual([p.errors, p.rows], [['2OUT으로 퇴실해 2028년 3월 1일(수)까지 다시 들어올 수 없습니다.'], []]);
   assert.deepStrictEqual(plan(rows, move, '2027-05-01').errors, []);   // terms 없음 = 기존 동작
   assert.deepStrictEqual(plain(ctx.movePlan_(rows, 's1', move, { today: '2027-05-01', terms: [] })).errors, []);   // 빈 terms로 무기한 막지 않음
   const nextYear = plain(ctx.movePlan_(HALL().concat([OUT2('2027-10-01')]), 's1', { type: '학사 입실', effectiveDate: '2028-01-10', requestedAt: '2028-01-05T09:00:00' }, { today: '2028-01-05', terms: TERMS }));
-  assert.deepStrictEqual(nextYear.errors, ['2OUT 퇴실로 7월 14일까지 다시 들어올 수 없습니다']);
+  assert.deepStrictEqual(nextYear.errors, ['2OUT으로 퇴실해 7월 14일(금)까지 다시 들어올 수 없습니다.']);
   const s = applyUndo(rows, undo(rows, 'o2', '2027-05-01'));
-  assert.deepStrictEqual(plain(ctx.movePlan_(s, 's1', move, { today: '2027-05-01', terms: TERMS })).errors, ['2027-05-03에 이미 학사 입실 상태입니다']);
+  assert.deepStrictEqual(plain(ctx.movePlan_(s, 's1', move, { today: '2027-05-01', terms: TERMS })).errors, ['5월 3일(월)에 이미 학사 입실 상태입니다. 날짜나 학생을 확인해 주세요.']);
 });
 
 test("계획이 자기 '일반 석식으로' 행을 빼면 그 신청의 '덮습니다' 경고도 뺀다(#55 nit)", () => {
@@ -951,5 +951,5 @@ test("계획이 자기 '일반 석식으로' 행을 빼면 그 신청의 '덮습
   r = saveReq(r, '석식', '미실시', '2027-03-04T17:00:00', '2027-03-05', '2027-03-20');   // 일반 석식 신청보다 새롭고 늦게 적용되는 다른 값 → 그 신청의 '덮습니다' 경고
   const p = plan(r, { type: '학사 퇴실', effectiveDate: '2027-03-04', requestedAt: '2027-03-04T15:00:00', dinner: '일반 석식' }, '2027-03-05');
   assert.ok(!p.rows.some((x) => x.value === '일반 석식'), JSON.stringify(p.rows));
-  assert.ok(!p.warnings.some((w) => /덮습니다/.test(w)), JSON.stringify(p.warnings));
+  assert.ok(!p.warnings.some((w) => /그날부터는 그 기록을 따릅니다/.test(w)), JSON.stringify(p.warnings));
 });

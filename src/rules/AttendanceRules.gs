@@ -19,19 +19,19 @@ function parseBlockSpec_(spec) {
   var s = ruleStr_(spec);
   if (s.toUpperCase() === 'ALL') return { all: true, ranges: [], errors: [] };
   var errors = [], ranges = [];
-  if (!s) return { all: false, ranges: [], errors: ['블록 표기가 비어 있습니다'] };
+  if (!s) return { all: false, ranges: [], errors: ['시간이 비어 있습니다. 18:00-20:00처럼 적어 주세요.'] };
   s.split(';').forEach(function (part) {
     var p = part.trim();
     if (!p) return;
     var m = /^(\d{1,2}:\d{2})\s*[-–~]\s*(\d{1,2}:\d{2})$/.exec(p);
     var a = m && hmNorm_(m[1]), b = m && hmNorm_(m[2]);
     if (!a || !b || a === '24:00' || hmToMin_(a) >= hmToMin_(b)) {
-      errors.push('블록 표기가 아닙니다(HH:mm-HH:mm): ' + p);
+      errors.push('읽을 수 없는 시간입니다(' + p + '). 18:00-20:00처럼 적어 주세요.');
       return;
     }
     ranges.push({ start: a, end: b });
   });
-  if (!ranges.length && !errors.length) errors.push('블록 표기가 비어 있습니다');
+  if (!ranges.length && !errors.length) errors.push('시간이 비어 있습니다. 18:00-20:00처럼 적어 주세요.');
   ranges.sort(function (x, y) { return hmToMin_(x.start) - hmToMin_(y.start) || hmToMin_(x.end) - hmToMin_(y.end); });
   var merged = [];
   ranges.forEach(function (r) {
@@ -305,7 +305,7 @@ function attGridCell_(plan, s, opts) {
   var exc = (s.exceptions || []).filter(function (e) { return e && ruleStr_(e.status) === '확정' && ruleStr_(e.date) === date; });
   var out = { date: date, operating: operating, marks: [], results: [], study: { blocks: 0, studiedBlocks: 0, minutes: 0, studiedMinutes: 0, missed: [] }, warnings: [] };
   if (!operating) {
-    if (exc.length) out.warnings.push(date + ' 운영 안 하는 날의 특이사항 ' + exc.length + '건은 결과로 세지 않습니다');
+    if (exc.length) out.warnings.push(ymdKo_(date) + '은 운영하지 않는 날이라 특이사항 ' + exc.length + '건을 결과에 세지 않았습니다.');
     return out;
   }
   out.marks = resolveStudentDay_(plan, s, opts).map(function (m) { return { seq: m.seq, code: m.code, text: m.text }; });
@@ -392,10 +392,10 @@ function attResultReplaces_(exceptions, studentId, ymd, blocks, keepIds) {
 function attGridWritable_(term, ymd, today, graceDays) {
   var d = ruleStr_(ymd), t = ruleStr_(today), s = ruleStr_(term && term.start_date), e = ruleStr_(term && term.end_date);
   var g = graceDays === undefined || graceDays === null || graceDays === '' ? 14 : Number(graceDays);
-  if (!ymdIsValid_(d) || !ymdIsValid_(t)) return { ok: false, reason: '날짜 형식이 아닙니다' };
-  if (!ymdIsValid_(s) || !ymdIsValid_(e) || d < s || d > e) return { ok: false, reason: d + '은(는) 이 기간의 날짜가 아닙니다' };
-  if (d > t) return { ok: false, reason: '아직 오지 않은 날의 결과는 적을 수 없습니다' };
+  if (!ymdIsValid_(d) || !ymdIsValid_(t)) return { ok: false, reason: '날짜를 읽을 수 없습니다. 날짜를 다시 골라 주세요.' };
+  if (!ymdIsValid_(s) || !ymdIsValid_(e) || d < s || d > e) return { ok: false, reason: ymdKo_(d, t) + '은 이 운영 기간의 날짜가 아닙니다. 운영 기간 안의 날짜를 골라 주세요.' };
+  if (d > t) return { ok: false, reason: ymdKo_(d, t) + '은 아직 오지 않은 날입니다. 그날이 지난 뒤 결과를 적어 주세요.' };
   if (!(g >= 0) || g % 1 !== 0) throw new Error('graceDays는 0 이상 정수: ' + graceDays);
-  if (t > ymdAddDays_(e, g)) return { ok: false, reason: '기간이 끝나고 ' + g + '일이 지나 결과를 고칠 수 없습니다' };
+  if (t > ymdAddDays_(e, g)) return { ok: false, reason: '운영 기간이 끝나고 ' + g + '일이 지나 결과를 고칠 수 없습니다. 고칠 것이 있으면 관리자 선생님께 알려 주세요.' };
   return { ok: true, reason: '' };
 }
