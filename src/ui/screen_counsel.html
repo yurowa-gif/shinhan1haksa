@@ -23,8 +23,9 @@
 
     call('getCounselContext').then(function (r) {
       ctx = r; drawHead();
+      Nav.bind(function (k) { if (String(k).indexOf('s:') === 0) openStudent(String(k).slice(2), true); else toList(); });   // 뒤로 가기(C39): 학생 기록 → 학생 목록
       var want = (window.SCREEN_PARAMS || {}).student;
-      if (want && r.students.some(function (s) { return s.id === want; })) openStudent(want);
+      if (want && r.students.some(function (s) { return s.id === want; })) openStudent(want, true);
     }).catch(function (err) { clear(head); showError(head, err); });
 
     function drawHead() {
@@ -44,12 +45,14 @@
       rows.forEach(function (s) {
         box.appendChild(el('div', { class: 'cn-row' }, [
           el('span', { text: label(s) + (s.mine || !anyMine ? '' : ' (담당 아님)') }),
-          el('button', { type: 'button', class: 'btn secondary row-btn', text: '상담 보기', onclick: function () { openStudent(s.id); } })
+          el('button', { type: 'button', class: 'btn secondary row-btn', text: '상담 보기', onclick: function () { Nav.go('s:' + s.id); openStudent(s.id, true); } })
         ]));
       });
     }
 
-    function openStudent(id) {
+    function toList() { seq++; dropBar(); data = null; editing = null; clear(body); head.style.display = ''; window.scrollTo(0, 0); }
+
+    function openStudent(id, fromNav) {
       var mine = ++seq; editing = null; tab = 'list'; dropBar(); head.style.display = 'none';
       clear(body); body.appendChild(el('div', { class: 'loading', text: '불러오는 중…' }));
       call('getCounselNotes', id).then(function (r) { if (mine !== seq) return; data = r; draw(); })
@@ -62,7 +65,7 @@
       var s = data.student;
       var top = el('div', { class: 'card' }, [
         el('div', { class: 'cn-head' }, [el('div', {}, [el('b', { text: s.grade + '. ' + s.name }), el('span', { class: 'muted', text: ' ' + s.grade + '-' + s.classNo + ' ' + s.number + '번' + (s.teacher ? ' · 담당 ' + s.teacher : '') })]),
-          el('button', { type: 'button', class: 'btn secondary row-btn', style: 'flex:0 0 auto;white-space:nowrap', text: '학생 바꾸기', onclick: function () { dropBar(); clear(body); data = null; head.style.display = ''; window.scrollTo(0, 0); } })])
+          el('button', { type: 'button', class: 'btn secondary row-btn', style: 'flex:0 0 auto;white-space:nowrap', text: '학생 바꾸기', onclick: function () { Nav.back(toList); } })])
       ]);
       if (data.canWrite) top.appendChild(UI.segmented({ label: '상담', value: tab, options: [{ value: 'list', label: '상담 목록' }, { value: 'write', label: editing ? '고치기' : '새로 쓰기' }], onchange: function (v) { tab = v; if (v === 'list') editing = null; draw(); } }));
       body.appendChild(top); body.appendChild(status);

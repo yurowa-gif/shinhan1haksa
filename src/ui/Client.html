@@ -56,6 +56,81 @@
     return ul;
   }
 
+  /** 계정을 못 찾았을 때(C39, device-compat 5.4): 지금 로그인된 이메일(본인 것만)과, 구글 계정이 여러 개일 때의 해결 안내 */
+  function accountHelp(email) {
+    return el('div', { class: 'notice info', style: 'word-break:keep-all' }, [
+      email ? el('div', {}, [document.createTextNode('지금 로그인된 계정: '), el('b', { text: email })]) : null,
+      el('div', { style: 'margin-top:6px', text: '다른 구글 계정으로 열렸다면 이 화면이 보일 수 있습니다. 시크릿 창(아이폰은 개인정보 보호 브라우징)에서 학교에 알린 계정 하나로만 로그인해 다시 열어 주세요.' })
+    ]);
+  }
+
+  /**
+   * 뒤로 가기(C39, device-compat 3.3): 같은 페이지 안에서 화면이 바뀌는 곳이 브라우저 기록을 남겨, 안드로이드 뒤로 가기 버튼이
+   * 앱 밖(카톡 등)이 아니라 앞 화면으로 가게 한다. Apps Script는 iframe 안이라 google.script.history(push·setChangeHandler)를 쓴다.
+   *   Nav.bind(fn)   기록으로 화면이 바뀔 때(뒤로·앞으로) fn(key)를 부른다. key = Nav.go에 준 이름('' = 처음 화면). 화면마다 한 번 묶는다(다시 묶으면 바뀐다).
+   *   Nav.go(key)    화면을 바꾼 직후 부른다(같은 key면 아무것도 안 함).
+   *   Nav.back(fb)   화면 안의 [← 돌아가기] 버튼용: 기록이 있으면 브라우저 뒤로 가기와 똑같이 움직이고, 없으면(또는 기록이 안 움직이면) fb()를 부른다.
+   * 바텀 시트는 열릴 때 기록을 하나 남기고, 뒤로 가기를 누르면 시트만 닫힌다(UI.bottomSheet를 여기서 감싼다 — Components는 건드리지 않는다).
+   * google.script.history가 없는 곳(편집기·시험)에서는 아무 일도 하지 않고 화면은 예전처럼 움직인다.
+   */
+  var Nav = (function () {
+    var cur = '', depth = 0, sheets = [], restore = null, wired = false, byBack = false;
+    function hist() { try { return window.google && google.script && google.script.history ? google.script.history : null; } catch (e) { return null; } }
+    function push() { var h = hist(); if (!h) return; depth++; try { h.push({ k: cur, s: sheets.length, d: depth }, {}, ''); } catch (e) { depth--; } }
+    function onChange(e) {
+      var st = (e && e.state) || {};
+      depth = st.d || 0;
+      byBack = true;
+      try {
+        while (sheets.length > (st.s || 0)) sheets[sheets.length - 1].close();
+        var k = st.k || '';
+        if (k !== cur) { cur = k; if (restore) restore(k); }
+      } finally { byBack = false; }
+    }
+    function wire() {
+      if (wired) return;
+      var h = hist();
+      if (!h) return;
+      wired = true;
+      try { h.setChangeHandler(onChange); } catch (e) { wired = false; }
+    }
+    function patchSheets() {
+      if (typeof UI === 'undefined' || !UI.bottomSheet || UI.__navSheets) return;
+      var orig = UI.bottomSheet;
+      UI.__navSheets = true;
+      UI.bottomSheet = function (opts) {
+        var sheet = orig(opts), open = sheet.open, close = sheet.close, isOpen = false;
+        sheet.open = function () {
+          var r = open.apply(sheet, arguments);
+          if (!isOpen) { isOpen = true; sheets.push(sheet); push(); }
+          return r;
+        };
+        sheet.close = function () {
+          var was = isOpen;
+          isOpen = false;
+          close.apply(sheet, arguments);
+          if (!was) return;
+          var i = sheets.indexOf(sheet);
+          if (i >= 0) sheets.splice(i, 1);
+          if (!byBack && depth > 0 && hist()) { try { window.history.back(); } catch (e) { /* 시트는 이미 닫혔다 */ } }   // 버튼으로 닫으면 시트가 남긴 기록도 걷는다
+        };
+        return sheet;
+      };
+    }
+    return {
+      bind: function (fn) { restore = fn; wire(); patchSheets(); },
+      go: function (key) { key = String(key || ''); if (key === cur) return; cur = key; push(); },
+      back: function (fb) {
+        if (depth > 0 && hist()) {
+          var before = cur;
+          try { window.history.back(); } catch (e) { if (fb) fb(); return; }
+          setTimeout(function () { if (cur === before && fb) fb(); }, 400);   // 기록이 안 움직이면 화면이라도 돌아간다
+        } else if (fb) fb();
+      },
+      _state: function () { return { key: cur, depth: depth, sheets: sheets.length }; }
+    };
+  })();
+
   function studentCard(s) {
     return el('div', { class: 'card' }, [
       el('h2', { text: s.name }),

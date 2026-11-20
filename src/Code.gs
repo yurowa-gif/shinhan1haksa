@@ -223,12 +223,14 @@ function getHomeData(role) {
     case 'student':
       var me = readAll_('students').filter(function (s) { return normalizeEmail_(s.email) === user.email; })[0];
       base.me = me ? studentSummary_(me, term) : null;
+      base.accountEmail = user.email;   // 본인 이메일만(계정을 못 찾았을 때 어느 계정으로 열렸는지 보이려고, C39)
       return base;
 
     case 'parent':
       var childIds = readAll_('guardian_links').filter(function (g) {
         return normalizeEmail_(g.parent_email) === user.email;
       }).map(function (g) { return g.student_id; });
+      base.accountEmail = user.email;   // 본인 이메일만(C39)
       base.children = studentsByIds_(childIds).map(function (s) {
         return { id: s.id, name: s.name, label: s.grade + '학년 ' + s.class_no + '반' };
       });

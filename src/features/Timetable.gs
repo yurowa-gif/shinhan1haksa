@@ -122,9 +122,9 @@ function ttcOwnId_() { return portalWho_().studentId; }
  * → {ok:true, student, today, window, view(ttcView_), hasPrev} | {ok:false, reason}
  */
 function getTimetableContext() {
-  requirePermission_('timetable.mine');
+  var me = requirePermission_('timetable.mine');
   var sid = ttcOwnId_();
-  if (!sid) return { ok: false, reason: '학생 명단에서 내 계정을 찾지 못했습니다. 담당 선생님께 알려 주세요.' };
+  if (!sid) return { ok: false, reason: '학생 명단에서 내 계정을 찾지 못했습니다. 담당 선생님께 알려 주세요.', email: me.email };   // email: 본인 것만(어느 계정으로 열렸는지 보이려고)
   var d = ttcLoad_(), win = ttcWindow_(d.today);
   var view = ttcView_(d.rows, sid, win.month);
   return { ok: true, student: ttcStudent_(findById_('students', sid)), today: d.today, window: win, view: view, hasPrev: ttcCopyPrevious_(d.rows, sid, win.month).entries.length > 0 };
