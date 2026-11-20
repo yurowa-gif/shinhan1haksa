@@ -10,7 +10,7 @@
           (d.out.out1 ? UI.statusPill('out1', '1OUT ' + d.out.out1 + '명') : UI.statusPill('mute', '1OUT 0명')), (d.out.out2 ? UI.statusPill('out2', '퇴실 대상 ' + d.out.out2 + '명') : UI.statusPill('mute', '퇴실 대상 0명')), UI.statusPill('mute', '오늘 ' + (d.out.today || 0) + '건')]),
         d.out.list && d.out.list.length ? el('ul', { class: 'list' }, d.out.list.map(function (r) { return el('li', {}, [el('span', { text: UI.util.studentLabel(r.student) }), r.count >= 2 ? UI.statusPill('out2') : UI.statusPill('out1')]); })) : null,
         UI.rowLink({ href: d.appUrl + '?page=outs&tab=record', text: 'OUT 기록하기' }),
-        UI.rowLink({ href: d.appUrl + '?page=outs&tab=term', text: (d.out.periodWord === '이번 기간' ? '이번 기간 보기' : '이번 학기 보기') })
+        UI.rowLink({ href: d.appUrl + '?page=outs&tab=term', text: (d.out.periodWord || '이번 학기') + ' 보기' })
       ]));
     }
     var x = d.duty, line = document.getElementById('home-duty');
@@ -55,7 +55,7 @@
     ]));
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '내 담당 학생 (' + d.students.length + '명)' }),
-      studentList(d.students, '이번 기간 담당 학생이 없습니다.')
+      studentList(d.students, '이번 운영 기간 담당 학생이 없습니다.')
     ]));
     if (d.docs && !d.docs.error) {
       root.appendChild(el('div', { class: UI.cardClass(d.docs.items ? 'todo' : '') }, [
@@ -69,8 +69,8 @@
       var cn = d.counsel;
       root.appendChild(el('div', { class: UI.cardClass(cn.withoutNote ? 'todo' : '') }, [
         el('h2', { text: '상담일지' }),
-        el('div', { style: 'margin:8px 0' }, [cn.withoutNote ? UI.statusPill('todo', '이번 기간 상담 기록 없는 학생 ' + cn.withoutNote + '명') : UI.statusPill('confirmed', cn.total ? '담당 학생 모두 기록 있음' : '담당 학생 없음')]),
-        el('div', { class: 'muted', style: 'word-break:keep-all', text: '최근 30일 내가 쓴 상담 ' + cn.mine30 + '건 · 내용은 담당교사·담임·관리자만 봅니다.' }),
+        el('div', { style: 'margin:8px 0' }, [cn.withoutNote ? UI.statusPill('todo', '이번 운영 기간 상담 기록 없는 학생 ' + cn.withoutNote + '명') : UI.statusPill('confirmed', cn.total ? '담당 학생 모두 기록 있음' : '담당 학생 없음')]),
+        el('div', { class: 'muted', style: 'word-break:keep-all', text: '최근 30일 내가 쓴 상담 ' + cn.mine30 + '건 · 내용은 담당교사·담임·관리자 선생님만 봅니다.' }),
         UI.rowLink({ href: d.appUrl + '?page=counsel', text: '상담일지 열기' })
       ]));
     }
@@ -90,7 +90,7 @@
     ]));
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '좌석표' }),
-      el('div', { class: 'muted', text: '학생을 빈 자리에 앉히고 두 자리를 맞바꿉니다.' }),
+      el('div', { class: 'muted', text: '학생을 빈 좌석에 앉히고 좌석 2개를 맞바꿉니다.' }),
       UI.rowLink({ href: d.appUrl + '?page=seats', text: '좌석표 열기' }),
       UI.rowLink({ href: d.appUrl + '?page=avoid', text: '떨어뜨릴 짝' }),
       UI.rowLink({ href: d.appUrl + '?page=contacts', text: '연락처' })

@@ -21,7 +21,7 @@
     if (d.out && !d.out.error) root.appendChild(el('div', { class: UI.cardClass(d.out.out1 || d.out.out2 ? 'key' : '') }, [
       el('h2', { text: 'OUT 현황' }),
       el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin:8px 0' }, [(d.out.out1 ? UI.statusPill('out1', '1OUT ' + d.out.out1 + '명') : UI.statusPill('mute', '1OUT 0명')), (d.out.out2 ? UI.statusPill('out2', '퇴실 대상 ' + d.out.out2 + '명') : UI.statusPill('mute', '퇴실 대상 0명'))]),
-      UI.rowLink({ href: d.appUrl + '?page=outs&tab=term', text: (d.out.periodWord === '이번 기간' ? '이번 기간 보기' : '이번 학기 보기') })
+      UI.rowLink({ href: d.appUrl + '?page=outs&tab=term', text: (d.out.periodWord || '이번 학기') + ' 보기' })
     ]));
     if (d.docs && !d.docs.error) {
       root.appendChild(el('div', { class: UI.cardClass(d.docs.items ? 'todo' : '') }, [
@@ -38,7 +38,7 @@
     ]));
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '좌석표' }),
-      el('div', { class: 'muted', text: '학사생 자리를 확인합니다(배정은 학사 교사·관리자).' }),
+      el('div', { class: 'muted', text: '학사생 좌석을 확인합니다(배정은 학사 교사·관리자).' }),
       UI.rowLink({ href: d.appUrl + '?page=seats', text: '좌석표 열기' })
     ]));
   }

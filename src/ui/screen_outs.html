@@ -237,7 +237,7 @@
       clear(tabsBox);
       var opts = [];
       if (state.ctx && state.ctx.canRecord) opts.push({ value: 'record', label: '기록' });
-      opts.push({ value: 'term', label: state.ctx && state.ctx.periodWord === '이번 기간' ? '운영 기간' : '학기' }, { value: 'today', label: '오늘' }, { value: 'dismiss', label: '퇴실 대상' });
+      opts.push({ value: 'term', label: state.ctx && state.ctx.periodWord === '이번 학기' ? '학기' : '운영 기간' }, { value: 'today', label: '오늘' }, { value: 'dismiss', label: '퇴실 대상' });
       if (state.ctx && state.ctx.isAdmin) opts.push({ value: 'rules', label: '항목' });
       tabsBox.appendChild(UI.segmented({ label: '화면', value: state.tab, options: opts, onchange: function (v) { state.tab = v; state.afterConfirm = null; showTab(); } }));
     }

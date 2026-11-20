@@ -201,7 +201,7 @@
           (p.counts.banned ? ' 2OUT 퇴실로 막힌 ' + p.counts.banned + '명은 빼고 저장합니다.' : '')
         : state.tab === 'contacts' ? '학생 전화 ' + p.counts.students + '명, 학부모 연락처 ' + p.counts.guardians + '건을 저장합니다.'
         : '학부모 연결 ' + p.counts.newLinks + '건, 새 계정 ' + p.counts.newUsers + '개를 저장합니다.';
-      UI.confirmSheet({ title: '저장할까요?', message: msg, confirmText: '저장', cancelText: '취소', onconfirm: function () {
+      UI.confirmSheet({ title: '저장할까요?', message: msg, confirmText: '저장', onconfirm: function () {
         state.busy = true; saveBtn.disabled = true;
         call(students ? 'commitRoster' : state.tab === 'contacts' ? 'commitContacts' : 'commitGuardians', textarea.value, opts(), expectOf(p)).then(function (r) {
           state.busy = false;

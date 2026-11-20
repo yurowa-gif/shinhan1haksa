@@ -94,8 +94,8 @@ function vioIsLeft_(changes, studentId, ymd) {
   });
 }
 
-/** '이번 학기' | '이번 기간'(방학) */
-function vioPeriodWord_(term) { return term && String(term.type).trim() === '방학' ? '이번 기간' : '이번 학기'; }
+/** '이번 학기' | '이번 운영 기간'(방학) — 화면에 그대로 보이는 말이다 */
+function vioPeriodWord_(term) { return term && String(term.type).trim() === '방학' ? '이번 운영 기간' : '이번 학기'; }
 
 /**
  * 알림 받을 사람(순수): 담당교사·그 반 담임(활성만), 처음 2OUT이 되는 저장이면 관리자도(결정 49). 입력한 본인은 뺀다. C12(자동 OUT)도 쓴다.

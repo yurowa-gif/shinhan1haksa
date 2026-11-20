@@ -153,7 +153,7 @@
       go.addEventListener('click', function () {
         if (!shown) return;
         UI.confirmSheet({ title: '이어받을까요?', message: shown.fromTermName + ' → ' + shown.termName + ': 학생 ' + shown.count + '명을 등록합니다.',
-          confirmText: '이어받기', cancelText: '취소', onconfirm: function () {
+          confirmText: '이어받기', onconfirm: function () {
             go.disabled = true;
             call('commitCarryOver', sel.value, shown.count).then(function (r) {
               if (!r.ok) { UI.toast(r.error, { kind: 'warn', ms: 5000 }); clear(out); return; }
