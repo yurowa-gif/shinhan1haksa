@@ -1,6 +1,6 @@
 /**
  * D15 ② 반응형 사진: 같은 화면을 휴대폰 3종(안드로이드 360×800, 아이폰 390×844, 아이폰 SE 375×667)과
- * 노트북 3종(1366×768, 1536×864 = 1920 화면 125%, 1366×768 배율 125% = CSS 약 1093×614)으로 찍는다.
+ * 노트북 3종(1366×768, 1920×1080, 1093×560 = 1366×768 화면 배율 125%의 보이는 영역)으로 찍는다.
  * 실행: node design/preview/refresh-responsive.js <이름 before|after> [화면 id …]   → design/preview/out/resp/<이름>-<화면>-<기기>.png
  *   노트북은 처음 보이는 화면(스크롤 전)만, 휴대폰은 위쪽 1400px까지. 이름·숫자는 모두 가짜, 가짜 오늘 2027-03-26.
  */
@@ -13,7 +13,7 @@ const { seed } = require('./stage7-real.js');
 const OUT = path.join(__dirname, 'out', 'resp');
 const A = { admin: 'test.admin@example.com', hall: 'test.teacher@example.com', student: 'test.student@example.com', parent: 'test.parent@example.com', attendance: 'test.attendance@example.com' };
 const PHONES = [{ id: 'android-360', w: 360, h: 800 }, { id: 'iphone-390', w: 390, h: 844 }, { id: 'iphone-se-375', w: 375, h: 667 }];
-const LAPTOPS = [{ id: 'laptop-1366', w: 1366, h: 768 }, { id: 'laptop-1536', w: 1536, h: 864 }, { id: 'laptop-1366-125', w: 1093, h: 614 }];
+const LAPTOPS = [{ id: 'laptop-1366', w: 1366, h: 768 }, { id: 'laptop-1920', w: 1920, h: 1080 }, { id: 'laptop-1093', w: 1093, h: 560 }];   // 1093×560 = 1366×768 화면을 배율 125%로 쓸 때(브라우저 주소창·탭 줄을 뺀 보이는 높이)
 const NOW = '2027-03-26T10:00:00';
 const SCREENS = [
   { id: 'home-hall', email: A.hall, query: '' },
@@ -23,6 +23,8 @@ const SCREENS = [
   { id: 'home-parent', email: A.parent, query: '' },
   { id: 'facility-write', email: A.student, query: 'page=facility' },
   { id: 'mealcount', email: A.admin, query: 'page=mealcount' },
+  { id: 'results', email: A.admin, query: 'page=results&tab=total' },
+  { id: 'seats', email: A.admin, query: 'page=seats' },
   { id: 'timetable-confirm', email: A.hall, query: 'page=timetable&role=hall_teacher', sheet: true }
 ];
 

@@ -239,6 +239,7 @@
   .picker-chosen .picker-name { font-weight: 700; }
   .seatgrid-wrap { overflow-x: auto; max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); }
   table.seatgrid { border-collapse: separate; border-spacing: 4px; }
+  .seatgrid-wrap { max-height: 70vh; max-height: 70dvh; overflow: auto; }
   .seatgrid td { padding: 0; height: var(--tap); min-width: 76px; text-align: center; vertical-align: middle; font-size: var(--font-xs); color: var(--muted-ink); }
   .seatgrid td.pillar { background: var(--muted-weak); }
   .seatgrid td.door, .seatgrid td.window { border: 1px dashed var(--muted-ink); }
@@ -287,7 +288,9 @@
   .home-head { margin-bottom: 4px; }
   .home-h { font-size: var(--font-sm); font-weight: 800; letter-spacing: 0; color: var(--muted-ink); margin: 14px 4px 4px; }
   .home-none { color: var(--muted); margin: 4px 4px 12px; }
-  .home-cols { display: block; }
+  .home-cols, .pt-cols { display: block; }
+  .pt-a, .pt-b { min-width: 0; }   /* 학생·학부모 홈의 왼쪽 열(할 일·OUT·출결)과 오른쪽 열(자리·급식·상담·일정) */
+  .card p, .card .muted, .pt-note, .notice { max-width: 45em; }   /* 본문 한 줄 40~45자를 넘기지 않는다(한글 1자 ≈ 1em) */
   @media (hover: hover) {
     .btn:hover { filter: brightness(.94); }
     .btn.secondary:hover { background: var(--accent-weak); filter: none; }
@@ -310,6 +313,7 @@
     header.top { --hw: 880px; padding-left: max(16px, calc((100vw - var(--hw)) / 2 + 32px)); padding-right: max(16px, calc((100vw - var(--hw)) / 2 + 32px)); }
     body:has(main.home) header.top, body:has(main.wide) header.top { --hw: 1180px; }
     body.tone-soft:has(main) header.top { --hw: 760px; }
+    body.tone-soft:has(main.home) header.top { --hw: 960px; }
     .home-cols { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 0 28px; align-items: start; }
     .home-main, .home-side { min-width: 0; }
     .home-side { position: sticky; top: 80px; }
@@ -328,6 +332,9 @@
     .actionbar > .btn { flex: 0 0 auto; min-width: 160px; max-width: none; }
     .toast { left: auto; right: 32px; margin: 0; }
     body.tone-soft main { max-width: 760px; margin: 24px auto; padding: 8px 28px 18px; }
+    body.tone-soft main.home { max-width: 960px; }   /* 학생·학부모 홈: 가운데 960px 판 안에서 두 열 */
+    .pt-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 32px; align-items: start; }
+    .pt-cols > div > .card:first-child { border-top: 0; padding-top: 8px; }
     body.tone-soft .actionbar { padding-left: max(16px, calc((100vw - 760px) / 2 + 32px)); padding-right: max(16px, calc((100vw - 760px) / 2 + 32px)); }
   }
 </style>

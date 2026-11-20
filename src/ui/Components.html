@@ -183,6 +183,28 @@ var UI = {};
   };
 
   /**
+   * UI.layoutPortal(root) — 학생·학부모 홈 본문(Portal)의 카드를 두 열로 나눈다(D15 ②). 맨 위 카드(이름)와 안내 줄은 위에 그대로,
+   * 나머지는 왼쪽 열(할 일·OUT·출결) / 오른쪽 열(`card side`: 자리·급식·상담·일정)로. 휴대폰은 한 줄(왼쪽 열 → 오른쪽 열)이고 840px 이상은 두 열(CSS `.pt-cols`).
+   */
+  UI.layoutPortal = function (root) {
+    var kids = Array.prototype.slice.call(root.children);
+    var has = function (n, c) { return !!(n.classList && n.classList.contains(c)); };
+    var head = [], a = [], b = [], seen = false;
+    kids.forEach(function (n) {
+      if (!has(n, 'card')) head.push(n);
+      else if (!seen) { head.push(n); seen = true; }
+      else if (has(n, 'side')) b.push(n);
+      else a.push(n);
+    });
+    if (!b.length) return { head: head.length, a: a.length, b: 0 };
+    kids.forEach(function (n) { root.removeChild(n); });
+    head.forEach(function (n) { root.appendChild(n); });
+    var colA = el('div', { class: 'pt-a' }, a), colB = el('div', { class: 'pt-b' }, b);
+    root.appendChild(el('div', { class: 'pt-cols' }, [colA, colB]));
+    return { head: head.length, a: a.length, b: b.length };
+  };
+
+  /**
    * UI.cardClass(kind) — 홈 카드의 종류: 'todo'(진짜 할 일: 마감·미처리 건수 > 0일 때만), 'key'(중요한 숫자·상태), 그 밖에는 참고(상자 없음).
    * 0건이면 todo를 붙이지 않는다(노란 띠가 늘 떠 있으면 아무것도 눈에 안 띈다).
    */

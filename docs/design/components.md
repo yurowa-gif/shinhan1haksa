@@ -29,6 +29,9 @@
 ### UI.layoutHome
 `UI.layoutHome(root)` — 교사 홈의 카드들을 **맨 위 한 줄(`.home-head`) + 해야 할 일(`.home-main`: `card todo`·`card key`) + 참고(`.home-side`)** 로 다시 놓는다. `Index.html`이 `renderHome` 뒤에 한 번 부른다(학생·학부모 홈은 부르지 않음). 카드는 옮길 뿐 다시 만들지 않는다. 할 일이 없으면 "지금 처리할 일이 없습니다." 한 줄. 휴대폰은 한 줄로 이어지고 840px 이상은 두 열(CSS `.home-cols`).
 
+### UI.layoutPortal
+`UI.layoutPortal(root)` — 학생·학부모 홈 본문의 카드를 **왼쪽 열(할 일·OUT·출결) / 오른쪽 열(`card side`: 자리·급식·상담·일정)** 로 나눈다. 맨 위 카드(이름)와 안내 줄은 위에 그대로. `Portal.html`이 홈을 다 그린 뒤 한 번 부른다. 휴대폰은 한 줄, 840px 이상은 두 열(CSS `.pt-cols`).
+
 ### UI.cardClass
 `UI.cardClass(kind)` → 카드 class 문자열. `'todo'` = **진짜 할 일**(마감·미처리 건수가 0보다 클 때만, 노란 띠 상자), `'key'` = **중요한 숫자·상태**(OUT 등, 코발트 띠 상자), 그 밖(`''`)은 참고 정보(상자 없음, 줄로만 나눔). 0건이면 `todo`를 붙이지 않는다 — 노란 띠가 늘 떠 있으면 아무것도 눈에 안 띈다.
 

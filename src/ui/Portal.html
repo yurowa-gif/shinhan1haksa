@@ -25,7 +25,7 @@
     function row(key, val) {
       return el('div', { class: 'pt-row' }, [el('span', { class: 'pt-k', text: key }), el('span', { class: 'pt-v' }, [typeof val === 'string' ? document.createTextNode(val) : val])]);
     }
-    function card(title, kids, kind) { return el('div', { class: UI.cardClass(kind) + ' pt-card' }, [el('h2', { text: title })].concat(kids.filter(Boolean))); }
+    function card(title, kids, kind) { return el('div', { class: UI.cardClass(kind) + (kind === 'side' ? ' side' : '') + ' pt-card' }, [el('h2', { text: title })].concat(kids.filter(Boolean))); }
     function note(text) { return el('div', { class: 'muted pt-note', text: text }); }
     function link(text, fn) { return UI.rowLink({ text: text, onclick: fn }); }
     function pillsOf(list) { return el('div', { class: 'pt-pills' }, list); }
@@ -82,7 +82,7 @@
 
       if (!parent) {
         var ph = [p.seat ? row('자습 자리', p.seat.space + ' ' + p.seat.label) : null, p.room ? row('기숙사', p.room.floor + '층 ' + p.room.roomNo + '호') : null].filter(Boolean);
-        root.appendChild(card('내 자리와 방', ph.length ? ph : [note('아직 자습 자리와 기숙사 방이 정해지지 않았습니다.')]));
+        root.appendChild(card('내 자리와 방', ph.length ? ph : [note('아직 자습 자리와 기숙사 방이 정해지지 않았습니다.')], 'side'));
       } else {
         var meal = [row('기숙사', st['기숙사'] || '없음'), row('조식', st['조식'] || '없음'), row('석식', st['석식'] || '없음')];
         if (st['중식']) meal.push(row('중식', st['중식']));
@@ -90,18 +90,19 @@
           meal.push(el('div', { class: 'pt-k', style: 'margin-top:8px', text: '바뀌는 것' }));
           p.pending.forEach(function (c) { meal.push(el('div', { class: 'pt-note', text: c.dateKo + '부터 ' + c.item + ' ' + c.value })); });
         }
-        root.appendChild(card('급식과 기숙사', meal));
+        root.appendChild(card('급식과 기숙사', meal, 'side'));
         var cn = p.counsel || [], cnKids = [];
         if (!cn.length) cnKids.push(el('div', { class: 'pt-note', text: '아직 상담 기록이 없습니다.' }));
         cn.slice(0, 5).forEach(function (c) { cnKids.push(el('div', { class: 'pt-note', text: c.dateKo + (c.teacher ? ' ' + c.teacher + ' 선생님과' : '') + ' 상담이 있었습니다.' })); });
         cnKids.push(note('상담 내용은 학교에서만 봅니다. 자세한 이야기는 담당 선생님께 직접 물어봐 주세요.'));
-        root.appendChild(card('상담', cnKids));
+        root.appendChild(card('상담', cnKids, 'side'));
       }
 
       var up = p.upcoming || [];
       var upKids = up.length ? up.map(function (e) { return row(e.dateKo, e.title); }) : [UI.emptyState('앞으로 잡힌 학사 일정이 없습니다.')];
       upKids.push(link('월별 일정 열기', function () { show('month'); }));
-      root.appendChild(card('앞으로 일정', upKids));
+      root.appendChild(card('앞으로 일정', upKids, 'side'));
+      UI.layoutPortal(root);   // 넓은 화면(840px~)에서 왼쪽 = 할 일·OUT·출결, 오른쪽 = 자리·급식·상담·일정
     }
 
     function outsView(p, back) {

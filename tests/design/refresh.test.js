@@ -107,6 +107,10 @@ test('D15 ②(반응형): Styles.html 에 중단점 두 곳(600·840)·홈 두 �
   assert.ok(/@media \(hover: hover\)/.test(styles) && /\.row-link:hover/.test(styles), 'hover');
   assert.ok(/iframe:focus/.test(styles) && /scrollbar-gutter: stable/.test(styles) && /100dvh/.test(styles) && /85dvh/.test(styles) && /safe-area-inset-top/.test(styles), '포커스·스크롤바·dvh·safe-area');
   assert.ok(/main\.home:has\(> nav\.tabs\)/.test(styles), '역할이 둘 이상일 때 왼쪽 메뉴');
+  assert.ok(/body\.tone-soft main\.home \{ max-width: 960px; \}/.test(styles) && /\.pt-cols \{ display: grid; grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\)/.test(styles), '학생·학부모 홈 960px 판 두 열');
+  assert.ok(/max-width: 720px; \}   \/\* 넓은 화면에서도/.test(styles), '학생·학부모 판은 넓은 화면에서 720px를 넘지 않는 기본값');
+  assert.ok(/\.card p, \.card \.muted, \.pt-note, \.notice \{ max-width: 45em; \}/.test(styles), '본문 한 줄 45em');
+  assert.ok(/UI\.layoutPortal\(root\)/.test(css.readFile('src/ui/Portal.html')), 'Portal이 두 열 배치를 부른다');
   // 식수·교사 홈이 쓰는 홈 틀: Index.html 이 main.home 을 쓰고 교사 홈에서 layoutHome 을 부른다(학생·학부모는 부르지 않는다)
   const index = css.readFile('src/ui/Index.html');
   assert.ok(/<main class="home">/.test(index) && /role !== 'student' && role !== 'parent'\) UI\.layoutHome\(root\)/.test(index));
@@ -117,12 +121,12 @@ test('D15 ②(반응형): Styles.html 에 중단점 두 곳(600·840)·홈 두 �
   // 문서
   const dir = path.join(ROOT, 'docs', 'design', 'refresh');
   const doc = fs.readFileSync(path.join(dir, 'responsive.md'), 'utf8');
-  ['색 타령만 하지 말고', '~599 휴대폰', '840~ 노트북', '가운데 대화창', '머리 행', 'scrollbar-gutter', '1366×768 배율 125%', '40px을 허용할지', '나빠진 칸 0', '건너뛴 것·확인 못 한 것', '실제 윈도우 노트북', '목록 + 옆 상세'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
+  ['색 타령만 하지 말고', '~599 휴대폰', '840~ 노트북', '가운데 대화창', '머리 행', 'scrollbar-gutter', '1093×560', '1920×1080', 'UI.layoutPortal', '45em', '40px을 허용할지', '나빠진 칸 0', '건너뛴 것·확인 못 한 것', '실제 윈도우 노트북', '목록 + 옆 상세'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
   const imgs = [...doc.matchAll(/!\[[^\]]*\]\((responsive\/[^)]+\.png)\)/g)].map((m) => m[1]);
-  assert.strictEqual(imgs.length, 16, '사진 수 ' + imgs.length);
+  assert.strictEqual(imgs.length, 20, '사진 수 ' + imgs.length);
   imgs.forEach((f) => assert.ok(fs.existsSync(path.join(dir, f)), f + ' 파일이 없다'));
   fs.readdirSync(path.join(dir, 'responsive')).filter((f) => f.endsWith('.png')).forEach((f) => assert.ok(imgs.indexOf('responsive/' + f) >= 0, f + ' 가 문서에 쓰이지 않았다'));
-  ['phone', 'laptop'].forEach((k) => ['home-hall', 'home-admin', 'home-owner', 'home-student', 'home-parent', 'facility-write', 'mealcount', 'timetable-confirm'].forEach((sc) => assert.ok(imgs.indexOf('responsive/compare-' + k + '-' + sc + '.png') >= 0, k + ' ' + sc)));
+  ['phone', 'laptop'].forEach((k) => ['home-hall', 'home-admin', 'home-owner', 'home-student', 'home-parent', 'facility-write', 'mealcount', 'results', 'seats', 'timetable-confirm'].forEach((sc) => assert.ok(imgs.indexOf('responsive/compare-' + k + '-' + sc + '.png') >= 0, k + ' ' + sc)));
   assert.ok(fs.existsSync(path.join(ROOT, 'design/preview/refresh-responsive.js')) && fs.existsSync(path.join(ROOT, 'design/preview/refresh-responsive-compare.js')));
   // rules.md 2-1절이 같은 중단점을 말한다
   const rules = css.readFile('docs/design/rules.md');

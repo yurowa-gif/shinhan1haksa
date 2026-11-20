@@ -162,6 +162,33 @@ test('layoutHome(D15 ②): 맨 위 카드는 head, todo·key 카드는 할 일 �
   delete ctx.el;
 });
 
+test('layoutPortal(D15 ②): 맨 위 카드(이름)·안내 줄은 위에 두고 나머지를 왼쪽(할 일·OUT·출결) / 오른쪽(side 카드)으로 옮긴다, side가 없으면 그대로', () => {
+  function node(tag, attrs, kids) {
+    const n = { tag, attrs: attrs || {}, children: [], parent: null,
+      classList: { contains: (c) => String((n.attrs.class || '')).split(/\s+/).indexOf(c) >= 0 },
+      appendChild(c) { if (c.parent) c.parent.removeChild(c); c.parent = n; n.children.push(c); return c; },
+      removeChild(c) { n.children.splice(n.children.indexOf(c), 1); c.parent = null; return c; } };
+    (kids || []).forEach((k) => n.appendChild(k));
+    return n;
+  }
+  ctx.el = node;
+  const card = (cls, id) => node('div', { class: cls, id });
+  const root = node('div', {});
+  ['card', 'notice warn', 'card todo', 'card key', 'card', 'card side', 'card side'].forEach((c, i) => root.appendChild(card(c, 'n' + i)));
+  const r = UI.layoutPortal(root);
+  assert.deepStrictEqual(plain(r), { head: 2, a: 3, b: 2 });
+  const [h1, h2, cols] = root.children;
+  assert.deepStrictEqual([h1.attrs.id, h2.attrs.id], ['n0', 'n1']);
+  assert.strictEqual(cols.attrs.class, 'pt-cols');
+  assert.deepStrictEqual(cols.children[0].children.map((x) => x.attrs.id), ['n2', 'n3', 'n4']);
+  assert.deepStrictEqual(cols.children[1].children.map((x) => x.attrs.id), ['n5', 'n6']);
+  const plainRoot = node('div', {});
+  ['card', 'card todo', 'card'].forEach((c, i) => plainRoot.appendChild(card(c, 'p' + i)));
+  assert.deepStrictEqual(plain(UI.layoutPortal(plainRoot)), { head: 1, a: 2, b: 0 });
+  assert.strictEqual(plainRoot.children.length, 3, 'side가 없으면 손대지 않는다');
+  delete ctx.el;
+});
+
 /* ───── 스타일 ───── */
 
 const rules = css.parseRules(css.styleText(css.readFile('src/ui/Styles.html')));
