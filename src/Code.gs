@@ -11,13 +11,13 @@ function doGet(e) {
   var p = (e && e.parameter) || {};
 
   if (p.page === 'diag') {
-    if (!isDiagEnabled_()) return renderPage_('ui/NoAccess', { email: '', message: noAccessText_('', false) }, '권한 없음');
+    if (!isDiagEnabled_()) return renderPage_('ui/NoAccess', { email: '', message: '지금은 접속 진단을 열 수 없습니다. 진단이 필요하면 관리자 선생님께 요청해 주세요.' }, '권한 없음');
     return renderPage_('ui/Diag', { diag: collectDiag_() }, '접속 진단');
   }
 
   // C0 임시: 인쇄 방식 시험 화면(소유자 본인만). A/B 결정 뒤 지운다.
   if (p.page === 'printspike') {
-    try { assertOwnerRun_(); } catch (err) { return renderPage_('ui/NoAccess', { email: '', message: noAccessText_('', false) }, '권한 없음'); }
+    try { assertOwnerRun_(); } catch (err) { return renderPage_('ui/NoAccess', { email: '', message: '인쇄 방식 시험 화면은 앱 소유자 계정으로만 열 수 있습니다.' }, '권한 없음'); }
     return renderPage_('ui/screen_printspike', {}, '인쇄 방식 시험');
   }
 
@@ -25,7 +25,8 @@ function doGet(e) {
   try {
     user = getCurrentUser_();
   } catch (err) {
-    return renderPage_('ui/Error', { message: err.message }, '오류');
+    console.error('앱 열기 실패: ' + err.message);   // 시스템 문구는 화면에 내보내지 않고 로그에만 남긴다
+    return renderPage_('ui/Error', { message: '앱을 여는 중 문제가 생겼습니다. 잠시 뒤 새로 불러와 보고, 또 안 되면 관리자 선생님께 알려 주세요.' }, '열 수 없음');
   }
 
   if (!user.registered) {

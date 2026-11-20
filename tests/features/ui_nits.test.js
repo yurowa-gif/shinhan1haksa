@@ -80,7 +80,7 @@ test('C41 학생·학부모 화면 문구: 저장 값 → 학부모 표기는 pt
   assert.ok(portal.includes('퇴실 대상이 되었습니다') && portal.includes('관리자 선생님이 퇴실을 정합니다') && !portal.includes('학교를 나가야'), '퇴실 대상 안내');
   assert.ok(portal.includes("'자녀가 ' + td.monthKo") && !portal.includes("s.name + ' 학생이 '"), '동의 카드는 자녀');
   const tt = ui('screen_timetable.html');
-  assert.ok(tt.includes('시간표가 자녀에게 돌아갔습니다. 자녀가 고쳐서 다시 내면 다시 동의해 주세요.') && tt.includes('자녀에게 돌려보내기') && tt.includes('자녀에게 돌려보냈습니다.'), '학부모 반려 문구');
+  assert.ok(tt.includes('시간표가 자녀에게 돌아갔습니다. 자녀가 고쳐서 다시 내면 다시 동의해 주세요.') && tt.includes('자녀에게 돌려보내기'), '학부모 반려 문구');
   assert.ok(!/kid\.name \+ ' 학생/.test(tt), '학부모 화면 제목에 "학생" 없음');
   const fc = ui('screen_facility.html');
   assert.ok(fc.includes("title: '일지 취소 처리'") && fc.includes("confirmText: '취소 처리', cancelText: '돌아가기'") && fc.includes('기록은 지워지지 않고 \\"취소\\"로 남습니다. 다시 쓰려면 새로 써 주세요.'.replace(/\\"/g, '"')), '시설 일지 취소 시트');

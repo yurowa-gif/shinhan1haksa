@@ -164,14 +164,14 @@ function saveCounselNote(input) {
  */
 function cnlOwnNote_(noteId, user) {
   var note = cnlFindNote_(noteId);
-  if (!note) return { error: '상담 기록을 찾을 수 없습니다. 새로 고친 뒤 다시 해 주세요.' };
+  if (!note) return { error: '상담 기록을 찾을 수 없습니다. 새로 불러온 뒤 다시 해 주세요.' };
   if (String(note.type).trim() === CNS_TYPE_OUT2) return { error: "'2OUT 학부모 면담'은 OUT 화면의 [퇴실 대상]에서만 취소합니다." };
   if (normalizeEmail_(note.teacher_email) !== user.email) {
     logDenied_(user.email, 'counsel.cancel', '남이 쓴 상담');
-    throw new Error('권한이 없습니다.');
+    throw new Error(DENIED_MESSAGE);
   }
   requirePermission_('counsel.save', { studentId: note.student_id });   // 지금도 그 학생의 담당교사여야 한다
-  if (!ruleRowLive_(note)) return { error: '이미 취소된 상담입니다. 새로 고친 뒤 다시 해 주세요.' };
+  if (!ruleRowLive_(note)) return { error: '이미 취소된 상담입니다. 새로 불러온 뒤 다시 해 주세요.' };
   return { note: note };
 }
 

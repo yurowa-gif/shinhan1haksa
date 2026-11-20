@@ -266,7 +266,7 @@
     function expectOf(cells) { var e = {}; cells.forEach(function (c) { e[c.id] = c.token; }); return e; }
     function doAssign(cell) {
       if (!cell.vacant) { UI.toast('이 좌석에는 이미 학생이 있습니다. 맞바꾸려면 위에서 학생 선택을 풀고(선택한 학생을 다시 누릅니다) 좌석 2개를 차례로 눌러 주세요.', { kind: 'warn', ms: 6000 }); return; }
-      if (cell.hold && cell.reason !== '퇴실') { UI.toast(cell.hold + ' 학생이 배정된 자리입니다(' + cell.reason + '). 자리를 눌러 배정을 먼저 풀어 주세요.', { kind: 'warn', ms: 6000 }); return; }
+      if (cell.hold && cell.reason !== '퇴실') { UI.toast(cell.hold + ' 학생이 배정된 좌석입니다(' + cell.reason + '). 학생 선택을 풀고 이 좌석을 눌러 [배정 풀기]를 먼저 해 주세요.', { kind: 'warn', ms: 6000 }); return; }
       call('assignSeat', state.termId, cell.id, state.student.id, expectOf([cell])).then(function (r) { if (r.ok) state.student = null; done(r, '앉혔습니다.'); }).catch(fail);
     }
     function confirmSwap(a, b) {
@@ -402,7 +402,7 @@
       var f = { name: UI.field('새 공간 이름', name, { name: 'name' }), gender: UI.field('성별 구역', gender, { name: 'gender' }), text: UI.field('좌석표', text, { name: 'text' }) };
       Object.keys(f).forEach(function (k) { card.appendChild(f[k]); });
       var out = el('div');
-      var pv = el('button', { type: 'button', class: 'btn secondary', text: '미리보기' });
+      var pv = el('button', { type: 'button', class: 'btn secondary', text: '미리 보기' });
       var go = el('button', { type: 'button', class: 'btn', text: '가져오기', disabled: 'disabled' });
       card.appendChild(el('div', { class: 'seat-row-actions' }, [pv, go])); card.appendChild(out);
       go.disabled = true;

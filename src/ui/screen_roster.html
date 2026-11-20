@@ -65,9 +65,9 @@
       textarea = el('textarea', { class: 'roster-text', placeholder: '첫 줄(머리글)부터 함께 붙여넣으세요.\n열 순서: ' + cols });
       textarea.addEventListener('input', onInputChanged);
       textField = UI.field(state.tab === 'students' ? '학생 명단' : state.tab === 'contacts' ? '연락처 명단' : '학부모 연결 명단', textarea, { name: 'text',
-        hint: state.tab === 'contacts' ? '비운 칸은 바꾸지 않습니다. 학부모 연결을 먼저 올린 뒤 보호자 줄을 올려 주세요. 번호는 미리보기에 나오지 않습니다.' : '구글 시트에서 복사해 붙이거나 CSV를 붙입니다. 이 단계에서는 아직 저장되지 않습니다.' });
+        hint: state.tab === 'contacts' ? '비운 칸은 바꾸지 않습니다. 학부모 연결을 먼저 올린 뒤 보호자 줄을 올려 주세요. 번호는 미리 보기에 나오지 않습니다.' : '구글 시트에서 복사해 붙이거나 CSV를 붙입니다. 이 단계에서는 아직 저장되지 않습니다.' });
       inputCard.appendChild(textField);
-      checkBtn = el('button', { type: 'button', class: 'btn secondary', text: '확인', onclick: onCheck });
+      checkBtn = el('button', { type: 'button', class: 'btn secondary', text: '미리 보기', onclick: onCheck });
       inputCard.appendChild(el('div', { class: 'roster-actions' }, [checkBtn]));
       clear(resultBox);
       resultBox.appendChild(el('div', { class: 'notice info', text: '저장하려면 먼저 [확인]을 눌러 결과를 봐 주세요. 저장 버튼은 확인한 뒤에 켜집니다.' }));
@@ -205,7 +205,7 @@
         state.busy = true; saveBtn.disabled = true;
         call(students ? 'commitRoster' : state.tab === 'contacts' ? 'commitContacts' : 'commitGuardians', textarea.value, opts(), expectOf(p)).then(function (r) {
           state.busy = false;
-          if (!r.ok) { setPreview(null); drawResult(r); UI.toast(r.stale ? '다시 확인해 주세요.' : '저장하지 못했습니다.', { kind: 'warn' }); return; }
+          if (!r.ok) { setPreview(null); drawResult(r); UI.toast(r.stale ? '그사이 다른 선생님이 명단을 바꿨습니다. [미리 보기]를 다시 눌러 주세요.' : '저장하지 못했습니다. 아래 고칠 곳을 확인해 주세요.', { kind: 'warn', ms: 6000 }); return; }
           UI.toast(r.nothingToDo ? '변경 없음' : '저장했습니다.', { kind: 'ok' });
           textarea.value = ''; setPreview(null);
           resultBox.appendChild(el('div', { class: 'notice ok', text: '저장했습니다. ' + (students ? '이어서 학부모 연결을 올려 주세요.' : state.tab === 'guardians' ? '이어서 연락처를 올릴 수 있습니다.' : '') }));

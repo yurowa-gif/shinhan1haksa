@@ -9,7 +9,7 @@
  *   visibleIds(acc, email)        그 계정이 볼 수 있는 학생 id(학생: 본인, 학부모: 자녀)
  *   plantPhones(env)              students.phone·guardian_links.phone 칸에 가짜 번호(010-0000-xxxx)를 감사 기록 없이 심는다 → 번호 목록
  *   portalMatrix(env, acc, ctx)   계정 × 화면용 읽기 공개 함수(get·list·preview) × 인자 → [{who, fn, args, outcome, text}]
- *                                 outcome: 'ok' | 'denied'(권한이 없습니다.) | 'error'(다른 오류). ctx = {today, termIds}
+ *                                 outcome: 'ok' | 'denied'(공통 거부 문구) | 'error'(다른 오류). ctx = {today, termIds}
  *                                 studentId 인자는 모든 학생 id 대신 A·B·C와 가짜 학생 4번(아무와도 연결 안 됨)만 넣는다.
  *   portalLeaks(env, rows, acc, opts)
  *     응답(오류 문구 포함)에서 그 계정이 볼 수 없는 것을 찾는다 → ['누가 함수(인자) → 무엇']
@@ -22,7 +22,6 @@ const { plain } = require('./harness');
 const { textOf, readFunctions, argSets } = require('./leak-scan');
 
 const PHONE_RE = /010[-. ]?0000[-. ]?(\d{4})/g;
-const DENIED = '권한이 없습니다.';
 
 function portalAccounts(env) {
   const byId = Object.fromEntries(env.rows('students').map((x) => [x.id, x]));
@@ -79,7 +78,7 @@ function portalMatrix(env, acc, ctx) {
     for (const fn of readFunctions()) {
       for (const args of argSets(fn, { today: ctx.today, termIds: ctx.termIds, studentIds: ids, roles, headId: 'x', spaceId: 'x' })) {
         let out, outcome = 'ok';
-        try { out = plain(env.call(who, fn.name, ...args)); } catch (e) { out = e.message; outcome = e.message === DENIED ? 'denied' : 'error'; }
+        try { out = plain(env.call(who, fn.name, ...args)); } catch (e) { out = e.message; outcome = e.message === env.ctx.DENIED_MESSAGE ? 'denied' : 'error'; }
         rows.push({ who, fn: fn.name, args, outcome, text: textOf(out) });
       }
     }
