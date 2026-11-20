@@ -110,7 +110,7 @@ function dtyMonthView_(m, user) {
     if (p.operating && open && p.date >= today_()) emptyDays++;
     return { date: p.date, weekdayKo: p.weekdayKo, operating: p.operating, memo: p.memo, end: p.end, overridden: p.overridden, slots: slots };
   });
-  return { teachers: teachers, days: days, emptyDays: emptyDays, swapCount: swapCount, warnings: warnings.filter(function (w, i, a) { return a.indexOf(w) === i; }) };
+  return { teachers: teachers, days: days, emptyDays: emptyDays, swapCount: swapCount, warnings: warnings.map(dtyWarnText_).filter(function (w, i, a) { return a.indexOf(w) === i; }) };
 }
 
 /**

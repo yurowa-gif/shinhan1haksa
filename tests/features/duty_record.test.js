@@ -261,3 +261,15 @@ test('xlsx: 근무 없는 달은 빈 달력 + 빈 합계로도 열린다', () =>
   const { zip } = xlsxOf(x, DUTY, '2027-05');
   assert.strictEqual(zip._order.length, 7);
 });
+
+test('근무표 달 화면(getDutyMonth) 경고도 dtyWarnText_를 거쳐 숫자 날짜(yyyy-MM-dd) 없이 "1월 11일(월)" 꼴로 나간다', () => {
+  const x = makeEnv();
+  const row = x.slots.find((r) => r.date === '2027-01-11' && r.slot === '21:30조' && r.status !== '취소');
+  assert.ok(row, '가짜 근무표에 1/11 21:30조가 있다');
+  x.env.asOwner((c) => c.updateRecord_('duty_slots', row.id, { original_email: '', actual_email: '' }, ADMIN));
+  const m = plain(x.env.call(DUTY, 'getDutyMonth', MON));
+  const w = m.warnings.filter((t) => t.includes('근무 선생님이 없습니다'));
+  assert.ok(w.length >= 1, JSON.stringify(m.warnings));
+  assert.ok(m.warnings.every((t) => !/\d{4}-\d{2}-\d{2}/.test(t)), JSON.stringify(m.warnings));
+  assert.ok(w.some((t) => t.startsWith('1월 11일(월) 21:30조')), JSON.stringify(w));
+});
