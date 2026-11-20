@@ -7,7 +7,7 @@
       UI.rowLink({ href: d.appUrl + '?page=counsel', text: '상담일지 열기' })
     ]));
     if (!d.out || d.out.error) return;
-    root.appendChild(el('div', { class: UI.cardClass('key') }, [
+    root.appendChild(el('div', { class: UI.cardClass(d.out.out1 || d.out.out2 ? 'key' : '') }, [
       el('h2', { text: '우리 반 OUT' }),
       el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin:8px 0' }, [
         d.out.out1 ? UI.statusPill('out1', '1OUT ' + d.out.out1 + '명') : UI.statusPill('mute', '1OUT 0명'),
