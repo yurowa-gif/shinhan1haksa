@@ -30,3 +30,29 @@ test('결과 시트 출석부 칸 줄: NONE은 빼고, 전부 비면 "출석(특
   assert.strictEqual(fn([{ code: 'NONE', text: '' }, { code: 'EXC', text: '학' }, { code: 'FIXED', text: '가' }]), '학 · 가');
   assert.ok(/marksText\(c\.marks\)/.test(html) && !html.includes('c.marks.map'), '쓰는 자리');
 });
+
+test('화면 파일: 줄 끝 // 주석 뒤에 .then·.catch 코드가 붙어 주석이 되어 버린 곳이 없다', () => {
+  const dir = path.join(__dirname, '..', '..', 'src', 'ui');
+  const bad = [];
+  fs.readdirSync(dir).filter((f) => f.endsWith('.html')).forEach((f) => {
+    fs.readFileSync(path.join(dir, f), 'utf8').split('\n').forEach((line, i) => {
+      let q = '';
+      for (let k = 0; k < line.length - 1; k++) {
+        const ch = line[k];
+        if (q) { if (ch === '\\') k++; else if (ch === q) q = ''; continue; }
+        if (ch === '"' || ch === "'" || ch === '`') { q = ch; continue; }
+        if (ch === '/' && line[k + 1] === '/' && line[k - 1] !== ':') {   // 문자열 밖의 // = 주석 시작
+          if (/\)\s*\.(then|catch|finally)\s*\(/.test(line.slice(k))) bad.push(f + ':' + (i + 1));
+          break;
+        }
+      }
+    });
+  });
+  assert.deepStrictEqual(bad, [], '주석 뒤에 코드가 붙은 줄: ' + bad.join(', '));
+});
+
+test('시설 일지 누적표: 관리자가 아닌 교사가 열면 서버 거부 뒤 화면이 멈추지 않고 안내를 낸다(.catch가 살아 있다)', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'ui', 'screen_facility_day.html'), 'utf8');
+  const line = html.split('\n').filter((l) => l.includes("call('getFacilityReport'") || /^\s*\.catch\(function \(err\) \{ clear\(body\); drawHead\(\)/.test(l)).join('\n');
+  assert.ok(/getFacilityReport[\s\S]*\.catch\(function \(err\)[\s\S]*관리자만 볼 수 있습니다/.test(line), '누적표 .catch와 안내 문구');
+});
