@@ -459,7 +459,7 @@ var UI = {};
     return api;
   };
 
-  /** UI.confirmSheet({title, lead, lines, message, confirmText:'저장', cancelText:'취소', danger, onconfirm, oncancel}) — 열린 시트를 돌려준다. 포커스는 취소 쪽.
+  /** UI.confirmSheet({title, lead, lines, message, confirmText:'저장', cancelText:'돌아가기', danger, onconfirm, oncancel}) — 열린 시트를 돌려준다. 포커스는 취소 쪽.
       lead = 크고 굵게 한 줄(적용일처럼 꼭 봐야 할 것), lines = 그 아래 바뀌는 것 목록 */
   UI.confirmSheet = function (opts) {
     opts = opts || {};
@@ -470,7 +470,7 @@ var UI = {};
     var sheet = UI.bottomSheet({
       title: opts.title, content: el('div', {}, body),
       actions: [
-        { text: opts.cancelText || '취소', kind: 'secondary', onclick: function () { sheet.close(); if (opts.oncancel) opts.oncancel(); } },
+        { text: opts.cancelText || '돌아가기', kind: 'secondary', onclick: function () { sheet.close(); if (opts.oncancel) opts.oncancel(); } },
         { text: opts.confirmText || '확인', kind: opts.danger ? 'danger' : 'primary', onclick: function () { sheet.close(); if (opts.onconfirm) opts.onconfirm(); } }
       ]
     });
@@ -487,7 +487,7 @@ var UI = {};
     var sheet = UI.bottomSheet({
       title: opts.title, content: content,
       actions: [
-        { text: '닫기', kind: 'secondary', onclick: function () { sheet.close(); if (opts.oncancel) opts.oncancel(); } },
+        { text: '돌아가기', kind: 'secondary', onclick: function () { sheet.close(); if (opts.oncancel) opts.oncancel(); } },
         { text: opts.confirmText || '확인', kind: opts.danger === false ? 'primary' : 'danger', disabled: true,
           onclick: function () { var r = area.value.trim(); if (r.length < min) return; sheet.close(); if (opts.onconfirm) opts.onconfirm(r); } }
       ]
