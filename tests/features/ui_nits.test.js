@@ -56,3 +56,12 @@ test('시설 일지 누적표: 관리자가 아닌 교사가 열면 서버 거�
   const line = html.split('\n').filter((l) => l.includes("call('getFacilityReport'") || /^\s*\.catch\(function \(err\) \{ clear\(body\); drawHead\(\)/.test(l)).join('\n');
   assert.ok(/getFacilityReport[\s\S]*\.catch\(function \(err\)[\s\S]*관리자만 볼 수 있습니다/.test(line), '누적표 .catch와 안내 문구');
 });
+
+test('시설 일지 시작·끝 시각 두 칸: flex가 아니라 grid minmax(0,1fr)이고 칸 안 input은 width 100%·min-width 0(고유 너비 때문에 카드 밖으로 나가지 않게)', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'ui', 'screen_facility.html'), 'utf8');
+  const css = /<style>([\s\S]*?)<\/style>/.exec(html)[1];
+  const rule = (sel) => { const m = new RegExp(sel.replace(/[.\s]/g, (c) => '\\' + c) + '\\s*\\{([^}]*)\\}').exec(css); return m ? m[1] : ''; };
+  assert.ok(/display:\s*grid/.test(rule('.fc-times')) && /minmax\(0,\s*1fr\)/.test(rule('.fc-times')), '.fc-times grid minmax(0, 1fr)');
+  assert.ok(/min-width:\s*0/.test(rule('.fc-times .field')), '.fc-times .field min-width 0');
+  assert.ok(/width:\s*100%/.test(rule('.fc-times .field input')) && /min-width:\s*0/.test(rule('.fc-times .field input')), 'input width 100%·min-width 0');
+});
