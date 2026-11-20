@@ -15,7 +15,7 @@
 
     var termSelect, ymdField, textarea, textField, checkBtn;
     var bar = UI.actionBar([
-      { text: '저장', kind: 'primary', disabled: true, onclick: onSave },
+      { text: '저장', kind: 'primary', enter: true, disabled: true, onclick: onSave },
       { text: '지우기', kind: 'secondary', onclick: function () { if (textarea) { textarea.value = ''; } setPreview(null); } }
     ], { mount: true });
     var saveBtn = bar.querySelectorAll('button')[0];

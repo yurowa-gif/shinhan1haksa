@@ -205,3 +205,11 @@ test('한국어 줄바꿈: .seg·.sheet h2·.sheet-body·.sheet-lead 는 word-br
   assert.ok(m, 'keep-all 규칙이 없다');
   ['.seg', '.sheet h2', '.sheet-body', '.sheet-lead'].forEach((sel) => assert.ok(m[1].split(',').map((x) => x.trim()).indexOf(sel) >= 0, sel));
 });
+
+// D15 ④: 글자 크기 이름 4개 — Styles.html 안에는 .9rem(보조)보다 작은 글자가 없다(알약 앞 기호 .7em 제외)
+test('Styles.html: 글자 크기는 보조(.9rem) 이상, --font-xs는 --font-sm과 같은 값', () => {
+  const css = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'src', 'ui', 'Styles.html'), 'utf8');
+  assert.match(css, /--font-xs: var\(--font-sm\)/);
+  const small = [...css.matchAll(/font-size:\s*(\.\d+)rem/g)].filter((m) => parseFloat(m[1]) < 0.9);
+  assert.deepStrictEqual(small.map((m) => m[0]), [], '0.9rem보다 작은 글자 크기');
+});

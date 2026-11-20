@@ -474,7 +474,7 @@
         }
         (last.warnings || []).forEach(function (w) { result.appendChild(el('div', { class: 'notice warn', text: w })); });
       }
-      function drawBar() { removeBar(); bar = UI.actionBar([{ text: '비우기', kind: 'secondary', onclick: reset }, { text: '입퇴실 신청', disabled: !ready(), onclick: confirmSave }], { mount: true }); }
+      function drawBar() { removeBar(); bar = UI.actionBar([{ text: '비우기', kind: 'secondary', onclick: reset }, { text: '입퇴실 신청', enter: true, disabled: !ready(), onclick: confirmSave }], { mount: true }); }
       function refresh(retried) {
         var mine = ++seq; clearTimeout(timer);   // 학생을 비우는 경우에도 진행 중인 미리보기를 무효로 한다
         last = null; drawResult(); drawBar();

@@ -99,12 +99,21 @@ var UI = {};
   util.SHEET_GUARD_MS = 350;
   /** 시트 안 버튼 클릭을 받아도 되는가: 아직 안 열렸거나(openedAt 0) 열린 지 SHEET_GUARD_MS 이상 지났을 때만 true */
   util.sheetClickAllowed = function (openedAt, now) { return !openedAt || now - openedAt >= util.SHEET_GUARD_MS; };
+  /** Enter를 '주 버튼 누르기'로 볼 키 입력인가(입력칸 한 줄에서 맨 Enter만). 한글 입력 중(isComposing·229)·여러 줄 칸·선택 칸·버튼 위·Shift/Ctrl 조합·시트가 열려 있을 때는 아니다 */
+  util.enterPressesPrimary = function (ev, sheetOpen) {
+    if (!ev || ev.key !== 'Enter' || sheetOpen) return false;
+    if (ev.isComposing || ev.keyCode === 229 || ev.shiftKey || ev.ctrlKey || ev.altKey || ev.metaKey || ev.defaultPrevented) return false;
+    var t = ev.target || {};
+    if (String(t.tagName || '').toUpperCase() !== 'INPUT') return false;
+    return ['checkbox', 'radio', 'button', 'submit', 'file', 'range', 'color'].indexOf(String(t.type || 'text').toLowerCase()) < 0;
+  };
   UI.util = util;
 
   /* ───────── 작은 도우미(전역 아님) ───────── */
   function makeBtn(spec) {
     var b = el('button', { type: 'button', class: BTN_CLASS[spec.kind || 'primary'] || 'btn', text: spec.text });
     if (spec.disabled) b.disabled = true;
+    if (spec.enter) b.setAttribute('data-enter', '1');   // 입력칸에서 Enter를 누르면 이 버튼이 눌린다(확인 시트가 뜨는 버튼에만 — 바로 기록되는 버튼에는 달지 않는다)
     if (spec.onclick) b.addEventListener('click', function (e) { spec.onclick(e, b); });
     return b;
   }
@@ -218,6 +227,14 @@ var UI = {};
     setTimeout(function () { if (node.parentNode) node.parentNode.removeChild(node); }, opts.ms || 3000);
     return node;
   };
+
+  if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('keydown', function (e) {
+    if (!util.enterPressesPrimary(e, !!document.querySelector('.sheet-scrim'))) return;
+    var btn = document.querySelector('button[data-enter]');
+    if (!btn || btn.disabled || !btn.offsetParent) return;
+    e.preventDefault();
+    btn.click();
+  });
 
   /** UI.actionBar([{text, onclick, kind:'primary'|'secondary'|'danger', disabled}], {mount:true}) — 아래 고정 바. mount면 body에 붙이고 main에 has-actionbar 표시 */
   UI.actionBar = function (buttons, opts) {
