@@ -34,7 +34,7 @@
     ]));
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '좌석표' }),
-      el('div', { class: 'muted', text: '학사생 자리를 확인합니다.' }),
+      el('div', { class: 'muted', text: '학사생 좌석을 확인합니다.' }),
       UI.rowLink({ href: d.appUrl + '?page=seats', text: '좌석표 열기' })
     ]));
     try { renderStage2A(d, root); } catch (e) { showError(root, e); }   // 2단계 카드가 실패해도 나머지 카드는 그린다

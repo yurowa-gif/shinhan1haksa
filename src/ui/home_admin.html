@@ -10,7 +10,7 @@
         d.out.targets && (d.out.targets.need + d.out.targets.ready) > 0 ? el('a', { class: 'notice warn', style: 'display:block;margin:8px 0;text-decoration:none', href: d.appUrl + '?page=outs&tab=dismiss',
           text: '2OUT 대상 ' + d.out.targets.n + '명 · 면담 필요 ' + d.out.targets.need + ' · 확정 가능 ' + d.out.targets.ready }) : null,
         UI.rowLink({ href: d.appUrl + '?page=outs&tab=record', text: 'OUT 기록하기' }),
-        UI.rowLink({ href: d.appUrl + '?page=outs&tab=term', text: (d.out.periodWord === '이번 기간' ? '이번 기간 보기' : '이번 학기 보기') })
+        UI.rowLink({ href: d.appUrl + '?page=outs&tab=term', text: (d.out.periodWord || '이번 학기') + ' 보기' })
       ]));
     }
     var x = d.duty;
@@ -44,7 +44,7 @@
       el('h2', { text: '전체 현황' }),
       el('div', { class: 'muted', text: UI.util.formatDateKo(d.today) + ' · ' + d.termName }),
       el('div', { class: 'stats', style: 'margin-top:12px' }, [
-        statBox(d.counts.students, '이번 기간 학사생'),
+        statBox(d.counts.students, '이번 운영 기간 학사생'),
         statBox(d.counts.allStudents, '등록 학생(전체)'),
         statBox(d.counts.guardianLinks, '학부모 연결')
       ])
@@ -91,7 +91,7 @@
     ]));
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '좌석표' }),
-      el('div', { class: 'muted', text: '공간·좌석 격자를 그리고 학생을 자리에 앉힙니다.' }),
+      el('div', { class: 'muted', text: '공간·좌석 격자를 그리고 학생을 좌석에 배정합니다.' }),
       UI.rowLink({ href: d.appUrl + '?page=seats', text: '좌석표 열기' }),
       UI.rowLink({ href: d.appUrl + '?page=avoid', text: '떨어뜨릴 짝' }),
       UI.rowLink({ href: d.appUrl + '?page=contacts', text: '연락처' }),
@@ -115,7 +115,7 @@
         el('div', { class: 'muted', style: 'margin-bottom:8px', text: c.dateKo + ' · ' + c.termName }),
         el('div', { class: 'stats', style: 'margin:4px 0 12px' }, [statBox(c.hall, '학사'), statBox(c.dorm, '기숙'), statBox(c.breakfast, '조식'), statBox(c.hallDinner + c.generalDinner, '석식')]),
         el('div', { class: 'muted', style: 'word-break:keep-all', text: '기숙 남 ' + c.dormMale + ' · 여 ' + c.dormFemale + ' / 석식 학사 ' + c.hallDinner + (c.afterLeaveHallDinner > 0 ? '(퇴실 후 석식 유지 ' + c.afterLeaveHallDinner + ' 포함)' : '') + ' · 일반 ' + c.generalDinner }),
-        el('div', { style: 'margin-top:8px;word-break:keep-all', text: (f.vacancy || []).map(function (v) { return v.label + ' 빈자리 ' + v.vacant + ' (전체 ' + v.total + '석)'; }).join(' · ') }),
+        el('div', { style: 'margin-top:8px;word-break:keep-all', text: (f.vacancy || []).map(function (v) { return v.label + ' 빈 좌석 ' + v.vacant + ' (전체 ' + v.total + '석)'; }).join(' · ') }),
         UI.rowLink({ href: d.appUrl + '?page=mealcount', text: '식수 집계 열기' })
       ]));
     }
