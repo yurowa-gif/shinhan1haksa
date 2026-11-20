@@ -90,6 +90,12 @@
     sheet.open();
   }
 
+  /** 아래 고정 바를 모두 걷는다(뒤로 가기로 편집 화면을 떠날 때) */
+  function ttDropBars() {
+    Array.prototype.forEach.call(document.querySelectorAll('.actionbar'), function (n) { if (n.parentNode) n.parentNode.removeChild(n); });
+    var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar');
+  }
+
   function ttErrors(status, r) { clear(status); (r.errors || []).forEach(function (e) { status.appendChild(el('div', { class: 'error', role: 'alert', text: e.message })); }); }
 
   function renderScreen(root) {
@@ -108,7 +114,7 @@
     function load() {
       dropBar(); clear(box).appendChild(el('div', { class: 'loading', text: '불러오는 중…' }));
       call('getTimetableContext').then(function (c) {
-        if (!c.ok) { clear(box); box.appendChild(el('div', { class: 'error', text: c.reason })); return; }
+        if (!c.ok) { clear(box); box.appendChild(el('div', { class: 'error', text: c.reason })); box.appendChild(accountHelp(c.email)); return; }
         state = c; editing = false; cells = ttCellsFrom(c.view.entries, c.view.slots); draw();
       }).catch(function (e) { clear(box); showError(box, e); });
     }
@@ -223,6 +229,7 @@
   function ttTeacher(root) {
     var box = el('div'); root.appendChild(box);
     var tab = 'todo', month = '';
+    Nav.bind(function (k) { if (!k) { ttDropBars(); load(month); } });   // 뒤로 가기(C39): 대신 입력 화면 → 목록
     function load(m) {
       clear(box).appendChild(el('div', { class: 'loading', text: '불러오는 중…' }));
       call('listTimetables', m || month || '').then(function (r) { month = r.month; draw(r); }).catch(function (e) { clear(box); showError(box, e); });
@@ -267,9 +274,10 @@
     }
     /** 대신 입력(결정 84): 학생과 같은 격자에서 고쳐 저장하면 학부모 동의 없이 바로 확정된다 */
     function enterFor(i, v, r) {
+      Nav.go('enter:' + i.id);
       var cells = ttCellsFrom(v.entries, v.slots), bar = null, status = el('div', { 'aria-live': 'polite' });
       function drop() { if (bar && bar.parentNode) bar.parentNode.removeChild(bar); bar = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); }
-      function back() { drop(); load(v.month); }
+      function back() { Nav.back(function () { drop(); load(v.month); }); }
       function drawEdit() {
         clear(box); drop();
         box.appendChild(el('div', { class: 'card' }, [el('h2', { text: i.grade + '. ' + i.name + ' · ' + v.monthKo + ' 시간표 대신 입력' }),
