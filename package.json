@@ -4,6 +4,7 @@
   "description": "신한1학사 관리 웹앱 (Google Apps Script)",
   "scripts": {
     "test": "node tests/run.js",
-    "push": "clasp push"
+    "push": "clasp push",
+    "devices": "node design/preview/devices.js"
   }
 }

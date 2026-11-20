@@ -1,0 +1,1593 @@
+{
+ "now": "2027-03-26T10:00:00",
+ "devices": [
+  {
+   "id": "android-360",
+   "w": 360,
+   "h": 800,
+   "phone": true,
+   "context": {
+    "isMobile": true,
+    "hasTouch": true
+   },
+   "note": "안드로이드(갤럭시 보급형)"
+  },
+  {
+   "id": "iphone-390",
+   "w": 390,
+   "h": 844,
+   "phone": true,
+   "context": {
+    "isMobile": true,
+    "hasTouch": true
+   },
+   "note": "아이폰 14·15 크기(Chromium 흉내)"
+  },
+  {
+   "id": "iphone-375",
+   "w": 375,
+   "h": 667,
+   "phone": true,
+   "context": {
+    "isMobile": true,
+    "hasTouch": true
+   },
+   "note": "아이폰 SE 크기(Chromium 흉내)"
+  },
+  {
+   "id": "android-360-font150",
+   "w": 360,
+   "h": 800,
+   "phone": true,
+   "context": {
+    "isMobile": true,
+    "hasTouch": true
+   },
+   "font150": true,
+   "note": "360px + 기기 글자 150%(html 27px)"
+  },
+  {
+   "id": "tablet-768",
+   "w": 768,
+   "h": 1024,
+   "phone": false,
+   "context": {
+    "isMobile": true,
+    "hasTouch": true
+   },
+   "note": "태블릿 세로"
+  },
+  {
+   "id": "laptop-1366",
+   "w": 1366,
+   "h": 768,
+   "phone": false,
+   "note": "노트북(윈도우 크롬)"
+  },
+  {
+   "id": "laptop-1536",
+   "w": 1536,
+   "h": 864,
+   "phone": false,
+   "note": "노트북 125% 배율(윈도우 크롬)"
+  },
+  {
+   "id": "desktop-1920",
+   "w": 1920,
+   "h": 1080,
+   "phone": false,
+   "note": "데스크톱"
+  }
+ ],
+ "screens": [
+  {
+   "id": "home:admin",
+   "email": "test.admin@example.com",
+   "query": "role=admin"
+  },
+  {
+   "id": "home:hall_teacher",
+   "email": "test.teacher@example.com",
+   "query": "role=hall_teacher"
+  },
+  {
+   "id": "home:attendance",
+   "email": "test.attendance@example.com",
+   "query": "role=attendance"
+  },
+  {
+   "id": "home:homeroom",
+   "email": "test.homeroom@example.com",
+   "query": "role=homeroom"
+  },
+  {
+   "id": "home:duty_manager",
+   "email": "test.duty@example.com",
+   "query": "role=duty_manager"
+  },
+  {
+   "id": "home:student",
+   "email": "test.student@example.com",
+   "query": "role=student"
+  },
+  {
+   "id": "home:parent",
+   "email": "test.parent@example.com",
+   "query": "role=parent"
+  },
+  {
+   "id": "terms",
+   "email": "test.admin@example.com",
+   "query": "page=terms"
+  },
+  {
+   "id": "roster",
+   "email": "test.admin@example.com",
+   "query": "page=roster"
+  },
+  {
+   "id": "schedule",
+   "email": "test.admin@example.com",
+   "query": "page=schedule"
+  },
+  {
+   "id": "sheet",
+   "email": "test.admin@example.com",
+   "query": "page=sheet"
+  },
+  {
+   "id": "exceptions",
+   "email": "test.admin@example.com",
+   "query": "page=exceptions"
+  },
+  {
+   "id": "results",
+   "email": "test.admin@example.com",
+   "query": "page=results"
+  },
+  {
+   "id": "seats",
+   "email": "test.admin@example.com",
+   "query": "page=seats"
+  },
+  {
+   "id": "avoid",
+   "email": "test.admin@example.com",
+   "query": "page=avoid"
+  },
+  {
+   "id": "duty",
+   "email": "test.admin@example.com",
+   "query": "page=duty"
+  },
+  {
+   "id": "outs",
+   "email": "test.admin@example.com",
+   "query": "page=outs"
+  },
+  {
+   "id": "moves",
+   "email": "test.admin@example.com",
+   "query": "page=moves"
+  },
+  {
+   "id": "mealcount",
+   "email": "test.admin@example.com",
+   "query": "page=mealcount"
+  },
+  {
+   "id": "rooms",
+   "email": "test.admin@example.com",
+   "query": "page=rooms"
+  },
+  {
+   "id": "programs",
+   "email": "test.admin@example.com",
+   "query": "page=programs"
+  },
+  {
+   "id": "docs",
+   "email": "test.admin@example.com",
+   "query": "page=docs"
+  },
+  {
+   "id": "contacts",
+   "email": "test.admin@example.com",
+   "query": "page=contacts"
+  },
+  {
+   "id": "calendar",
+   "email": "test.admin@example.com",
+   "query": "page=calendar"
+  },
+  {
+   "id": "batch",
+   "email": "test.admin@example.com",
+   "query": "page=batch"
+  },
+  {
+   "id": "facility",
+   "email": "test.student@example.com",
+   "query": "page=facility"
+  },
+  {
+   "id": "facilityday",
+   "email": "test.teacher@example.com",
+   "query": "page=facilityday"
+  },
+  {
+   "id": "counsel",
+   "email": "test.admin@example.com",
+   "query": "page=counsel"
+  },
+  {
+   "id": "timetable:hall_teacher",
+   "email": "test.teacher@example.com",
+   "query": "page=timetable&role=hall_teacher"
+  },
+  {
+   "id": "timetable:student",
+   "email": "test.student@example.com",
+   "query": "page=timetable&role=student"
+  },
+  {
+   "id": "timetable:parent",
+   "email": "test.parent@example.com",
+   "query": "page=timetable&role=parent"
+  }
+ ],
+ "results": {
+  "home:admin": {
+   "android-360": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-admin__android-360.png"
+   },
+   "iphone-390": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-admin__iphone-390.png"
+   },
+   "iphone-375": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-admin__iphone-375.png"
+   },
+   "android-360-font150": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 86×25",
+      "a \"접속 진단\" 92×25"
+     ]
+    },
+    "shot": "home-admin__android-360-font150.png"
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "home:hall_teacher": {
+   "android-360": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-hall_teacher__android-360.png"
+   },
+   "iphone-390": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-hall_teacher__iphone-390.png"
+   },
+   "iphone-375": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-hall_teacher__iphone-375.png"
+   },
+   "android-360-font150": {
+    "fails": {
+     "넘침": [
+      "+81px"
+     ],
+     "작은칸": [
+      "a \"처음으로\" 86×25",
+      "a \"접속 진단\" 92×25"
+     ]
+    },
+    "shot": "home-hall_teacher__android-360-font150.png"
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "home:attendance": {
+   "android-360": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-attendance__android-360.png"
+   },
+   "iphone-390": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-attendance__iphone-390.png"
+   },
+   "iphone-375": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-attendance__iphone-375.png"
+   },
+   "android-360-font150": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 86×25",
+      "a \"접속 진단\" 92×25"
+     ]
+    },
+    "shot": "home-attendance__android-360-font150.png"
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "home:homeroom": {
+   "android-360": {
+    "fails": {
+     "작은칸": [
+      "a \"한새봄\" 54×27",
+      "a \"권보람\" 54×27",
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-homeroom__android-360.png"
+   },
+   "iphone-390": {
+    "fails": {
+     "작은칸": [
+      "a \"한새봄\" 54×27",
+      "a \"권보람\" 54×27",
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-homeroom__iphone-390.png"
+   },
+   "iphone-375": {
+    "fails": {
+     "작은칸": [
+      "a \"한새봄\" 54×27",
+      "a \"권보람\" 54×27",
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-homeroom__iphone-375.png"
+   },
+   "android-360-font150": {
+    "fails": {
+     "작은칸": [
+      "a \"한새봄\" 81×41",
+      "a \"권보람\" 81×41",
+      "a \"처음으로\" 86×25",
+      "a \"접속 진단\" 92×25"
+     ]
+    },
+    "shot": "home-homeroom__android-360-font150.png"
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "home:duty_manager": {
+   "android-360": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-duty_manager__android-360.png"
+   },
+   "iphone-390": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-duty_manager__iphone-390.png"
+   },
+   "iphone-375": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-duty_manager__iphone-375.png"
+   },
+   "android-360-font150": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 86×25",
+      "a \"접속 진단\" 92×25"
+     ]
+    },
+    "shot": "home-duty_manager__android-360-font150.png"
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "home:student": {
+   "android-360": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-student__android-360.png"
+   },
+   "iphone-390": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-student__iphone-390.png"
+   },
+   "iphone-375": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-student__iphone-375.png"
+   },
+   "android-360-font150": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 86×25",
+      "a \"접속 진단\" 92×25"
+     ]
+    },
+    "shot": "home-student__android-360-font150.png"
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "home:parent": {
+   "android-360": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-parent__android-360.png"
+   },
+   "iphone-390": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-parent__iphone-390.png"
+   },
+   "iphone-375": {
+    "fails": {
+     "작은칸": [
+      "a \"처음으로\" 58×16",
+      "a \"접속 진단\" 62×16"
+     ]
+    },
+    "shot": "home-parent__iphone-375.png"
+   },
+   "android-360-font150": {
+    "fails": {
+     "넘침": [
+      "+27px"
+     ],
+     "작은칸": [
+      "a \"처음으로\" 86×25",
+      "a \"접속 진단\" 92×25"
+     ]
+    },
+    "shot": "home-parent__android-360-font150.png"
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "terms": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {},
+    "shot": null
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "roster": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {},
+    "shot": null
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "schedule": {
+   "android-360": {
+    "fails": {
+     "작은칸": [
+      "label \"일\" 40×54",
+      "label \"월\" 40×54",
+      "label \"화\" 40×54",
+      "label \"수\" 40×54",
+      "label \"목\" 40×54",
+      "label \"금\" 40×54",
+      "label \"토\" 40×54"
+     ]
+    },
+    "shot": "schedule__android-360.png"
+   },
+   "iphone-390": {
+    "fails": {
+     "작은칸": [
+      "label \"일\" 40×54",
+      "label \"월\" 40×54",
+      "label \"화\" 40×54",
+      "label \"수\" 40×54",
+      "label \"목\" 40×54",
+      "label \"금\" 40×54",
+      "label \"토\" 40×54"
+     ]
+    },
+    "shot": "schedule__iphone-390.png"
+   },
+   "iphone-375": {
+    "fails": {
+     "작은칸": [
+      "label \"일\" 40×54",
+      "label \"월\" 40×54",
+      "label \"화\" 40×54",
+      "label \"수\" 40×54",
+      "label \"목\" 40×54",
+      "label \"금\" 40×54",
+      "label \"토\" 40×54"
+     ]
+    },
+    "shot": "schedule__iphone-375.png"
+   },
+   "android-360-font150": {
+    "fails": {},
+    "shot": null
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "sheet": {
+   "android-360": {
+    "fails": {
+     "포커스": [
+      "포커스 표시 없음: iframe \"\""
+     ],
+     "콘솔": [
+      "Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission "
+     ]
+    },
+    "shot": "sheet__android-360.png"
+   },
+   "iphone-390": {
+    "fails": {
+     "포커스": [
+      "포커스 표시 없음: iframe \"\""
+     ],
+     "콘솔": [
+      "Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission "
+     ]
+    },
+    "shot": "sheet__iphone-390.png"
+   },
+   "iphone-375": {
+    "fails": {
+     "포커스": [
+      "포커스 표시 없음: iframe \"\""
+     ],
+     "콘솔": [
+      "Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission "
+     ]
+    },
+    "shot": "sheet__iphone-375.png"
+   },
+   "android-360-font150": {
+    "fails": {
+     "포커스": [
+      "포커스 표시 없음: iframe \"\""
+     ],
+     "콘솔": [
+      "Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission "
+     ]
+    },
+    "shot": "sheet__android-360-font150.png"
+   },
+   "tablet-768": {
+    "fails": {
+     "포커스": [
+      "포커스 표시 없음: iframe \"\""
+     ],
+     "콘솔": [
+      "Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission "
+     ]
+    },
+    "shot": "sheet__tablet-768.png"
+   },
+   "laptop-1366": {
+    "fails": {
+     "포커스": [
+      "포커스 표시 없음: iframe \"\""
+     ],
+     "콘솔": [
+      "Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission "
+     ]
+    },
+    "shot": "sheet__laptop-1366.png"
+   },
+   "laptop-1536": {
+    "fails": {
+     "포커스": [
+      "포커스 표시 없음: iframe \"\""
+     ],
+     "콘솔": [
+      "Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission "
+     ]
+    },
+    "shot": "sheet__laptop-1536.png"
+   },
+   "desktop-1920": {
+    "fails": {
+     "포커스": [
+      "포커스 표시 없음: iframe \"\""
+     ],
+     "콘솔": [
+      "Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission "
+     ]
+    },
+    "shot": "sheet__desktop-1920.png"
+   }
+  },
+  "exceptions": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {},
+    "shot": null
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "results": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {},
+    "shot": null
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "seats": {
+   "android-360": {
+    "fails": {
+     "작은칸": [
+      "button.seg \"남\" 43×48",
+      "button.seg \"여\" 42×48",
+      "button.seg \"1\" 35×48",
+      "button.seg \"2\" 35×48",
+      "button.seg \"3\" 34×48"
+     ]
+    },
+    "shot": "seats__android-360.png"
+   },
+   "iphone-390": {
+    "fails": {
+     "작은칸": [
+      "button.seg \"남\" 43×48",
+      "button.seg \"여\" 42×48",
+      "button.seg \"1\" 35×48",
+      "button.seg \"2\" 35×48",
+      "button.seg \"3\" 34×48"
+     ]
+    },
+    "shot": "seats__iphone-390.png"
+   },
+   "iphone-375": {
+    "fails": {
+     "작은칸": [
+      "button.seg \"남\" 43×48",
+      "button.seg \"여\" 42×48",
+      "button.seg \"1\" 35×48",
+      "button.seg \"2\" 35×48",
+      "button.seg \"3\" 34×48"
+     ]
+    },
+    "shot": "seats__iphone-375.png"
+   },
+   "android-360-font150": {
+    "fails": {
+     "작은칸": [
+      "button.seg \"1\" 40×57",
+      "button.seg \"2\" 40×57",
+      "button.seg \"3\" 39×57"
+     ]
+    },
+    "shot": "seats__android-360-font150.png"
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "avoid": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {},
+    "shot": null
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "duty": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {},
+    "shot": null
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "outs": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {},
+    "shot": null
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "moves": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {
+     "가림": [
+      "마지막 내용(아래 7px 가림)"
+     ]
+    },
+    "shot": "moves__android-360-font150.png"
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "mealcount": {
+   "android-360": {
+    "fails": {
+     "작은칸": [
+      "a \"서류 미제출 3건 ▸\" 142×44"
+     ]
+    },
+    "shot": "mealcount__android-360.png"
+   },
+   "iphone-390": {
+    "fails": {
+     "작은칸": [
+      "a \"서류 미제출 3건 ▸\" 142×44"
+     ]
+    },
+    "shot": "mealcount__iphone-390.png"
+   },
+   "iphone-375": {
+    "fails": {
+     "작은칸": [
+      "a \"서류 미제출 3건 ▸\" 142×44"
+     ]
+    },
+    "shot": "mealcount__iphone-375.png"
+   },
+   "android-360-font150": {
+    "fails": {
+     "작은칸": [
+      "a \"서류 미제출 3건 ▸\" 213×44"
+     ],
+     "가림": [
+      "a \"서류 미제출 3건 ▸\"",
+      "마지막 내용(아래 48px 가림)"
+     ]
+    },
+    "shot": "mealcount__android-360-font150.png"
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "rooms": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {},
+    "shot": null
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "programs": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {},
+    "shot": null
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "docs": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {},
+    "shot": null
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "contacts": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {},
+    "shot": null
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "calendar": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {},
+    "shot": null
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "batch": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {
+     "가림": [
+      "마지막 내용(아래 7px 가림)"
+     ]
+    },
+    "shot": "batch__android-360-font150.png"
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "facility": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {},
+    "shot": null
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "facilityday": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {},
+    "shot": null
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "counsel": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {},
+    "shot": null
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "timetable:hall_teacher": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {},
+    "shot": null
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "timetable:student": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {},
+    "shot": null
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "timetable:parent": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {},
+    "shot": null
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  }
+ }
+}

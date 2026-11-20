@@ -57,13 +57,15 @@ function pageHtml(app, email, query) {
   const parameter = Object.fromEntries(new URLSearchParams(query || ''));
   const out = app.env.as(email, (c) => {
     const o = c.doGet({ parameter });
-    return { content: o._content, vars: o._vars, title: o._title, home: (r) => c.homeFileFor_(r) };
+    return { content: o._content, vars: o._vars, title: o._title, meta: Object.assign({}, o._meta), home: (r) => c.homeFileFor_(r) };
   });
   const include = (f) => readUi(f);
   const vars = Object.assign({}, out.vars, { homeFileFor_: (r) => 'ui/home_' + r, ROLES: ['admin', 'attendance', 'hall_teacher', 'homeroom', 'duty_manager', 'student', 'parent'] });
   // 홈 조각 이름은 서버 규칙(homeFileFor_)이 정한다: 같은 규칙을 env.as 안에서 한 번 물어 둔다
   vars.homeFileFor_ = (r) => app.env.as(email, (c) => c.homeFileFor_(r));
-  return evalTemplate(out.content, vars, include);
+  // 서버가 addMetaTag로 붙이는 태그(viewport 등)를 실제 Apps Script처럼 머리에 넣는다(없으면 휴대폰 흉내에서 980px 화면이 된다)
+  const metas = Object.keys(out.meta || {}).map((k) => '<meta name="' + k + '" content="' + String(out.meta[k]).replace(/"/g, '&quot;') + '">').join('');
+  return metas + evalTemplate(out.content, vars, include);
 }
 
 /**
@@ -74,9 +76,10 @@ async function openPage(browser, app, o) {
   fs.mkdirSync(OUT, { recursive: true });
   const size = o.size || { w: 360, h: 800 };
   const state = { email: o.email };
-  const page = await browser.newPage({ viewport: { width: size.w, height: size.h }, deviceScaleFactor: 1, locale: 'ko-KR' });
+  const page = await browser.newPage(Object.assign({ viewport: { width: size.w, height: size.h }, deviceScaleFactor: 1, locale: 'ko-KR' }, o.context || {}));   // context: 휴대폰 흉내(isMobile·hasTouch) 등
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
+  if (o.onPage) o.onPage(page);   // 불러오기 전에 붙일 것(콘솔 오류 듣기 등)
   // 시계: 가짜 서버 시계와 같게(화면 쪽 new Date()도 같은 날)
   const nowIso = (app.env.now && app.env.now.iso) || null;
   await page.route(APP_URL + '**', (route) => {
