@@ -250,3 +250,20 @@ test('시트 두 번 탭 방지: 열린 직후 350ms는 시트 안 버튼 클릭
   assert.ok(fn.indexOf('util.sheetClickAllowed(openedAt, Date.now())') > 0 && fn.indexOf('openedAt = Date.now()') > 0, 'open()이 시각을 남기고 버튼이 판정을 거친다');
   assert.ok(fn.indexOf('.map(makeBtn)') < 0, '시트 버튼을 가드 없이 만들지 않는다');
 });
+
+// D15 ④: Enter = 주 버튼 누르기 — 맨 Enter, 한 줄 입력칸에서만. 한글 입력 중·여러 줄·선택·버튼·조합키·시트 열림은 아니다
+test('util.enterPressesPrimary: 한 줄 입력칸의 맨 Enter만, 나머지는 거부', () => {
+  const U = UI.util, inp = { tagName: 'INPUT', type: 'text' };
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', target: inp }, false), true);
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', target: { tagName: 'INPUT', type: 'date' } }, false), true);
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', isComposing: true, target: inp }, false), false, '한글 조합 중');
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', keyCode: 229, target: inp }, false), false);
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', target: { tagName: 'TEXTAREA' } }, false), false, '여러 줄');
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', target: { tagName: 'SELECT' } }, false), false);
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', target: { tagName: 'BUTTON' } }, false), false);
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', target: { tagName: 'INPUT', type: 'checkbox' } }, false), false);
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', shiftKey: true, target: inp }, false), false);
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', ctrlKey: true, target: inp }, false), false);
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', target: inp }, true), false, '시트가 열려 있으면 시트가 처리');
+  assert.strictEqual(U.enterPressesPrimary({ key: 'a', target: inp }, false), false);
+});
