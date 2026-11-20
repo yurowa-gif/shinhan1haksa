@@ -7,6 +7,7 @@
         el('div', { style: 'word-break:keep-all;margin:8px 0', text: '학교에 알려 주신 구글 계정과 자녀 정보가 아직 이어지지 않았습니다. 담당 선생님께 이 계정(로그인한 구글 계정)으로 자녀를 연결해 달라고 알려 주세요.' }),
         el('div', { class: 'muted', style: 'word-break:keep-all', text: '이어지면 이 화면에서 자녀의 OUT, 출결 기록, 급식과 기숙사, 상담한 날짜, 학교 일정을 볼 수 있습니다.' })
       ]));
+      root.appendChild(accountHelp(d.accountEmail));
       return;
     }
     window.PORTAL_APP_URL = d.appUrl;
@@ -15,9 +16,13 @@
     root.appendChild(tabs);
     root.appendChild(body);
 
-    function show(child, btn) {
+    var first = d.children[0];
+    window.PORTAL_NAV = function (id, v) { return id === first.id && v === 'home' ? '' : id + ':' + v; };   // 뒤로 가기(C39): 자녀 전환·자세히 화면이 기록에 남는다
+    var tabOf = {};
+    function show(child, btn, fromNav) {
       Array.prototype.forEach.call(tabs.children, function (b) { b.classList.remove('on'); });
       btn.classList.add('on');
+      if (!fromNav) Nav.go(window.PORTAL_NAV(child.id, 'home'));
       renderPortal(body, child.id);   // 본문(OUT·특이사항·급식·상담 여부·월별 일정)은 ui/Portal. 서버(getPortalStudent)가 연결된 자녀인지 확인한다
     }
 
@@ -27,7 +32,14 @@
       var b = el('button', { class: 'tab', type: 'button', text: tabName(c) });
       b.addEventListener('click', function () { show(c, b); });
       tabs.appendChild(b);
-      if (i === 0) setTimeout(function () { show(c, b); }, 0);
+      tabOf[c.id] = b;
+      if (i === 0) setTimeout(function () { show(c, b, true); }, 0);
+    });
+    Nav.bind(function (k) {   // 뒤로·앞으로 가기로 기록이 바뀔 때
+      var parts = String(k).split(':'), child = d.children.filter(function (c) { return c.id === parts[0]; })[0] || first;
+      Array.prototype.forEach.call(tabs.children, function (b) { b.classList.remove('on'); });
+      tabOf[child.id].classList.add('on');
+      renderPortal(body, child.id, '', parts[1] || 'home');
     });
   }
 </script>

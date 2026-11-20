@@ -51,7 +51,7 @@ function ptlOuts_(term, studentId) {
   return out;
 }
 
-/** 이번 기간 출결 특이사항(사전·결과 모두 같은 탭). 유형·날짜·상태(확정·확인 대기·취소)만 — 사유·요청자·확정자는 보내지 않는다. */
+/** 이번 기간 출결 특이사항(사전·결과 모두 같은 탭). 유형·날짜·저장된 상태(요청·확정·취소, 화면이 학부모에게는 '확인 중'으로 풀어 쓴다)만 — 사유·요청자·확정자는 보내지 않는다. */
 function ptlExceptions_(term, studentId, today) {
   if (!term) return [];
   var settings = excSettings_(readAll_('settings', 'config')), seen = {}, list = [];
@@ -62,7 +62,7 @@ function ptlExceptions_(term, studentId, today) {
       if (seen[key] || !ymdIsValid_(String(r.date))) return;
       seen[key] = true;
       list.push({ date: String(r.date), dateKo: foodDateKo_(r.date), type: String(r.type), short: settings.typeShort[String(r.type)] || String(r.type),
-        state: ruleStr_(r.status) === '취소' ? '취소' : ruleStr_(r.status) === '확정' ? '확정' : '확인 대기', upcoming: String(r.date) > today });
+        state: ruleStr_(r.status) === '취소' ? '취소' : ruleStr_(r.status) === '확정' ? '확정' : '요청', upcoming: String(r.date) > today });
     });
   return list.slice(0, PTL_EXC_MAX);
 }

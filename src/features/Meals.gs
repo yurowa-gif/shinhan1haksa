@@ -50,6 +50,9 @@ var FOOD_RULE_TEXT = {
   next_monday: '수요일 마감 시각 전 신청이라 다음 주 월요일부터 적용됩니다.',
   monday_after_next: '수요일 마감 시각이 지나 신청해서 다다음 주 월요일부터 적용됩니다.',
   initial: '지금 그 급식이 없어 신청일부터 적용됩니다.',
+  entry_date: '입실일에 맞췄습니다.',
+  leave_date: '퇴실일에 맞췄습니다.',
+  vacation_start: '방학 시작 전에 신청해서 방학 시작일부터 적용됩니다.',
   manual: '선생님이 직접 고친 날짜입니다.'
 };
 

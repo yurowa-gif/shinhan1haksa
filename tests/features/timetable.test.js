@@ -212,3 +212,84 @@ test('유출 감시: 시간표 응답 어디에도 다른 학생·이메일·사
     assert.ok(!/@/.test(text));
   }
 });
+
+/* ───── C38 담당교사 대신 입력(결정 84, R24 teacherEnter) ───── */
+const enterPre = (x, who, o) => call(x, who, 'previewTimetableEnter', x.me.id, (o && o.month) || MONTH, (o && o.entries) || ENTRIES);
+const enter = (x, who, o) => {
+  const pre = enterPre(x, who, o);
+  return call(x, who, 'enterTimetableForStudent', x.me.id, (o && o.month) || MONTH, (o && o.entries) || ENTRIES, (o && o.token) || pre.token);
+};
+
+test('대신 입력 권한표: 담당교사(자기 학생)·관리자만, 학생·학부모·출결·담임·담당 아닌 교사·그날 근무교사는 denied 기록, 행 불변', () => {
+  const x = makeEnv();
+  x.env.asOwner((c) => c.appendRecord_('duty_slots', { date: '2027-03-26', slot: '21:30조', end_time: '21:30', original_email: T2, actual_email: T2, swapped_at: '', swapped_by: '', status: '유효', memo: '' }, ADMIN));
+  const tok = call(x, x.teacher, 'getTimetableEntry', x.me.id, MONTH).view.token;
+  for (const who of [STUDENT, PARENT, ATT, HOMEROOM, T2, DUTY]) {
+    x.env.expectDenied(who, 'timetable.enter', 'previewTimetableEnter', x.me.id, MONTH, ENTRIES);
+    x.env.expectDenied(who, 'timetable.enter', 'enterTimetableForStudent', x.me.id, MONTH, ENTRIES, tok);
+  }
+  x.env.expectAllowed(x.teacher, 'previewTimetableEnter', x.me.id, MONTH, ENTRIES);
+  x.env.expectAllowed(ADMIN, 'previewTimetableEnter', x.me.id, MONTH, ENTRIES);
+  assert.strictEqual(x.rows().length, 0);
+});
+
+test('대신 입력: 제출 기간이 아니어도(마감 뒤) 바로 확정 — 동의·제출 시각은 비고, 확정 시각이 남고, 학생·학부모 화면에 "담당교사가 입력"으로 보인다', () => {
+  const x = makeEnv();
+  x.env.setNow(CLOSED);   // 3월 10일: 제출 기간 아님 — 학생은 못 내는 때
+  assert.strictEqual(submit(x).ok, false);
+  const pre = enterPre(x, x.teacher);
+  assert.deepStrictEqual([pre.ok, pre.status, pre.startKo], [true, '', '4월 1일(목)']);
+  const thisMonth = enterPre(x, x.teacher, { month: '2027-03' });
+  assert.deepStrictEqual([thisMonth.ok, thisMonth.startKo, thisMonth.warnings.some((w) => w.includes('3월 10일(수)부터'))], [true, '3월 10일(수)', true], '이번 달은 입력한 날부터');
+  const r = enter(x, x.teacher);
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.deepStrictEqual(x.live().map((q) => [q.weekday, q.blocks, q.code, q.status, q.submitted_at, q.parent_agreed_at, !!q.teacher_confirmed_at]).sort(),
+    [['월', '18:30-20:00', '학', '확정', '', '', true], ['토', '09:00-12:00', '가', '확정', '', '', true]]);
+  assert.deepStrictEqual([call(x, PARENT, 'getChildTimetable', x.me.id).view.enteredBy, call(x, x.teacher, 'getTimetableEntry', x.me.id, MONTH).view.enteredBy], ['담당교사', '담당교사']);
+  const fixed = x.env.as(ADMIN, (c) => c.effectiveFixedRows_(c.readAll_('fixed_schedules'), x.me.id, '2027-04-05'));
+  assert.deepStrictEqual(plain(fixed).map((q) => [q.weekday, q.code]).sort(), [['월', '학'], ['토', '가']], '출석부가 그 달부터 읽는다');
+  assert.ok(x.env.rows('audit_log').some((a) => a.action === 'timetable:enter' && JSON.parse(a.detail).s === x.me.id), '감사 기록');
+});
+
+test('대신 입력으로 학생이 낸 시간표를 대신하면: 규칙 경고가 미리 보기에 나오고, 옛 행은 취소로 남고(updated_at 갱신), 학생 제출 상태는 사라진다. 낸 학생이 다시 낼 수 있다', () => {
+  const x = makeEnv();
+  submit(x);
+  const before = x.live().map((q) => q.id);
+  const pre = enterPre(x, x.teacher, { entries: [ENTRIES[1]] });
+  assert.ok(pre.warnings.some((w) => w.includes('제출')), '대신하는 경고: ' + JSON.stringify(pre.warnings));
+  assert.strictEqual(pre.status, '제출');
+  assert.strictEqual(enter(x, x.teacher, { entries: [ENTRIES[1]] }).ok, true);
+  assert.deepStrictEqual([status(x), x.live().length], ['확정', 1]);
+  assert.deepStrictEqual(x.rows().filter((q) => before.includes(q.id)).map((q) => q.status), ['취소', '취소']);
+  assert.ok(x.rows().filter((q) => before.includes(q.id)).every((q) => q.updated_at), '취소 행에 updated_at');
+  assert.strictEqual(submit(x).ok, true, '학생이 제출 기간에 다시 낼 수 있다');
+  assert.deepStrictEqual([status(x), call(x, STUDENT, 'getTimetableContext').view.enteredBy], ['제출', '학생']);
+});
+
+test('대신 입력 거부: 이번 달·다음 달 밖, 겹치는 칸, 화면이 본 상태가 바뀐 뒤(stale), 확인값 없음 — 아무 행도 바뀌지 않는다', () => {
+  const x = makeEnv();
+  const bad = (r) => { assert.strictEqual(r.ok, false, JSON.stringify(r)); return r; };
+  const far = bad(enterPre(x, x.teacher, { month: '2027-06' }));
+  assert.ok(!/\d{4}-\d{2}/.test(far.errors[0].message), '오류 문구도 화면 말(3월·4월): ' + far.errors[0].message);
+  bad(enterPre(x, x.teacher, { month: '2027-02' }));
+  bad(enterPre(x, x.teacher, { entries: [{ weekday: '월', blocks: '18:30-20:00', code: '학' }, { weekday: '월', blocks: '19:00-21:00', code: '가' }] }));
+  const tok = call(x, x.teacher, 'getTimetableEntry', x.me.id, MONTH).view.token;
+  submit(x);   // 화면을 연 뒤 학생이 냈다
+  const stale = call(x, x.teacher, 'enterTimetableForStudent', x.me.id, MONTH, ENTRIES, tok);
+  assert.deepStrictEqual([stale.ok, stale.stale], [false, true]);
+  bad(call(x, x.teacher, 'enterTimetableForStudent', x.me.id, MONTH, ENTRIES, ''));
+  assert.deepStrictEqual([status(x), x.rows().length], ['제출', 2], '학생이 낸 것 그대로');
+  assert.strictEqual(call(x, x.teacher, 'enterTimetableForStudent', x.me.id, MONTH, ENTRIES, 'x').ok, false);
+});
+
+test('대신 입력한 시간표는 확인을 거둘 수 없고(규칙), 확정된 것을 다시 대신 입력하면 바뀐다. 빈 목록은 "없음" 행 하나로 확정된다', () => {
+  const x = makeEnv();
+  assert.strictEqual(enter(x, x.teacher).ok, true);
+  assert.strictEqual(call(x, x.teacher, 'returnTimetable', x.me.id, MONTH, '확정은 돌려보낼 수 없다').ok, false);
+  const again = enterPre(x, ADMIN, { entries: [ENTRIES[0]] });
+  assert.ok(again.warnings.some((w) => w.includes('바꿉니다') && w.includes('4월') && !/\d{4}-\d{2}/.test(w)), JSON.stringify(again.warnings));
+  assert.strictEqual(enter(x, ADMIN, { entries: [ENTRIES[0]] }).ok, true);
+  assert.deepStrictEqual(x.live().map((q) => [q.weekday, q.code]), [['월', '학']]);
+  assert.strictEqual(enter(x, x.teacher, { entries: [] }).ok, true);
+  assert.deepStrictEqual(x.live().map((q) => [q.code, q.status]), [['없음', '확정']]);
+});

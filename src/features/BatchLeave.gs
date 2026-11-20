@@ -28,7 +28,7 @@ function batValidate_(input, ctx) {
   if (!/^\d+$/.test(grade) || ctx.grades.indexOf(grade) < 0) err('grade', '학년을 골라 주세요.');
   var eff = String(input.effectiveDate || '').trim();
   if (!ymdIsValid_(eff)) err('effectiveDate', '퇴실일을 날짜로 입력해 주세요.');
-  else if (ctx.term && (eff < ctx.term.start_date || eff > ymdAddDays_(ctx.term.end_date, 1))) err('effectiveDate', '퇴실일은 이번 운영 기간("' + ctx.term.name + '", ' + ctx.term.end_date + '까지) 안이어야 합니다.');
+  else if (ctx.term && (eff < ctx.term.start_date || eff > ymdAddDays_(ctx.term.end_date, 1))) err('effectiveDate', '퇴실일이 이번 운영 기간 밖입니다. "' + ctx.term.name + '" 시작일(' + foodDateKo_(ctx.term.start_date) + ')부터 끝난 다음 날(' + foodDateKo_(ymdAddDays_(ctx.term.end_date, 1)) + ')까지 골라 주세요.');
   var at = foodNormAt_(input.requestedAt);
   if (!at) err('requestedAt', '신청 일시를 날짜와 시각까지 입력해 주세요(예: 2027-03-03T10:45).');
   else if (at > ctx.now) err('requestedAt', '신청 일시가 지금보다 늦습니다.');

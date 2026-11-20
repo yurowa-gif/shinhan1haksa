@@ -265,7 +265,7 @@
     }
     function expectOf(cells) { var e = {}; cells.forEach(function (c) { e[c.id] = c.token; }); return e; }
     function doAssign(cell) {
-      if (!cell.vacant) { UI.toast('이미 앉은 학생이 있습니다. 두 자리를 차례로 눌러 맞바꿔 주세요.', { kind: 'warn', ms: 5000 }); return; }
+      if (!cell.vacant) { UI.toast('이 좌석에는 이미 학생이 있습니다. 맞바꾸려면 위에서 학생 선택을 풀고(선택한 학생을 다시 누릅니다) 좌석 2개를 차례로 눌러 주세요.', { kind: 'warn', ms: 6000 }); return; }
       if (cell.hold && cell.reason !== '퇴실') { UI.toast(cell.hold + ' 학생이 배정된 자리입니다(' + cell.reason + '). 자리를 눌러 배정을 먼저 풀어 주세요.', { kind: 'warn', ms: 6000 }); return; }
       call('assignSeat', state.termId, cell.id, state.student.id, expectOf([cell])).then(function (r) { if (r.ok) state.student = null; done(r, '앉혔습니다.'); }).catch(fail);
     }
