@@ -5,9 +5,11 @@
   /* ───────── 토큰 ───────── */
   :root {
     /* 바탕·글자·선 */
-    --bg: #f6f7f9; --card: #fff; --text: #1d2330; --muted: #5d6676; --line: #dde1e7;
+    --bg: #eef1f8; --card: #fff; --text: #101828; --muted: #4f586a; --line: #d7dcea;
     /* 주 색(링크·주 버튼·선택됨) */
-    --accent: #1f5fbf; --accent-weak: #e8f0fc; --accent-ink: #164a99;
+    --accent: #1747c4; --accent-weak: #e6edfd; --accent-ink: #12379a;
+    /* 강조 색(결정 85): 진짜 할 일(마감·미처리 건수 > 0)의 띠·알약에만. 글자는 -ink */
+    --signal: #ffc531; --signal-ink: #5c4200;
     /* 경고·오류 */
     --warn: #b3261e; --warn-weak: #fdecea;
     /* 상태 색: 글자색(-ink)은 연한 바탕(-weak) 위에서 대비 4.5:1 이상 */
@@ -26,16 +28,16 @@
     --tap: 48px;          /* 누르는 칸 최소 높이·너비 */
     --bar-h: 72px;        /* 하단 작업 바 높이(안전 영역 제외) */
     --gap: 12px; --gap-sm: 8px; --gap-lg: 16px;
-    --radius: 12px; --radius-sm: 10px; --radius-pill: 999px;
-    --shadow: 0 -2px 8px rgba(29, 35, 48, .12);
-    --focus: #1f5fbf;
+    --radius: 16px; --radius-sm: 12px; --radius-pill: 999px;
+    --shadow: 0 -4px 16px rgba(16, 24, 40, .10);
+    --focus: #12379a;
   }
 
   /* ───────── 바탕 ───────── */
   * { box-sizing: border-box; }
   html { font-size: 18px; -webkit-text-size-adjust: 100%; }
   /* 글꼴 파일은 내려받지 않는다(rules 3절): Pretendard는 깔린 기기에서만, 나머지는 기기 기본 한글 글꼴 */
-  body { margin: 0; background: var(--bg); color: var(--text);
+  body { margin: 0; background: var(--bg); color: var(--text); letter-spacing: -.012em;
     font-family: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; line-height: 1.5;
     overflow-wrap: anywhere; }
   img, table { max-width: 100%; }
@@ -44,34 +46,43 @@
     clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
   /* ───────── 화면 틀: 위 머리 · 본문 · 아래 작업 바 ───────── */
-  header.top { position: sticky; top: 0; z-index: 2; background: var(--card); border-bottom: 1px solid var(--line);
-    padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  header.top h1 { font-size: 1.1rem; margin: 0; }
-  header.top .who { font-size: .85rem; color: var(--muted); text-align: right; word-break: keep-all; white-space: nowrap; }
-  .back { display: inline-flex; align-items: center; min-height: var(--tap); color: var(--accent);
+  /* 머리줄(결정 85): 코발트 면 + 흰 글자. 앱 이름이 한눈에 보이게 색을 여기 한 곳에 몰아 쓴다 */
+  header.top { position: sticky; top: 0; z-index: 2; background: var(--accent); color: #fff; border-bottom: 0;
+    padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  header.top h1 { font-size: 1.15rem; font-weight: 800; letter-spacing: -.03em; margin: 0; color: #fff; }
+  header.top .who { font-size: .82rem; color: #dbe5ff; text-align: right; word-break: keep-all; white-space: nowrap; }
+  header.top :focus-visible { outline-color: #fff; }
+  .back { display: inline-flex; align-items: center; min-height: var(--tap); color: #fff; font-weight: 700;
     text-decoration: none; white-space: nowrap; }
-  main { max-width: 720px; margin: 0 auto; padding: 16px; }
+  main { max-width: 720px; margin: 0 auto; padding: 12px 16px 16px; }
   main.wide { max-width: 1120px; }   /* PC 권장 화면(좌석·방 배정): 넓은 화면에서 격자와 목록을 나란히 */
   /* 하단 작업 바가 있는 화면은 main에 has-actionbar를 붙여 바에 가려지지 않게 한다 */
   main.has-actionbar { padding-bottom: calc(var(--bar-h) + 24px + env(safe-area-inset-bottom, 0px)); }
   .actionbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 3; background: var(--card);
-    border-top: 1px solid var(--line); box-shadow: var(--shadow);
+    border-top: 0; box-shadow: var(--shadow);
     padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); display: flex; gap: var(--gap-sm);
     justify-content: center; }
   .actionbar > .btn { flex: 1 1 0; max-width: 360px; }
   .tabs { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 12px; }
   .tab { flex: 0 0 auto; padding: 10px 16px; border-radius: var(--radius-pill); border: 1px solid var(--line);
-    background: var(--card); color: var(--text); text-decoration: none; font-size: .95rem; cursor: pointer;
+    background: var(--card); color: var(--text); text-decoration: none; font-size: .95rem; font-weight: 600; cursor: pointer;
     min-height: var(--tap); display: inline-flex; align-items: center; }
   .tab.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 
   /* ───────── 카드·목록·글자 ───────── */
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
-  .card h2 { font-size: 1rem; margin: 0 0 8px; }
+  /* 카드(결정 85): 참고 정보는 상자 없이 바탕 위에 놓는다. 상자는 '할 일'(.todo, 노란 띠)과 '중요'(.key, 코발트 띠)에만 */
+  .card { background: transparent; border: 0; padding: 14px 4px 6px; margin-bottom: 6px; }
+  .card h2 { font-size: 1.1rem; font-weight: 800; letter-spacing: -.03em; margin: 0 0 6px; }
+  .card.todo, .card.key { background: var(--card); border-radius: var(--radius); padding: 16px 16px 14px; margin: 8px 0 12px; box-shadow: 0 1px 2px rgba(16, 24, 40, .06); }
+  .card.todo { border-left: 8px solid var(--signal); }
+  .card.key { border-left: 8px solid var(--accent); }
+  .card.todo h2 { font-size: 1.25rem; }
+  .card.soon, .card.boxed { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+  .card.soon { border: 1px dashed var(--muted); color: var(--muted); }
   .muted { color: var(--muted); font-size: .9rem; }
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
-  .stat { background: var(--accent-weak); border-radius: var(--radius-sm); padding: 12px; }
-  .stat .n { font-size: 1.5rem; font-weight: 700; }
+  .stat { background: var(--card); border-radius: var(--radius-sm); padding: 12px; }
+  .stat .n { font-size: 2.5rem; font-weight: 800; letter-spacing: -.05em; line-height: 1.05; color: var(--accent-ink); }
   .stat .l { font-size: .85rem; color: var(--muted); }
   ul.list { list-style: none; margin: 0; padding: 0; }
   ul.list li { padding: 12px 4px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 8px; }
@@ -79,25 +90,32 @@
   dl.kv { display: grid; grid-template-columns: 7em 1fr; gap: 6px 12px; margin: 0; }
   dl.kv dt { color: var(--muted); }
   dl.kv dd { margin: 0; }
-  .soon { border-style: dashed; color: var(--muted); }
+  .soon { border: 1px dashed var(--muted); color: var(--muted); }
   .loading { color: var(--muted); padding: 16px 0; }
   footer { text-align: center; padding: 24px 16px; font-size: .8rem; color: var(--muted); }
-  footer a { color: var(--muted); }
+  footer a { color: var(--muted); display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 6px; }   /* 처음으로·접속 진단도 누르는 칸 48px */
 
   /* ───────── 버튼: 모두 48px 이상, 주 버튼은 한 화면에 하나 ───────── */
   .btn { display: inline-flex; align-items: center; justify-content: center; min-height: var(--tap); min-width: var(--tap);
-    padding: 12px 18px; border-radius: var(--radius-sm); border: 1px solid var(--accent);
-    background: var(--accent); color: #fff; font: inherit; font-size: 1rem; cursor: pointer; text-decoration: none; text-align: center; }
-  .btn.secondary { background: var(--card); color: var(--accent); }
+    padding: 12px 18px; border-radius: var(--radius-sm); border: 1px solid var(--accent); font-weight: 700; letter-spacing: -.02em;
+    background: var(--accent); color: #fff; font: inherit; font-size: 1rem; font-weight: 700; cursor: pointer; text-decoration: none; text-align: center; }
+  .btn.secondary { background: var(--card); color: var(--accent-ink); border: 1.5px solid var(--accent); }
   .btn.danger { background: var(--warn); border-color: var(--warn); color: #fff; }
   .btn.block { display: flex; width: 100%; }
+  /* 줄 링크(UI.rowLink, 결정 85): 다른 화면으로 가는 '열기 ›' 한 줄. 48px. 할 일 카드(.todo)의 첫 줄 링크만 폭 가득 주 버튼 모양 */
+  .row-link { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: var(--tap); padding: 10px 4px; margin: 0;
+    border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--accent-ink);
+    font: inherit; font-weight: 700; letter-spacing: -.02em; text-align: left; text-decoration: none; cursor: pointer; word-break: keep-all; }
+  .row-link::after { content: "›"; font-size: 1.5rem; line-height: 1; flex: 0 0 auto; }
+  .card.todo > .row-link:not(.row-link ~ .row-link) { background: var(--accent); color: #fff; border: 0; border-radius: var(--radius-sm); padding: 14px 16px; margin-top: 12px; font-size: 1.05rem; }
+  .card.todo > .row-link ~ .row-link { border-top-color: var(--line); }
   .btn:disabled, .btn[aria-disabled="true"] { background: var(--muted-weak); border-color: var(--line); color: var(--muted-ink); cursor: not-allowed; }
 
   /* ───────── 입력칸: 라벨 + 입력 + 고칠 점(무엇을 하면 되는지) ───────── */
   .field { margin-bottom: 14px; }
-  .field label { display: block; margin-bottom: 4px; color: var(--muted); font-size: .9rem; }
+  .field label { display: block; margin-bottom: 4px; color: var(--text); font-weight: 700; font-size: .9rem; }
   .field input, .field select, .field textarea { width: 100%; min-height: var(--tap); padding: 8px 12px; font: inherit;
-    border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); color: var(--text); }
+    border: 1px solid #c4cbe0; border-radius: var(--radius-sm); background: var(--card); color: var(--text); }
   .field textarea { min-height: 96px; }
   .field .hint { color: var(--muted); font-size: .85rem; margin-top: 4px; }
   .field .fix { color: var(--warn); font-size: .9rem; margin-top: 4px; }
@@ -116,25 +134,27 @@
   .notice.info::before { content: "ⓘ"; }
 
   /* ───────── 상태 표시(pill): 색만으로 구분하지 않는다 ─────────
-     모양: 앞 글자(✓ ◔ ⊘ ⚠ …)와 테두리 모양(실선·점선·이중선)이 다르다. 글자는 항상 함께 쓴다. */
-  .pill { display: inline-flex; align-items: center; gap: .25em; padding: 2px 10px; border-radius: var(--radius-pill);
-    font-size: var(--font-sm); font-weight: 700; line-height: 1.5; white-space: nowrap; border: 1.5px solid currentColor; }
-  .pill.s-confirmed { color: var(--ok-ink); background: var(--ok-weak); border-style: solid; }
+     모양은 하나(테두리 없는 알약, 결정 85). 구분은 앞 글자(✓ … ⊘ ▲ ⛔ ●)와 글자와 색이다. 글자는 항상 함께 쓴다. 학·가·병은 글자 자체가 다르다. */
+  .pill { display: inline-flex; align-items: center; gap: .25em; padding: 3px 11px; border-radius: var(--radius-pill); border: 0;
+    font-size: var(--font-sm); font-weight: 800; letter-spacing: -.02em; line-height: 1.5; max-width: 100%; white-space: normal; }
+  .pill.s-confirmed { color: var(--ok-ink); background: var(--ok-weak); }
   .pill.s-confirmed::before { content: "✓"; }
-  .pill.s-requested { color: var(--caution-ink); background: var(--caution-weak); border-style: dashed; }
+  .pill.s-requested { color: var(--caution-ink); background: var(--caution-weak); }
   .pill.s-requested::before { content: "…"; }
-  .pill.s-canceled { color: var(--muted-ink); background: var(--muted-weak); border-style: dotted; text-decoration: line-through; }
+  .pill.s-canceled { color: var(--muted-ink); background: var(--muted-weak); text-decoration: line-through; }
   .pill.s-canceled::before { content: "⊘"; text-decoration: none; display: inline-block; }
-  .pill.c-hak { color: var(--code-hak-ink); background: var(--code-hak-weak); border-style: solid; }
-  .pill.c-ga { color: var(--code-ga-ink); background: var(--code-ga-weak); border-style: double; border-width: 3px; }
-  .pill.c-byung { color: var(--code-byung-ink); background: var(--code-byung-weak); border-style: dashed; }
-  .pill.out-1 { color: var(--out1-ink); background: var(--out1-weak); border-color: var(--out1-line); border-style: solid; }
+  .pill.c-hak { color: var(--code-hak-ink); background: var(--code-hak-weak); }
+  .pill.c-ga { color: var(--code-ga-ink); background: var(--code-ga-weak); }
+  .pill.c-byung { color: var(--code-byung-ink); background: var(--code-byung-weak); }
+  .pill.out-1 { color: var(--out1-ink); background: var(--out1-weak); }
   .pill.out-1::before { content: "▲"; }
-  .pill.out-2 { color: var(--out2-ink); background: var(--out2); border-color: var(--out2); border-style: solid; }
+  .pill.out-2 { color: var(--out2-ink); background: var(--out2); }
   .pill.out-2::before { content: "⛔"; }
-  .pill.todo { color: var(--accent-ink); background: var(--accent-weak); border-color: var(--accent); }
+  .pill.todo { color: var(--signal-ink); background: var(--signal); }
   .pill.todo::before { content: "●"; font-size: .7em; }
-  .pill.mute { color: var(--muted-ink); background: var(--muted-weak); border-color: var(--line); }
+  .pill.mute { color: var(--muted-ink); background: var(--muted-weak); }
+  /* 중요한 숫자(.key 카드의 OUT)는 크게 */
+  .card.key *:not(li) > .pill.out-1, .card.key *:not(li) > .pill.out-2 { font-size: 1.6rem; padding: 4px 16px; }
 
   /* 알림 개수 배지(숫자는 글자로 함께 쓴다) */
   .count { display: inline-block; min-width: 1.6em; padding: 0 .45em; border-radius: var(--radius-pill);
@@ -147,16 +167,16 @@
   .chip:disabled { background: var(--muted-weak); border-style: dashed; color: var(--muted-ink); cursor: not-allowed; }
   .row-btn { flex: 0 0 auto; white-space: nowrap; }
   .tabs.wrap { flex-wrap: wrap; overflow-x: visible; }
-  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 800; }
   .chip.on::before { content: "✓ "; }
-  .segmented { display: flex; border: 1px solid var(--accent); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 12px; }
-  .seg { flex: 1 1 0; min-height: var(--tap); padding: 8px 6px; border: 0; border-right: 1px solid var(--accent);
-    background: var(--card); color: var(--accent); font: inherit; font-size: 1rem; cursor: pointer; }
-  .seg:last-child { border-right: 0; }
-  .seg.on { background: var(--accent); color: #fff; font-weight: 700; }
+  .segmented { display: flex; gap: 4px; padding: 4px; background: #dfe5f4; border: 0; border-radius: var(--radius-sm); margin-bottom: 12px; }
+  .seg { flex: 1 1 0; min-height: var(--tap); padding: 8px 6px; border: 0; border-radius: 9px;
+    background: transparent; color: var(--text); font: inherit; font-size: 1rem; font-weight: 700; cursor: pointer; }
+  .seg.on { background: var(--card); color: var(--accent-ink); box-shadow: 0 1px 3px rgba(16, 24, 40, .15); }
   .seg.on::before { content: "✓ "; }
-  .empty { text-align: center; color: var(--muted); padding: 24px 8px; }
-  .empty p { margin: 0 0 12px; }
+  /* 빈 상태: 왼쪽 정렬 한 줄(결정 85). 다음 할 일이 있을 때만 버튼 */
+  .empty { text-align: left; color: var(--muted); padding: 4px 0 10px; }
+  .empty p { margin: 0 0 4px; }
   .check { display: flex; align-items: center; gap: var(--gap-sm); min-height: var(--tap); cursor: pointer; }
   .check input { width: 28px; height: 28px; flex: 0 0 auto; }
   .range { padding-bottom: 8px; }
@@ -237,4 +257,17 @@
   .rg-cell.bad .rg-sym::before { content: "⚠ "; color: var(--warn); }
   .rg-cell.sel { border: 3px solid var(--accent); }   /* 달력에서 지금 고른 날: 색 + 굵기(아이콘 없음, aria-current="date"). ⚠는 미인정·경고 뜻이라 쓰지 않는다 */
   .rg-cell.off { background: var(--muted-weak); border-style: dashed; color: var(--muted-ink); cursor: not-allowed; }
+  /* ───────── 학생·학부모 화면(body.tone-soft, 결정 85): 흰 판 하나 + 큰 글씨 + 더 둥근 모서리. 색은 교사 화면과 같은 코발트 ───────── */
+  body.tone-soft { font-size: 1.04rem; }
+  body.tone-soft main { background: var(--card); border-radius: 22px; margin: 12px max(12px, calc((100vw - 720px) / 2)); padding: 6px 18px 14px; max-width: 720px; }   /* 넓은 화면에서도 한 줄이 720px를 넘지 않는다(넘으면 읽기 힘들다) */
+  body.tone-soft main.has-actionbar { padding-bottom: calc(var(--bar-h) + 24px + env(safe-area-inset-bottom, 0px)); }   /* 아래 작업 바에 마지막 내용이 가리지 않게(위 main 규칙보다 우선) */
+  body.tone-soft .card { padding: 16px 0 8px; margin: 0; border-top: 1px solid var(--line); }
+  body.tone-soft .card:first-child { border-top: 0; padding-top: 10px; }
+  body.tone-soft .card h2 { font-size: 1.15rem; }
+  body.tone-soft #home .card:first-child h2 { font-size: 1.5rem; }   /* 홈 맨 위 카드(이름)만 크게. 화면의 첫 카드는 그대로 */
+  body.tone-soft .card.todo, body.tone-soft .card.key { background: var(--accent-weak); border: 0; border-radius: var(--radius-sm); box-shadow: none; padding: 16px; margin: 12px 0; }
+  body.tone-soft .card.todo h2 { color: var(--accent-ink); }
+  body.tone-soft .field input, body.tone-soft .field select, body.tone-soft .field textarea { border: 0; background: var(--bg); padding: 8px 14px; }
+  body.tone-soft .segmented { background: var(--bg); }
+  body.tone-soft .actionbar > .btn { padding: 14px 18px; font-size: 1.05rem; }
 </style>

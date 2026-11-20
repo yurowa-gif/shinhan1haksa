@@ -25,9 +25,9 @@
     function row(key, val) {
       return el('div', { class: 'pt-row' }, [el('span', { class: 'pt-k', text: key }), el('span', { class: 'pt-v' }, [typeof val === 'string' ? document.createTextNode(val) : val])]);
     }
-    function card(title, kids) { return el('div', { class: 'card pt-card' }, [el('h2', { text: title })].concat(kids.filter(Boolean))); }
+    function card(title, kids, kind) { return el('div', { class: UI.cardClass(kind) + ' pt-card' }, [el('h2', { text: title })].concat(kids.filter(Boolean))); }
     function note(text) { return el('div', { class: 'muted pt-note', text: text }); }
-    function link(text, fn) { return el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:8px', text: text, onclick: fn }); }
+    function link(text, fn) { return UI.rowLink({ text: text, onclick: fn }); }
     function pillsOf(list) { return el('div', { class: 'pt-pills' }, list); }
     function typeKind(t) { return /^병/.test(t) ? 'byung' : /^학원/.test(t) ? 'hak' : /^가정/.test(t) ? 'ga' : 'mute'; }
     function stateKind(s) { return s === '확정' ? 'confirmed' : s === '취소' ? 'canceled' : 'requested'; }
@@ -54,13 +54,13 @@
 
       var td = p.todo, base = window.PORTAL_APP_URL || '';
       if (td && td.kind === 'submit') {
-        root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '다음 달 시간표를 내 주세요' }), el('div', { class: 'pt-note', text: td.monthKo + ' 시간표 제출 기간입니다. ' + td.endKo + '까지 내 주세요. 낸 뒤에는 부모님이 동의하고 선생님이 확인합니다.' }),
-          el('a', { class: 'btn', style: 'margin-top:8px', href: base + '?page=timetable&role=student', text: '시간표 내기' })]));
+        root.appendChild(el('div', { class: UI.cardClass('todo') }, [el('h2', { text: '다음 달 시간표를 내 주세요' }), el('div', { class: 'pt-note', text: td.monthKo + ' 시간표 제출 기간입니다. ' + td.endKo + '까지 내 주세요. 낸 뒤에는 부모님이 동의하고 선생님이 확인합니다.' }),
+          UI.rowLink({ href: base + '?page=timetable&role=student', text: '시간표 내기' })]));
       } else if (td && td.kind === 'returned') {
         root.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all' }, [document.createTextNode(td.monthKo + ' 시간표가 돌려보내졌습니다. 고쳐서 ' + td.endKo + '까지 다시 내 주세요. '), el('a', { href: base + '?page=timetable&role=student', text: '시간표 열기' })]));
       } else if (td && td.kind === 'agree') {
-        root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '시간표에 동의해 주세요' }), el('div', { class: 'pt-note', text: s.name + ' 학생이 ' + td.monthKo + ' 시간표를 냈습니다. 동의하면 담당 선생님이 확인한 뒤 ' + td.monthKo + ' 1일부터 적용됩니다.' }),
-          el('a', { class: 'btn', style: 'margin-top:8px', href: base + '?page=timetable&role=parent&student=' + encodeURIComponent(s.id), text: '시간표 보고 동의하기' })]));
+        root.appendChild(el('div', { class: UI.cardClass('todo') }, [el('h2', { text: '시간표에 동의해 주세요' }), el('div', { class: 'pt-note', text: s.name + ' 학생이 ' + td.monthKo + ' 시간표를 냈습니다. 동의하면 담당 선생님이 확인한 뒤 ' + td.monthKo + ' 1일부터 적용됩니다.' }),
+          UI.rowLink({ href: base + '?page=timetable&role=parent&student=' + encodeURIComponent(s.id), text: '시간표 보고 동의하기' })]));
       }
       var o = p.outs, live = o.items.filter(function (i) { return i.status === '유효'; });
       if (o.total >= 2 && !parent) {
@@ -68,20 +68,21 @@
       }
       var outKids = [pillsOf([o.total >= 2 ? UI.statusPill('out2', '퇴실 대상') : o.total === 1 ? UI.statusPill('out1', '1OUT') : UI.statusPill('mute', 'OUT 없음'), el('span', { text: '이번 기간 ' + o.total + '건' })])];
       live.slice(0, 3).forEach(function (i) { outKids.push(el('div', { class: 'pt-note', text: i.dateKo + ' ' + i.ruleName })); });
-      outKids.push(note(parent ? 'OUT이 2번 쌓이면 퇴실 대상이 됩니다. 그때는 담당 선생님이 먼저 연락드립니다.' : 'OUT이 2번 쌓이면 퇴실 대상이 됩니다. OUT은 학기마다 처음부터 다시 셉니다.'));
+      outKids.push(note(parent ? 'OUT은 학사 생활 규칙을 어겼을 때 받는 기록입니다. OUT이 2번 쌓이면 학사 퇴실 대상이 되고, 그때는 담당 선생님이 먼저 연락드립니다.' : 'OUT이 2번 쌓이면 퇴실 대상이 됩니다. OUT은 학기마다 처음부터 다시 셉니다.'));
       if (!parent) outKids.push(link('내 OUT 자세히', function () { show('outs'); }));
-      root.appendChild(card(parent ? 'OUT' : '내 OUT', outKids));
+      root.appendChild(card(parent ? 'OUT' : '내 OUT', outKids, o.total > 0 ? 'key' : ''));   // OUT이 없으면 강조하지 않는다(노란 띠를 건수 > 0에만 주는 것과 같은 원칙)
 
       var wk = weekOf(p.today), shown = p.exceptions.filter(function (e) { return parent || (e.date >= wk[0] && e.date <= wk[1]); }).filter(function (e) { return e.state !== '취소'; });
       if (parent) shown = shown.slice(0, 5);
       var exKids = shown.length ? shown.map(excRow) : [UI.emptyState(parent ? '출결 기록이 없습니다.' : '이번 주 출결 기록이 없습니다.')];
-      exKids.push(note(parent ? '확인 중인 기록은 선생님이 확인하면 확정으로 바뀝니다.' : '요청은 선생님이 확인하면 확정으로 바뀝니다.'));
+      // 요청 중인 기록이 하나라도 보일 때만 이 안내를 띄운다(writing.md 2절 7번)
+      if (shown.some(function (e) { return stateKind(e.state) === 'requested'; })) exKids.push(note(parent ? '확인 중인 기록은 선생님이 확인하면 확정으로 바뀝니다.' : '요청은 선생님이 확인하면 확정으로 바뀝니다.'));
       if (!parent) exKids.push(link('출결 기록 전체 보기', function () { show('exceptions'); }));
       root.appendChild(card(parent ? '출결 기록' : '이번 주 출결 기록', exKids));
 
       if (!parent) {
         var ph = [p.seat ? row('자습 자리', p.seat.space + ' ' + p.seat.label) : null, p.room ? row('기숙사', p.room.floor + '층 ' + p.room.roomNo + '호') : null].filter(Boolean);
-        root.appendChild(card('내 자리와 방', ph.length ? ph : [note('아직 정해진 자리가 없습니다.')]));
+        root.appendChild(card('내 자리와 방', ph.length ? ph : [note('아직 자습 자리와 기숙사 방이 정해지지 않았습니다.')]));
       } else {
         var meal = [row('기숙사', st['기숙사'] || '없음'), row('조식', st['조식'] || '없음'), row('석식', st['석식'] || '없음')];
         if (st['중식']) meal.push(row('중식', st['중식']));
@@ -98,7 +99,7 @@
       }
 
       var up = p.upcoming || [];
-      var upKids = up.length ? up.map(function (e) { return row(e.dateKo, e.title); }) : [UI.emptyState('앞으로 등록된 일정이 없습니다.')];
+      var upKids = up.length ? up.map(function (e) { return row(e.dateKo, e.title); }) : [UI.emptyState('앞으로 잡힌 학사 일정이 없습니다.')];
       upKids.push(link('월별 일정 열기', function () { show('month'); }));
       root.appendChild(card('앞으로 일정', upKids));
     }

@@ -134,6 +134,25 @@ var UI = {};
     return box;
   };
 
+  /**
+   * UI.rowLink({text, href}) 또는 UI.rowLink({text, onclick}) — '열기 ›' 한 줄(48px, 결정 85).
+   * 다른 화면으로 가는 링크는 버튼(.btn) 대신 이것을 쓴다. 홈의 할 일 카드(class "card todo")에서는 첫 줄 링크가 폭 가득 주 버튼 모양이 된다.
+   * 저장·확정처럼 실제로 일을 하는 버튼은 계속 .btn(makeBtn)을 쓴다.
+   */
+  UI.rowLink = function (opts) {
+    if (!opts || !opts.text) throw new Error('UI.rowLink: text가 필요합니다');
+    if (opts.href) return el('a', { class: 'row-link', href: opts.href, text: opts.text });
+    var b = el('button', { type: 'button', class: 'row-link', text: opts.text });
+    if (opts.onclick) b.addEventListener('click', function (e) { opts.onclick(e, b); });
+    return b;
+  };
+
+  /**
+   * UI.cardClass(kind) — 홈 카드의 종류: 'todo'(진짜 할 일: 마감·미처리 건수 > 0일 때만), 'key'(중요한 숫자·상태), 그 밖에는 참고(상자 없음).
+   * 0건이면 todo를 붙이지 않는다(노란 띠가 늘 떠 있으면 아무것도 눈에 안 띈다).
+   */
+  UI.cardClass = function (kind) { return kind === 'todo' || kind === 'key' ? 'card ' + kind : 'card'; };
+
   /** UI.toast('저장했습니다.', {kind:'ok'|'warn'|'info', ms:3000}) — 아래에 잠깐 떴다 사라지는 한 줄 */
   UI.toast = function (message, opts) {
     opts = opts || {};

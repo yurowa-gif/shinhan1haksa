@@ -107,6 +107,24 @@ test('statusPill: 알 수 없는 상태는 오류, 알려진 상태는 모두 PI
   kinds.forEach((c) => assert.ok(defined.has(c), c));
 });
 
+test('rowLink·cardClass(결정 85): 줄 링크는 href면 a, onclick이면 button이고 글자가 없으면 오류, 카드 종류는 todo·key만 상자 클래스를 붙인다', () => {
+  // 브라우저가 없으니 Client.html 의 el 자리에 아주 작은 가짜를 둔다(태그·속성·이벤트만 기록)
+  ctx.el = function (tag, attrs) { return { tag: tag, attrs: attrs || {}, listeners: {}, addEventListener(t, f) { this.listeners[t] = f; } }; };
+  assert.throws(() => UI.rowLink({}), /text/);
+  const a = UI.rowLink({ text: '출석부 열기', href: 'https://x/?page=sheet' });
+  assert.deepStrictEqual([a.tag, a.attrs.class, a.attrs.href, a.attrs.text], ['a', 'row-link', 'https://x/?page=sheet', '출석부 열기']);
+  let hit = 0;
+  const b = UI.rowLink({ text: '월별 일정 열기', onclick: () => { hit++; } });
+  assert.deepStrictEqual([b.tag, b.attrs.type, b.attrs.class], ['button', 'button', 'row-link']);
+  b.listeners.click({});
+  assert.strictEqual(hit, 1);
+  assert.deepStrictEqual(['', 'todo', 'key', 'x', undefined].map((k) => UI.cardClass(k)), ['card', 'card todo', 'card key', 'card', 'card']);
+  // Styles.html 에 .row-link .card.todo .card.key 가 있다
+  const defined = css.definedClasses(css.parseRules(css.styleText(css.readFile('src/ui/Styles.html'))));
+  ['row-link', 'todo', 'key'].forEach((c) => assert.ok(defined.has(c), c));
+  delete ctx.el;
+});
+
 /* ───── 스타일 ───── */
 
 const rules = css.parseRules(css.styleText(css.readFile('src/ui/Styles.html')));
