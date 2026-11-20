@@ -19,6 +19,18 @@ function permissions_() {
   return {
     // 홈 화면: 요청한 역할(context.role)을 실제로 가진 사람만
     'home.view': { roles: ROLES, scope: 'ownRole' },
+    // 포털(F14, C36, 결정 82): 학생은 본인, 학부모는 연결된 자녀만(교사 역할은 이 키로 못 연다). home은 역할만, view는 scope student(isOwn·isGuardian)
+    'portal.home': { roles: ['student', 'parent'] },
+    'portal.view': { roles: ['student', 'parent'], scope: 'student' },
+    // 시간표(F9, C37): 학생 본인 제출, 학부모 동의(연결된 자녀), 담당교사·관리자 확인. 신원은 portalWho_. screen = 화면을 여는 역할만
+    'timetable.screen': { roles: ['student', 'parent', 'hall_teacher', 'admin'] },
+    'timetable.mine': { roles: ['student'] },
+    'timetable.submit': { roles: ['student'] },
+    'timetable.parent': { roles: ['parent'], scope: 'student' },
+    'timetable.agree': { roles: ['parent'], scope: 'student' },
+    'timetable.list': { roles: ['admin', 'hall_teacher'] },
+    'timetable.view': { roles: ['admin', 'hall_teacher'], scope: 'student', noDuty: true },
+    'timetable.confirm': { roles: ['admin', 'hall_teacher'], scope: 'student', noDuty: true },
     // 학생 한 명의 기본 정보 보기
     // wideView: 보기 키만 — 학사 교사도 이번 기간 학사생 전체를 본다(결정 45). 쓰기 키·counsel.view에는 달지 않는다
     'student.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom', 'student', 'parent'], scope: 'student', wideView: true },
@@ -54,6 +66,10 @@ function permissions_() {
     // ── 5단계(결정 80, F13). 월별 일정: 교사 역할은 모두 보기, 등록·취소는 관리자만. 학생·학부모는 F14(0단계 진단 뒤) ──
     'event.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom', 'duty_manager'] },
     'event.edit': { roles: ['admin'] },
+    // ── 7단계(결정 82·83, F10 시설 사용 일지). 쓰기는 학생 본인(scope student → isOwn, 신원은 portalWho_), 보기는 그날 근무교사(dutyWindow 0 = 그날 실제 근무자만)·관리자, 누적은 관리자 ──
+    'facility.write': { roles: ['student'], scope: 'student', noDuty: true },
+    'facility.view': { roles: ['admin', 'hall_teacher'], dutyWindow: 0 },
+    'facility.report': { roles: ['admin'] },
     // ── 4단계(결정 75·76, S4-0). 서류 체크리스트·프로그램·연락처. 학생·학부모·담임에게는 내보내지 않는다 ──
     'doc.view': { roles: ['admin', 'hall_teacher', 'attendance'] },
     'doc.edit': { roles: ['admin', 'hall_teacher'], scope: 'student' },
@@ -98,7 +114,7 @@ function permissions_() {
 }
 
 /** 한 번의 실행 안에서 접속자 정보를 다시 읽지 않도록 */
-var _authMemo = { user: undefined };
+var _authMemo = { user: undefined, portal: undefined };
 
 function normalizeEmail_(v) {
   return String(v || '').trim().toLowerCase();
@@ -151,6 +167,40 @@ function hasRole_(user, role) {
   return user.roles.indexOf(role) >= 0;
 }
 
+/**
+ * 학생·학부모 신원 판정 — **이 함수 한 곳**(결정 82, docs/contracts/identity.md).
+ * 지금은 PRD 6.1의 1안: 접속 이메일(getCurrentUser_) → users 역할(student·parent) → students.email로 본인 학생 id,
+ * guardian_links.parent_email로 자녀 id 목록. 0단계 진단 결과가 2·3안이면 이 함수(와 doGet 진입)만 바꾼다.
+ * 학생·학부모 공개 함수는 모두 이 함수와 requirePermission_(scope student)를 거친다. studentFacts_의 isOwn·isGuardian도 여기서 나온다.
+ * @return {{email:string, registered:boolean, roles:string[], isStudent:boolean, isParent:boolean,
+ *           studentId:string, ownStudentIds:string[], childIds:string[]}}
+ *   studentId = 본인 학생 id(없으면 ''), ownStudentIds = 같은 이메일을 쓰는 모든 학생(보통 1명), childIds = 연결된 자녀 id(중복 없음, 시트 순서).
+ *   역할이 없으면 해당 목록은 비어 있다(학생 역할이 아닌 계정은 본인 학생이 없다).
+ */
+function portalWho_() {
+  if (_authMemo.portal !== undefined) return _authMemo.portal;
+  var user = getCurrentUser_();
+  var who = { email: user.email, registered: user.registered, roles: user.roles.slice(), isStudent: false, isParent: false,
+    studentId: '', ownStudentIds: [], childIds: [] };
+  if (user.registered && user.email) {
+    if (hasRole_(user, 'student')) {
+      who.isStudent = true;
+      readAll_('students').forEach(function (st) {
+        if (st.email && normalizeEmail_(st.email) === user.email && who.ownStudentIds.indexOf(st.id) < 0) who.ownStudentIds.push(st.id);
+      });
+      who.studentId = who.ownStudentIds[0] || '';
+    }
+    if (hasRole_(user, 'parent')) {
+      who.isParent = true;
+      readAll_('guardian_links').forEach(function (g) {
+        if (g.student_id && normalizeEmail_(g.parent_email) === user.email && who.childIds.indexOf(g.student_id) < 0) who.childIds.push(g.student_id);
+      });
+    }
+  }
+  _authMemo.portal = who;
+  return who;
+}
+
 /** 오늘 날짜가 속한 운영 기간. 없으면 오늘 이전에 시작한 가장 최근 기간. */
 function getCurrentTerm_() {
   var t = today_();
@@ -199,10 +249,9 @@ function studentFacts_(user, student, ymd, windowDays, noDuty) {
   var enrolled = readAll_('enrollments').some(function (en) { return en.term_id === termId && en.student_id === student.id; });
   var facts = {
     isEnrolled: enrolled,
-    isOwn: !!student.email && normalizeEmail_(student.email) === user.email,
-    isGuardian: readAll_('guardian_links').some(function (g) {
-      return normalizeEmail_(g.parent_email) === user.email && g.student_id === student.id;
-    }),
+    // 본인·보호자 판정은 신원 판정 한 곳(portalWho_)에서 — user는 접속자 그대로여야 한다(다른 사람 신원을 넣지 않는다)
+    isOwn: portalWho_().ownStudentIds.indexOf(student.id) >= 0,
+    isGuardian: portalWho_().childIds.indexOf(student.id) >= 0,
     isAssigned: readAll_('enrollments').some(function (en) {
       return en.term_id === termId && en.student_id === student.id &&
         normalizeEmail_(en.teacher_email) === user.email;

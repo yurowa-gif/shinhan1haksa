@@ -2,10 +2,15 @@
   /** 학부모 홈: 자녀 전환 탭 + 자녀 요약 (PRD 8절, F14) */
   function renderHome(d, root) {
     if (!d.children.length) {
-      root.appendChild(el('div', { class: 'error', text: '연결된 자녀가 없습니다. 학사 담당 선생님께 문의해 주세요.' }));
+      root.appendChild(el('div', { class: 'card' }, [
+        el('h2', { text: '연결된 자녀가 없습니다' }),
+        el('div', { style: 'word-break:keep-all;margin:8px 0', text: '학교에 알려 주신 구글 계정과 자녀 정보가 아직 이어지지 않았습니다. 담당 선생님께 이 계정(로그인한 구글 계정)으로 자녀를 연결해 달라고 알려 주세요.' }),
+        el('div', { class: 'muted', style: 'word-break:keep-all', text: '이어지면 이 화면에서 자녀의 OUT, 출결 기록, 급식과 기숙사, 상담한 날짜, 학교 일정을 볼 수 있습니다.' })
+      ]));
       return;
     }
-    var tabs = el('nav', { class: 'tabs', 'aria-label': '자녀 전환' });
+    window.PORTAL_APP_URL = d.appUrl;
+    var tabs = el('nav', { class: 'tabs wrap', 'aria-label': '자녀 전환' });
     var body = el('div');
     root.appendChild(tabs);
     root.appendChild(body);
@@ -13,18 +18,13 @@
     function show(child, btn) {
       Array.prototype.forEach.call(tabs.children, function (b) { b.classList.remove('on'); });
       btn.classList.add('on');
-      clear(body).appendChild(el('div', { class: 'loading', text: '불러오는 중…' }));
-      // 서버가 이 자녀에 대한 권한을 다시 확인한다(student.view)
-      call('getStudentSummary', child.id)
-        .then(function (s) {
-          clear(body).appendChild(studentCard(s));
-          body.appendChild(soonCard('OUT · 출결 특이사항 · 급식·기숙사 상태 · 상담 여부', '1단계 이후 차례로 추가합니다.'));
-        })
-        .catch(function (err) { clear(body); showError(body, err); });
+      renderPortal(body, child.id);   // 본문(OUT·특이사항·급식·상담 여부·월별 일정)은 ui/Portal. 서버(getPortalStudent)가 연결된 자녀인지 확인한다
     }
 
+    // 탭 글자는 이름만(360px에서 잘리지 않게). 같은 이름이 둘 이상이면 학년을 붙인다. 학년·반은 아래 카드에 나온다
+    function tabName(c) { return d.children.filter(function (o) { return o.name === c.name; }).length > 1 ? c.name + ' (' + c.label + ')' : c.name; }
     d.children.forEach(function (c, i) {
-      var b = el('button', { class: 'tab', type: 'button', text: c.name + ' (' + c.label + ')' });
+      var b = el('button', { class: 'tab', type: 'button', text: tabName(c) });
       b.addEventListener('click', function () { show(c, b); });
       tabs.appendChild(b);
       if (i === 0) setTimeout(function () { show(c, b); }, 0);

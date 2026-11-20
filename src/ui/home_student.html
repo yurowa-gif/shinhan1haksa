@@ -1,12 +1,20 @@
 <script>
-  /** 학생 홈: 내 정보 (PRD 8절) */
+  /** 학생 홈(F14, C36): 본인 OUT·출결 특이사항·자리·방·급식·월별 일정(읽기만). 본문은 ui/Portal의 renderPortal */
   function renderHome(d, root) {
     if (!d.me) {
       root.appendChild(el('div', { class: 'error', text: '학생 명단에서 내 계정을 찾지 못했습니다. 담당 선생님께 알려 주세요.' }));
       return;
     }
-    root.appendChild(studentCard(d.me));
-    root.appendChild(soonCard('OUT · 이번 주 특이사항 · 내 자리·방', '1단계 이후 차례로 추가합니다.'));
-    root.appendChild(soonCard('시간표 제출 · 시설 일지 · 월별 일정', '3단계 이후에 추가합니다.'));
+    window.PORTAL_APP_URL = d.appUrl;
+    var body = el('div');
+    root.appendChild(body);
+    renderPortal(body, d.me.id);
+    // 시설 일지 카드(C35, F10): 포털 본문 아래에 한 카드. 쓰기·내 기록은 ?page=facility
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '시설 일지' }),
+      el('div', { class: 'muted', style: 'word-break:keep-all', text: '특강실·원형테이블 같은 시설을 쓰면 근무 선생님께 말씀드린 뒤 여기에 적습니다.' }),
+      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=facility', text: '시설 일지 쓰기' }),
+      el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=facility&tab=mine', text: '내가 쓴 시설 일지' })
+    ]));
   }
 </script>

@@ -1,0 +1,266 @@
+<style>
+  .tt-steps { list-style: none; margin: 8px 0; padding: 0; }
+  .tt-steps li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); word-break: keep-all; }
+  .tt-steps li:last-child { border-bottom: 0; }
+  .tt-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); word-break: keep-all; }
+  .tt-row .tt-main { flex: 1 1 auto; min-width: 0; }
+  .tt-pad { margin: 8px 0; word-break: keep-all; }
+  /* 360px(글자 150%까지)에서 블록이 5개인 요일도 카드 안에 들어오게: 칸 폭을 줄이고 시각은 시·분 두 줄로 */
+  table.data.rg.tt-fit { table-layout: fixed; }
+  table.data.rg.tt-fit th, table.data.rg.tt-fit td { padding: 2px; }
+  table.data.rg.tt-fit th:first-child, table.data.rg.tt-fit td:first-child { width: 2.4em; padding-left: 4px; }
+  table.data.rg.tt-fit .rg-cell { min-width: 0; padding: 2px 0; }
+  .tt-time { display: block; line-height: 1.1; font-size: var(--font-sm); }
+  .tt-time small { display: block; font-size: .75em; color: var(--muted-ink); }
+  .tt-cell-off { color: var(--muted-ink); border: 1px dashed var(--line); min-height: var(--tap); display: flex; align-items: center; justify-content: center; }
+  .tt-tools { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .tt-tools .btn { flex: 0 1 auto; max-width: 100%; white-space: normal; }   /* 긴 글자 한 개짜리 버튼은 큰 글씨에서 줄을 바꿔 카드 안에 둔다 */
+</style>
+<script>
+  /**
+   * 시간표 화면(C37, F9, 시안 D13 docs/design/stage7-screens.md 4절). ?role=student|parent|hall_teacher|admin 로 열린다.
+   * 학생: 요일 × 블록 표에서 학(학원)·가(집)를 골라 낸다 / 학부모: 자녀 시간표를 보고 동의·동의하지 않음 / 담당교사·관리자: 목록에서 확인·돌려보냄.
+   * 권한·상태·기간은 모두 서버(Timetable.gs, R23)가 정한다. 이 파일은 서버가 준 것만 그린다.
+   */
+  var TT_DAYS = ['월', '화', '수', '목', '금', '토', '일'];
+  var TT_CIRCLED = ['①', '②', '③', '④', '⑤', '⑥'];
+
+  /** 서버가 준 entries([{weekday, blocks:'HH:mm-HH:mm;…' | 'ALL', code}]) → cells[요일][칸 번호 0..] = '' | '학' | '가' */
+  function ttCellsFrom(entries, slots) {
+    var cells = {};
+    TT_DAYS.forEach(function (w) { cells[w] = (slots[w] || []).map(function () { return ''; }); });
+    (entries || []).forEach(function (e) {
+      var ranges = String(e.blocks).toUpperCase() === 'ALL' ? null : String(e.blocks).split(';').map(function (r) { var p = r.split('-'); return { s: p[0], e: p[1] }; });
+      (slots[e.weekday] || []).forEach(function (b, i) {
+        var hit = !ranges || ranges.some(function (r) { return String(r.s).padStart(5, '0') < b.end && b.start < String(r.e).padStart(5, '0'); });
+        if (hit) cells[e.weekday][i] = e.code;
+      });
+    });
+    return cells;
+  }
+
+  /** cells → 제출할 entries(요일·구분마다 고른 블록의 'HH:mm-HH:mm;…') */
+  function ttEntriesFrom(cells, slots) {
+    var out = [];
+    TT_DAYS.forEach(function (w) {
+      ['학', '가'].forEach(function (code) {
+        var parts = (slots[w] || []).filter(function (b, i) { return cells[w][i] === code; }).map(function (b) { return b.start + '-' + b.end; });
+        if (parts.length) out.push({ weekday: w, blocks: parts.join(';'), code: code });
+      });
+    });
+    return out;
+  }
+
+  /** 요일 × 블록 표. onpick(요일, 번호)가 있으면 칸을 눌러 고른다(없으면 읽기만). */
+  function ttGrid(cells, slots, onpick) {
+    var max = 0;
+    TT_DAYS.forEach(function (w) { max = Math.max(max, (slots[w] || []).length); });
+    var head = el('tr', {}, [el('th', { text: '요일' })].concat(TT_CIRCLED.slice(0, max).map(function (c) { return el('th', { text: c }); })));
+    var body = TT_DAYS.map(function (w) {
+      var tds = [el('td', { text: w })];
+      for (var i = 0; i < max; i++) {
+        var b = (slots[w] || [])[i];
+        if (!b) { tds.push(el('td', {}, [el('div', { class: 'tt-cell-off', 'aria-label': '해당 없음', text: '—' })])); continue; }
+        var code = cells[w][i];
+        var label = code === '학' ? '학원' : code === '가' ? '가정' : '';
+        var btn = el('button', { type: 'button', class: code ? 'rg-cell has' : 'rg-cell', 'aria-label': w + '요일 ' + TT_CIRCLED[i] + ' ' + b.start + '부터 ' + (label || '학사 자습') }, [
+          code ? el('span', { class: 'rg-sym', text: code }) : el('span', { class: 'tt-time' }, [document.createTextNode(b.start.slice(0, 2)), el('small', { text: b.start.slice(3, 5) })]), code ? el('span', { class: 'rg-pre', text: label }) : null
+        ]);
+        if (onpick) btn.onclick = (function (ww, ii) { return function () { onpick(ww, ii); }; })(w, i); else btn.disabled = true;
+        tds.push(el('td', {}, [btn]));
+      }
+      return el('tr', {}, tds);
+    });
+    return el('div', { class: 'tablewrap' }, [el('table', { class: 'data rg tt-fit' }, [el('thead', {}, [head]), el('tbody', {}, body)])]);
+  }
+
+  function ttErrors(status, r) { clear(status); (r.errors || []).forEach(function (e) { status.appendChild(el('div', { class: 'error', role: 'alert', text: e.message })); }); }
+
+  function renderScreen(root) {
+    var role = (window.SCREEN_PARAMS || {}).role || '';
+    if (role === 'student') return ttStudent(root);
+    if (role === 'parent') return ttParent(root);
+    if (role === 'hall_teacher' || role === 'admin') return ttTeacher(root);
+    root.appendChild(el('div', { class: 'error', text: '홈에서 시간표 버튼을 눌러 들어와 주세요.' }));
+  }
+
+  /* ───────── 학생 ───────── */
+  function ttStudent(root) {
+    var box = el('div'); root.appendChild(box);
+    var state = null, cells = null, editing = false, bar = null;
+    function dropBar() { if (bar && bar.parentNode) bar.parentNode.removeChild(bar); bar = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); }
+    function load() {
+      dropBar(); clear(box).appendChild(el('div', { class: 'loading', text: '불러오는 중…' }));
+      call('getTimetableContext').then(function (c) {
+        if (!c.ok) { clear(box); box.appendChild(el('div', { class: 'error', text: c.reason })); return; }
+        state = c; editing = false; cells = ttCellsFrom(c.view.entries, c.view.slots); draw();
+      }).catch(function (e) { clear(box); showError(box, e); });
+    }
+    function draw() {
+      clear(box); dropBar();
+      var c = state, v = c.view, st = v.status, win = c.window, status = el('div', { 'aria-live': 'polite' });
+      var canEdit = win.open && (st === '' || st === '반려' || editing);
+      if (!win.open && st === '') {
+        box.appendChild(el('div', { class: 'card' }, [el('h2', { text: '지금은 시간표를 내는 기간이 아닙니다' }),
+          el('div', { class: 'tt-pad', text: win.reason || '시간표는 매달 정해진 기간에 다음 달 것을 냅니다.' }),
+          el('div', { class: 'muted tt-pad', text: win.monthKo + ' 시간표는 ' + win.startKo + '부터 ' + win.endKo + '까지 낼 수 있습니다.' })]));
+        return;
+      }
+      if (st === '반려' && v.returned) {
+        var who = v.returned.by === 'parent' ? '부모님이' : (v.returned.byName ? '담당 ' + v.returned.byName + '님이' : '담당 선생님이');
+        box.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: who + (v.returned.by === 'parent' ? ' 시간표에 동의하지 않았습니다.' : ' 시간표를 돌려보냈습니다.') + (v.returned.reason ? ' 사유: ' + v.returned.reason : '') + ' 고쳐서 다시 내 주세요.' }));
+      }
+      if (st && st !== '반려' && !editing) {
+        box.appendChild(el('div', { class: 'notice info', text: '확정되기 전에는 지금 시간표가 그대로 쓰입니다.' }));
+        var steps = [['내가 제출', '완료', 'confirmed'], ['부모님 동의', st === '제출' ? '기다리는 중' : '완료', st === '제출' ? 'requested' : 'confirmed'],
+          ['선생님 확인', st === '확정' ? '완료' : st === '동의' ? '기다리는 중' : '아직', st === '확정' ? 'confirmed' : st === '동의' ? 'requested' : 'mute'],
+          [v.monthKo + ' 1일부터 적용', st === '확정' ? '확정' : '아직', st === '확정' ? 'confirmed' : 'mute']];
+        box.appendChild(el('div', { class: 'card' }, [el('h2', { text: v.monthKo + ' 시간표' })].concat([el('ol', { class: 'tt-steps' }, steps.map(function (s, i) {
+          return el('li', {}, [el('span', { text: (i + 1) + '. ' + s[0] }), UI.statusPill(s[2], s[1])]);
+        }))])));
+      }
+      if (canEdit || !st) box.appendChild(el('div', { class: 'card' }, [el('h2', { text: '언제부터' }), el('div', { class: 'tt-pad', text: win.monthKo === v.monthKo ? v.month.slice(0, 4) + '년 ' + v.monthKo + ' 1일부터 한 달. ' + win.endKo + '까지 낼 수 있습니다.' : '' })]));
+      var gridCard = el('div', { class: 'card' }, [el('h2', { text: '학원·집 공부 시간' })]);
+      if (canEdit) {
+        gridCard.appendChild(el('div', { class: 'muted tt-pad', text: '비어 있는 칸은 학사에서 자습합니다. 칸을 눌러 학(학원)이나 가(집)를 고르세요. 평일 자습 끝나는 시각이 바뀌면 담당 선생님께 말씀하세요.' }));
+        if (c.hasPrev) gridCard.appendChild(el('div', { class: 'tt-tools' }, [el('button', { type: 'button', class: 'btn secondary', text: '지난달 시간표 그대로 가져오기', onclick: importPrev })]));
+      }
+      gridCard.appendChild(ttGrid(cells, v.slots, canEdit ? pick : null));
+      box.appendChild(gridCard); box.appendChild(status);
+      if (canEdit) {
+        bar = UI.actionBar([{ text: '시간표 제출', onclick: function (e, b) { submit(b, status); } }], { mount: true });
+      } else if (win.open && st && st !== '확정') {
+        box.appendChild(el('button', { type: 'button', class: 'btn secondary', style: 'flex:0 0 auto;white-space:nowrap', text: '고쳐서 다시 내기', onclick: function () { editing = true; draw(); } }));
+      }
+    }
+    function pick(w, i) {
+      var b = state.view.slots[w][i], choice = cells[w][i];
+      var chips = el('div', { class: 'chips' });
+      function paint() {
+        clear(chips);
+        [['학', '학 (학원)'], ['가', '가 (집)'], ['', '비움 (학사 자습)']].forEach(function (o) {
+          chips.appendChild(el('button', { type: 'button', class: o[0] === choice ? 'chip on' : 'chip', text: o[1], onclick: function () { choice = o[0]; paint(); } }));
+        });
+      }
+      paint();
+      var sheet = UI.bottomSheet({ title: w + '요일 ' + TT_CIRCLED[i] + ' (' + b.start + '–' + b.end + ')', content: chips,
+        actions: [{ text: '닫기', kind: 'secondary', onclick: function () { sheet.close(); } }, { text: '이 칸에 적용', onclick: function () { cells[w][i] = choice; sheet.close(); draw(); } }] });
+      sheet.open();
+    }
+    function importPrev() {
+      call('getPreviousTimetable', state.view.month).then(function (r) {
+        if (!r.ok) { UI.toast((r.errors && r.errors[0].message) || '가져올 수 없습니다.', { kind: 'warn' }); return; }
+        UI.confirmSheet({ title: '지난달 시간표를 가져옵니다', lead: r.monthKo + ' 시간표 ' + r.entries.length + '줄', lines: ['지금 표에 적은 것은 이 시간표로 바뀝니다.', '가져온 뒤에도 칸을 눌러 고칠 수 있고, [시간표 제출]을 눌러야 냅니다.'], confirmText: '가져오기',
+          onconfirm: function () { cells = ttCellsFrom(r.entries, state.view.slots); draw(); } });
+      }).catch(function (e) { UI.toast(e.message, { kind: 'warn' }); });
+    }
+    function submit(btn, status) {
+      btn.disabled = true;
+      call('submitTimetable', { month: state.view.month, entries: ttEntriesFrom(cells, state.view.slots) }).then(function (r) {
+        btn.disabled = false;
+        if (!r.ok) { ttErrors(status, r); return; }
+        UI.toast('시간표를 냈습니다.'); load();
+      }).catch(function (e) { btn.disabled = false; clear(status); showError(status, e); });
+    }
+    load();
+  }
+
+  /* ───────── 학부모 ───────── */
+  function ttParent(root) {
+    var tabs = el('nav', { class: 'tabs wrap', 'aria-label': '자녀 전환' }), box = el('div'), bar = null;
+    root.appendChild(tabs); root.appendChild(box);
+    function dropBar() { if (bar && bar.parentNode) bar.parentNode.removeChild(bar); bar = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); }
+    var want = (window.SCREEN_PARAMS || {}).student || '';
+    call('getPortalHome').then(function (h) {
+      var kids = h.children;
+      if (!kids.length) { box.appendChild(el('div', { class: 'error', text: '연결된 자녀가 없습니다. 학사 담당 선생님께 문의해 주세요.' })); return; }
+      var first = kids.filter(function (k) { return k.id === want; })[0] || kids[0];
+      kids.forEach(function (k) {
+        var b = el('button', { class: 'tab', type: 'button', text: k.name, onclick: function () { show(k, b); } });
+        tabs.appendChild(b);
+        if (k === first) show(k, b);
+      });
+      if (kids.length < 2) tabs.style.display = 'none';
+    }).catch(function (e) { showError(box, e); });
+    function show(kid, btn) {
+      Array.prototype.forEach.call(tabs.children, function (b) { b.classList.remove('on'); });
+      btn.classList.add('on'); dropBar();
+      clear(box).appendChild(el('div', { class: 'loading', text: '불러오는 중…' }));
+      call('getChildTimetable', kid.id).then(function (r) { draw(kid, r); }).catch(function (e) { clear(box); showError(box, e); });
+    }
+    function draw(kid, r) {
+      clear(box);
+      if (r.none) { box.appendChild(el('div', { class: 'card' }, [el('h2', { text: kid.name + ' 학생 시간표' }), UI.emptyState('아직 학생이 낸 시간표가 없습니다.')])); return; }
+      var v = r.view, status = el('div', { 'aria-live': 'polite' });
+      var msg = { '제출': '동의하면 담당 선생님에게 "확인 필요"로 갑니다. 선생님이 확인한 뒤 ' + v.monthKo + ' 1일부터 적용됩니다.', '동의': '동의하셨습니다. 담당 선생님이 확인하면 ' + v.monthKo + ' 1일부터 적용됩니다.', '확정': '확정되었습니다. ' + v.monthKo + ' 1일부터 적용됩니다.', '반려': '학생에게 돌려보냈습니다. 학생이 고쳐서 다시 내면 다시 동의를 부탁드립니다.' }[v.status] || '';
+      box.appendChild(el('div', { class: 'card' }, [el('h2', { text: kid.name + ' 학생 · ' + v.monthKo + ' 시간표' }), el('div', { class: 'tt-pad', text: msg })]));
+      var gridCard = el('div', { class: 'card' }, [el('h2', { text: '학원·집 공부 시간' }), ttGrid(ttCellsFrom(v.entries, v.slots), v.slots, null)]);
+      gridCard.appendChild(el('div', { class: 'muted tt-pad', text: '비어 있는 칸은 학사에서 자습합니다.' }));
+      box.appendChild(gridCard); box.appendChild(status);
+      if (r.canAgree) {
+        bar = UI.actionBar([{ text: '동의하지 않습니다', kind: 'secondary', onclick: function () { decline(kid, v, status); } },
+          { text: '동의합니다', onclick: function (e, b) { b.disabled = true; call('agreeTimetable', kid.id, v.month).then(function (x) { b.disabled = false; if (!x.ok) { ttErrors(status, x); return; } UI.toast('동의했습니다.'); show(kid, tabs.querySelector('.on') || tabs.firstChild); }).catch(function (er) { b.disabled = false; clear(status); showError(status, er); }); } }], { mount: true });
+      }
+    }
+    function decline(kid, v, status) {
+      var input = el('input', { type: 'text', maxlength: '100', placeholder: '예: 학원 시간이 바뀌었습니다' });
+      var content = el('div', {}, [el('p', { text: '학생에게 시간표가 "돌려보냄"으로 돌아갑니다. 학생이 고쳐서 다시 내면 다시 동의를 부탁드립니다.' }), UI.field('사유(적지 않아도 됩니다)', input, { name: 'reason' })]);
+      var sheet = UI.bottomSheet({ title: '동의하지 않습니다', content: content, actions: [{ text: '돌아가기', kind: 'secondary', onclick: function () { sheet.close(); } },
+        { text: '학생에게 돌려보내기', onclick: function () {
+          call('declineTimetable', kid.id, v.month, input.value).then(function (x) { if (!x.ok) { sheet.close(); ttErrors(status, x); return; } sheet.close(); UI.toast('학생에게 돌려보냈습니다.'); show(kid, tabs.querySelector('.on') || tabs.firstChild); }).catch(function (er) { sheet.close(); clear(status); showError(status, er); });
+        } }] });
+      sheet.open();
+    }
+  }
+
+  /* ───────── 담당교사·관리자 ───────── */
+  function ttTeacher(root) {
+    var box = el('div'); root.appendChild(box);
+    var tab = 'todo', month = '';
+    function load(m) {
+      clear(box).appendChild(el('div', { class: 'loading', text: '불러오는 중…' }));
+      call('listTimetables', m || month || '').then(function (r) { month = r.month; draw(r); }).catch(function (e) { clear(box); showError(box, e); });
+    }
+    function draw(r) {
+      clear(box);
+      var head = el('div', { class: 'card' }, [el('h2', { text: r.monthKo + ' 시간표' })]);
+      if (r.months.length > 1) head.appendChild(UI.segmented({ label: '달', value: r.month, options: r.months.map(function (m) { return { value: m, label: (+m.slice(5, 7)) + '월' }; }), onchange: function (v) { load(v); } }));
+      head.appendChild(el('div', { class: 'tt-pad', text: (r.deadline.open ? '제출 마감까지 ' + r.deadline.daysLeft + '일(' + r.deadline.endKo + ')' : '지금은 제출 기간이 아닙니다') + ' · 미제출 ' + r.counts.missing + '명' }));
+      head.appendChild(UI.segmented({ label: '보기', value: tab, options: [{ value: 'todo', label: '할 일 ' + r.counts.todo }, { value: 'all', label: '전체 ' + r.counts.total }], onchange: function (v) { tab = v; draw(r); } }));
+      box.appendChild(head);
+      var list = r.items.filter(function (i) { return tab === 'all' || i.todo; });
+      var card = el('div', { class: 'card' });
+      if (!list.length) card.appendChild(UI.emptyState(tab === 'todo' ? '지금 할 일이 없습니다.' : '학생이 없습니다.'));
+      list.forEach(function (i) {
+        var kind = { '확인 필요': 'todo', '동의 기다림': 'requested', '제출 안 함': 'todo', '확정': 'confirmed', '돌려보냄': 'canceled' }[i.label] || 'mute';
+        var row = el('div', { class: 'tt-row' }, [el('div', { class: 'tt-main' }, [el('b', { text: i.grade + '. ' + i.name }), el('span', { class: 'muted', text: ' ' + i.grade + '-' + i.classNo + ' ' + i.number + '번' })]), UI.statusPill(kind, i.label)]);
+        if (i.status) { row.style.cursor = 'pointer'; row.onclick = function () { openEntry(i, r); }; }
+        card.appendChild(row);
+      });
+      box.appendChild(card);
+    }
+    function openEntry(i, r) {
+      call('getTimetableEntry', i.id, r.month).then(function (x) {
+        if (!x.ok) { UI.toast(x.errors[0].message, { kind: 'warn' }); return; }
+        var v = x.view, days = {};
+        v.entries.forEach(function (e) { (days[e.code] = days[e.code] || []).push(e.weekday); });
+        var lines = [el('p', { class: 'sheet-lead', text: i.grade + '. ' + i.name + ' · ' + v.monthKo + ' 시간표' }),
+          el('p', { text: '학(학원): ' + ((days['학'] || []).join(' ') || '없음') }), el('p', { text: '가(집): ' + ((days['가'] || []).join(' ') || '없음') }),
+          el('p', { text: '부모 동의: ' + (v.agreedKo || '아직') })];
+        if (v.status === '동의') { lines.push(el('p', { class: 'muted', text: '확인하면 ' + v.monthKo + ' 1일부터 출석부에 학·가가 나옵니다. 그 전까지는 지금 시간표가 그대로 쓰입니다.' })); }
+        var content = el('div', {}, lines), actions = v.status === '동의' ? [] : [{ text: '닫기', kind: 'secondary', onclick: function () { sheet.close(); } }];   // 확인할 수 있을 때는 [돌려보내기]·[확인] 두 개만(배경을 누르면 닫힌다)
+        if (v.status === '동의') actions.push({ text: '돌려보내기', kind: 'secondary', onclick: function () { sheet.close(); askReturn(i, v, r); } });
+        if (v.status === '동의') actions.push({ text: '확인', onclick: function () {
+          call('confirmTimetable', i.id, v.month).then(function (c) { sheet.close(); if (!c.ok) { UI.toast(c.errors[0].message, { kind: 'warn' }); return; } UI.toast('확인했습니다.'); load(v.month); }).catch(function (e) { sheet.close(); UI.toast(e.message, { kind: 'warn' }); });
+        } });
+        var sheet = UI.bottomSheet({ title: v.status === '동의' ? '시간표를 확인합니다' : v.monthKo + ' 시간표', content: content, actions: actions });
+        sheet.open();
+      }).catch(function (e) { UI.toast(e.message, { kind: 'warn' }); });
+    }
+    function askReturn(i, v, r) {
+      UI.confirmWithReason({ title: '시간표를 돌려보냅니다', message: '학생에게 "돌려보냄"으로 돌아가고, 학생이 고쳐서 다시 냅니다.', reasonLabel: '사유', confirmText: '돌려보내기', danger: false,
+        onconfirm: function (reason) { call('returnTimetable', i.id, v.month, reason).then(function (x) { if (!x.ok) { UI.toast(x.errors[0].message, { kind: 'warn' }); return; } UI.toast('돌려보냈습니다.'); load(v.month); }).catch(function (e) { UI.toast(e.message, { kind: 'warn' }); }); } });
+    }
+    load('');
+  }
+</script>
