@@ -59,9 +59,9 @@
       clear(calBox);
       calBox.appendChild(el('h2', { text: '날짜별 일정' }));
       calBox.appendChild(el('div', { class: 'cal-nav' }, [
-        el('button', { type: 'button', class: 'btn secondary', text: '◀ 이전 달', onclick: function () { state.day = null; load(monthShift(state.month, -1)); } }),
+        el('button', { type: 'button', class: 'btn secondary', style: 'white-space:nowrap;padding:12px 10px', text: '◀ 이전 달', onclick: function () { state.day = null; load(monthShift(state.month, -1)); } }),
         el('span', { class: 'title', text: state.month.replace('-', '년 ') + '월' }),
-        el('button', { type: 'button', class: 'btn secondary', text: '다음 달 ▶', onclick: function () { state.day = null; load(monthShift(state.month, 1)); } })
+        el('button', { type: 'button', class: 'btn secondary', style: 'white-space:nowrap;padding:12px 10px', text: '다음 달 ▶', onclick: function () { state.day = null; load(monthShift(state.month, 1)); } })
       ]));
       var list = el('div');
       state.data.days.forEach(function (d) {
@@ -157,7 +157,7 @@
       var wk = el('div', { class: 'cal-actions' });
       KO.forEach(function (k, i) {
         var cb = el('input', { type: 'checkbox', id: 'bwd' + i }); checks.push(cb);
-        wk.appendChild(el('label', { for: 'bwd' + i, style: 'display:flex;align-items:center;gap:4px;min-height:44px' }, [cb, el('span', { text: k })]));
+        wk.appendChild(el('label', { for: 'bwd' + i, style: 'display:flex;align-items:center;justify-content:center;gap:4px;min-height:var(--tap);min-width:var(--tap);padding:0 6px' }, [cb, el('span', { text: k })]));
       });
       var msg = el('div'), pv = null;
       [localField('시작 날짜', from, 'from'), localField('끝 날짜', to, 'to'), localField('요일', wk, 'weekdays'), localField('요일 유형', dt, 'dayType'),

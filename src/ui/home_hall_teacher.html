@@ -40,7 +40,7 @@
   function renderHome(d, root) {
     var m = (d.exc && d.exc.mine) || { requested: 0, confirmed: 0, canceled: 0 };
     root.appendChild(el('div', { class: 'card' }, [
-      el('h2', { text: '오늘 ' + d.today }),
+      el('h2', { text: '오늘 ' + UI.util.formatDateKo(d.today) }),
       el('div', { class: 'muted', text: d.termName }),
       el('div', { class: 'muted', id: 'home-duty' })
     ]));
