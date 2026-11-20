@@ -93,7 +93,7 @@
   .soon { border: 1px dashed var(--muted); color: var(--muted); }
   .loading { color: var(--muted); padding: 16px 0; }
   footer { text-align: center; padding: 24px 16px; font-size: .8rem; color: var(--muted); }
-  footer a { color: var(--muted); }
+  footer a { color: var(--muted); display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 6px; }   /* 처음으로·접속 진단도 누르는 칸 48px */
 
   /* ───────── 버튼: 모두 48px 이상, 주 버튼은 한 화면에 하나 ───────── */
   .btn { display: inline-flex; align-items: center; justify-content: center; min-height: var(--tap); min-width: var(--tap);
@@ -113,7 +113,7 @@
 
   /* ───────── 입력칸: 라벨 + 입력 + 고칠 점(무엇을 하면 되는지) ───────── */
   .field { margin-bottom: 14px; }
-  .field label { display: block; margin-bottom: 4px; color: var(--text); font-weight: 700; font-size: .88rem; }
+  .field label { display: block; margin-bottom: 4px; color: var(--text); font-weight: 700; font-size: .9rem; }
   .field input, .field select, .field textarea { width: 100%; min-height: var(--tap); padding: 8px 12px; font: inherit;
     border: 1px solid #c4cbe0; border-radius: var(--radius-sm); background: var(--card); color: var(--text); }
   .field textarea { min-height: 96px; }
@@ -260,6 +260,7 @@
   /* ───────── 학생·학부모 화면(body.tone-soft, 결정 85): 흰 판 하나 + 큰 글씨 + 더 둥근 모서리. 색은 교사 화면과 같은 코발트 ───────── */
   body.tone-soft { font-size: 1.04rem; }
   body.tone-soft main { background: var(--card); border-radius: 22px; margin: 12px; padding: 6px 18px 14px; max-width: none; }
+  body.tone-soft main.has-actionbar { padding-bottom: calc(var(--bar-h) + 24px + env(safe-area-inset-bottom, 0px)); }   /* 아래 작업 바에 마지막 내용이 가리지 않게(위 main 규칙보다 우선) */
   body.tone-soft .card { padding: 16px 0 8px; margin: 0; border-top: 1px solid var(--line); }
   body.tone-soft .card:first-child { border-top: 0; padding-top: 10px; }
   body.tone-soft .card h2 { font-size: 1.15rem; }
