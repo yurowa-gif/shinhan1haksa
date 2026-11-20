@@ -31,6 +31,7 @@ function permissions_() {
     'timetable.list': { roles: ['admin', 'hall_teacher'] },
     'timetable.view': { roles: ['admin', 'hall_teacher'], scope: 'student', noDuty: true },
     'timetable.confirm': { roles: ['admin', 'hall_teacher'], scope: 'student', noDuty: true },
+    'timetable.enter': { roles: ['admin', 'hall_teacher'], scope: 'student', noDuty: true },   // 담당교사 대신 입력(결정 84)
     // 학생 한 명의 기본 정보 보기
     // wideView: 보기 키만 — 학사 교사도 이번 기간 학사생 전체를 본다(결정 45). 쓰기 키·counsel.view에는 달지 않는다
     'student.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom', 'student', 'parent'], scope: 'student', wideView: true },

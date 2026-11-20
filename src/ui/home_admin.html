@@ -69,7 +69,7 @@
     ]));
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '명단 올리기' }),
-      el('div', { class: 'muted', text: '시트에서 복사한 명단(또는 CSV)을 붙여넣어 형식을 확인합니다. 저장은 다음 단계에서 붙습니다.' }),
+      el('div', { class: 'muted', text: '새 운영 기간 명단을 받으면 시트에서 복사해 붙여 넣고 저장합니다.' }),
       el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=roster', text: '명단 올리기 열기' })
     ]));
     root.appendChild(el('div', { class: 'card' }, [
@@ -98,7 +98,7 @@
       el('a', { class: 'btn secondary', style: 'margin:12px 0 0 8px', href: d.appUrl + '?page=counsel', text: '상담일지' }),
       el('a', { class: 'btn secondary', style: 'margin:12px 0 0 8px', href: d.appUrl + '?page=timetable&role=admin', text: '시간표' })
     ]));
-    root.appendChild(soonCard('계정, 설정', '1단계부터 차례로 추가합니다.'));
+    root.appendChild(soonCard('계정, 설정', '준비 중입니다.'));
   }
 
   /** 2단계 B 카드(CODING-B: 입퇴실·급식·서류). 이 함수의 몸통만 고친다(docs/plan/stage2.md 1절) */

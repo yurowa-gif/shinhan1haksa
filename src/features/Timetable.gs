@@ -91,7 +91,8 @@ function ttcView_(rows, sid, month) {
   var sub = live.reduce(function (a, r) { return a || ruleStr_(r.submitted_at); }, '');
   var agr = live.reduce(function (a, r) { return a || ruleStr_(r.parent_agreed_at); }, '');
   var con = live.reduce(function (a, r) { return a || ruleStr_(r.teacher_confirmed_at); }, '');
-  return { month: month, monthKo: ttcMonthKo_(month), status: st.status, entries: ttcEntries_(rows, sid, month), submittedKo: ttcDateKo_(sub), agreedKo: ttcDateKo_(agr), confirmedKo: ttcDateKo_(con),
+  var tokenIds = live.map(function (r) { return r.id + '|' + ruleStr_(r.status) + '|' + ruleStr_(r.updated_at); }).sort().join(';');
+  return { month: month, monthKo: ttcMonthKo_(month), status: st.status, enteredBy: st.enteredBy, token: dtyHash_(st.status + '#' + tokenIds), entries: ttcEntries_(rows, sid, month), submittedKo: ttcDateKo_(sub), agreedKo: ttcDateKo_(agr), confirmedKo: ttcDateKo_(con),
     returned: ttcReturnInfo_(sid, month, st.status), slots: ttcSlots_(month) };
 }
 
@@ -102,7 +103,12 @@ function ttcApply_(plan, email) {
   if (patches.length) bulkUpdateRecords_('fixed_schedules', patches, email);
 }
 
-function ttcFail_(message, field) { return { ok: false, errors: [{ field: field || '', message: message }] }; }
+/** 규칙이 주는 문구의 날짜(2027-04-01)·달(2027-04)을 화면 말(4월 1일(목)·4월)로 바꾼다(writing.md 5절) */
+function ttcKo_(text) {
+  return String(text).replace(/(\d{4})-(\d{2})-(\d{2})/g, function (m) { return ymdIsValid_(m) ? foodDateKo_(m) : m; }).replace(/(\d{4})-(0[1-9]|1[0-2])(?!\d)/g, function (m, y, mo) { return (+mo) + '월'; });
+}
+
+function ttcFail_(message, field) { return { ok: false, errors: [{ field: field || '', message: ttcKo_(message) }] }; }
 
 function ttcMonthOk_(m) { return /^\d{4}-(0[1-9]|1[0-2])$/.test(String(m || '')); }
 
@@ -275,6 +281,49 @@ function returnTimetable(studentId, month, reason) {
     ttcApply_(plan, user.email);
     ttcSaveAudit_('timetable:return', user, { s: sid, m: String(month), by: 'teacher', n: String(user.name || ''), r: why });
     return { ok: true };
+  });
+}
+
+/* ───────────── 담당교사 대신 입력(결정 84, R24 teacherEnter) ───────────── */
+
+/** 대신 입력이 출석부에 들어가기 시작하는 날(달 중간이면 입력한 날부터, 다음 달이면 1일) */
+function ttcEnterStart_(month, today) { return month === today.slice(0, 7) ? today : month + '-01'; }
+
+/**
+ * 대신 입력 미리 보기(저장하지 않는다). 규칙이 거부하면 {ok:false, errors}, 아니면 확인 시트에 보일 것:
+ * {ok:true, month, monthKo, status(지금 상태), warnings:[…], startKo(출석부에 들어가는 날), token}
+ * 담당교사(자기 학생)·관리자만. 기간과 상관없다(이번 달·다음 달만 규칙이 받는다).
+ */
+function previewTimetableEnter(studentId, month, entries) {
+  requirePermission_('timetable.enter', { studentId: studentId });
+  var sid = String(studentId || '');
+  if (!ttcMonthOk_(month)) return ttcFail_('적용월을 확인할 수 없습니다.');
+  var d = ttcLoad_();
+  var plan = ttTransition_(d.rows, sid, String(month), 'teacherEnter', { now: nowIso_(), entries: Array.isArray(entries) ? entries : [] });
+  if (!plan.ok) return ttcFail_(plan.reason);
+  var view = ttcView_(d.rows, sid, String(month));
+  return { ok: true, month: String(month), monthKo: ttcMonthKo_(String(month)), status: view.status, warnings: plan.warnings.map(ttcKo_), startKo: ttcDateKo_(ttcEnterStart_(String(month), d.today)), token: view.token };
+}
+
+/**
+ * 담당교사·관리자 대신 입력(결정 84). 학부모 동의 없이 바로 확정된다. expect = 미리 보기·학생 시간표가 준 token(그 사이 학생·학부모·다른 교사가
+ * 바꿨으면 {ok:false, stale:true}). 락 안에서 다시 읽고 R24 ttTransition_으로 다시 판정한다. 옛 행은 취소로 남고(updated_at 남음) 감사 기록 'timetable:enter'가 남는다.
+ * → {ok:true, warnings} | {ok:false, errors, stale?}
+ */
+function enterTimetableForStudent(studentId, month, entries, expect) {
+  var user = requirePermission_('timetable.enter', { studentId: studentId });
+  var sid = String(studentId || '');
+  if (!ttcMonthOk_(month)) return ttcFail_('적용월을 확인할 수 없습니다.');
+  if (!expect) return ttcFail_('화면을 새로 고친 뒤 다시 해 주세요.');
+  return withLock_(function () {
+    var d = ttcLoad_();
+    var before = ttcView_(d.rows, sid, String(month));
+    if (before.token !== String(expect)) return { ok: false, stale: true, errors: [{ field: '', message: '그 사이 시간표가 바뀌었습니다. 새로 고친 뒤 다시 해 주세요.' }] };
+    var plan = ttTransition_(d.rows, sid, String(month), 'teacherEnter', { now: nowIso_(), entries: Array.isArray(entries) ? entries : [] });
+    if (!plan.ok) return ttcFail_(plan.reason);
+    ttcApply_(plan, user.email);
+    ttcSaveAudit_('timetable:enter', user, { s: sid, m: String(month), n: String(user.name || ''), from: before.status, rows: plan.add.length, start: ttcEnterStart_(String(month), d.today) });
+    return { ok: true, warnings: plan.warnings.map(ttcKo_) };
   });
 }
 
