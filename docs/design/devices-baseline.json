@@ -676,76 +676,40 @@
   },
   "sheet": {
    "android-360": {
-    "fails": {
-     "포커스": [
-      "포커스 표시 없음: iframe \"\""
-     ]
-    },
-    "shot": "sheet__android-360.png"
+    "fails": {},
+    "shot": null
    },
    "iphone-390": {
-    "fails": {
-     "포커스": [
-      "포커스 표시 없음: iframe \"\""
-     ]
-    },
-    "shot": "sheet__iphone-390.png"
+    "fails": {},
+    "shot": null
    },
    "iphone-375": {
-    "fails": {
-     "포커스": [
-      "포커스 표시 없음: iframe \"\""
-     ]
-    },
-    "shot": "sheet__iphone-375.png"
+    "fails": {},
+    "shot": null
    },
    "android-360-font150": {
-    "fails": {
-     "포커스": [
-      "포커스 표시 없음: iframe \"\""
-     ]
-    },
-    "shot": "sheet__android-360-font150.png"
+    "fails": {},
+    "shot": null
    },
    "tablet-768": {
-    "fails": {
-     "포커스": [
-      "포커스 표시 없음: iframe \"\""
-     ]
-    },
-    "shot": "sheet__tablet-768.png"
+    "fails": {},
+    "shot": null
    },
    "laptop-1093": {
-    "fails": {
-     "포커스": [
-      "포커스 표시 없음: iframe \"\""
-     ]
-    },
-    "shot": "sheet__laptop-1093.png"
+    "fails": {},
+    "shot": null
    },
    "laptop-1366": {
-    "fails": {
-     "포커스": [
-      "포커스 표시 없음: iframe \"\""
-     ]
-    },
-    "shot": "sheet__laptop-1366.png"
+    "fails": {},
+    "shot": null
    },
    "laptop-1536": {
-    "fails": {
-     "포커스": [
-      "포커스 표시 없음: iframe \"\""
-     ]
-    },
-    "shot": "sheet__laptop-1536.png"
+    "fails": {},
+    "shot": null
    },
    "desktop-1920": {
-    "fails": {
-     "포커스": [
-      "포커스 표시 없음: iframe \"\""
-     ]
-    },
-    "shot": "sheet__desktop-1920.png"
+    "fails": {},
+    "shot": null
    }
   },
   "exceptions": {
