@@ -47,3 +47,10 @@ test('화면 이름·가짜 계정: 근무표 담당자 역할 표시는 "근무
   assert.strictEqual(names.length, 4);
   names.forEach((n) => assert.ok(!/시험|학부모|학사|교사|담임|선생|학생/.test(n), '직함이 들어 있는 이름: ' + n));
 });
+
+test('기계 조사 "은(는)·을(를)·이(가)·(으)로"가 화면·서버 문구에 없다(rules는 RULES 세션 몫)', () => {
+  const list = SRC.concat(files('src/print', '.gs')).filter((f) => /^src\/(ui|features|print)\//.test(f));
+  const hits = [];
+  list.forEach((f) => read(f).split('\n').forEach((l, i) => { if (!/^\s*(\/\/|\*|\/\*)/.test(l) && /은\(는\)|을\(를\)|이\(가\)|\(으\)로|와\(과\)/.test(l)) hits.push(f + ':' + (i + 1)); }));
+  assert.deepStrictEqual(hits, []);
+});

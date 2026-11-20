@@ -53,7 +53,7 @@ function printCfStudent_(model) {
   function num(v, what) {
     var t = printCfText_(v).replace(/^\s+|\s+$/g, '');
     if (t === '') return '';
-    if (!/^\d{1,3}$/.test(t)) throw new Error('학생 ' + what + '은(는) 숫자여야 합니다: ' + t);
+    if (!/^\d{1,3}$/.test(t)) throw new Error('학생 ' + what + ' 칸에는 숫자만 넣을 수 있습니다: ' + t);
     return String(Number(t));
   }
   return { name: printCfText_(model.name).replace(/^\s+|\s+$/g, ''), grade: num(model.grade, '학년'), classNo: num(model.classNo, '반'), number: num(model.number, '번호') };

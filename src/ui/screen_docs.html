@@ -35,8 +35,8 @@
       clear(head);
       head.appendChild(el('h2', { text: '서류 체크리스트' }));
       head.appendChild(el('div', { class: 'muted', text: data.term + ' · 서류를 낸 학생을 표시합니다. 표시하지 않은 칸은 "미제출"입니다.' }));
-      if (data.missingTab) head.appendChild(el('div', { class: 'notice warn', text: '이 기간의 서류 탭이 아직 없습니다. 관리자가 편집기에서 setup()을 한 번 실행해야 표시할 수 있습니다.' }));
-      if (!data.types.length) { head.appendChild(el('div', { class: 'notice info', text: data.canTypes ? '서류 종류가 아직 없습니다. 아래에서 추가해 주세요.' : '서류 종류가 아직 없습니다. 관리자가 정하면 여기에 나타납니다.' })); return; }
+      if (data.missingTab) head.appendChild(el('div', { class: 'notice warn', text: '이 운영 기간의 서류 탭이 아직 없습니다. 관리자 선생님이 편집기에서 setup()을 한 번 실행해야 표시할 수 있습니다.' }));
+      if (!data.types.length) { head.appendChild(el('div', { class: 'notice info', text: data.canTypes ? '서류 종류가 아직 없습니다. 아래에서 추가해 주세요.' : '서류 종류가 아직 없습니다. 관리자 선생님이 정하면 여기에 나타납니다.' })); return; }
       head.appendChild(el('div', { class: 'notice ' + (data.missing.items ? 'warn' : 'ok'), text: data.missing.items ? '미제출 ' + data.missing.items + '건 (학생 ' + data.missing.students + '명)' : '모두 제출했습니다.' }));
       head.appendChild(UI.segmented({ options: [{ value: 'missing', label: '미제출 목록' }, { value: 'type', label: '서류별' }], value: mode, onchange: function (v) { mode = v; drawBody(); } }));
       if (mode === 'type') {
@@ -72,7 +72,7 @@
     function drawBody() {
       clear(body);
       if (!data.types.length) return;
-      if (!data.canEdit) body.appendChild(el('div', { class: 'muted', text: '보기만 할 수 있습니다. 표시는 담당 선생님·관리자가 합니다.' }));
+      if (!data.canEdit) body.appendChild(el('div', { class: 'muted', text: '보기만 할 수 있습니다. 표시는 담당 선생님·관리자 선생님이 합니다.' }));
       if (mode === 'type') {
         if (!data.students.length) { body.appendChild(UI.emptyState('볼 수 있는 학생이 없습니다.')); return; }
         data.students.forEach(function (s) {
@@ -126,7 +126,7 @@
           call('saveDocType', { id: t.id, name: name.value, description: desc.value, sort_order: order.value, token: t.token }).then(function (r) { busy = false; afterType(r, err, '저장했습니다.'); }).catch(function (e) { busy = false; err.textContent = (e && e.message) || String(e); err.style.display = ''; });
         });
         var off = el('button', { type: 'button', class: 'btn secondary', text: '끄기', onclick: function () {
-          UI.confirmSheet({ title: '"' + t.name + '"을(를) 끌까요?', lines: ['목록에서 사라집니다.', '이미 표시한 제출 기록은 지워지지 않습니다.'], confirmText: '끄기', danger: true, onconfirm: function () {
+          UI.confirmSheet({ title: '서류 종류 끄기', lines: ['"' + t.name + '" 종류는 목록에서 사라집니다.', '이미 표시한 제출 기록은 지워지지 않습니다.'], confirmText: '끄기', danger: true, onconfirm: function () {
             if (busy) return; busy = true;
             call('cancelDocType', t.id, t.token).then(function (r) { busy = false; afterType(r, err, '껐습니다.'); }).catch(function (e) { busy = false; err.textContent = (e && e.message) || String(e); err.style.display = ''; });
           } });

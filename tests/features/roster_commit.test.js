@@ -313,7 +313,7 @@ test('학부모 연결: 없는 학번·잘못된 이메일은 줄 번호로 알�
   const p2 = plain(s.c.previewGuardians(text2, OPTS));
   assert.strictEqual(p2.ok, false);
   assert.strictEqual(p2.errors[0].line, 2); assert.strictEqual(p2.errors[0].column, '학번');
-  assert.ok(p2.errors[0].message.includes('이 기간 학사생 중 학번 99999'));
+  assert.ok(p2.errors[0].message.includes('이 운영 기간 학사생 중 학번 99999'));
   assert.strictEqual(plain(s.c.previewGuardians([GHEAD, 'not-an-email,' + fake.students[0].student_no + ',부'].join('\n'), OPTS)).ok, false);
   assert.strictEqual(plain(s.c.commitGuardians(text2, OPTS, {})).ok, false);
   assert.strictEqual(s.writes.length, writes);
@@ -324,7 +324,7 @@ test('이 기간에 등록되지 않은 학생(퇴실·졸업생의 옛 학번)�
   s.db.students.push({ id: 'oldkid', student_no: '30999', name: '옛학생', grade: '3', email: 'old@example.com' });   // 이 기간 등록 없음
   const p = plain(s.c.previewGuardians([GHEAD, 'par9@example.com,30999,모'].join('\n'), OPTS));
   assert.strictEqual(p.ok, false);
-  assert.ok(p.errors[0].message.includes('이 기간 학사생 중 학번 30999 학생이 없습니다'));
+  assert.ok(p.errors[0].message.includes('이 운영 기간 학사생 중 학번 30999 학생이 없습니다'));
   // 같은 학번을 가진 퇴실 학생이 있어도 이 기간 등록 학생에게만 간다
   const a = fake.students[0];
   s.db.students.push({ id: 'dup', student_no: a.student_no, name: '옛학생2', grade: '3', email: 'old2@example.com' });

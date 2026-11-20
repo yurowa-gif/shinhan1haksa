@@ -209,7 +209,7 @@ function setDutyOperating(input) {
   var memoIn = memoGiven ? String(input.memo).trim() : '';
   if (memoIn.length > CAL_MEMO_MAX) return { ok: false, errors: [{ field: 'memo', message: '메모는 ' + CAL_MEMO_MAX + '자 안으로 적어 주세요.' }] };
   if (date < today_() && user.roles.indexOf('admin') < 0) {
-    return { ok: false, errors: [{ field: 'date', message: '지난 날짜는 바꿀 수 없습니다. 필요하면 관리자에게 알려 주세요.' }] };
+    return { ok: false, errors: [{ field: 'date', message: '지난 날짜는 바꿀 수 없습니다. 필요하면 관리자 선생님께 알려 주세요.' }] };
   }
   return withLock_(function () {
     ['duty_slots', 'day_schedules', 'blocks', 'users'].forEach(function (t) { invalidate_('db', t); });
@@ -410,7 +410,7 @@ function dtyDayTokens_(date) {
 
 function dtyStale_() { return { ok: false, stale: true, message: DTY_STALE_MSG, errors: [{ field: 'slot', message: DTY_STALE_MSG }] }; }
 
-var DTY_STARTED_MSG = '이미 시작한 근무는 근무표 담당자에게 대신 근무로 기록해 달라고 하세요.';
+var DTY_STARTED_MSG = '이미 시작한 근무는 근무표 담당 선생님께 대신 근무로 기록해 달라고 하세요.';
 
 /**
  * 그 칸의 근무가 이미 시작했는가(순수). now = 'yyyy-MM-ddTHH:mm:ss'(KST). 오늘 이전 날짜 칸은 시작한 것으로 본다.

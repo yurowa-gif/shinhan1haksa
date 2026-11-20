@@ -174,7 +174,7 @@ function calKnownDayTypes_(blocks) {
 
 /* ───────────── 화면이 최신인가 확인(token) ───────────── */
 
-var CAL_STALE_MSG = '다른 관리자가 먼저 바꿨습니다. 새로 불러온 뒤 다시 해 주세요.';
+var CAL_STALE_MSG = '다른 선생님이 먼저 바꿨습니다. 새로 불러온 뒤 다시 해 주세요.';
 
 /** 살아 있는 행들의 표: 각 행 id|updated_at을 정렬해 이은 글(없으면 ''). 행이 취소·추가·수정되면 바뀐다 */
 function calRowsToken_(rows) {

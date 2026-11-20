@@ -73,7 +73,7 @@
     }
 
     function listCard(status) {
-      body.appendChild(el('div', { class: 'notice info', text: '상담 내용은 이 학생의 담당교사·담임(자기 반)·관리자만 봅니다. 다른 학사 교사·출결 담당에게는 이 목록이 없습니다.' }));
+      body.appendChild(el('div', { class: 'notice info', text: '상담 내용은 이 학생의 담당교사·담임(자기 반)·관리자 선생님만 봅니다. 다른 학사 교사·출결 담당에게는 이 목록이 없습니다.' }));
       var live = data.notes.filter(function (n) { return n.status === '유효'; }).length;
       var card = el('div', { class: 'card' }, [el('h2', { text: '상담 ' + live + '건' })]);
       if (!data.notes.length) card.appendChild(UI.emptyState('아직 상담 기록이 없습니다.'));
@@ -127,7 +127,7 @@
       var errs = { date: date.setError, type: typeBox.setError, target: targetBox.setError, content: contentBox.setError };
       body.appendChild(el('div', { class: 'card' }, [el('h2', { text: editing ? '상담 고치기' : '상담' }), date, typeBox, targetBox]));
       body.appendChild(el('div', { class: 'card' }, [el('h2', { text: '내용' }), contentBox, check]));
-      body.appendChild(el('div', { class: 'notice info', text: '내용은 담당교사·담임(자기 반)·관리자만 봅니다. 감사 기록에는 "(내용 생략, N자)"만 남습니다.' }));
+      body.appendChild(el('div', { class: 'notice info', text: '내용은 담당교사·담임(자기 반)·관리자 선생님만 봅니다. 감사 기록에는 "(내용 생략, N자)"만 남습니다.' }));
       var send;
       function input() { return { studentId: data.student.id, date: date.getValue(), type: type, target: target, content: area.value, showToParent: show.checked }; }
       function fail(r) {

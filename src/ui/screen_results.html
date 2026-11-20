@@ -104,8 +104,8 @@
         });
         head.appendChild(box);
       }
-      if (state.data && state.tab === 'grid' && !state.data.editable) head.appendChild(el('div', { class: 'notice info', text: '이 기간은 끝난 지 오래되어 볼 수만 있습니다(' + state.data.editUntil + '까지 고칠 수 있었습니다).' }));
-      if (state.data && state.tab === 'grid' && !state.data.canEdit) head.appendChild(el('div', { class: 'muted', text: '보기 전용입니다. 결과 입력은 출결 담당·관리자가 합니다.' }));
+      if (state.data && state.tab === 'grid' && !state.data.editable) head.appendChild(el('div', { class: 'notice info', text: '이 운영 기간은 끝난 지 오래되어 볼 수만 있습니다(' + state.data.editUntil + '까지 고칠 수 있었습니다).' }));
+      if (state.data && state.tab === 'grid' && !state.data.canEdit) head.appendChild(el('div', { class: 'muted', text: '보기 전용입니다. 결과 입력은 출결 담당·관리자 선생님이 합니다.' }));
     }
 
     /* ───────── 격자 ───────── */
@@ -198,7 +198,7 @@
           ]);
           if (isResult && c.canEdit && c.editable && r.status === '확정') {
             line.appendChild(el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:6px', text: '취소', onclick: function () {
-              UI.confirmWithReason({ title: r.kind + ' 결과 취소', message: s.name + ' ' + c.date + ' ' + r.type + (r.recognized ? '' : ' — 연결된 자동 1OUT도 함께 취소됩니다.'), reasonLabel: '취소 사유', confirmText: '결과 취소', minLength: 2,
+              UI.confirmWithReason({ title: r.kind + ' 결과 취소', message: s.name + ' ' + U.formatDateKo(c.date) + ' ' + r.type + (r.recognized ? '' : ' — 연결된 자동 1OUT도 함께 취소됩니다.'), reasonLabel: '취소 사유', confirmText: '결과 취소', minLength: 2,
                 onconfirm: function (reason) {
                   call('cancelResult', { studentId: s.id, date: c.date, kind: r.kind, reason: reason, range: { from: d.from, to: d.to }, token: d.token }).then(function (res) {
                     if (!res.ok) { UI.toast(res.error || (res.errors && res.errors[0].message) || '취소하지 못했습니다.', { kind: 'warn', ms: 5000 }); if (res.stale) reloadAll(); return; }
@@ -212,7 +212,7 @@
         content.appendChild(el('h3', { text: '이 날 기록' })); content.appendChild(list);
       }
       if (!c.canEdit || !c.editable) {
-        content.appendChild(el('div', { class: 'notice info', text: !c.canEdit ? '결과 입력은 출결 담당·관리자만 합니다.' : '끝난 기간이라 고칠 수 없습니다.' }));
+        content.appendChild(el('div', { class: 'notice info', text: !c.canEdit ? '결과 입력은 출결 담당·관리자 선생님만 합니다.' : '끝난 운영 기간이라 고칠 수 없습니다.' }));
         sheet = UI.bottomSheet({ title: s.name + ' ' + c.date.slice(5).replace('-', '/'), content: content, actions: [{ text: '닫기', kind: 'secondary', onclick: function () { sheet.close(); } }] }).open();
         return;
       }
