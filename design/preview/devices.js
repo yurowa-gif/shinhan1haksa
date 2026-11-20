@@ -21,6 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const { makeApp, openPage } = require('./real-screens.js');
 const { launchKo } = require('./browser.js');
+const { isHarnessNoise } = require('./console-filter.js');
 
 const OUT = path.join(__dirname, 'out', 'devices');
 const NOW = '2027-03-26T10:00:00', TODAY = '2027-03-26';   // 시간표 제출 기간이 열린 날(stage7-real.js와 같음)
@@ -141,7 +142,7 @@ async function checkOne(browser, app, sc, dev) {
   const consoleErr = [];
   const s = await openPage(browser, app, {
     email: sc.email, query: sc.query, size: { w: dev.w, h: dev.h }, context: dev.context,
-    onPage: (page) => page.on('console', (m) => { if (m.type() === 'error') consoleErr.push(m.text().slice(0, 120)); })
+    onPage: (page) => page.on('console', (m) => { if (m.type() === 'error' && !isHarnessNoise(m.text())) consoleErr.push(m.text().slice(0, 120)); })   // 가짜 시계가 만든 것만 거른다(console-filter.js)
   });
   try {
     if (dev.font150) { await s.page.addStyleTag({ content: 'html { font-size: 27px !important; }' }); await s.settle(); }
