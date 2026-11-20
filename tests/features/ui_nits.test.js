@@ -65,3 +65,23 @@ test('시설 일지 시작·끝 시각 두 칸: flex가 아니라 grid minmax(0,
   assert.ok(/min-width:\s*0/.test(rule('.fc-times .field')), '.fc-times .field min-width 0');
   assert.ok(/width:\s*100%/.test(rule('.fc-times .field input')) && /min-width:\s*0/.test(rule('.fc-times .field input')), 'input width 100%·min-width 0');
 });
+
+test('C41 학생·학부모 화면 문구: 저장 값 → 학부모 표기는 ptlFoodLabel 한 곳, 퇴실 대상·자녀·시설 일지 취소 문구', () => {
+  const ui = (f) => fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'ui', f), 'utf8');
+  const portal = ui('Portal.html');
+  const m = /function ptlFoodLabel\(item, value\) \{[\s\S]*?\n  \}/.exec(portal);
+  assert.ok(m, 'ptlFoodLabel 함수');
+  const f = vm.runInNewContext('(' + m[0].replace('function ptlFoodLabel', 'function') + ')');
+  const cases = [['기숙사', '입실', '입실'], ['기숙사', '퇴실', '퇴실'], ['기숙사', '', '신청 안 함'], ['조식', '실시', '먹음'], ['조식', '미실시', '먹지 않음'], ['조식', '', '신청 안 함'],
+    ['석식', '학사 석식', '학사 석식'], ['석식', '일반 석식', '일반 석식'], ['석식', '미실시', '먹지 않음'], ['석식', '', '신청 안 함'], ['중식', '실시', '먹음'], ['중식', '미실시', '먹지 않음']];
+  cases.forEach(([i, v, w]) => assert.strictEqual(f(i, v), w, i + ' ' + v));
+  assert.ok(!/st\['(기숙사|조식|석식|중식)'\]\)\)?[,\]]/.test(portal.replace(/ptlFoodLabel\('[^']+', st\['[^']+'\]\)/g, '')), '저장 값을 그대로 보이는 곳 없음');
+  assert.ok(portal.includes("c.dateKo + '부터 ' + c.item + ': ' + ptlFoodLabel(c.item, c.value)"), '바뀌는 것 한 줄 형식');
+  assert.ok(portal.includes('퇴실 대상이 되었습니다') && portal.includes('관리자 선생님이 퇴실을 정합니다') && !portal.includes('학교를 나가야'), '퇴실 대상 안내');
+  assert.ok(portal.includes("'자녀가 ' + td.monthKo") && !portal.includes("s.name + ' 학생이 '"), '동의 카드는 자녀');
+  const tt = ui('screen_timetable.html');
+  assert.ok(tt.includes('시간표가 자녀에게 돌아갔습니다. 자녀가 고쳐서 다시 내면 다시 동의해 주세요.') && tt.includes('자녀에게 돌려보내기') && tt.includes('자녀에게 돌려보냈습니다.'), '학부모 반려 문구');
+  assert.ok(!/kid\.name \+ ' 학생/.test(tt), '학부모 화면 제목에 "학생" 없음');
+  const fc = ui('screen_facility.html');
+  assert.ok(fc.includes("title: '일지 취소 처리'") && fc.includes("confirmText: '취소 처리', cancelText: '돌아가기'") && fc.includes('기록은 지워지지 않고 \\"취소\\"로 남습니다. 다시 쓰려면 새로 써 주세요.'.replace(/\\"/g, '"')), '시설 일지 취소 시트');
+});
