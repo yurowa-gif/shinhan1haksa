@@ -294,8 +294,8 @@ function foodWarnTexts_(rec, plan, manual, eff, changes, today, terms) {
     changes.forEach(function (c) {
       var e = String(c.effective_date);
       if (c.item !== rec.item || String(c.status || '유효') !== '유효' || gone[c.id] || c.value === rec.value || !ymdIsValid_(e)) return;
-      if (e > eff) add(foodDateKo_(e) + '부터 ' + c.value + '(으)로 바뀌는 신청이 있어 이 신청을 덮습니다.');
-      else if (e > today && e < eff) add(foodDateKo_(e) + '부터 ' + c.value + '(으)로 바뀌는 대기 신청이 먼저 적용됩니다. 필요하면 직접 취소해 주세요.');
+      if (e > eff) add(foodDateKo_(e) + '부터 적용되는 변경 신청(' + c.value + ')이 있어 이 신청이 그 신청을 덮습니다.');
+      else if (e > today && e < eff) add(foodDateKo_(e) + '부터 적용되는 대기 신청(' + c.value + ')이 먼저 적용됩니다. 필요하면 직접 취소해 주세요.');
     });
   }
   return w;
@@ -341,7 +341,7 @@ function foodCheck_(input, d) {
   return { errors: errors, rec: rec, term: term, plan: plan, manual: p.manual, eff: eff,
     permYmd: foodPermYmd_(term, eff),
     warnings: foodWarnTexts_(rec, plan, p.manual, eff, d.changes, today, d.terms),
-    blocked: plan.blocked ? foodDateKo_(eff) + '에는 학사 퇴실 상태라 ' + rec.item + ' ' + rec.value + '을(를) 새로 신청할 수 없습니다.' : '' };
+    blocked: plan.blocked ? foodDateKo_(eff) + '에는 학사 퇴실 상태라 ' + rec.item + ' 신청(' + rec.value + ')을 새로 받을 수 없습니다.' : '' };
 }
 
 /**
@@ -351,9 +351,9 @@ function foodCheck_(input, d) {
 function foodTermErrors_(studentId, eff, term, terms, enrollments, today, what) {
   if (!term) return [{ field: 'effectiveDate', message: '적용일이 속한 운영 기간이 없습니다.' }];
   var effTerm = foodTermOf_(eff, terms);
-  var noList = function (t) { return [{ field: 'studentId', message: '"' + t.name + '" 명단에 없는 학생입니다. 관리자에게 명단 등록을 요청해 주세요.' }]; };
+  var noList = function (t) { return [{ field: 'studentId', message: '"' + t.name + '" 명단에 없는 학생입니다. 관리자 선생님께 명단 등록을 요청해 주세요.' }]; };
   if (term.end_date < today) {
-    return effTerm && effTerm.id !== term.id ? noList(effTerm) : [{ field: 'effectiveDate', message: '"' + term.name + '"은(는) 끝난 기간입니다. 끝난 기간의 ' + what + '은 받지 않습니다.' }];
+    return effTerm && effTerm.id !== term.id ? noList(effTerm) : [{ field: 'effectiveDate', message: '"' + term.name + '" 운영 기간은 이미 끝났습니다. 끝난 운영 기간의 ' + what + '은 받지 않습니다.' }];
   }
   return enrollments.some(function (e) { return e.term_id === term.id && e.student_id === studentId; }) ? [] : noList(term);
 }
@@ -370,7 +370,7 @@ function foodAuthorize_(input, c) {
     var mine = readAll_('enrollments').filter(function (en) { return en.student_id === sid && normalizeEmail_(en.teacher_email) === u.email; });
     var inTerm = c.term ? readAll_('enrollments').some(function (en) { return en.term_id === c.term.id && en.student_id === sid; }) : false;
     if (c.term && c.eff && e.message === DENIED_MESSAGE && c.term.end_date >= today_() && inTerm && mine.length && hasAnyAllowedRole_(u.roles, permissions_()['status.edit'].roles)) {
-      throw new Error('이 신청(적용일 ' + foodDateKo_(c.eff) + ')은 ' + c.term.name + ' 담당교사나 관리자가 합니다.');
+      throw new Error('이 신청(적용일 ' + foodDateKo_(c.eff) + ')은 ' + c.term.name + ' 담당 선생님이나 관리자 선생님이 합니다.');
     }
     throw e;
   }
@@ -461,7 +461,7 @@ function foodBefore_(changes, headId) {
   });
 }
 
-var FOOD_UNFINISHED = '이전 저장이 중간에 끊겨 덜 끝났습니다. 관리자에게 알려 주세요.';
+var FOOD_UNFINISHED = '이전 저장이 중간에 끊겨 덜 끝났습니다. 관리자 선생님께 알려 주세요.';
 
 /**
  * 저장했다는 대표 행이 있는데 취소 쓰기가 빠졌나(다시 눌렀을 때 "이미 저장"으로 넘기지 않으려고).

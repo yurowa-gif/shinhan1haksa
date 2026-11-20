@@ -159,7 +159,7 @@ test('seatGridPlan_: 지난 기간 배정만 있는 좌석은 경고 후 허용,
   const existing = [ex('a', 1, 1, '좌석', '1'), ex('b', 1, 2, '좌석', '2')];
   const p = gp(existing, [{ row: 1, col: 2, kind: '좌석' }], [], 3, 3, 'room', ['a']);
   assert.strictEqual(p.ok, true); assert.strictEqual(p.cancel.length, 1);
-  assert.ok(p.warnings.length === 1 && p.warnings[0].includes('지난 기간') && p.warnings[0].includes('1행 1열'));
+  assert.ok(p.warnings.length === 1 && p.warnings[0].includes('지난 운영 기간') && p.warnings[0].includes('1행 1열'));
   const labelOnly = gp(existing, [{ row: 1, col: 1, kind: '창문' }, { row: 1, col: 2, kind: '좌석' }], [], 3, 3, 'room', ['b']);
   assert.ok(labelOnly.warnings.some((w) => w.includes('번호가 바뀝니다')));
   assert.strictEqual(gp(existing, [{ row: 1, col: 2, kind: '좌석' }], ['a'], 3, 3, 'room', []).ok, false);
@@ -520,7 +520,7 @@ test('격자 저장: 이번 기간에 어제까지 쓰인 자리(valid_to로 끝
   const sp = data(s).spaces[0];
   const pv = plain(s.c.previewSpaceGrid(sp.id, gridOf(sp).filter((x) => !(x.row === c.row && x.col === c.col))));
   assert.strictEqual(pv.ok, false);
-  assert.ok(pv.errors[0].includes(TRUE_MSG) && !pv.errors[0].includes('지난 기간') && !pv.errors[0].includes('배정을 풀어'), pv.errors[0]);
+  assert.ok(pv.errors[0].includes(TRUE_MSG) && !pv.errors[0].includes('지난 운영 기간') && !pv.errors[0].includes('배정을 풀어'), pv.errors[0]);
   assert.strictEqual(plain(s.c.saveSpaceGrid(sp.id, gridOf(sp).filter((x) => !(x.row === c.row && x.col === c.col)), lt(s, sp.id))).ok, false);
   assert.strictEqual(s.db.seats.find((x) => x.id === c.id).status, '유효');
   const freshSeat = sp.cells.find((x) => x.kind === 'seat' && x.vacant && !x.hold && x.id !== c.id);   // 기록이 전혀 없는 자리는 지울 수 있다
@@ -786,7 +786,7 @@ test('격자 저장: 지난 기간 배정만 있는 좌석은 경고 후 허용,
   s.db.seat_assignments.push({ id: 'past1', term_id: old.id, seat_id: seat.id, student_id: s1.leaverId, status: '배정', valid_from: '', valid_to: '' });
   const want = gridOf(sp).filter((c) => !(c.row === seat.row && c.col === seat.col));
   const pv = plain(s.c.previewSpaceGrid(sp.id, want));
-  assert.strictEqual(pv.ok, true); assert.ok(pv.warnings.length === 1 && pv.warnings[0].includes('지난 기간'));
+  assert.strictEqual(pv.ok, true); assert.ok(pv.warnings.length === 1 && pv.warnings[0].includes('지난 운영 기간'));
   assert.strictEqual(plain(s.c.saveSpaceGrid(sp.id, want, lt(s, sp.id))).ok, true);
   // 지금 기간 배정이 있는 좌석은 거부
   const seated = d.spaces[0].cells.find((c) => c.studentId);
@@ -853,7 +853,7 @@ test('격자·공간 저장의 낡은 화면 방지: 다른 관리자가 먼저 
   // 관리자 B(옛 화면): 같은 옛 토큰으로 되돌려 저장 → 거부, 쓰기 없음
   const b = plain(s.c.saveSpaceGrid(sp.id, grid, t0));
   assert.deepStrictEqual([b.ok, b.stale, typeof b.error], [false, true, 'string']);
-  assert.ok(/다른 관리자가 먼저/.test(b.error));
+  assert.ok(/다른 선생님이 먼저/.test(b.error));
   assert.strictEqual(s.writes.length, w);
   // 토큰이 없거나 모양이 틀려도 거부
   [undefined, '', 5, null, 'zz'].forEach((t) => assert.strictEqual(plain(s.c.saveSpaceGrid(sp.id, grid, t)).stale, true, String(t)));

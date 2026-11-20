@@ -8,7 +8,7 @@ var EVT_TITLE_MAX = 60;
 var EVT_MEMO_MAX = 200;
 var EVT_MAX_DAYS = 366;
 var EVT_REASON_MIN = 2;
-var EVT_STALE_MSG = '다른 관리자가 먼저 바꿨습니다. 새로 불러온 뒤 다시 해 주세요.';
+var EVT_STALE_MSG = '다른 선생님이 먼저 바꿨습니다. 새로 불러온 뒤 다시 해 주세요.';
 
 /** settings 행 → 종류 목록(비면 기본값) */
 function evtKinds_(settingRows) {

@@ -67,7 +67,7 @@ function excValidate_(input, ctx) {
   else {
     term = termOnDate_(from, ctx.terms);
     if (!term) add('from', '이 날짜는 어떤 운영 기간에도 속하지 않습니다. 운영 기간을 먼저 만들어 주세요.');
-    else if (to > term.end_date) add('to', '종료일이 "' + term.name + '" 기간(' + term.end_date + '까지)을 넘습니다. 기간을 나누어 입력해 주세요.');
+    else if (to > term.end_date) add('to', '종료일이 "' + term.name + '" 운영 기간(' + foodDateKo_(term.end_date) + '까지)을 넘습니다. 날짜를 나누어 입력해 주세요.');
     else dates = ymdRange_(from, to, EXC_MAX_DAYS);
   }
   var spec = String(input.blocks || '').trim() || 'ALL';
@@ -176,7 +176,7 @@ var EXC_ENDED_MSG = '끝난 운영 기간의 특이사항은 볼 수만 있습�
 
 /** 저장할 기간의 오류: 끝난 기간은 보기만, 학생은 그 기간 명단에 있어야 한다(관리자도 마찬가지 — 목록에 안 보여 취소할 수 없는 기록을 막는다) */
 function excTermErrors_(enrollments, studentId, term) {
-  if (excTermEnded_(term)) return [{ field: 'from', message: '"' + term.name + '"은(는) 끝난 기간입니다. ' + EXC_ENDED_MSG }];
+  if (excTermEnded_(term)) return [{ field: 'from', message: '"' + term.name + '" 운영 기간은 이미 끝났습니다. ' + EXC_ENDED_MSG }];
   var ok = enrollments.some(function (e) { return e.term_id === term.id && e.student_id === studentId; });
   return ok ? [] : [{ field: 'studentId', message: '"' + term.name + '" 명단에 없는 학생입니다. 명단 올리기에서 먼저 등록해 주세요.' }];
 }
@@ -216,7 +216,7 @@ function getExceptionContext(date) {
   var ymd = String(date || '').trim() || today;
   if (!ymdIsValid_(ymd)) throw new Error('날짜를 골라 주세요.');
   var term = termOnDate_(ymd, d.terms) || getCurrentTerm_();
-  if (!term) throw new Error('운영 기간이 없습니다. 관리자에게 운영 기간을 만들어 달라고 요청해 주세요.');
+  if (!term) throw new Error('운영 기간이 없습니다. 관리자 선생님께 운영 기간을 만들어 달라고 요청해 주세요.');
   var base = ymd < term.start_date ? term.start_date : (ymd > term.end_date ? term.end_date : ymd);
   var enrByStudent = {};
   d.enrollments.forEach(function (e) { if (e.term_id === term.id) enrByStudent[e.student_id] = e; });
@@ -364,7 +364,7 @@ function listExceptions(filter) {
       termOnDate_(String(filter.from || today), d.terms) || getCurrentTerm_();
     terms = one ? [one] : [];
   }
-  if (scope === 'pending' && !excCanConfirm_(user)) excDenied_(user, 'exception.view', '요청 처리 목록은 출결 담당·관리자만');
+  if (scope === 'pending' && !excCanConfirm_(user)) excDenied_(user, 'exception.view', '요청 처리 목록은 출결 담당·관리자 선생님만');
   if (scope === 'student') {
     var anyVisible = terms.some(function (t) { return excVisibleIds_(user, d.enrollments, d.students, t.id, excViewWide_())[String(filter.studentId || '')]; });   // 학생 id는 prototype 없는 집합에서만 찾는다
     if (!anyVisible) excDenied_(user, 'exception.view', '범위 밖 학생 ' + String(filter.studentId || ''));
@@ -429,7 +429,7 @@ function confirmException(termId, groupId, acknowledge) {
     var enrolled = {};
     readAll_('enrollments').forEach(function (e) { if (e.term_id === term.id) enrolled[e.student_id] = true; });
     if (pending.some(function (r) { return !enrolled[r.student_id]; })) {
-      return { ok: false, error: '이 기간에 등록된 학생이 아니어서 확정할 수 없습니다. 명단을 확인해 주세요.' };
+      return { ok: false, error: '이 운영 기간에 등록된 학생이 아니어서 확정할 수 없습니다. 명단을 확인해 주세요.' };
     }
     var others = all.filter(function (r) { return r.group_id !== gid; });
     var warnings = [];
@@ -470,7 +470,7 @@ function cancelException(termId, groupId, reason, onlyDate) {
     var only = String(onlyDate || '').trim();
     if (only) {
       live = live.filter(function (r) { return r.date === only; });
-      if (!live.length) return { ok: false, error: only + '은(는) 이 묶음에 없거나 이미 취소된 날입니다. 목록을 새로 불러와 주세요.' };
+      if (!live.length) return { ok: false, error: '고른 날(' + only + ')이 이 묶음에 없거나 이미 취소되었습니다. 목록을 새로 불러와 주세요.' };
     }
     if (!excCanConfirm_(user) && live.some(function (r) { return r.status !== '요청'; })) {
       return { ok: false, error: '이미 확정되어 출결 담당 선생님만 취소할 수 있습니다. 출결 담당 선생님께 취소를 요청해 주세요.' };

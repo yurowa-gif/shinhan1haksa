@@ -98,7 +98,7 @@ function contactPlan_(text, opts, ctx) {
     if (row.length > 5 && row.slice(5).some(function (c) { return rosterStr_(c) !== ''; })) errors.push({ line: line, column: '', message: '열이 5개보다 많습니다. 칸이 밀렸는지 확인해 주세요.' });
     var cands = /^\d{5}$/.test(no) ? (byNo[no] || []) : [];
     if (!/^\d{5}$/.test(no)) { errors.push({ line: line, column: '학번', message: '학번은 숫자 5자리여야 합니다.' }); continue; }
-    if (cands.length !== 1) { errors.push({ line: line, column: '학번', message: cands.length ? '이 기간 학사생 중 이 학번 학생이 여럿입니다.' : '이 기간 학사생 중 학번 ' + no + ' 학생이 없습니다. 학생 명단을 먼저 올렸는지 확인해 주세요.' }); continue; }
+    if (cands.length !== 1) { errors.push({ line: line, column: '학번', message: cands.length ? '이 운영 기간 학사생 중 이 학번 학생이 여럿입니다.' : '이 운영 기간 학사생 중 학번 ' + no + ' 학생이 없습니다. 학생 명단을 먼저 올렸는지 확인해 주세요.' }); continue; }
     var st = cands[0];
     names[st.id] = st.student_no + ' ' + st.name;
     var sp = rosterStr_(row[1]), pe = rosterStr_(row[2]).toLowerCase(), gn = rosterStr_(row[3]), gp = rosterStr_(row[4]);
@@ -109,7 +109,7 @@ function contactPlan_(text, opts, ctx) {
       else stuWant[st.id] = n;
     }
     if (!pe) {
-      if (gn || gp) errors.push({ line: line, column: '학부모구글계정', message: '보호자 이름·전화를 넣으려면 학부모 구글 계정도 적어 주세요.' });
+      if (gn || gp) errors.push({ line: line, column: '학부모구글계정', message: '학부모 이름·전화를 넣으려면 학부모 구글 계정도 적어 주세요.' });
       continue;
     }
     if (!rosterEmailOk_(pe)) { errors.push({ line: line, column: '학부모구글계정', message: '이메일 형식이 아닙니다.' }); continue; }
@@ -118,7 +118,7 @@ function contactPlan_(text, opts, ctx) {
     if (seenLink[link.id]) { errors.push({ line: line, column: '학부모구글계정', message: seenLink[link.id] + '줄과 같은 학생·학부모입니다.' }); continue; }
     seenLink[link.id] = line;
     var want = {};
-    if (gn) { if (gn.length > CONTACT_NAME_MAX) errors.push({ line: line, column: '보호자이름', message: '보호자 이름은 ' + CONTACT_NAME_MAX + '자 안으로 적어 주세요.' }); else want.name = gn; }
+    if (gn) { if (gn.length > CONTACT_NAME_MAX) errors.push({ line: line, column: '보호자이름', message: '학부모 이름은 ' + CONTACT_NAME_MAX + '자 안으로 적어 주세요.' }); else want.name = gn; }
     if (gp) { var m = contactPhoneNorm_(gp); if (!m) errors.push({ line: line, column: '보호자전화', message: '전화번호 형식이 아닙니다(예: 010-1234-5678).' }); else want.phone = m; }
     guardWant[link.id] = want;
   }

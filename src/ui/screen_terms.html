@@ -39,7 +39,7 @@
     function drawList() {
       clear(listBox);
       listBox.appendChild(el('h2', { text: '운영 기간' }));
-      listBox.appendChild(el('div', { class: 'muted', text: '오늘은 ' + state.data.today + '입니다.' }));
+      listBox.appendChild(el('div', { class: 'muted', text: '오늘은 ' + UI.util.formatDateKo(state.data.today, true) + '입니다.' }));
       if (!state.data.terms.length) {
         listBox.appendChild(el('div', { class: 'muted', text: '아직 기간이 없습니다. 아래에서 첫 기간을 추가해 주세요.' }));
         return;
@@ -123,7 +123,7 @@
       var terms = state.data.terms.filter(function (t) { return t.type === '학기'; });
       if (!terms.length) { carryBox.appendChild(el('div', { class: 'muted', text: '학기 기간을 먼저 추가해 주세요. 방학에는 이어받기가 없습니다.' })); return; }
       carryBox.appendChild(el('div', { class: 'muted', text: '직전 학기에 학사생이던 학생(새 학기 시작일 기준)을 새 학기 명단에 등록합니다. 퇴실한 학생은 빠집니다.' }));
-      var sel = el('select', {}, terms.map(function (t) { return el('option', { value: t.id, text: t.name + ' (' + t.start_date + ' ~)' }); }));
+      var sel = el('select', {}, terms.map(function (t) { return el('option', { value: t.id, text: t.name + ' (' + UI.util.formatDateKo(t.start_date, true) + '부터)' }); }));
       sel.value = terms[terms.length - 1].id;
       carryBox.appendChild(UI.field('이어받을 새 학기', sel, { name: 'carry' }));
       var out = el('div');

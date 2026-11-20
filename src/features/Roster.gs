@@ -127,7 +127,7 @@ function rosterUserPlan_(people, users, roleCode, memo, ctx) {
     if (!email || seen[email]) return;
     seen[email] = true;
     var fail = function (why) {
-      out.errors.push({ line: p.line || 0, column: column, message: '계정 ' + rosterMask_(email) + '은(는) ' + why +
+      out.errors.push({ line: p.line || 0, column: column, message: '계정 ' + rosterMask_(email) + ': ' + why +
         ' ' + label[roleCode] + ' 계정으로 올릴 수 없습니다. 이메일이 맞는지 확인해 주세요.' });
     };
     if (roleCode === 'student' && parentEmails[email]) { fail('이미 학부모 연결에 쓰이는 계정이라'); return; }
@@ -143,7 +143,7 @@ function rosterUserPlan_(people, users, roleCode, memo, ctx) {
       fail('이미 ' + other.map(function (r) { return ROLE_LABELS[r] || r; }).join('·') + ' 역할을 가진 계정이라');
       return;
     }
-    if (!isTruthy_(u.active)) out.warnings.push('계정 ' + rosterMask_(email) + '이(가) 비활성 상태입니다. 사용자 목록에서 활성으로 바꾸어 주세요.');
+    if (!isTruthy_(u.active)) out.warnings.push('비활성 상태인 계정입니다(' + rosterMask_(email) + '). 사용자 목록에서 활성으로 바꾸어 주세요.');
     if (roles.indexOf(roleCode) < 0) {
       out.update.push({ id: u.id, patch: { roles: roleCode } });
       out.changes.push({ email: rosterMask_(email), before: roles.length ? roles.map(function (r) { return ROLE_LABELS[r] || r; }).join('·') : '(역할 없음)', add: label[roleCode] });
@@ -310,8 +310,8 @@ function rosterGuardianPlan_(text, opts, ctx) {
     var cands = (byNo[rec.student_no] || []).filter(function (s) { return enrolled[s.id]; });
     if (cands.length !== 1) {
       errors.push({ line: rec.line, column: '학번', message: cands.length
-        ? '이 기간 학사생 중 학번 ' + rec.student_no + ' 학생이 여럿입니다. 학번을 확인해 주세요.'
-        : '이 기간 학사생 중 학번 ' + rec.student_no + ' 학생이 없습니다. 학생 명단을 먼저 올렸는지, 학번이 맞는지 확인해 주세요.' });
+        ? '이 운영 기간 학사생 중 학번 ' + rec.student_no + ' 학생이 여럿입니다. 학번을 확인해 주세요.'
+        : '이 운영 기간 학사생 중 학번 ' + rec.student_no + ' 학생이 없습니다. 학생 명단을 먼저 올렸는지, 학번이 맞는지 확인해 주세요.' });
       return;
     }
     var st = cands[0];

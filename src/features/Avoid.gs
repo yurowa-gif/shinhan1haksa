@@ -77,8 +77,8 @@ function saveAvoidPair(input) {
   return withLock_(function () {
     var d = avdLoad_();
     if (!d.term) return avdErr_('studentA', '운영 기간을 찾을 수 없습니다.');
-    if (!d.byId[a] || !d.enrolled[a]) return avdErr_('studentA', '이번 기간에 등록된 학생이 아닙니다. 새로 불러온 뒤 다시 골라 주세요.');
-    if (!d.byId[b] || !d.enrolled[b]) return avdErr_('studentB', '이번 기간에 등록된 학생이 아닙니다. 새로 불러온 뒤 다시 골라 주세요.');
+    if (!d.byId[a] || !d.enrolled[a]) return avdErr_('studentA', '이번 운영 기간에 등록된 학생이 아닙니다. 새로 불러온 뒤 다시 골라 주세요.');
+    if (!d.byId[b] || !d.enrolled[b]) return avdErr_('studentB', '이번 운영 기간에 등록된 학생이 아닙니다. 새로 불러온 뒤 다시 골라 주세요.');
     var key = avdKey_(a, b);
     var dup = d.pairs.filter(function (r) { return avdLive_(r) && avdKey_(r.student_a, r.student_b) === key; })[0];
     if (dup) return avdErr_('studentB', '이미 같은 짝이 있습니다(' + dup.scope + '). 범위를 바꾸려면 그 짝을 고치세요.');

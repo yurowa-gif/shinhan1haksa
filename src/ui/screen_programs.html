@@ -151,7 +151,7 @@
       call('listPrograms', {}).then(function (r) {
         if (my !== seq || !alive) return;
         clear(box); data = r;
-        box.appendChild(el('div', { class: 'muted', style: 'margin-bottom:8px', text: r.term.name + (r.term.ended ? ' (끝난 기간 — 볼 수만 있습니다)' : '') }));
+        box.appendChild(el('div', { class: 'muted', style: 'margin-bottom:8px', text: r.term.name + (r.term.ended ? ' (끝난 운영 기간 — 볼 수만 있습니다)' : '') }));
         var n = function (k) { return pick(r, k).length; };
         seg = UI.segmented({ label: '보기', value: which, options: [{ value: 'upcoming', label: '예정 ' + n('upcoming') }, { value: 'past', label: '지난 ' + n('past') }, { value: 'canceled', label: '취소 ' + n('canceled') }],
           onchange: function (v) { which = v; drawItems(); } });

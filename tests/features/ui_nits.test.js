@@ -54,7 +54,7 @@ test('화면 파일: 줄 끝 // 주석 뒤에 .then·.catch 코드가 붙어 주
 test('시설 일지 누적표: 관리자가 아닌 교사가 열면 서버 거부 뒤 화면이 멈추지 않고 안내를 낸다(.catch가 살아 있다)', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'ui', 'screen_facility_day.html'), 'utf8');
   const line = html.split('\n').filter((l) => l.includes("call('getFacilityReport'") || /^\s*\.catch\(function \(err\) \{ clear\(body\); drawHead\(\)/.test(l)).join('\n');
-  assert.ok(/getFacilityReport[\s\S]*\.catch\(function \(err\)[\s\S]*관리자만 볼 수 있습니다/.test(line), '누적표 .catch와 안내 문구');
+  assert.ok(/getFacilityReport[\s\S]*\.catch\(function \(err\)[\s\S]*관리자 선생님만 볼 수 있습니다/.test(line), '누적표 .catch와 안내 문구');
 });
 
 test('시설 일지 시작·끝 시각 두 칸: flex가 아니라 grid minmax(0,1fr)이고 칸 안 input은 width 100%·min-width 0(고유 너비 때문에 카드 밖으로 나가지 않게)', () => {

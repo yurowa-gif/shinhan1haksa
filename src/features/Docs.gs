@@ -8,7 +8,7 @@
 var DOC_STATES = ['제출', '미제출', '해당없음'];
 var DOC_NAME_MAX = 40;
 var DOC_DESC_MAX = 100;
-var DOC_NO_TAB_MSG = '이 기간의 서류 탭이 아직 없습니다. 관리자가 편집기에서 setup()을 한 번 실행해 주세요.';
+var DOC_NO_TAB_MSG = '이 운영 기간의 서류 탭이 아직 없습니다. 관리자 선생님이 편집기에서 setup()을 한 번 실행해 주세요.';
 
 function docLiveTypes_() {
   return readAll_('doc_types').filter(function (t) { return String(t.status || '').trim() !== '취소'; })
@@ -126,7 +126,7 @@ function saveDocState(input) {
     var term = getCurrentTerm_();
     if (!term) return { ok: false, error: '운영 기간이 없습니다.' };
     var enrolled = readAll_('enrollments').some(function (e) { return e.term_id === term.id && e.student_id === studentId; });
-    if (!enrolled) return { ok: false, error: '이번 기간 학사생이 아닙니다.' };
+    if (!enrolled) return { ok: false, error: '이번 운영 기간 학사생이 아닙니다.' };
     if (!docLiveTypes_().some(function (t) { return t.id === typeId; })) return { ok: false, error: '없어졌거나 취소된 서류 종류입니다. 새로 불러와 주세요.', stale: true };
     var sheet = termSheetName_('student_docs', term.id);
     var loaded = docRows_(term);

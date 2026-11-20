@@ -103,7 +103,7 @@ function inoutReentryDefaults_(changes, studentId, ymd) {
 function inoutSummary_(rec, plan, changes) {
   var lead = foodDateKo_(rec.effectiveDate) + '부터 ' + rec.type;
   var lines = [];
-  if (rec.type === '학사 퇴실' || rec.type === '학사 및 기숙사 퇴실' || rec.temp) lines.push('자리 공석');
+  if (rec.type === '학사 퇴실' || rec.type === '학사 및 기숙사 퇴실' || rec.temp) lines.push('좌석 비움');
   if (rec.temp) lines.push('복귀 예정일 ' + foodDateKo_(rec.returnDate) + ' · 건강상 임시 퇴실은 재입실을 막지 않습니다');
   plan.rows.slice(1).forEach(function (r) {
     var d = foodDateKo_(r.effective_date);
@@ -313,7 +313,7 @@ function inoutUndoCheck_(headId) {
   if (inoutIsDismissRow_(head)) requirePermission_('out.dismiss');
   if (String(head.status || '유효') !== '유효') return { already: true };
   var today = today_();
-  if (head.effective_date < today && user.roles.indexOf('admin') < 0) return { error: '적용일이 지난 퇴실은 관리자만 취소할 수 있습니다.' };
+  if (head.effective_date < today && user.roles.indexOf('admin') < 0) return { error: '적용일이 지난 퇴실은 관리자 선생님만 취소할 수 있습니다.' };
   var changes = readAll_('status_changes').filter(function (c) { return c.student_id === head.student_id; });
   var plan = moveUndoPlan_(changes, head.id, { today: today });
   if (!plan.toCancel.length) return { error: inoutKo_(plan.warnings[0] || '취소할 내용이 없습니다.') };
@@ -430,7 +430,7 @@ function previewConvertTempLeave(headId) {
   var until = ban.until ? foodDateKo_(ban.until) + '까지 다시 들어올 수 없습니다.' : '다음 학기가 끝날 때까지 다시 들어올 수 없습니다(다음 학기가 아직 등록되지 않았습니다).';
   return { ok: true, errors: [], lead: foodDateKo_(c.head.effective_date) + ' 임시 퇴실을 일반 퇴실로 바꿉니다',
     lines: ['재입실 제한은 처음 임시 퇴실한 날(' + foodDateKo_(c.head.effective_date) + ')부터 셉니다.' + (ban.banned ? ' ' + until : ''),
-      '급식·자리는 임시 퇴실 때와 같이 이미 정리되어 있어 그대로입니다.', '기록은 지우지 않고 임시 퇴실 신청서를 취소 처리합니다.'],
+      '급식·좌석은 임시 퇴실 때와 같이 이미 정리되어 있어 그대로입니다.', '기록은 지우지 않고 임시 퇴실 신청서를 취소 처리합니다.'],
     warnings: c.plan.warnings, expect: inoutConvertSignature_(c) };
 }
 
