@@ -30,7 +30,7 @@
         var slot = el('div');
         var row = el('div', { class: 'ct-row' }, [
           el('span', { text: s.display + (s.hasContact ? '' : ' (연락처 없음)') }),
-          el('button', { type: 'button', class: 'btn secondary row-btn', text: '연락처 보기', onclick: function () { show(s, slot); } })
+          el('button', { type: 'button', class: 'btn secondary row-btn row-open', text: '연락처 보기', onclick: function () { show(s, slot); } })
         ]);
         body.appendChild(row); body.appendChild(slot);
       });

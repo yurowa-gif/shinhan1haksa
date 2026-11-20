@@ -73,7 +73,7 @@
         el('div', { style: 'display:flex;justify-content:space-between;gap:12px' }, [el('span', { text: '아직 서류가 없는 신청' }), el('b', { style: 'flex:0 0 auto', text: n + '건' })]),
         el('div', { class: 'muted', text: '전체 기준이며 날짜와 무관합니다. 인원에는 이미 포함되어 있습니다. 이름은 처음 화면의 서류 카드에서 봅니다.' })
       ]);
-      if (back && n) box.appendChild(el('a', { href: back.href.split('#')[0] + '#docs', style: 'display:inline-flex;align-items:center;min-height:44px;margin-top:4px;color:var(--accent)', text: '서류 미제출 ' + n + '건 ▸' }));
+      if (back && n) box.appendChild(el('a', { href: back.href.split('#')[0] + '#docs', style: 'display:inline-flex;align-items:center;min-height:var(--tap);margin-top:4px;color:var(--accent)', text: '서류 미제출 ' + n + '건 ▸' }));
       notes.appendChild(box);
     }
 

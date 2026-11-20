@@ -226,6 +226,10 @@ var UI = {};
       document.body.appendChild(bar);
       var main = document.querySelector('main');
       if (main) main.classList.add('has-actionbar');
+      // 바 높이는 글자 크기·버튼 줄바꿈에 따라 달라진다(글자 150%에서 마지막 내용이 가려지던 것). 실제 높이를 --bar-h로 알려 main의 아래 여백이 따라가게 한다
+      var fit = function () { var h = bar.offsetHeight; if (h) document.documentElement.style.setProperty('--bar-h', h + 'px'); };
+      fit();
+      if (typeof ResizeObserver !== 'undefined') { try { new ResizeObserver(fit).observe(bar); } catch (e) { window.addEventListener('resize', fit); } } else window.addEventListener('resize', fit);
     }
     return bar;
   };
@@ -347,7 +351,7 @@ var UI = {};
   UI.segmented = function (opts) {
     opts = opts || {};
     var value = opts.value !== undefined ? opts.value : (opts.options && opts.options[0] ? opts.options[0].value : '');
-    var wrap = el('div', { class: 'segmented', role: 'radiogroup', 'aria-label': opts.label || '선택' });
+    var wrap = el('div', { class: (opts.options || []).length >= 5 ? 'segmented dense' : 'segmented', role: 'radiogroup', 'aria-label': opts.label || '선택' });
     function draw() {
       while (wrap.firstChild) wrap.removeChild(wrap.firstChild);
       (opts.options || []).forEach(function (o) {
@@ -455,7 +459,7 @@ var UI = {};
     return api;
   };
 
-  /** UI.confirmSheet({title, lead, lines, message, confirmText:'저장', cancelText:'취소', danger, onconfirm, oncancel}) — 열린 시트를 돌려준다. 포커스는 취소 쪽.
+  /** UI.confirmSheet({title, lead, lines, message, confirmText:'저장', cancelText:'돌아가기', danger, onconfirm, oncancel}) — 열린 시트를 돌려준다. 포커스는 취소 쪽.
       lead = 크고 굵게 한 줄(적용일처럼 꼭 봐야 할 것), lines = 그 아래 바뀌는 것 목록 */
   UI.confirmSheet = function (opts) {
     opts = opts || {};
@@ -466,7 +470,7 @@ var UI = {};
     var sheet = UI.bottomSheet({
       title: opts.title, content: el('div', {}, body),
       actions: [
-        { text: opts.cancelText || '취소', kind: 'secondary', onclick: function () { sheet.close(); if (opts.oncancel) opts.oncancel(); } },
+        { text: opts.cancelText || '돌아가기', kind: 'secondary', onclick: function () { sheet.close(); if (opts.oncancel) opts.oncancel(); } },
         { text: opts.confirmText || '확인', kind: opts.danger ? 'danger' : 'primary', onclick: function () { sheet.close(); if (opts.onconfirm) opts.onconfirm(); } }
       ]
     });
@@ -483,7 +487,7 @@ var UI = {};
     var sheet = UI.bottomSheet({
       title: opts.title, content: content,
       actions: [
-        { text: '닫기', kind: 'secondary', onclick: function () { sheet.close(); if (opts.oncancel) opts.oncancel(); } },
+        { text: '돌아가기', kind: 'secondary', onclick: function () { sheet.close(); if (opts.oncancel) opts.oncancel(); } },
         { text: opts.confirmText || '확인', kind: opts.danger === false ? 'primary' : 'danger', disabled: true,
           onclick: function () { var r = area.value.trim(); if (r.length < min) return; sheet.close(); if (opts.onconfirm) opts.onconfirm(r); } }
       ]

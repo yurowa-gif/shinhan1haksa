@@ -132,3 +132,23 @@ test('D15 ②(반응형): Styles.html 에 중단점 두 곳(600·840)·홈 두 �
   const rules = css.readFile('docs/design/rules.md');
   ['### 2-1. 반응형', '~599px', '600~839px', '840px~', '제안(미적용)', 'UI.layoutHome'].forEach((t) => assert.ok(rules.indexOf(t) >= 0, 'rules.md ' + t));
 });
+
+test('D15 ③(화면 전수 점검): 줄 끝 열기 ›·탭 5개 이상 축소·작업 바 높이 따라가기·48px 보정이 코드에 있고, screens-audit.md 사진이 모두 있고 모두 쓰이며 고친 곳·하지 않은 것이 적혀 있다', () => {
+  const styles = css.readFile('src/ui/Styles.html');
+  assert.ok(/\.btn\.secondary\.row-open \{[^}]*border: 0/.test(styles) && /\.btn\.secondary\.row-open::after \{ content: "›"/.test(styles), '줄 끝 열기 ›');
+  assert.ok(/\.segmented\.dense \.seg \{ font-size: \.9rem/.test(styles), '탭 다섯 개 이상 축소');
+  assert.ok(/\.seg \{ flex: 1 1 0; min-width: var\(--tap\)/.test(styles) && /ul\.list li a \{ display: inline-flex; align-items: center; min-height: var\(--tap\)/.test(styles), '탭·목록 링크 48px');
+  const comp = css.readFile('src/ui/Components.html');
+  assert.ok(/\.length >= 5 \? 'segmented dense' : 'segmented'/.test(comp), 'UI.segmented 다섯 개 이상');
+  assert.ok(/setProperty\('--bar-h'/.test(comp) && /ResizeObserver/.test(comp), '작업 바 실제 높이를 --bar-h로');
+  ['screen_counsel', 'screen_contacts'].forEach((f) => assert.ok(/row-btn row-open/.test(css.readFile('src/ui/' + f + '.html')), f + ' 줄 끝 열기 ›'));
+  assert.ok(/min-height:var\(--tap\)/.test(css.readFile('src/ui/screen_mealcount.html')) && /min-width:var\(--tap\)/.test(css.readFile('src/ui/screen_schedule.html')), '식수 링크·일정 요일 칸 48px');
+  const dir = path.join(ROOT, 'docs', 'design', 'refresh');
+  const doc = fs.readFileSync(path.join(dir, 'screens-audit.md'), 'utf8');
+  ['279칸 중 279칸', '나빠진 칸 0', '고친 것', 'Enter로 저장 — 하지 않았다', '타이포 4단계', '목록 + 옆 상세', '건너뛴 것·확인 못 한 것', '실제 윈도우 노트북', '.row-open', '.segmented.dense', '--bar-h'].forEach((t) => assert.ok(doc.indexOf(t) >= 0, t));
+  const imgs = [...doc.matchAll(/!\[[^\]]*\]\((screens\/[^)]+\.png)\)/g)].map((m) => m[1]);
+  assert.strictEqual(imgs.length, 11, '사진 수 ' + imgs.length);
+  imgs.forEach((f) => assert.ok(fs.existsSync(path.join(dir, f)), f + ' 파일이 없다'));
+  fs.readdirSync(path.join(dir, 'screens')).filter((f) => f.endsWith('.png')).forEach((f) => assert.ok(imgs.indexOf('screens/' + f) >= 0, f + ' 가 문서에 쓰이지 않았다'));
+  assert.ok(fs.existsSync(path.join(ROOT, 'design/preview/refresh-tour.js')) && fs.existsSync(path.join(ROOT, 'design/preview/refresh-tour-sheets.js')));
+});
