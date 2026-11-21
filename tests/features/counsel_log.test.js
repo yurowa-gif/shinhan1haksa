@@ -2,6 +2,7 @@
 const assert = require('assert');
 const { test, plain } = require('../helpers/harness');
 const { createGasEnv } = require('../helpers/gas-fakes');
+const { textOf } = require('../helpers/leak-scan');
 
 const ADMIN = 'test.admin@example.com', DUTY = 'test.duty@example.com', ATT = 'test.attendance@example.com', T1 = 'test.teacher@example.com',
   T2 = 'fake.t2@example.com', HOMEROOM = 'test.homeroom@example.com', STUDENT = 'test.student@example.com', PARENT = 'test.parent@example.com';
@@ -205,4 +206,49 @@ test('홈 카드: 담당교사만 숫자(최근 30일 내가 쓴 상담·기록 
   assert.ok(!JSON.stringify(h1).includes(MARK));
   assert.ok(!call(x, ADMIN, 'getHomeData', 'admin').counsel, '관리자 홈에는 숫자 없음');
   assert.ok(!call(x, HOMEROOM, 'getHomeData', 'homeroom').counsel, '담임 홈에도 없음');
+});
+
+test('C42 getCounselRoster: 볼 수 있는 학생만(담당교사 자기 학생·담임 자기 반·관리자 전체), 살아 있는 상담 수·마지막 날짜, 취소는 제외, 응답에 내용·유형·대상·교사 없음', () => {
+  const x = makeEnv();
+  x.env.asOwner((c) => c.addUser('fake.t3@example.com', '가짜교사3', 'hall_teacher'));
+  asTeacherOf(x, x.other, T2);
+  const ids = (r) => r.students.map((s) => s.id);
+  // 거부: 출결 담당·근무 교사(담당 아님)·학생·학부모
+  for (const who of [ATT, DUTY, STUDENT, PARENT]) x.env.expectDenied(who, 'counsel.list', 'getCounselRoster');
+  // 상담 전에는 0건·날짜 없음
+  const before = call(x, T1, 'getCounselRoster');
+  assert.strictEqual(before.ok, true);
+  assert.ok(before.students.length >= 1 && before.students.every((s) => s.count === 0 && s.lastDate === ''));
+  // 상담 3건(하나는 취소) + 다른 교사 학생 1건
+  save(x, T1, { date: '2027-03-02', content: MARK + ' 첫째' });
+  const second = save(x, T1, { date: '2027-03-02', type: '진로', target: '학부모', content: MARK + ' 둘째' });
+  const third = save(x, T1, { date: '2027-03-03', content: MARK + ' 셋째' });
+  save(x, T2, { studentId: x.other.id, date: '2027-03-02', content: MARK + ' 남의 학생' });
+  call(x, T1, 'cancelCounselNote', third.id, '잘못 적었습니다');
+  const t1 = call(x, T1, 'getCounselRoster'), t2 = call(x, T2, 'getCounselRoster'), t3 = call(x, 'fake.t3@example.com', 'getCounselRoster');
+  const adm = call(x, ADMIN, 'getCounselRoster'), hr = call(x, HOMEROOM, 'getCounselRoster');
+  const row = (r, id) => r.students.find((s) => s.id === id);
+  assert.deepStrictEqual(Object.keys(row(t1, x.mine.id)).sort(), ['classNo', 'count', 'grade', 'id', 'lastDate', 'name', 'number']);
+  assert.strictEqual(row(t1, x.mine.id).count, 2, '취소 제외');
+  assert.strictEqual(row(t1, x.mine.id).lastDate, '2027-03-02', '취소한 마지막 날은 빠진다');
+  assert.ok(!ids(t1).includes(x.other.id), '남의 담당 학생은 목록에 없다');
+  assert.deepStrictEqual(ids(t2), [x.other.id]);
+  assert.deepStrictEqual([row(t2, x.other.id).count, row(t2, x.other.id).lastDate], [1, '2027-03-02']);
+  assert.deepStrictEqual(t3.students, [], '담당 학생이 없는 교사는 빈 목록');
+  const enrolled = x.env.rows('enrollments').filter((e) => e.term_id === x.term.id).map((e) => e.student_id).sort();
+  assert.deepStrictEqual(ids(adm).slice().sort(), enrolled, '관리자는 이번 기간 학사생 전체');
+  assert.strictEqual(row(adm, x.mine.id).count, 2);
+  assert.strictEqual(row(adm, x.other.id).count, 1);
+  const hrClass = x.env.rows('users').find((u) => u.email === HOMEROOM).homeroom_class.match(/(\d+)\s*-\s*(\d+)/);
+  assert.ok(hr.students.length >= 1);
+  hr.students.forEach((s) => assert.deepStrictEqual([String(s.grade), String(s.classNo)], [hrClass[1], hrClass[2]], '담임은 자기 반만'));
+  // 학번 순
+  const nos = (r) => r.students.map((s) => x.env.rows('students').find((q) => q.id === s.id).student_no);
+  assert.deepStrictEqual(nos(adm), nos(adm).slice().sort((a, b) => String(a).localeCompare(String(b))));
+  // 유출 감시: 내용·유형·대상·교사 이름·이메일·취소 사유 없음
+  for (const r of [t1, t2, t3, adm, hr]) {
+    const t = textOf(r);
+    for (const bad of [MARK, '진로', '학부모', '가짜교사', '@', '잘못 적었습니다', 'teacher_email', 'content']) assert.ok(!t.includes(bad), '응답에 있으면 안 되는 글: ' + bad);
+  }
+  assert.strictEqual(second.ok, true);
 });
