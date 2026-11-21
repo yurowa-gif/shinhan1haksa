@@ -35,6 +35,9 @@
 ### UI.cardClass
 `UI.cardClass(kind)` → 카드 class 문자열. `'todo'` = **진짜 할 일**(마감·미처리 건수가 0보다 클 때만, 노란 띠 상자), `'key'` = **중요한 숫자·상태**(OUT 등, 코발트 띠 상자), 그 밖(`''`)은 참고 정보(상자 없음, 줄로만 나눔). 0건이면 `todo`를 붙이지 않는다 — 노란 띠가 늘 떠 있으면 아무것도 눈에 안 띈다.
 
+### UI.refreshStamp
+`UI.refreshStamp(onrefresh, at?)` → "15:20 기준 · ↻ 새로고침" 한 줄. **실시간이 아니라 불러온 시각**임을 알리고, 누르면 `onrefresh()`(보통 화면을 다시 불러온다). 홈(교사)·포털(학생·학부모)·요청 처리 목록 위에 하나씩. `at`을 안 주면 지금 시각. 순수 함수 `UI.util.clockText(Date)`·`waitedText(requestedAt, today)`('오늘/어제/N일 전 보냄')·`sortWaitedFirst(groups, today)`(하루 넘게 기다린 것을 위로, 새 배열)가 같이 있다(D16 G1·G3).
+
 ### UI.toast
 `UI.toast(message, {kind:'ok'|'warn'|'info', ms:3000})` → 아래에 잠깐 뜨는 한 줄(`role="status"`). 저장 성공 같은 확인용이고, 되돌릴 수 없는 일의 확인은 `confirmSheet`를 쓴다.
 

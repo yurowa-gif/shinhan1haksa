@@ -367,4 +367,12 @@
     .ld .row-open, .ld .ld-narrow { display: none; }   /* 두 칸에서는 줄 전체가 버튼이고 목록이 늘 보인다 */
     .ld-empty { display: block; }
   }
+
+  /* ───────── D16: 기준 시각 · 포털 OUT 한 줄 · 요청 경과 ───────── */
+  .stamp-time { font-variant-numeric: tabular-nums; }
+  .stamp { display: flex; align-items: center; justify-content: flex-end; gap: 2px; margin: 0 0 6px; color: var(--muted-ink); font-size: var(--font-sm); }
+  .btn.secondary.stamp-btn { border: 0; background: transparent; color: var(--accent-ink); padding: 0 10px; min-width: auto; font-size: var(--font-sm); }
+  .btn.secondary.stamp-btn::before { content: "↻"; margin-right: .3em; }
+  .card.pt-outline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; font-weight: 700; }
+  .exc-waited { color: var(--muted-ink); font-size: var(--font-sm); }
 </style>

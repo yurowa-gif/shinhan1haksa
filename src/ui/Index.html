@@ -34,9 +34,16 @@
     (function () {
       var root = document.getElementById('home');
       var role = document.body.getAttribute('data-role');
-      call('getHomeData', role)
-        .then(function (data) { clear(root); renderHome(data, root); if (role !== 'student' && role !== 'parent') UI.layoutHome(root); })
-        .catch(function (err) { clear(root); showError(root, err); });
+      var teacherHome = role !== 'student' && role !== 'parent';
+      function load() {
+        call('getHomeData', role)
+          .then(function (data) {
+            clear(root); renderHome(data, root); if (teacherHome) UI.layoutHome(root);
+            if (teacherHome) root.insertBefore(UI.refreshStamp(load), root.firstChild);   // 학생·학부모 홈은 Portal이 같은 줄을 넣는다
+          })
+          .catch(function (err) { clear(root); showError(root, err); });
+      }
+      load();
     })();
   </script>
 </body>

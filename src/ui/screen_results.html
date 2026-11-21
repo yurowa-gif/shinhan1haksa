@@ -2,10 +2,14 @@
   .res-nav { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
   .res-nav .grow { flex: 1 1 auto; text-align: center; font-weight: 700; }
   .res-classes { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
-  .res-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+  .res-wrap { overflow: auto; max-height: 70vh; max-height: 70dvh; border: 1px solid var(--line); border-radius: var(--radius-sm); }   /* 상자 높이를 제한해 머리 행·이름 열·합계 행이 고정되게(G8) */
   .res-table { border-collapse: collapse; width: 100%; }
   .res-table th, .res-table td { border: 1px solid var(--line); padding: 0; text-align: center; font-size: .85rem; }
   .res-table th { background: var(--muted-weak); padding: 6px 4px; min-width: 52px; font-weight: 600; }
+  .res-table thead th { position: sticky; top: 0; z-index: 2; }
+  .res-table thead th.name { z-index: 3; }
+  .res-table tr.total th, .res-table tr.total td { position: sticky; bottom: 0; z-index: 2; box-shadow: 0 -1px 0 var(--line); }
+  .res-table tr.total th.name { z-index: 3; }
   .res-table th.off { color: var(--muted-ink); }
   .res-table th.name, .res-table td.name { position: sticky; left: 0; background: var(--card); text-align: left; padding: 6px 8px; white-space: nowrap; z-index: 1; min-width: 5.5em; }
   .res-cell { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-width: 52px; min-height: var(--tap); border: 0; background: transparent; color: var(--text); font: inherit; cursor: pointer; padding: 2px; }

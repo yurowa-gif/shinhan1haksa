@@ -254,6 +254,8 @@
     function autoOutText(out) { return out && out.created ? ' · 1OUT이 기록되었습니다' : out && out.error ? '' : ' · 같은 묶음의 1OUT이 이미 있습니다'; }
     function groupCard(g, reload, opts) {
       opts = opts || {};
+      var waitedLine = opts.waited && g.requestedAt ? U.waitedText(g.requestedAt, state.ctx.today) : '';   // '어제 보냄' 같은 경과(서버가 requestedAt을 줄 때만)
+      var waitedLate = waitedLine && U.waitedDays(g.requestedAt, state.ctx.today) >= 1;
       var cancelled = g.status === '취소';
       var multi = g.dates.length > 1;
       var item = el('div', { class: 'exc-item' });
@@ -261,6 +263,7 @@
         el('b', { class: cancelled ? 'exc-cancelled' : '', text: g.display + ' · ' + g.short }),
         el('span', {}, [pillFor(g), !cancelled && (g.hasOut || (g.auto && g.status !== '확정')) ? ' ' : null, !cancelled ? (g.hasOut ? UI.statusPill('out1', '1OUT') : (g.auto && g.status !== '확정' ? UI.statusPill('out1', '확정되면 1OUT') : null)) : null])
       ]));
+      if (waitedLine) item.appendChild(el('div', { class: 'exc-waited' }, [waitedLate ? UI.statusPill('todo', waitedLine) : waitedLine]));
       // 묶음 전체 기간을 보인다(하루 카드에서도): 취소·확정이 묶음 단위라는 것을 알 수 있게
       item.appendChild(el('div', { class: cancelled ? 'muted exc-cancelled' : 'muted', text: datesText(g) + ' · ' + g.blocksText + (g.requestedByName ? ' · ' + g.requestedByName : '') }));
       if (g.canceledDates && g.canceledDates.length && !cancelled) item.appendChild(el('div', { class: 'muted', text: '취소된 날: ' + g.canceledDates.map(ymdKo).join(', ') }));
@@ -382,9 +385,11 @@
       function load() {
         call('listExceptions', { scope: scope }).then(function (r) {
           clear(card);
+          card.appendChild(UI.refreshStamp(load));   // 불러온 시각 + 다시 불러오기
           card.appendChild(el('h2', { text: scope === 'pending' ? '처리할 요청 ' + r.groups.length + '건' : '내 요청·입력 ' + r.groups.length + '건' }));
           if (!r.groups.length) { card.appendChild(UI.emptyState(emptyText)); return; }
-          r.groups.forEach(function (g) { card.appendChild(groupCard(g, load)); });
+          var gs = scope === 'pending' ? U.sortWaitedFirst(r.groups, state.ctx.today) : r.groups;   // 하루 넘게 기다린 요청이 위로(정렬만, 서버 응답은 그대로)
+          gs.forEach(function (g) { card.appendChild(groupCard(g, load, { waited: scope === 'pending' })); });
         }).catch(function (err) { clear(card); showError(card, err); });
       }
       load();

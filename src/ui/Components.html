@@ -99,6 +99,28 @@ var UI = {};
   util.SHEET_GUARD_MS = 350;
   /** 시트 안 버튼 클릭을 받아도 되는가: 아직 안 열렸거나(openedAt 0) 열린 지 SHEET_GUARD_MS 이상 지났을 때만 true */
   util.sheetClickAllowed = function (openedAt, now) { return !openedAt || now - openedAt >= util.SHEET_GUARD_MS; };
+  /** 불러온 시각 '15:20' (Date를 받는다: 지금 시각을 안에서 읽지 않는다) */
+  util.clockText = function (d) { return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); };
+  /** 요청이 기다린 날수: requestedAt('2027-03-24T09:10:00')의 날짜 → today('2027-03-26')까지 달력 날수. 값이 이상하면 -1 */
+  util.waitedDays = function (requestedAt, today) {
+    var n = util.daysBetween(String(requestedAt || '').slice(0, 10), today);   // 같은 날 = 1(양 끝 포함), 이상하거나 미래 = 0
+    return n >= 1 ? n - 1 : -1;
+  };
+  /** '오늘 보냄' · '어제 보냄' · '3일 전 보냄'. 값이 없으면 '' */
+  util.waitedText = function (requestedAt, today) {
+    var n = util.waitedDays(requestedAt, today);
+    return n < 0 ? '' : n === 0 ? '오늘 보냄' : n === 1 ? '어제 보냄' : n + '일 전 보냄';
+  };
+  /** 하루 넘게 기다린 요청을 위로(오래된 것 먼저), 나머지는 들어온 순서 그대로. 새 배열을 돌려준다(서버 응답은 그대로) */
+  util.sortWaitedFirst = function (groups, today) {
+    return (groups || []).map(function (g, i) { return { g: g, i: i, n: util.waitedDays(g.requestedAt, today) }; })
+      .sort(function (a, b) {
+        var la = a.n >= 1, lb = b.n >= 1;
+        if (la !== lb) return la ? -1 : 1;
+        if (la && a.n !== b.n) return b.n - a.n;
+        return a.i - b.i;
+      }).map(function (x) { return x.g; });
+  };
   /** Enter를 '주 버튼 누르기'로 볼 키 입력인가(입력칸 한 줄에서 맨 Enter만). 한글 입력 중(isComposing·229)·여러 줄 칸·선택 칸·버튼 위·Shift/Ctrl 조합·시트가 열려 있을 때는 아니다 */
   util.enterPressesPrimary = function (ev, sheetOpen) {
     if (!ev || ev.key !== 'Enter' || sheetOpen) return false;
@@ -235,6 +257,13 @@ var UI = {};
     e.preventDefault();
     btn.click();
   });
+
+  /** UI.refreshStamp(onrefresh, at?) — '15:20 기준 · 새로고침'. 실시간이 아니라 불러온 시각임을 알리고, 눌러서 다시 불러오게 한다(홈·포털·요청 목록 위에 하나씩) */
+  UI.refreshStamp = function (onrefresh, at) {
+    var btn = makeBtn({ text: '새로고침', kind: 'secondary', onclick: function () { if (onrefresh) onrefresh(); } });
+    btn.className = 'btn secondary stamp-btn';
+    return el('div', { class: 'stamp' }, [el('span', { class: 'stamp-time', text: util.clockText(at || new Date()) + ' 기준' }), btn]);
+  };
 
   /** UI.actionBar([{text, onclick, kind:'primary'|'secondary'|'danger', disabled}], {mount:true}) — 아래 고정 바. mount면 body에 붙이고 main에 has-actionbar 표시 */
   UI.actionBar = function (buttons, opts) {
