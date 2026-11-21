@@ -40,7 +40,10 @@
     function typeKind(t) { return /^병/.test(t) ? 'byung' : /^학원/.test(t) ? 'hak' : /^가정/.test(t) ? 'ga' : 'mute'; }
     function stateKind(s) { return s === '확정' ? 'confirmed' : s === '취소' ? 'canceled' : 'requested'; }
     function stateText(s) { return s === '요청' && viewerParent ? '확인 중' : s; }   // 저장 값은 요청·확정·취소 — 학부모에게만 '확인 중'(writing.md 7절)
-    function excRow(e) { return row(e.dateKo, pillsOf([UI.statusPill(typeKind(e.type), e.type.replace(/\s*\(.*$/, '')), UI.statusPill(stateKind(e.state), stateText(e.state))])); }
+    function excRow(e) {
+      var r = row(e.dateKo, pillsOf([UI.statusPill(typeKind(e.type), e.type.replace(/\s*\(.*$/, '')), UI.statusPill(stateKind(e.state), stateText(e.state))]));
+      return e.reason ? el('div', {}, [r, el('div', { class: 'pt-note', text: e.reason })]) : r;   // 왜 이 기록인지 한 줄(서버가 유형·상태로만 만든다)
+    }
     function ymd(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
     function weekOf(today) {
       var p = today.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2]);
