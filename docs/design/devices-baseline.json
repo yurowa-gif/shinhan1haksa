@@ -241,6 +241,11 @@
    "id": "timetable:parent",
    "email": "test.parent@example.com",
    "query": "page=timetable&role=parent"
+  },
+  {
+   "id": "inbox",
+   "email": "test.admin@example.com",
+   "query": "page=inbox"
   }
  ],
  "results": {
@@ -1385,6 +1390,44 @@
    }
   },
   "timetable:parent": {
+   "android-360": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-390": {
+    "fails": {},
+    "shot": null
+   },
+   "iphone-375": {
+    "fails": {},
+    "shot": null
+   },
+   "android-360-font150": {
+    "fails": {},
+    "shot": null
+   },
+   "tablet-768": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1093": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1366": {
+    "fails": {},
+    "shot": null
+   },
+   "laptop-1536": {
+    "fails": {},
+    "shot": null
+   },
+   "desktop-1920": {
+    "fails": {},
+    "shot": null
+   }
+  },
+  "inbox": {
    "android-360": {
     "fails": {},
     "shot": null
