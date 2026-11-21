@@ -6,17 +6,19 @@
       el('h2', { text: '오늘 ' + UI.util.formatDateKo(d.today) }),
       el('div', { class: 'muted', text: d.termName + ' · 학사생 ' + d.studentCount + '명' })
     ]));
-    root.appendChild(el('div', { class: UI.cardClass(x.pending ? 'todo' : '') }, [
-      el('h2', {}, ['특이사항 요청 ', UI.badge(x.pending)]),
-      el('div', { class: 'muted', text: x.pending ? '확정할 요청이 ' + x.pending + '건 있습니다.' : '확정할 요청이 없습니다.' }),
-      UI.rowLink({ href: d.appUrl + '?page=exceptions&tab=requests', text: '요청 처리' })
-    ]));
-    root.appendChild(el('div', { class: 'card' }, [
-      el('h2', { text: '오늘·내일 특이사항' }),
-      el('div', { class: 'muted', text: '오늘 ' + x.today + '명 · 내일 ' + x.tomorrow + '명' }),
-      UI.rowLink({ href: d.appUrl + '?page=exceptions', text: '특이사항 입력' }),
-      UI.rowLink({ href: d.appUrl + '?page=results', text: '출결 결과 정리' }),
-      UI.rowLink({ href: d.appUrl + '?page=programs', text: '학사 프로그램 열기' })
+    var A = d.appUrl, dc = d.docs || {}, o = d.out || {};
+    root.appendChild(UI.todoList({ title: '오늘 처리할 것', items: [   // D17: 이미 홈 데이터에 있는 숫자만. 없는 숫자(복귀 예정일 지남·시간표 확인 대기)는 서버가 주면 자동으로 보인다
+      { label: '특이사항 확인 대기', count: x.pending, href: A + '?page=exceptions&tab=requests' },
+      { label: '오늘 빠지는 학생', count: x.today, hint: '내일 ' + (x.tomorrow || 0) + '명', href: A + '?page=exceptions&tab=list' },
+      { label: '퇴실 대상(2OUT)', count: o.out2, href: A + '?page=outs&tab=term' },
+      { label: '복귀 예정일이 지난 임시 퇴실', count: d.moves && d.moves.overdue, href: A + '?page=moves' },
+      { label: '서류 미제출', count: dc.items, hint: '학생 ' + (dc.students || 0) + '명', href: A + '?page=docs' },
+      { label: '시간표 확인 대기', count: d.timetable && d.timetable.confirmPending, href: A + '?page=timetable&role=attendance' }
+    ] }));
+    root.appendChild(UI.featureList([
+      { title: '출결', items: [{ text: '특이사항 입력·요청 처리', href: A + '?page=exceptions', badge: x.pending }, { text: '출결 결과 정리', href: A + '?page=results' }, { text: '학사 프로그램', href: A + '?page=programs' },
+        { text: '출석부', href: A + '?page=sheet' }, { text: '좌석표', href: A + '?page=seats' }] },
+      { title: '학생·생활', items: [{ text: 'OUT 현황', href: A + '?page=outs&tab=term' }, { text: '서류 체크리스트', href: A + '?page=docs', badge: dc.items }] }
     ]));
     if (d.out && !d.out.error) root.appendChild(el('div', { class: UI.cardClass(d.out.out1 || d.out.out2 ? 'key' : '') }, [
       el('h2', { text: 'OUT 현황' }),
@@ -31,16 +33,6 @@
         UI.rowLink({ href: d.appUrl + '?page=docs', text: '서류 체크리스트 열기' })
       ]));
     }
-    root.appendChild(el('div', { class: 'card' }, [
-      el('h2', { text: '출석부' }),
-      el('div', { class: 'muted', text: '날짜를 고르면 그날 출석부를 미리 보고 PDF로 받습니다.' }),
-      UI.rowLink({ href: d.appUrl + '?page=sheet', text: '출석부 열기' })
-    ]));
-    root.appendChild(el('div', { class: 'card' }, [
-      el('h2', { text: '좌석표' }),
-      el('div', { class: 'muted', text: '학사생 좌석을 확인합니다(배정은 학사 교사·관리자).' }),
-      UI.rowLink({ href: d.appUrl + '?page=seats', text: '좌석표 열기' })
-    ]));
   }
   /** 월별 일정 카드(C34, 결정 80): 오늘 일정과 다음 일정. 맨 아래에 붙인다 */
   (function () {

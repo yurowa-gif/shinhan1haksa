@@ -38,6 +38,34 @@
     ]));
   }
 
+  /** 관리자 '오늘 처리할 것'(D17). 홈 데이터에 있는 숫자만 쓴다 — 없는 숫자(특이사항 확인 대기·오늘 빠지는 학생·복귀 예정일 지남·시간표 확인 대기)는 서버가 주면 자동으로 보인다 */
+  function todoCard_(d) {
+    var o = d.out || {}, t = o.targets || {}, x = d.exc || {}, dc = d.docs || {}, f = d.food || {}, du = d.duty || {};
+    return UI.todoList({ title: '오늘 처리할 것', items: [
+      { label: '특이사항 확인 대기', count: x.pending, href: d.appUrl + '?page=exceptions&tab=requests' },
+      { label: '2OUT 대상 면담·퇴실 확정', count: (t.need || 0) + (t.ready || 0), hint: '면담 필요 ' + (t.need || 0) + ' · 확정 가능 ' + (t.ready || 0), href: d.appUrl + '?page=outs&tab=dismiss' },
+      { label: '복귀 예정일이 지난 임시 퇴실', count: d.moves && d.moves.overdue, href: d.appUrl + '?page=moves' },
+      { label: '서류 미제출', count: dc.items, hint: '학생 ' + (dc.students || 0) + '명', href: d.appUrl + '?page=docs' },
+      { label: '신청 서류 확인', count: f.docMissing, href: d.appUrl + '?page=moves' },
+      { label: '시간표 확인 대기', count: d.timetable && d.timetable.confirmPending, href: d.appUrl + '?page=timetable&role=admin' },
+      { label: '근무표 빈 날', count: du.emptyDays, href: d.appUrl + '?page=duty' }
+    ] });
+  }
+  /** 관리자 '전체 기능' 줄 링크(D17): 카드 열 몇 장을 대신한다. 숫자 배지는 위 '처리할 것'과 같은 값 */
+  function featureList_(d) {
+    var o = d.out || {}, t = o.targets || {}, x = d.exc || {}, dc = d.docs || {}, A = d.appUrl;
+    return UI.featureList([
+      { title: '출결', items: [
+        { text: '사전 특이사항', href: A + '?page=exceptions', badge: x.pending }, { text: '출결 결과 정리', href: A + '?page=results' }, { text: '학사 프로그램', href: A + '?page=programs' },
+        { text: '출석부', href: A + '?page=sheet' }, { text: '좌석표', href: A + '?page=seats' }, { text: '떨어뜨릴 짝', href: A + '?page=avoid' }] },
+      { title: '학생·생활', items: [
+        { text: 'OUT 기록', href: A + '?page=outs&tab=record', badge: (t.need || 0) + (t.ready || 0) }, { text: '서류 체크리스트', href: A + '?page=docs', badge: dc.items },
+        { text: '상담일지', href: A + '?page=counsel' }, { text: '연락처', href: A + '?page=contacts' }, { text: '시간표', href: A + '?page=timetable&role=admin' }] },
+      { title: '운영 설정', items: [
+        { text: '운영 기간', href: A + '?page=terms' }, { text: '명단 올리기', href: A + '?page=roster' }, { text: '자습 일정·블록', href: A + '?page=schedule' }] }
+    ]);
+  }
+
   /** 관리자 홈: 전체 현황 (PRD 8절) */
   function renderHome(d, root) {
     root.appendChild(el('div', { class: 'card' }, [
@@ -49,6 +77,7 @@
         statBox(d.counts.guardianLinks, '학부모 연결')
       ])
     ]));
+    root.appendChild(todoCard_(d));   // 오늘 처리할 것(D17): 이미 홈 데이터에 있는 숫자만 모아 맨 위에
     var roleStats = el('div', { class: 'stats' });
     Object.keys(d.roleCounts).forEach(function (k) { roleStats.appendChild(statBox(d.roleCounts[k], k)); });
     root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '계정(활성)' }), roleStats]));
@@ -62,43 +91,7 @@
         UI.rowLink({ href: d.appUrl + '?page=docs', text: '서류 체크리스트 열기' })
       ]));
     }
-    root.appendChild(el('div', { class: 'card' }, [
-      el('h2', { text: '운영 기간' }),
-      el('div', { class: 'muted', text: '학기·방학 기간을 추가하고 고칩니다.' }),
-      UI.rowLink({ href: d.appUrl + '?page=terms', text: '운영 기간 열기' })
-    ]));
-    root.appendChild(el('div', { class: 'card' }, [
-      el('h2', { text: '명단 올리기' }),
-      el('div', { class: 'muted', text: '새 운영 기간 명단을 받으면 시트에서 복사해 붙여 넣고 저장합니다.' }),
-      UI.rowLink({ href: d.appUrl + '?page=roster', text: '명단 올리기 열기' })
-    ]));
-    root.appendChild(el('div', { class: 'card' }, [
-      el('h2', { text: '자습 일정·블록' }),
-      el('div', { class: 'muted', text: '날짜별 운영 여부·시작·종료와 요일 유형별 출석 블록을 정합니다.' }),
-      UI.rowLink({ href: d.appUrl + '?page=schedule', text: '자습 일정 열기' })
-    ]));
-    root.appendChild(el('div', { class: 'card' }, [
-      el('h2', { text: '사전 특이사항' }),
-      el('div', { class: 'muted', text: '병결·가정사유·학원 등을 입력하고 담임·담당교사의 요청을 확정합니다.' }),
-      UI.rowLink({ href: d.appUrl + '?page=exceptions', text: '특이사항 열기' }),
-      UI.rowLink({ href: d.appUrl + '?page=results', text: '출결 결과 정리' }),
-      UI.rowLink({ href: d.appUrl + '?page=programs', text: '학사 프로그램 열기' })
-    ]));
-    root.appendChild(el('div', { class: 'card' }, [
-      el('h2', { text: '출석부' }),
-      el('div', { class: 'muted', text: '날짜를 고르면 그날 출석부를 미리 보고 PDF로 받습니다.' }),
-      UI.rowLink({ href: d.appUrl + '?page=sheet', text: '출석부 열기' })
-    ]));
-    root.appendChild(el('div', { class: 'card' }, [
-      el('h2', { text: '좌석표' }),
-      el('div', { class: 'muted', text: '공간·좌석 격자를 그리고 학생을 좌석에 배정합니다.' }),
-      UI.rowLink({ href: d.appUrl + '?page=seats', text: '좌석표 열기' }),
-      UI.rowLink({ href: d.appUrl + '?page=avoid', text: '떨어뜨릴 짝' }),
-      UI.rowLink({ href: d.appUrl + '?page=contacts', text: '연락처' }),
-      UI.rowLink({ href: d.appUrl + '?page=counsel', text: '상담일지' }),
-      UI.rowLink({ href: d.appUrl + '?page=timetable&role=admin', text: '시간표' })
-    ]));
-    root.appendChild(soonCard('계정·설정', '아직 준비 중입니다.'));
+    root.appendChild(featureList_(d));
   }
 
   /** 2단계 B 카드(CODING-B: 입퇴실·급식·서류). 이 함수의 몸통만 고친다(docs/plan/stage2.md 1절) */

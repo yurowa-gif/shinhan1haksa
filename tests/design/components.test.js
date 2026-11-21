@@ -285,3 +285,25 @@ test('util.clockText / waitedText / sortWaitedFirst', () => {
   assert.deepStrictEqual(gs.map((g) => g.id), ['a', 'b', 'c', 'd', 'e'], '원래 배열은 그대로');
   assert.deepStrictEqual(U.sortWaitedFirst([{ id: 'x' }, { id: 'y' }], today).map((g) => g.id), ['x', 'y'], 'requestedAt이 없으면 순서 그대로');
 });
+
+// D17: 오늘 빠지는 학생 정리 · 날짜 더하기
+test('util.addDays / whosOut', () => {
+  const U = UI.util;
+  assert.strictEqual(U.addDays('2027-03-26', 1), '2027-03-27');
+  assert.strictEqual(U.addDays('2027-03-31', 1), '2027-04-01');
+  assert.strictEqual(U.addDays('2027-12-31', 1), '2028-01-01');
+  assert.strictEqual(U.addDays('이상한', 1), '');
+  const T = '2027-03-26', N = '2027-03-27';
+  const g = (id, status, dates, blocks, type, short, display, extra) => Object.assign({ groupId: id, status, dates, rangeDates: dates, blocks, blocksText: blocks === 'ALL' ? '전체' : blocks, type, short, display }, extra || {});
+  const w = U.whosOut([
+    g('a', '확정', [T], '20:10-21:30', '학원(보강 포함)', '학원', '2. 나나'),
+    g('b', '확정', [T, N], 'ALL', '병결', '병결', '1. 가가'),
+    g('c', '요청', [T], 'ALL', '가정사유', '가정', '3. 다다'),
+    g('d', '취소', [T], 'ALL', '병결', '병결', '3. 라라'),
+    g('e', '확정', [T], '18:30-20:00', '가정사유(가족여행 포함)', '가정', '1. 마마'),
+    g('f', '확정', [T, N], 'ALL', '병결', '병결', '2. 바바', { canceledDates: [T] })
+  ], T, N);
+  assert.strictEqual(JSON.stringify(w.today.map((x) => x.display)), JSON.stringify(['1. 가가', '1. 마마', '2. 나나']), '확정만, 전체 먼저 → 블록 글자 순');
+  assert.strictEqual(JSON.stringify(w.tomorrow.map((x) => x.display)), JSON.stringify(['1. 가가', '2. 바바']), '내일은 취소된 날 제외 후 이름 순');
+  assert.strictEqual(JSON.stringify(U.whosOut(null, T, N)), JSON.stringify({ today: [], tomorrow: [] }));
+});

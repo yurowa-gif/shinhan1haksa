@@ -374,5 +374,28 @@
   .btn.secondary.stamp-btn { border: 0; background: transparent; color: var(--accent-ink); padding: 0 10px; min-width: auto; font-size: var(--font-sm); }
   .btn.secondary.stamp-btn::before { content: "↻"; margin-right: .3em; }
   .card.pt-outline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; font-weight: 700; }
+  /* D17: 오늘 처리할 것 · 전체 기능 · 오늘 빠지는 학생 */
+  .todo-row { display: flex; align-items: center; gap: 12px; min-height: var(--tap); padding: 8px 2px; border-top: 1px solid var(--line); color: var(--text); text-decoration: none; }
+  .todo-row:first-of-type { border-top: 0; }
+  .todo-n { flex: 0 0 auto; min-width: 2.2em; padding: 2px 10px; border-radius: var(--radius-pill); background: var(--signal); color: var(--signal-ink); font-weight: 800; text-align: center; }
+  .todo-l { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
+  .todo-l .muted { font-size: var(--font-sm); }
+  .todo-go { flex: 0 0 auto; font-size: 1.5rem; line-height: 1; color: var(--accent-ink); }
+  .todo-row:hover { background: var(--accent-weak); }
+  .feature-h { margin: 14px 0 2px; font-size: var(--font-sm); font-weight: 800; color: var(--muted-ink); }
+  .feature-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: var(--tap); padding: 6px 4px; color: var(--accent-ink); font-weight: 700; text-decoration: none; border-top: 1px solid var(--line); }
+  .feature-h + .feature-row { border-top: 0; }
+  .feature-row:hover { background: var(--accent-weak); }
+  .out-row { display: flex; align-items: center; gap: 8px; min-height: var(--tap); padding: 6px 0; border-top: 1px solid var(--line); }
+  .out-row:first-of-type { border-top: 0; }
+  .out-row .out-when { flex: 0 0 5.5em; color: var(--muted-ink); font-size: var(--font-sm); }
+  .out-row .out-who { flex: 1 1 auto; min-width: 0; font-weight: 700; }
+  .out-card .out-row:last-of-type { border-bottom: 0; }
+  .out-day { margin: 10px 0 2px; font-size: var(--font-sm); font-weight: 800; color: var(--muted-ink); }
+  @media (min-width: 840px) {
+    .home-cols.has-rail { grid-template-columns: minmax(200px, 1fr) minmax(0, 3fr); }
+    .home-cols.has-rail > .home-side { order: -1; }
+    .home-cols.has-rail > .home-side > .card.rail { position: static; }
+  }
   .exc-waited { color: var(--muted-ink); font-size: var(--font-sm); }
 </style>
