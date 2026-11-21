@@ -114,3 +114,42 @@ test('줄 정렬·개수·링크: 오래 기다린 순(시각 없는 줄은 맨 
   });
   assert.ok(!/@/.test(JSON.stringify(r.items)));
 });
+
+/* ───── C48 홈 숫자(getHomeData): 관리자 exc·moves·timetable, 출결 담당 moves ───── */
+
+const home = (x, who, role) => plain(x.env.call(who, 'getHomeData', role));
+const tempLeave = (x, sid) => x.env.asOwner((c) => c.appendRecord_('status_changes', { student_id: sid, item: '학사', value: '퇴실', effective_date: '2027-03-02', effective_date_auto: '2027-03-02',
+  requested_at: '2027-03-02T10:00:00', reason: '임시 퇴실', memo: '[임시] return:2027-03-02', source: 'F6', status: '유효', doc_submitted: 'FALSE', linked_change_id: '', cancel_reason: '' }, ADMIN));
+
+test('홈 숫자: 관리자 홈 exc는 출결 담당 홈과 같은 계산, timetable.confirmPending은 확인함 시간표 줄 수와 같다(숫자만)', () => {
+  const x = makeEnv(), s = x.mine[0];
+  plain(x.env.call(T1, 'saveException', { studentId: s.id, from: '2027-03-12', blocks: 'ALL', type: '병결', reason: SECRET }));
+  x.fixed(s.id, '2027-03', '동의'); x.fixed(x.notMine.id, '2027-03', '동의');
+  const a = home(x, ADMIN, 'admin'), t = home(x, ATT, 'attendance');
+  assert.deepStrictEqual(a.exc, t.exc, '관리자·출결 담당 홈의 exc는 같은 함수');
+  assert.strictEqual(a.exc.pending, inbox(x, ADMIN).counts.exception);
+  assert.strictEqual(a.timetable.confirmPending, 2);
+  assert.strictEqual(a.timetable.confirmPending, inbox(x, ADMIN).counts.timetable);
+  assert.deepStrictEqual(Object.keys(a.timetable), ['confirmPending']);
+  assert.ok(!('timetable' in t), '출결 담당은 시간표를 확인할 권한도 화면도 없어 숫자를 주지 않는다');
+  assert.ok(!/비밀 사유|010-1234|@/.test(JSON.stringify([a.moves, a.timetable])), '숫자만');
+});
+
+test('홈 숫자: 복귀 예정일 지난 임시 퇴실 수(moves.overdue)는 관리자·출결 담당 홈에만, 관리자 홈 food.tempLeave.n과 같다', () => {
+  const x = makeEnv();
+  assert.strictEqual(home(x, ADMIN, 'admin').moves.overdue, 0);
+  tempLeave(x, x.mine[0].id); tempLeave(x, x.notMine.id);
+  const a = home(x, ADMIN, 'admin'), t = home(x, ATT, 'attendance');
+  assert.deepStrictEqual([a.moves, t.moves], [{ overdue: 2 }, { overdue: 2 }]);
+  assert.strictEqual(a.food.tempLeave.n, a.moves.overdue, '숫자 출처가 같다');
+  assert.deepStrictEqual(Object.keys(a.moves), ['overdue']);
+});
+
+test('홈 숫자: 다른 역할 홈(학사 교사·담임·근무표 담당·학생·학부모)에는 moves·timetable.confirmPending이 없다(학사 교사 홈의 옛 timetable 카드는 그대로)', () => {
+  const x = makeEnv();
+  tempLeave(x, x.mine[0].id); x.fixed(x.mine[0].id, '2027-03', '동의');
+  [[T1, 'hall_teacher'], [HOMEROOM, 'homeroom'], [DUTY, 'duty_manager'], [STUDENT, 'student'], [PARENT, 'parent']].forEach(([who, role]) => {
+    const h = home(x, who, role);
+    assert.ok(!('moves' in h) && !(h.timetable && 'confirmPending' in h.timetable), role);
+  });
+});

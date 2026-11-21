@@ -26,6 +26,10 @@ function inboxSort_(items) {
   });
 }
 
+function inboxLoad_() {
+  return { terms: readAll_('terms'), students: readAll_('students'), enrollments: readAll_('enrollments'), changes: readAll_('status_changes') };
+}
+
 function inboxExceptions_(user, d, today) {
   if (!excCanConfirm_(user)) return [];
   var byId = {};
@@ -102,11 +106,21 @@ function inboxOuts_() {
  */
 function getInbox() {
   var user = requirePermission_('inbox.view');
-  var d = { terms: readAll_('terms'), students: readAll_('students'), enrollments: readAll_('enrollments'), changes: readAll_('status_changes') };
-  var today = today_();
+  var d = inboxLoad_(), today = today_();
   var all = inboxExceptions_(user, d, today).concat(inboxTimetables_(user, d, today), inboxDocs_(user, d), inboxOuts_());
   var items = inboxSort_(all);
   var counts = {};
   items.forEach(function (i) { counts[i.kind] = (counts[i.kind] || 0) + 1; });
   return { ok: true, items: items.slice(0, INBOX_MAX), counts: counts, total: items.length, more: Math.max(0, items.length - INBOX_MAX), labels: INBOX_LABEL, appUrl: ScriptApp.getService().getUrl() };
+}
+
+/**
+ * 홈 숫자(C48, getHomeData가 부른다): 숫자만 — 이름·내용 없음. 확인함과 같은 함수로 센다(숫자 출처 하나).
+ *  moves.overdue      복귀 예정일 지난 임시 퇴실 학생 수(관리자·출결 담당 홈, 전체 학사생 — 관리자 홈 food.tempLeave.n과 같은 계산)
+ *  timetable.confirmPending  시간표 확인 대기 수(확인함 timetable 줄 수). 시간표를 확인할 수 있는 관리자 홈에만 — 출결 담당은 확인 권한도 화면도 없다
+ */
+function inboxHomeInfo_(user, role) {
+  var d = inboxLoad_(), out = { moves: { overdue: foodTempLeaveOverdue_(user, 'admin', d.terms, d.students, d.enrollments, d.changes).n } };
+  if (role === 'admin') out.timetable = { confirmPending: inboxTimetables_(user, d, today_()).length };
+  return out;
 }
