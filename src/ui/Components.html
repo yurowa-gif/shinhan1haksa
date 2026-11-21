@@ -219,16 +219,21 @@ var UI = {};
     var head = [], main = [], side = [], seenCard = false;
     kids.forEach(function (n) {
       if (!isCard(n)) head.push(n);                                 // 오류·안내 줄은 맨 위
-      else if (has(n, 'todo') || has(n, 'key')) main.push(n);
+      else if (has(n, 'todo') || has(n, 'key') || has(n, 'todo-list') || has(n, 'fold')) main.push(n);   // 처리할 것·접힌 현황(.fold)도 왼쪽 본문 열
       else if (!seenCard && !(n.querySelector && n.querySelector('ul.list'))) head.push(n);   // 맨 위 카드(오늘·전체 현황). 목록(ul.list)이 든 카드(담임 홈의 우리 반 명단)는 머리가 아니라 참고 열로
       else side.push(n);
       if (isCard(n)) seenCard = true;
     });
-    var todo = main.filter(function (n) { return has(n, 'todo'); }).length;
+    // '해야 할 일 N건'의 N = 처리할 줄 수(처리할 것 카드는 줄마다, 그 밖의 노란 띠 카드는 한 장에 1). 카드 수와 줄 수가 엇갈려 보이지 않게
+    var todo = 0, hasList = false;
+    main.forEach(function (n) {
+      if (has(n, 'todo-list')) { hasList = true; todo += n.querySelectorAll ? n.querySelectorAll('.todo-row').length : 0; }
+      else if (has(n, 'todo')) todo += 1;
+    });
     kids.forEach(function (n) { root.removeChild(n); });
     var headBox = el('div', { class: 'home-head' }, head);
     var mainBox = el('div', { class: 'home-main' }, [el('h2', { class: 'home-h', text: todo ? '해야 할 일 ' + todo + '건' : '오늘 해야 할 일' })]);
-    if (!todo) mainBox.appendChild(el('p', { class: 'home-none', text: '지금 처리할 일이 없습니다.' }));
+    if (!todo && !hasList) mainBox.appendChild(el('p', { class: 'home-none', text: '지금 처리할 일이 없습니다.' }));   // 처리할 것 카드가 같은 말을 이미 하면 두 번 쓰지 않는다
     main.forEach(function (n) { mainBox.appendChild(n); });
     var cols = el('div', { class: 'home-cols' + (side.some(function (n) { return has(n, 'rail'); }) ? ' has-rail' : '') }, [mainBox]);
     if (side.length) {
@@ -249,8 +254,8 @@ var UI = {};
   UI.todoList = function (opts) {
     opts = opts || {};
     var items = (opts.items || []).filter(function (i) { return i && Number(i.count) > 0; });
-    if (!items.length) return el('div', { class: 'card' }, [el('h2', { text: opts.title || '오늘 처리할 것' }), el('div', { class: 'muted', text: opts.none || '지금 처리할 일이 없습니다.' })]);
-    return el('div', { class: UI.cardClass('todo') }, [el('h2', { text: opts.title || '오늘 처리할 것' })].concat(items.map(function (i) {
+    if (!items.length) return el('div', { class: 'card todo-list' }, [el('h2', { text: opts.title || '오늘 처리할 것' }), el('div', { class: 'muted', text: opts.none || '지금 처리할 일이 없습니다.' })]);
+    return el('div', { class: UI.cardClass('todo') + ' todo-list' }, [el('h2', { text: opts.title || '오늘 처리할 것' })].concat(items.map(function (i) {
       return el('a', { class: 'todo-row', href: i.href }, [
         el('span', { class: 'todo-n', 'aria-label': i.count + '건', text: Number(i.count) > 99 ? '99+' : String(i.count) }),
         el('span', { class: 'todo-l' }, [el('b', { text: i.label }), i.hint ? el('span', { class: 'muted', text: i.hint }) : null]),

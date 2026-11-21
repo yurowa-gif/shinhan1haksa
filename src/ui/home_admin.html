@@ -176,4 +176,23 @@
       root.appendChild(el('div', { class: UI.cardClass(f.count ? 'key' : '') }, kids));
     };
   })();
+  /** 관리자 홈(D18): 숫자·상태 카드(급식·인원, 기숙사, OUT 기록, 근무표, 서류, 일정, 계정…)를 '현황' 한 장으로 접는다. 맨 위 카드·처리할 것·전체 기능은 그대로 */
+  (function () {
+    var base = renderHome;
+    renderHome = function (d, root) {
+      base(d, root);
+      var kids = Array.prototype.slice.call(root.children), seen = false, moved = [];
+      kids.forEach(function (n) {
+        var isCard = n.classList && n.classList.contains('card');
+        if (!isCard) return;
+        if (!seen) { seen = true; return; }   // 맨 위 카드(전체 현황)
+        if (n.classList.contains('todo-list') || n.classList.contains('rail')) return;
+        moved.push(n);
+      });
+      if (!moved.length) return;
+      var fold = el('details', { class: 'card fold' }, [el('summary', {}, [el('span', {}, ['현황', el('span', { class: 'muted', text: '급식·인원 · 기숙사 · OUT · 근무표 · 서류 · 일정' })])])]);
+      moved.forEach(function (n) { fold.appendChild(n); });
+      root.appendChild(fold);
+    };
+  })();
 </script>

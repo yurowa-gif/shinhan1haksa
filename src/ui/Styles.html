@@ -375,6 +375,7 @@
   .btn.secondary.stamp-btn::before { content: "↻"; margin-right: .3em; }
   .card.pt-outline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; font-weight: 700; }
   /* D17: 오늘 처리할 것 · 전체 기능 · 오늘 빠지는 학생 */
+  .card.todo-list h2 { margin-bottom: 4px; }
   .todo-row { display: flex; align-items: center; gap: 12px; min-height: var(--tap); padding: 8px 2px; border-top: 1px solid var(--line); color: var(--text); text-decoration: none; }
   .todo-row:first-of-type { border-top: 0; }
   .todo-n { flex: 0 0 auto; min-width: 2.2em; padding: 2px 10px; border-radius: var(--radius-pill); background: var(--signal); color: var(--signal-ink); font-weight: 800; text-align: center; }
@@ -398,4 +399,12 @@
     .home-cols.has-rail > .home-side > .card.rail { position: static; }
   }
   .exc-waited { color: var(--muted-ink); font-size: var(--font-sm); }
+  /* D18: 접힌 '현황' — 숫자·상태 카드를 한 장으로 접어 홈 길이를 줄인다 */
+  details.fold { padding: 0; }
+  details.fold > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: var(--tap); padding: 8px 16px; cursor: pointer; list-style: none; font-weight: 800; color: var(--accent-ink); }
+  details.fold > summary::-webkit-details-marker { display: none; }
+  details.fold > summary::after { content: "펼치기 ▾"; flex: 0 0 auto; white-space: nowrap; font-size: var(--font-sm); font-weight: 700; color: var(--accent-ink); }
+  details.fold[open] > summary::after { content: "접기 ▴"; }
+  details.fold > summary .muted { display: block; font-weight: 400; font-size: var(--font-sm); }
+  details.fold > .card { margin: 0 8px 8px; }
 </style>
