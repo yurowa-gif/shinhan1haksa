@@ -344,4 +344,27 @@
     .pt-cols > div > .card:first-child { border-top: 0; padding-top: 8px; }
     body.tone-soft .actionbar { padding-left: max(16px, calc((100vw - 760px) / 2 + 32px)); padding-right: max(16px, calc((100vw - 760px) / 2 + 32px)); }
   }
+
+  /* ───────── 목록 | 상세 (D15 ⑤, docs/design/refresh/list-detail.md) ─────────
+     840px 이상에서만 두 칸. 그보다 좁으면 목록과 상세가 번갈아 나온다(.has-detail 이면 목록을 숨김). 서버 함수·권한은 그대로. */
+  .ld-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--line); }
+  .ld-row:last-child { border-bottom: 0; }
+  .ld-pick { flex: 1 1 auto; min-width: 0; min-height: var(--tap); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; text-align: left;
+    padding: 6px 10px; border: 0; border-left: 4px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+  .ld-pick .ld-name { font-weight: 700; }
+  .ld-pick .muted { font-size: var(--font-sm); }
+  .ld-pick[aria-current="true"] { background: var(--accent-weak); border-left-color: var(--accent); color: var(--accent-ink); }
+  .ld-pick:hover { background: var(--accent-weak); }
+  .ld-empty { display: none; padding: 24px 4px; }
+  @media (max-width: 839px) {
+    .ld.has-detail > .ld-list { display: none; }
+    .ld > .ld-detail:not(:has(> :not(.ld-empty))) { display: none; }
+  }
+  @media (min-width: 840px) {
+    .ld { display: grid; grid-template-columns: minmax(280px, 5fr) minmax(0, 7fr); gap: 16px; align-items: start; }
+    .ld > .ld-list { position: sticky; top: 8px; max-height: calc(100dvh - 92px); overflow: auto; margin-bottom: 0; }
+    .ld > .ld-detail { min-width: 0; }
+    .ld .row-open, .ld .ld-narrow { display: none; }   /* 두 칸에서는 줄 전체가 버튼이고 목록이 늘 보인다 */
+    .ld-empty { display: block; }
+  }
 </style>

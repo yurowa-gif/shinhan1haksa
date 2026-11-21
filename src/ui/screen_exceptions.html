@@ -21,6 +21,7 @@
     var body = el('div');
     root.appendChild(tabsBox); root.appendChild(body);
     var bar = null, timer = null, busy = false;
+    var mainEl = document.querySelector('main');   // 목록 탭만 넓은 본문(두 칸). 입력·요청 처리 탭은 읽기 폭 그대로
 
     function removeBar() {
       if (bar) { bar.remove(); bar = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); }
@@ -55,6 +56,7 @@
     }
     function drawTab() {
       clear(body); removeBar();
+      if (mainEl) mainEl.classList.toggle('wide', state.tab === 'list');
       if (state.tab !== 'input' && state.lastWarn) { body.appendChild(el('div', { class: 'notice warn', text: state.lastWarn })); state.lastWarn = ''; }   // 확정·취소 뒤 경고는 한 번 화면에도 남긴다
       if (state.tab === 'input') drawInput();
       else if (state.tab === 'requests') drawRequests('pending', '처리할 요청이 없습니다.');
@@ -317,6 +319,29 @@
       return item;
     }
 
+    /** 목록 탭: 840px 이상이면 왼쪽 줄 목록 | 오른쪽 고른 묶음 상세(확정·취소 버튼 그대로), 좁으면 지금처럼 카드를 쌓는다(D15 ⑤) */
+    var wideMq = window.matchMedia ? window.matchMedia('(min-width: 840px)') : { matches: false };
+    if (wideMq.addEventListener) wideMq.addEventListener('change', function () { if (state.ctx && state.tab === 'list') drawTab(); });
+    function listGroups(host, groups, reload, opts) {
+      if (!wideMq.matches) { groups.forEach(function (g) { host.appendChild(groupCard(g, reload, opts)); }); return; }
+      var box = el('div', { class: 'ld' });
+      host.appendChild(box);
+      (function paint() {   // 줄을 누르면 서버를 다시 부르지 않고 이 두 칸만 다시 그린다
+        var sel = groups.filter(function (g) { return g.groupId === state.listSel; })[0] || groups[0];
+        var detail = el('div', { class: 'ld-detail' }), list = el('div', { class: 'card ld-list' });
+        groups.forEach(function (g) {
+          var cancelled = g.status === '취소';
+          list.appendChild(el('div', { class: 'ld-row' + (g === sel ? ' on' : '') }, [
+            el('button', { type: 'button', class: 'ld-pick', 'aria-current': g === sel ? 'true' : null, onclick: function () { state.listSel = g.groupId; clear(box); paint(); } }, [
+              el('span', { class: 'ld-name' + (cancelled ? ' exc-cancelled' : ''), text: g.display + ' · ' + g.short }),
+              el('span', { class: 'muted', text: datesText(g) + ' · ' + g.blocksText })]),
+            pillFor(g)]));
+        });
+        detail.appendChild(el('div', { class: 'card' }, [groupCard(sel, reload, opts)]));
+        box.appendChild(list); box.appendChild(detail);
+      })();
+    }
+
     function drawRequests(scope, emptyText) {
       var card = el('div', { class: 'card' }, [el('div', { class: 'loading', text: '불러오는 중…' })]);
       body.appendChild(card);
@@ -350,7 +375,7 @@
           clear(card);
           card.appendChild(el('h2', { text: title + ' · ' + (filter.scope === 'range' && filter.from === filter.to ? r.liveStudentCount + '명' : r.groups.length + '건') }));   // 홈 "오늘 N명"과 같은 서버 계산
           if (!r.groups.length) { card.appendChild(UI.emptyState('이 조건에 해당하는 특이사항이 없습니다.', c.mode === 'confirm' || true ? { text: '특이사항 입력', onclick: function () { state.tab = 'input'; drawTabs(); drawTab(); } } : null)); return; }
-          r.groups.forEach(function (g) { card.appendChild(groupCard(g, function () { show(filter, title); }, { day: filter.scope === 'range' && filter.from === filter.to })); });
+          listGroups(card, r.groups, function () { show(filter, title); }, { day: filter.scope === 'range' && filter.from === filter.to });
         }).catch(function (err) { clear(card); showError(card, err); });
       }
       if (state.listMode === 'today') show({ scope: 'range', from: c.today, to: c.today }, ymdKo(c.today));
@@ -370,7 +395,7 @@
             clear(holder);
             holder.appendChild(el('h2', { style: 'margin-top:12px', text: s.grade + '. ' + s.name + ' · ' + r.groups.length + '건' }));
             if (!r.groups.length) { holder.appendChild(UI.emptyState('이 학생의 특이사항이 없습니다.')); return; }
-            r.groups.forEach(function (g) { holder.appendChild(groupCard(g, function () { show2(s); })); });
+            listGroups(holder, r.groups, function () { show2(s); });
           }).catch(function (err) { clear(holder); showError(holder, err); });
         }
       }

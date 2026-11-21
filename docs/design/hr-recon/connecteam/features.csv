@@ -1,0 +1,43 @@
+feature,area,priority,original,clone,notes
+기간 선택(급여 주기 프리셋),기간,must,yes,no,우리는 월 단위(운영 기간 안). 근거 C5 C13
+팀 요약 표(사람별 1줄 합계),요약,must,yes,no,우리는 학생 행 + 지각·조퇴·결석·OUT 합계 열. 근거 C5
+요일별 열 켜기(Daily Totals),요약,should,yes,no,우리는 날짜 열이 기본인 월간 격자. 근거 C5
+열 선택기,요약,could,yes,no,학교 맥락에선 고정 열 구성이 더 단순. 근거 C5
+개인 기간 타임시트(날짜별 행),상세,must,yes,no,휴대폰에서 학생 1명의 날짜 목록으로 대응. 근거 C6
+일·주 합계 열,상세,should,yes,no,우리는 월 합계 위주. 근거 C6
+날짜별 문제 표시(Issues 열·느낌표),문제,must,yes,no,칸 모서리 표시 + 행 끝 '확인 필요 n'. 근거 C1
+문제 유형(충돌·대기 요청·자동 퇴근·빈 근무일),문제,must,yes,no,우리 유형은 vocabulary.md에서 총괄이 확정. 근거 C1
+빈 근무일 문제 설정(기본 꺼짐),문제,could,yes,no,기호 비어 있음 표시는 우리에겐 기본 켬이 맞아 보임(ASSUMPTION). 근거 C1
+문제 무시·되돌리기(권한),문제,should,yes,no,무시도 audit_log에 남겨야 함. 근거 C1
+충돌 패널(겹친 근무·휴식·휴가),문제,could,yes,no,사전 특이사항과 고정 일정 충돌에 대응 가능. 근거 C4
+사람별 경고 건수 배지(Factorial Alerts 열),문제,must,yes,no,학생 행 끝 '확인 필요 n' 열 + 정렬. 근거 F1
+경고 유형별 필터,문제,should,yes,no,근거 F1 F3
+경고가 승인을 막지 않음(Factorial),확정,should,yes,no,우리는 확정 전 확인 대화상자 제안(ASSUMPTION 총괄 결정). 근거 F1
+한도 초과 숫자 강조,표시,could,yes,no,색만 쓰지 말고 기호 병행. 근거 C6
+수정 표시 점(파란·주황 마우스 올림),이력,should,yes,no,휴대폰 마우스 없음 → 누르면 이력 목록으로 개선. 근거 C9
+수정 이력·감사 기록,이력,must,yes,no,원본은 근거 모순. 우리는 audit_log 필수(CLAUDE.md 4). 근거 C9 F4
+근무 항목 편집,편집,must,yes,no,우리는 기호 변경 = 새 기록 + 이전 기록 취소(삭제 금지). 근거 C10
+관리자 메모·첨부 칸,편집,must,yes,no,조퇴 사유는 메모 칸(결정 38). 근거 C6
+기간 승인 = 전체 날짜 잠금,확정,must,yes,no,버튼 이름에 '잠금' 명시. 근거 C3
+날짜 단위 잠금(단일·일괄),확정,should,yes,no,근거 C3 C8
+다시 열기(권한자만),확정,must,yes,no,서버에서 권한 판정 + audit_log. 근거 C3 C11
+승인·다시 열기 권한 설정,권한,must,yes,no,우리는 Auth.gs 역할로. 근거 C2 C3
+자기 승인 제한,권한,could,yes,no,교사 6~8명 규모라 선택. 근거 C3
+기간 전 승인 경고,확정,should,yes,no,근거 C2
+승인 불가 이유 표시(버튼 숨김 대신),확정,should,no,no,원본은 사용자 지정 범위에서 버튼이 사라짐(C2). 우리 개선
+잠금 후 덧붙임 메모 허용,확정,could,no,no,원본은 잠금 후 메모도 불가(C11). ASSUMPTION 총괄 결정
+여러 사람 일괄 승인,일괄,should,yes,no,근거 C7
+일괄 내보내기(한 PDF / 사람별),내보내기,should,yes,no,우리는 Drive에 출석부 HTML·PDF. 근거 C7
+내보내기 형식(급여 합계·타임시트·감사 기록),내보내기,could,yes,no,급여 연동은 범위 밖. 근거 C5 C9
+승인 현황 한눈에(누가 확정됐나),요약,should,yes,no,근거 C17
+직원 제출(Submit),제출,could,yes,no,학생 제출 개념 없음 → 해당 없음에 가까움. 근거 C13
+직원 수정 요청 + 메모,제출,could,yes,no,학생·담당교사 사전 특이사항 신청에 대응 가능. 근거 C13
+직원 PDF 내려받기,내보내기,could,yes,no,근거 C14
+관리자 휴대폰 검토·승인,휴대폰,should,yes,no,리뷰 불만 1위가 휴대폰 관리자 기능 부족. 근거 C15 R2 R3 R4
+휴대폰 학생별 줄 목록,휴대폰,must,no,no,우리 요구(PC 격자와 같은 데이터)
+이름 열·합계 열·머리글 고정,표시,must,no,no,원본 근거 없음. 우리 요구
+자동 채움 값 표시(23:00 종료),표시,should,no,no,원본의 자동 퇴근 문제 표시에서 착안. 근거 C1
+동시 수정 충돌 알림(실시간 없음),편집,must,no,no,LockService + 갱신 시각 비교. 우리 요구
+GPS·지오펜스,범위 밖,could,yes,no,skip: 학교 맥락에 불필요
+급여 계산·초과근무 규칙·급여 연동,범위 밖,could,yes,no,skip: 학교 맥락에 불필요
+일괄 메뉴의 채팅·과제 생성,범위 밖,could,yes,no,skip: 기능 섞임을 피함
