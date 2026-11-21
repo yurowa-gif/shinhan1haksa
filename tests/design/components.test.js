@@ -267,3 +267,21 @@ test('util.enterPressesPrimary: 한 줄 입력칸의 맨 Enter만, 나머지는 
   assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', target: inp }, true), false, '시트가 열려 있으면 시트가 처리');
   assert.strictEqual(U.enterPressesPrimary({ key: 'a', target: inp }, false), false);
 });
+
+// D16: 불러온 시각·요청 경과 — 순수 함수
+test('util.clockText / waitedText / sortWaitedFirst', () => {
+  const U = UI.util;
+  assert.strictEqual(U.clockText(new Date(2027, 2, 26, 9, 5)), '09:05');
+  assert.strictEqual(U.clockText(new Date(2027, 2, 26, 15, 20)), '15:20');
+  const today = '2027-03-26';
+  assert.strictEqual(U.waitedText('2027-03-26T08:00:00', today), '오늘 보냄');
+  assert.strictEqual(U.waitedText('2027-03-25T23:50:00', today), '어제 보냄');
+  assert.strictEqual(U.waitedText('2027-03-23T10:00:00', today), '3일 전 보냄');
+  assert.strictEqual(U.waitedText('', today), '', '값이 없으면 빈 글');
+  assert.strictEqual(U.waitedText('이상한 값', today), '');
+  assert.strictEqual(U.waitedText('2027-03-30T10:00:00', today), '', '미래 날짜는 말하지 않는다');
+  const gs = [{ id: 'a', requestedAt: '2027-03-26T09:00:00' }, { id: 'b', requestedAt: '2027-03-25T09:00:00' }, { id: 'c', requestedAt: '2027-03-22T09:00:00' }, { id: 'd' }, { id: 'e', requestedAt: '2027-03-26T10:00:00' }];
+  assert.deepStrictEqual(U.sortWaitedFirst(gs, today).map((g) => g.id), ['c', 'b', 'a', 'd', 'e'], '하루 넘은 것(오래된 순)이 위, 나머지는 들어온 순서');
+  assert.deepStrictEqual(gs.map((g) => g.id), ['a', 'b', 'c', 'd', 'e'], '원래 배열은 그대로');
+  assert.deepStrictEqual(U.sortWaitedFirst([{ id: 'x' }, { id: 'y' }], today).map((g) => g.id), ['x', 'y'], 'requestedAt이 없으면 순서 그대로');
+});

@@ -113,7 +113,7 @@ test('D15 ②(반응형): Styles.html 에 중단점 두 곳(600·840)·홈 두 �
   assert.ok(/UI\.layoutPortal\(root\)/.test(css.readFile('src/ui/Portal.html')), 'Portal이 두 열 배치를 부른다');
   // 식수·교사 홈이 쓰는 홈 틀: Index.html 이 main.home 을 쓰고 교사 홈에서 layoutHome 을 부른다(학생·학부모는 부르지 않는다)
   const index = css.readFile('src/ui/Index.html');
-  assert.ok(/<main class="home">/.test(index) && /role !== 'student' && role !== 'parent'\) UI\.layoutHome\(root\)/.test(index));
+  assert.ok(/<main class="home">/.test(index) && /if \(teacherHome\) UI\.layoutHome\(root\)/.test(index));
   // 출석부 미리보기 iframe은 Tab 순서에서 뺀다(눌러도 되는 것이 없다)
   assert.ok(/class: 'sheet-frame'[^)]*tabindex: '-1'/.test(css.readFile('src/ui/screen_sheet.html')));
   // 교사 홈 OUT 알약: 0명이면 빨강이 아니라 회색
@@ -196,4 +196,27 @@ test('D15 ⑤a 목록|상세 적용: 문서·사진·CSS 약속', () => {
   assert.ok(/el\('button', \{ type: 'button', class: 'ld-pick'/.test(counsel) && /UI\.util\.studentLabel\(s\)/.test(counsel), '줄은 button, 학생 표기는 앱 표기');
   assert.ok(/if \(!wideMq\.matches\) Nav\.go\(/.test(counsel), '좁을 때만 Nav 기록');
   assert.ok(/call\('getCounselRoster'\)/.test(counsel) && /roster\.filter\(/.test(counsel), '왼쪽 목록은 getCounselRoster, 검색은 목록 안에서');
+});
+
+// D16(G1·G3·G5·G8): 화면 약속 — 소스 안의 약속을 검사한다
+test('D16 화면 약속: 기준 시각 부품·포털 OUT 한 줄·요청 경과·결과 격자 고정', () => {
+  const rd = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
+  const comp = rd('src/ui/Components.html'), portal = rd('src/ui/Portal.html'), index = rd('src/ui/Index.html'), exc = rd('src/ui/screen_exceptions.html'), res = rd('src/ui/screen_results.html'), styles = rd('src/ui/Styles.html');
+  assert.ok(/UI\.refreshStamp = function \(onrefresh, at\)/.test(comp) && /' 기준'/.test(comp), '공통 부품 하나');
+  assert.ok(/UI\.refreshStamp\(/.test(portal) && /UI\.refreshStamp\(load\)/.test(index) && /UI\.refreshStamp\(load\)/.test(exc), '포털·교사 홈·요청 목록에 하나씩');
+  assert.ok(/pt-outline/.test(portal) && /이번 학기 OUT ' \+ Math\.min\(o\.total, 2\) \+ '\/2'/.test(portal), '포털 OUT n/2 한 줄');
+  assert.ok(/U\.sortWaitedFirst\(r\.groups, state\.ctx\.today\)/.test(exc) && /scope === 'pending'/.test(exc), '요청 처리만 하루 넘은 것 위로(정렬만)');
+  assert.ok(/\.res-wrap \{ overflow: auto; max-height: 70dvh/.test(res.replace('70vh; max-height: 70dvh', '70dvh').replace(/max-height: 70vh; /, '')) || /max-height: 70dvh/.test(res), '결과 격자 상자 높이 제한');
+  assert.ok(/\.res-table thead th \{ position: sticky; top: 0/.test(res) && /tr\.total th, \.res-table tr\.total td \{ position: sticky; bottom: 0/.test(res), '머리 행·합계 행 고정(이름 열은 이미 고정)');
+  assert.ok(/\.stamp \{/.test(styles) && /\.card\.pt-outline/.test(styles), '스타일');
+});
+
+// D16: 문서가 사진 20장을 모두 싣고, 서버 부탁(requestedAt)과 출석부 화면 제외 이유를 밝힌다
+test('D16 문서: 사진 전부 참조, requestedAt 부탁, screen_sheet 제외 이유, 건너뛴 것', () => {
+  const dir = path.join(ROOT, 'docs', 'design', 'refresh');
+  const md = fs.readFileSync(path.join(dir, 'd16.md'), 'utf8');
+  const pics = fs.readdirSync(path.join(dir, 'd16')).filter((f) => f.endsWith('.png'));
+  assert.ok(pics.length >= 20, '사진 20장 이상');
+  pics.forEach((f) => assert.ok(md.includes('d16/' + f), f + ' 문서에 없음'));
+  ['requestedAt', 'excGroupView_', '코딩A', '출석부 화면(`screen_sheet`)은 하지 않았습니다', '건너뛴 것·확인 못 한 것'].forEach((w) => assert.ok(md.includes(w), w));
 });

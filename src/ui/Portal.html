@@ -71,6 +71,9 @@
           UI.rowLink({ href: base + '?page=timetable&role=parent&student=' + encodeURIComponent(s.id), text: '시간표 보고 동의하기' })]));
       }
       var o = p.outs, live = o.items.filter(function (i) { return i.status === '유효'; });
+      // 할 일 카드 바로 밑 한 줄: 이번 학기 OUT n/2(숫자 하나) — 자세한 것은 아래 OUT 카드
+      root.appendChild(el('div', { class: 'card pt-outline' }, [o.total >= 2 ? UI.statusPill('out2', '퇴실 대상') : o.total === 1 ? UI.statusPill('out1', '1OUT') : UI.statusPill('mute', 'OUT 없음'),
+        el('span', { text: '이번 학기 OUT ' + Math.min(o.total, 2) + '/2' })]));
       if (o.total >= 2 && !parent) {
         root.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: 'OUT이 2번 쌓여 퇴실 대상이 되었습니다. ' + (p.teacher ? '담당 ' + p.teacher + ' 선생님이' : '담당 선생님이') + ' 학부모님과 면담한 뒤 관리자 선생님이 퇴실을 정합니다. 궁금한 점은 담당 선생님께 먼저 물어봐 주세요.' }));
       }
@@ -110,7 +113,9 @@
       var upKids = up.length ? up.map(function (e) { return row(e.dateKo, e.title); }) : [UI.emptyState('앞으로 잡힌 학사 일정이 없습니다.')];
       upKids.push(link('월별 일정 열기', function () { show('month'); }));
       root.appendChild(card('앞으로 일정', upKids, 'side'));
-      UI.layoutPortal(root);   // 넓은 화면(840px~)에서 왼쪽 = 할 일·OUT·출결, 오른쪽 = 자리·급식·상담·일정
+      UI.layoutPortal(root);
+      root.insertBefore(UI.refreshStamp(function () { renderPortal(root, studentId, '', ''); }), root.firstChild);   // 불러온 시각 + 다시 불러오기
+      // 넓은 화면(840px~)에서 왼쪽 = 할 일·OUT·출결, 오른쪽 = 자리·급식·상담·일정
     }
 
     function outsView(p, back) {
