@@ -235,6 +235,10 @@
     "confirmExceptionGroups": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getInbox": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }
