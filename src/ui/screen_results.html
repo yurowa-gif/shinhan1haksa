@@ -98,9 +98,17 @@
       }
       if (d && d.classes && d.classes.length > 1) {
         var box = el('div', { class: 'res-classes', role: 'group', 'aria-label': '반' });
-        d.classes.forEach(function (c) {
+        var grades = [];
+        d.classes.forEach(function (c) { if (grades.indexOf(c.grade) < 0) grades.push(c.grade); });
+        var curGrade = d.pick ? d.pick.grade : d.classes[0].grade, shownClasses = d.classes;
+        if (d.classes.length > 8 && grades.length > 1) {   // 반이 많으면(28개) 학년을 먼저 고르고 그 학년의 반만 한 줄에 보인다(D15 ⑤)
+          head.appendChild(UI.segmented({ label: '학년', value: String(curGrade), options: grades.map(function (g) { return { value: String(g), label: g + '학년' }; }),
+            onchange: function (v) { var first = d.classes.filter(function (c) { return String(c.grade) === v; })[0]; if (first) { state.grade = first.grade; state.classNo = first.classNo; load(); } } }));
+          shownClasses = d.classes.filter(function (c) { return String(c.grade) === String(curGrade); });
+        }
+        shownClasses.forEach(function (c) {
           var on = d.pick && d.pick.grade === c.grade && String(d.pick.classNo) === String(c.classNo);
-          box.appendChild(el('button', { type: 'button', class: on ? 'chip on' : 'chip', 'aria-pressed': on ? 'true' : 'false', text: c.label, onclick: function () { state.grade = c.grade; state.classNo = c.classNo; load(); } }));
+          box.appendChild(el('button', { type: 'button', class: on ? 'chip on' : 'chip', 'aria-pressed': on ? 'true' : 'false', text: shownClasses === d.classes ? c.label : c.classNo + '반', onclick: function () { state.grade = c.grade; state.classNo = c.classNo; load(); } }));
         });
         head.appendChild(box);
       }
