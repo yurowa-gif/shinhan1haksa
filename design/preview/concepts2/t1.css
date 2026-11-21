@@ -1,32 +1,13 @@
-/* 1 흑백과 형광펜: 각진 선, 검은 버튼, 상자 0개. 강조는 큰 숫자에 형광펜 한 줄 */
-header.top { background: var(--background); color: var(--foreground); border-bottom: 1px solid var(--foreground); }
-header.top h1 { color: var(--foreground); font-weight: 800; } header.top .who { color: var(--muted-foreground); } header.top :focus-visible { outline-color: var(--ring); }
-.back { color: var(--foreground); }
-.card, body.tone-soft .card, .card.todo, .card.key, body.tone-soft .card.todo, body.tone-soft .card.key { background: none; box-shadow: none; border: 0; border-top: 1px solid var(--foreground); border-radius: 0; padding: 16px 0 8px; margin: 0 0 8px; }
-body.tone-soft main { background: none; border-radius: 0; margin: 0 auto; padding: 8px 16px 16px; }
-body.tone-soft .card.todo h2 { color: var(--foreground); }
-.card h2 { font-weight: 800; }
-.home-h, .feature-h, .out-day { font-size: var(--font-sm); font-weight: 700; color: var(--foreground); letter-spacing: .04em; }
-.row-link, .feature-row, .todo-row, ul.list li, .ld-row { border-color: var(--border); }
-/* 알약 대신: 바탕 없는 굵은 글자 + 아이콘. 할 일·퇴실 대상만 면 */
-.pill { background: none !important; padding: 0 2px; border-radius: 0; font-weight: 700; color: var(--foreground); }
-.pill.s-confirmed { color: var(--success); } .pill.s-canceled { color: var(--muted-foreground); }
-.pill.todo, .pill.s-requested, .pill.out-1 { background: linear-gradient(transparent 45%, var(--point) 45%, var(--point) 92%, transparent 92%) !important; color: var(--foreground); }
-.pill.out-2 { background: var(--destructive) !important; color: #fff; padding: 2px 8px; }
-.pill.mute, .pill.c-hak, .pill.c-ga, .pill.c-byung { box-shadow: inset 0 0 0 1.5px var(--foreground); padding: 2px 8px; }
-.todo-n { font-size: 1.5rem; font-weight: 800; background: linear-gradient(transparent 45%, var(--point) 45%, var(--point) 90%, transparent 90%); padding: 0 4px; text-align: center; }
-.count { background: var(--foreground); color: var(--background); border-radius: 0; }
-.btn { border-width: 1.5px; font-weight: 700; } .btn.secondary { border: 1.5px solid var(--foreground); color: var(--foreground); }
-.field input, .field select, .field textarea, body.tone-soft .field input, body.tone-soft .field select, body.tone-soft .field textarea { border: 1.5px solid var(--foreground); }
-.segmented, body.tone-soft .segmented { background: none; box-shadow: inset 0 0 0 1.5px var(--foreground); padding: 0; gap: 0; } .seg.on { background: var(--foreground); color: var(--background); }
-.chip, .tab { border: 1.5px solid var(--foreground); }
-.notice, .error { border-radius: 0; background: none; border: 0; border-left: 4px solid currentColor; color: var(--foreground); }
-.stat { background: none; border-radius: 0; border-top: 1px solid var(--foreground); padding: 8px 0 4px; } .stats { gap: 16px; grid-template-columns: repeat(3, 1fr); } .stat .n { font-weight: 800; }
-.sheet { border-radius: 0; border-top: 4px solid var(--foreground); }
-details.fold > summary { padding-left: 0; padding-right: 0; }
-/* hero */
-.card.hero, body.tone-soft .card.hero { border-top: 6px solid var(--foreground); padding: 12px 0 8px; }
-.hero-eyebrow { font-weight: 700; letter-spacing: .04em; }
-.hero-big { font-size: 6rem; letter-spacing: -.04em; background: linear-gradient(transparent 48%, var(--point) 48%, var(--point) 86%, transparent 86%); padding: 0 8px 0 0; }
-.hero-name { font-size: 2.6rem; letter-spacing: -.02em; display: inline; background: linear-gradient(transparent 48%, var(--point) 48%, var(--point) 86%, transparent 86%); }
-.hero-facts { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--foreground); }
+/* 1 Supabase: hero는 벤토(도시락 칸) — 큰 칸 하나 + 작은 칸들. 시각 요소 = 민트 면과 점 격자 */
+.card.hero, body.tone-soft .card.hero, body.tone-soft .card.hero:first-child { background: none; border: 0; box-shadow: none; padding: 0; overflow: visible; display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.card.hero > * { grid-column: 1 / -1; }
+.bento-main { position: relative; overflow: hidden; background: var(--primary); color: var(--primary-foreground); border-radius: var(--r-xl); padding: 20px 16px 16px; box-shadow: var(--shadow-sm); }
+.bento-main .hero-eyebrow { color: var(--primary-foreground); }
+.bento-main .hero-art { right: -24px; top: -24px; width: 200px; height: 200px; background: radial-gradient(circle, color-mix(in srgb, var(--primary-foreground) 55%, transparent) 1.5px, transparent 2px) 0 0 / 14px 14px; -webkit-mask: radial-gradient(circle at 70% 30%, #000 20%, transparent 70%); mask: radial-gradient(circle at 70% 30%, #000 20%, transparent 70%); }
+.bento-main .row-link.hero-cta { background: var(--primary-foreground); color: var(--primary); border: 0; border-radius: var(--r-md); padding: 12px 16px; font-weight: 600; margin-top: 16px; justify-content: center; gap: 4px; border-top: 0; }
+.bento-main .row-link.hero-cta::after { color: var(--primary); margin-left: 4px; }
+.card.hero .stats { display: contents; } .card.hero .stat { grid-column: span 2; background: var(--card); box-shadow: var(--shadow-xs); }
+.card.hero #home-duty, .card.hero > .row-link:not(.hero-cta) { background: var(--card); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 8px 12px; margin: 0; box-shadow: var(--shadow-xs); }
+.card.hero #home-duty .row-link { border-top: 1px solid var(--border); }
+.hero-fact { background: color-mix(in srgb, var(--primary-foreground) 8%, transparent); border-color: color-mix(in srgb, var(--primary-foreground) 25%, transparent); }
+@media (min-width: 840px) { .bento-main { grid-column: span 4 !important; grid-row: span 3; padding: 28px 24px 24px; } .card.hero .stat { grid-column: span 2; } .card.hero #home-duty, .card.hero > .row-link:not(.hero-cta) { grid-column: span 2; } }

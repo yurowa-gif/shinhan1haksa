@@ -1,8 +1,8 @@
 /**
- * D20 시안(코드 병합 없음): shadcn 변수 체계 테마 3벌 + 한글 웹폰트 + 홈 hero + Lucide 아이콘을 **완성된 3안**으로 실제 화면에 덧씌워 찍는다.
+ * D20 시안(코드 병합 없음): tweakcn 프리셋 테마 3벌(shadcn 변수·부품 규격) + 한글 웹폰트 + 홈 hero + Lucide 아이콘을 **완성된 3안**으로 실제 화면에 덧씌워 찍는다.
  * 실행: FONT_DIR=<글꼴 npm 패키지를 받은 폴더> node design/preview/concepts2.js [now t1 t2 t3] [--font150] [--boards]
  *   → design/preview/out/concepts2/<안>-<화면>.png, board-<안>-phone.png · board-<안>-laptop.png · summary-*.png, report.json(기준 측정 + 글꼴 내려받은 KB)
- * 글꼴은 저장소에 넣지 않는다. FONT_DIR에서 `npm i pretendard @sun-typeface/suit wanted-sans @fontsource-variable/hahmlet`로 받아 둔 파일을
+ * 글꼴은 저장소에 넣지 않는다. FONT_DIR에서 `npm i pretendard wanted-sans @fontsource-variable/hahmlet @fontsource/black-han-sans`로 받아 둔 파일을
  *   가짜 주소(https://fonts.local/…)로 내려 주고 바이트를 센다(실제 속도는 학교 망에서 따로 재야 한다).
  * 아이콘은 design/preview/concepts2/icons/*.svg (Lucide, ISC — 같은 폴더 LICENSE).
  */
@@ -20,7 +20,8 @@ const FONT_CSS = {   // 글꼴마다: 패키지 안 CSS(잘게 나눈 subset, un
   wanted: 'wanted-sans/fonts/webfonts/variable/split/WantedSansVariable.css',
   pretendard: 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css',
   suit: '@sun-typeface/suit/fonts/variable/woff2/SUIT-Variable.css',
-  hahmlet: '@fontsource-variable/hahmlet/wght.css'
+  hahmlet: '@fontsource-variable/hahmlet/wght.css',
+  blackhan: '@fontsource/black-han-sans/korean-400.css'
 };
 const IDS = ['now', 't1', 't2', 't3'];
 const read = (f) => fs.readFileSync(path.join(DIR, f), 'utf8');
@@ -47,8 +48,9 @@ async function serveFonts(page, stats) {
 }
 /** hero: 지금 화면의 첫 카드(오늘·전체 현황·이름)를 '오늘 한눈에' 영역으로 바꾼다. 숫자·글자는 화면에 이미 있는 것만 옮긴다(새 데이터 없음).
  *  실제로 넣을 때는 UI.hero 부품을 만들고 서버 값은 그대로 쓴다. 글자 기호(←·●)도 여기서 지운다(아이콘으로 바뀜) */
-async function makeHero(page) {
-  await page.evaluate(() => {
+async function makeHero(page, bento) {
+  await page.evaluate((bento) => {
+    if (bento) document.documentElement.dataset.bento = '1';
     document.querySelectorAll('.back').forEach((b) => { b.textContent = b.textContent.replace(/^[←\s]+/, ''); });
     document.querySelectorAll('.pill').forEach((p) => { p.childNodes.forEach((n) => { if (n.nodeType === 3) n.textContent = n.textContent.replace(/^[\s•●▲✓…⊘⛔]+\s*/, ''); }); });
     const home = document.getElementById('home'); if (!home) return;
@@ -60,20 +62,25 @@ async function makeHero(page) {
     card.classList.add('hero');
     const h2 = text(card.querySelector('h2')), sub = text(card.querySelector(':scope > .muted:not(#home-duty)'));
     const todoH = text(home.querySelector('.home-main .home-h')), m = todoH.match(/(\d+)건/);
-    const front = [];
-    if (home.querySelector('.home-main')) {   // 교사 화면: 오늘 날짜 + 처리할 건수
+    const front = [], art = '<div class="hero-art" aria-hidden="true"></div>';
+    const cta = card.querySelector(':scope > .row-link:last-of-type') && [...card.querySelectorAll(':scope > .row-link')].find((a) => /확인함/.test(a.textContent));
+    if (home.querySelector('.home-main')) {   // 교사 화면: 오늘 날짜 + 처리할 건수 + 버튼 하나(확인함)
       const date = /^오늘/.test(h2) ? h2.replace(/^오늘\s*/, '') + (sub ? ' · ' + sub : '') : sub;
       front.push(el('hero-eyebrow', esc(date)));
       front.push(el('hero-row', '<span class="hero-big">' + (m ? m[1] : '0') + '</span><span class="hero-unit">건</span><span class="hero-cap">오늘 처리할 일</span>'));
-    } else {   // 학생·학부모: 이름 + 내 상태
+    } else {   // 학생·학부모: 이름 + 이번 학기 OUT n/2 + 할 일
       const out = text(home.querySelector('.pt-outline')).match(/(\d+)\s*\/\s*(\d+)/), todo = home.querySelectorAll('.card.todo').length;
       front.push(el('hero-eyebrow', esc(sub)));
       front.push(el('hero-name', esc(h2)));
-      front.push(el('hero-facts', (out ? '<span><b>' + out[1] + '</b>/ ' + out[2] + ' OUT</span>' : '') + '<span><b>' + todo + '</b>할 일</span>'));
+      front.push(el('hero-facts', (out ? '<div class="hero-fact"><b>' + out[1] + '<small> / ' + out[2] + '</small></b>이번 학기 OUT</div>' : '') + '<div class="hero-fact"><b>' + todo + '<small> 건</small></b>지금 할 일</div>'));
     }
-    front.reverse().forEach((n) => card.insertBefore(n, card.firstChild));
+    const main = el('bento-main', art);   // 큰 칸(벤토 배치에서는 이 칸이 가장 큼)
+    front.forEach((n) => main.appendChild(n));
+    if (cta) { cta.classList.add('hero-cta'); cta.textContent = '확인함 열기'; main.appendChild(cta); }
+    card.insertBefore(main, card.firstChild);
+    if (!document.documentElement.dataset.bento) { while (main.lastChild) card.insertBefore(main.lastChild, main.nextSibling || null); main.remove(); [...card.children].filter((c) => /hero-(art|eyebrow|row|name|facts)|hero-cta/.test(c.className)).reverse().forEach((c) => card.insertBefore(c, card.firstChild)); const order = ['hero-art', 'hero-eyebrow', 'hero-row', 'hero-name', 'hero-facts', 'hero-cta']; [...card.children].filter((c) => order.some((o) => c.classList.contains(o))).sort((x, y) => order.findIndex((o) => x.classList.contains(o)) - order.findIndex((o) => y.classList.contains(o))).forEach((c, i, arr) => card.insertBefore(c, i === 0 ? card.firstChild : arr[i - 1].nextSibling)); }
     if (stamp) card.parentNode.insertBefore(stamp, card.nextSibling);   // 기준 시각은 hero 아래로
-  });
+  }, bento);
 }
 
 async function shootAll(browser, want, font150) {
@@ -90,7 +97,7 @@ async function shootAll(browser, want, font150) {
       if (font150) await s.page.addStyleTag({ content: 'html { font-size: 27px !important; }' });
       await s.settle();
       if (sc.act) await sc.act(s);
-      await s.settle(); await makeHero(s.page);
+      await s.settle(); await makeHero(s.page, id === 't1');
       await s.page.evaluate(() => document.fonts.ready); await s.page.waitForTimeout(500);
       const m = await measure(s.page, sc.dev === 'phone');
       m.fontKB = Math.round(stats.bytes / 1024); m.fontFiles = stats.files;

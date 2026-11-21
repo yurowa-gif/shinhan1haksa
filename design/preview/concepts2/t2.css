@@ -1,34 +1,22 @@
-/* 2 한지와 먹: 종이 바탕, 명조 제목, 가는 선과 점선. 건수는 붉은 도장 */
-header.top { background: var(--background); color: var(--foreground); border-bottom: 3px double var(--foreground); }
-header.top h1 { color: var(--foreground); font-size: 1.25rem; } header.top .who { color: var(--muted-foreground); } header.top :focus-visible { outline-color: var(--ring); }
-.back { color: var(--foreground); font-weight: 400; }
-.card, body.tone-soft .card, .card.todo, .card.key, body.tone-soft .card.todo, body.tone-soft .card.key { background: none; box-shadow: none; border: 0; border-top: 1px solid var(--border); border-radius: 0; padding: 20px 0 8px; margin: 0 0 4px; }
-body.tone-soft main { background: none; border-radius: 0; margin: 0 auto; padding: 8px 16px 16px; }
-body.tone-soft .card.todo h2 { color: var(--foreground); }
-.card h2, body.tone-soft .card h2 { font-size: 1.25rem; font-weight: 700; }
-.card.todo > h2::before { content: ""; display: inline-block; width: .5em; height: .5em; border-radius: 50%; background: var(--point); margin-right: .45em; vertical-align: .12em; }
-.home-h { font-family: var(--font-head), serif; font-size: 1rem; color: var(--foreground); margin: 28px 0 0; padding-bottom: 4px; border-bottom: 1px solid var(--foreground); }
-.row-link, .feature-row, .todo-row, ul.list li, .ld-row, .out-row { border-top-style: dotted; border-bottom-style: dotted; border-color: var(--input); }
-.pill { background: none !important; padding: 0 2px; font-weight: 700; }
-.pill.out-2 { background: var(--destructive) !important; color: var(--primary-foreground); padding: 2px 8px; }
-.pill.mute, .pill.c-hak, .pill.c-ga, .pill.c-byung { background: var(--secondary) !important; padding: 2px 8px; }
-.pill.todo, .pill.s-requested { color: var(--point); }
-.todo-n { color: var(--point); font-weight: 700; font-size: 1.5rem; }
-.count { background: none; color: var(--point); font-family: var(--font-head), serif; font-weight: 700; }
-.btn { font-weight: 700; } .btn.secondary { border: 1px solid var(--foreground); color: var(--foreground); background: none; }
-.segmented, body.tone-soft .segmented { background: none; border-bottom: 1px solid var(--foreground); border-radius: 0; padding: 0; gap: 0; }
-.seg { border-radius: 0; font-weight: 400; border-bottom: 3px solid transparent; } .seg.on { background: none; font-weight: 700; border-bottom-color: var(--foreground); }
-.notice, .error { background: var(--card); border: 1px solid var(--border); }
-.stat { background: none; border-radius: 0; padding: 4px 0; display: flex; align-items: baseline; gap: 8px; border-bottom: 1px dotted var(--input); } .stats { gap: 0; grid-template-columns: 1fr; } .stat .n { font-size: 1.5rem; min-width: 2.2em; }
-.sheet { background: var(--card); } .actionbar { background: var(--background); }
-details.fold > summary { padding-left: 0; padding-right: 0; }
-/* hero: 날짜 한 줄 + 도장 */
-.card.hero, body.tone-soft .card.hero { border-top: 0; padding: 12px 0 16px; border-bottom: 3px double var(--foreground); margin-bottom: 8px; }
-.hero-eyebrow { font-family: var(--font-head), serif; font-size: 1rem; }
-.hero-row { align-items: center; gap: 16px; margin-top: 12px; }
-.hero-big { font-size: 4rem; color: var(--point); border: 4px solid var(--point); border-radius: 10px; padding: 4px 16px 8px; transform: rotate(-4deg); font-weight: 700; }
-.hero-unit { display: none; }
-.hero-cap { font-family: var(--font-head), serif; font-size: 1.5rem; line-height: 1.3; margin: 0; flex: 1 1 8em; }
-.hero-name { font-size: 2.4rem; font-weight: 700; }
-.hero-facts b { color: var(--point); }
-@media (min-width: 600px) { .stats { grid-template-columns: repeat(3, 1fr); gap: 0 24px; } }
+/* 2 Neo Brutalism: 테두리는 프리셋 border=검정을 2px로, 그림자는 프리셋의 4px 4px 0. hero 시각 요소 = 노란 면 + 기울인 딱지 */
+.card.todo, .card.key, body.tone-soft .card.todo, body.tone-soft .card.key, details.fold, .btn, .chip, .tab, .field input, .field select, .field textarea, .notice, .error, .sheet, .hero-fact, .card.hero .stat { border-width: 2px; border-color: var(--border); }
+.btn.secondary { border: 2px solid var(--border); } .btn { border: 2px solid var(--border); font-family: var(--font-body), sans-serif; font-weight: 700; }
+.segmented, body.tone-soft .segmented { border: 2px solid var(--border); background: var(--background); padding: 0; } .seg { font-weight: 600; color: var(--foreground); } .seg.on { background: var(--secondary); box-shadow: none; }
+.chip.on.on, .tab.on.on { border-color: var(--border); }
+header.top { border-bottom: 3px solid var(--border); } header.top h1 { font-weight: 400; font-size: 1.25rem; }
+.card h2, body.tone-soft .card h2, .hero-cap, .hero-name, .hero-big, .stat .n, .todo-n { font-weight: 400; }   /* 검은고딕은 굵기가 하나(매우 굵음) */
+.row-link, .feature-row, .todo-row, ul.list li, .ld-row, .out-row { border-color: var(--border); }
+.pill { border: 2px solid var(--border); border-radius: 0; font-weight: 700; background: var(--background); color: var(--foreground); }
+.pill.todo, .pill.s-requested, .pill.out-1 { background: var(--secondary); color: var(--secondary-foreground); } .pill.s-confirmed { background: var(--success-soft); color: var(--foreground); }
+.pill.out-2 { background: var(--destructive); color: var(--destructive-foreground); }
+.todo-n { background: var(--secondary); border: 2px solid var(--border); text-align: center; min-width: 2em; padding: 0 4px; }
+.count { border-radius: 0; background: var(--accent-sh); color: var(--accent-foreground); border: 2px solid var(--border); }
+.notice.info { background: var(--accent-sh); color: var(--accent-foreground); }
+.card.todo > .row-link:not(.row-link ~ .row-link), .card.hero > .row-link.hero-cta { border: 2px solid var(--border); font-weight: 700; }
+/* hero */
+.card.hero, body.tone-soft .card.hero, body.tone-soft .card.hero:first-child { background: var(--secondary); color: var(--secondary-foreground); border: 3px solid var(--border); box-shadow: 6px 6px 0 var(--border); overflow: visible; margin: 12px 6px 24px 0; }
+.hero-eyebrow { color: var(--secondary-foreground); font-weight: 700; }
+.hero-big { font-size: 7rem; }
+.hero-art { right: 12px; top: -14px; background: var(--foreground); color: var(--background); font-family: var(--font-head), sans-serif; font-size: 1rem; padding: 4px 12px; transform: rotate(4deg); border: 2px solid var(--border); }
+.hero-art::after { content: "TODAY"; letter-spacing: .08em; }
+.hero-cap { font-family: var(--font-head), sans-serif; } .card.hero .stat .l, .hero-fact { font-weight: 600; }
