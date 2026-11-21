@@ -73,6 +73,14 @@ test('T10 확인함 범위·유출: 출결 담당은 특이사항 요청만, 학
 
 test('T10 동치(C48): 홈 숫자 = 확인함 — 관리자·출결 담당 exc.pending = 특이사항 요청 줄 수, 관리자 timetable.confirmPending = 시간표 줄 수, moves.overdue는 두 홈이 같다', () => {
   const { env, acc } = setup();
+  // 임시 퇴실 한 건: 3월 10일에 3월 12일부터 퇴실·복귀 예정 3월 20일로 저장 → 오늘(3월 26일)은 복귀 예정일이 지났다
+  const dorm = env.as(ADMIN, (c) => c.statusOn_(c.readAll_('status_changes'), acc.C.id, '기숙사', '2027-03-10')) === '입실';
+  const mv = { studentId: acc.C.id, type: dorm ? '학사 및 기숙사 임시 퇴실' : '학사 임시 퇴실', requestedAt: '2027-03-10T10:00:00', effectiveDate: '2027-03-12', dinner: '중단', docSubmitted: false, returnDate: '2027-03-20', reason: '가짜 입원' };
+  env.setNow('2027-03-10T10:00:00');
+  const pv = env.call(ADMIN, 'previewMove', mv);
+  assert.strictEqual(pv.ok, true, JSON.stringify(pv).slice(0, 300));
+  assert.strictEqual(env.call(ADMIN, 'saveMove', mv, pv.expect).ok, true);
+  env.setNow(TODAY + 'T10:00:00');
   const adm = env.call(ADMIN, 'getHomeData', 'admin'), att = env.call(ATT, 'getHomeData', 'attendance');
   const ia = env.call(ADMIN, 'getInbox'), it = env.call(ATT, 'getInbox');
   assert.strictEqual(adm.exc.pending, ia.counts.exception || 0, '관리자 홈 요청 수 = 확인함');
@@ -80,6 +88,8 @@ test('T10 동치(C48): 홈 숫자 = 확인함 — 관리자·출결 담당 exc.p
   assert.strictEqual(adm.timetable.confirmPending, ia.counts.timetable || 0, '관리자 홈 시간표 확인 대기 = 확인함');
   assert.ok(adm.timetable.confirmPending >= 1 && adm.exc.pending >= 1, '0이 아닌 값으로 비교');
   assert.strictEqual(att.moves.overdue, adm.moves.overdue, '복귀 지남 수는 두 홈이 같다');
+  assert.ok(adm.moves.overdue >= 1, '0이 아닌 값으로 비교 ' + adm.moves.overdue);
+  assert.strictEqual(adm.moves.overdue, adm.food.tempLeave.n, '관리자 홈 식사 카드의 임시 퇴실 지남 수와 같은 계산');
   assert.ok(!('timetable' in att) || att.timetable.confirmPending === undefined, '출결 담당 홈에는 시간표 확인 숫자가 없다');
   // 처리하면 둘이 함께 준다
   const tt = env.call(env.rows('enrollments').find((e) => e.student_id === acc.A.id).teacher_email, 'confirmTimetable', acc.A.id, '2027-04');
