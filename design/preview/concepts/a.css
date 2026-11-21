@@ -1,0 +1,36 @@
+/* A 「또박또박 문서」: 흰 종이 위 먹글씨. 상자·그림자·둥근 모서리를 거의 쓰지 않고 선과 굵기로만 나눈다. 색은 누르는 것에만 */
+:root { --bg: #fff; --radius: 4px; --radius-sm: 4px; --radius-pill: 4px; }
+header.top { background: #fff; color: var(--text); border-bottom: 3px solid var(--g12); }
+header.top h1 { color: var(--text); } header.top .who { color: var(--muted); }
+header.top :focus-visible { outline-color: var(--focus); }
+.back { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
+/* 구역 = 위 선 하나. 상자 없음 */
+.card, body.tone-soft .card { border-top: 1px solid var(--line); border-radius: 0; padding: 16px 0 8px; margin: 0; }
+.card.todo, .card.key, body.tone-soft .card.todo, body.tone-soft .card.key { background: #fff; box-shadow: none; border: 0; border-top: 1px solid var(--line); border-left: 4px solid var(--g12); border-radius: 0; padding: 16px 0 12px 16px; margin: 0 0 8px; }
+.card.key, body.tone-soft .card.key { border-left-color: var(--g7); }
+body.tone-soft .card.todo h2 { color: var(--text); }
+body.tone-soft main { border-radius: 0; margin: 0 auto; padding: 8px 16px 16px; }
+.card.todo > .row-link:not(.row-link ~ .row-link) { background: var(--accent); color: #fff; border-radius: 4px; padding: 12px 16px; font-weight: 700; font-size: 1rem; }
+.card.todo > .row-link:not(.row-link ~ .row-link)::after { color: #fff; }
+/* 줄 링크는 밑줄 친 색 글자(문서의 링크처럼) */
+.row-link, .feature-row { color: var(--accent-ink); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.todo-row .todo-l > :first-child { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.feature-row::after { content: none; }
+/* 숫자 칸: 상자 대신 위 굵은 선 */
+.stats { gap: 16px; grid-template-columns: repeat(3, 1fr); } .stat { background: none; border-radius: 0; border-top: 2px solid var(--g12); padding: 8px 0 4px; }
+.todo-n, .count { border-radius: 4px; }
+.todo-n { background: none; color: var(--text); border: 0; font-size: var(--font-lg); min-width: 2em; padding: 0; text-align: left; }
+/* 버튼·칩·구간 선택: 각진 모양 */
+.btn { border-radius: 4px; } .btn.secondary { border-width: 2px; }
+.chip { border-radius: 4px; border-color: var(--g8); } .chip.on { background: var(--g12); border-color: var(--g12); }
+.tab { border-radius: 4px; border-color: var(--g8); } .tab.on { background: var(--g12); border-color: var(--g12); }
+.segmented { background: none; border-bottom: 1px solid var(--g8); border-radius: 0; padding: 0; gap: 0; }
+.seg { border-radius: 0; border-bottom: 4px solid transparent; font-weight: 400; } .seg.on { box-shadow: none; background: none; color: var(--text); font-weight: 700; border-bottom-color: var(--accent); }
+body.tone-soft .segmented { background: none; }
+.field input, .field select, .field textarea, body.tone-soft .field input, body.tone-soft .field select, body.tone-soft .field textarea { border: 2px solid var(--g12); border-radius: 0; background: #fff; }
+.notice, .error { border-radius: 0; border: 0; border-left: 4px solid currentColor; }
+.pill { border-radius: 4px; }
+.actionbar { box-shadow: none; border-top: 1px solid var(--g8); }
+.sheet { border-radius: 0; } .tablewrap, .rg-cell, .picker-item { border-radius: 0; }
+.ld-pick { border-radius: 0; } .ld-pick[aria-current="true"] { background: var(--g3); border-left-color: var(--g12); color: var(--text); }
+details.fold > summary { padding-left: 0; padding-right: 0; }
