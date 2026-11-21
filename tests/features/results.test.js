@@ -196,3 +196,22 @@ test('R22 보충: 같은 학생·같은 날은 F11 묶음 하나, 학원 같은 
   assert.ok(Object.keys(row['학습량'].missedMinutes).length >= 1, '빠진 시간 까닭');
   assert.ok(t.sum['학습량'].minutes >= row['학습량'].minutes);
 });
+
+test('C47 getResultTotals rows.outs: 이번 기간 살아 있는 OUT 합계(자동 1OUT 포함, 취소 제외, 범위와 상관없음), 다른 학생은 0 — 권한은 그대로', () => {
+  const x = makeEnv();
+  const totals = (from, to) => plain(x.env.call(ATT, 'getResultTotals', { from, to, all: true }));
+  const outsOf = (t, id) => t.rows.find((q) => q.student.id === id).outs;
+  assert.strictEqual(plain(x.env.call(ATT, 'getResultGrid', { from: D1, to: '2027-03-12', all: true })).endLabel, '정상 종료', '격자 응답에 정상 종료 글자');
+  const t0 = totals(D1, '2027-03-12');
+  assert.ok(t0.rows.every((r) => r.outs === 0), '시작은 전부 0');
+  const s = x.save(ATT, [x.cell(x.a)]);
+  assert.strictEqual(s.r.ok, true, JSON.stringify(s.r));
+  const t1 = totals(D1, '2027-03-12');
+  assert.strictEqual(outsOf(t1, x.a.id), 1, '미인정결석 → 자동 1OUT');
+  assert.strictEqual(outsOf(t1, x.b.id), 0);
+  assert.strictEqual(outsOf(totals(D2, '2027-03-12'), x.a.id), 1, 'OUT은 기간 합계라 범위가 좁아도 같다');
+  const tok = plain(x.env.call(ATT, 'getResultGrid', { from: D1, to: '2027-03-12', all: true })).token;
+  assert.strictEqual(plain(x.env.call(ATT, 'cancelResult', { studentId: x.a.id, date: D1, kind: '결석', reason: '잘못 입력', range: x.range, token: tok })).ok, true);
+  assert.strictEqual(outsOf(totals(D1, '2027-03-12'), x.a.id), 0, '취소한 자동 OUT은 세지 않는다');
+  for (const who of ['test.student@example.com', 'test.parent@example.com']) x.env.expectDenied(who, 'exception.view', 'getResultTotals', { from: D1, to: D1 });
+});
