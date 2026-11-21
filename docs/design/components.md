@@ -35,6 +35,12 @@
 ### UI.cardClass
 `UI.cardClass(kind)` → 카드 class 문자열. `'todo'` = **진짜 할 일**(마감·미처리 건수가 0보다 클 때만, 노란 띠 상자), `'key'` = **중요한 숫자·상태**(OUT 등, 코발트 띠 상자), 그 밖(`''`)은 참고 정보(상자 없음, 줄로만 나눔). 0건이면 `todo`를 붙이지 않는다 — 노란 띠가 늘 떠 있으면 아무것도 눈에 안 띈다.
 
+### UI.todoList
+`UI.todoList({title:'오늘 처리할 것', items:[{label, count, href, hint}], none})` → 관리자·출결 담당 홈 맨 위 **'오늘 처리할 것'** 카드(D17). 건수가 0보다 큰 줄만 보이고(0건은 숨김), 줄마다 `[건수 | 이름 ›]`을 눌러 그 화면으로 간다. 하나도 없으면 카드 대신 회색 한 줄(`none`, 기본 "지금 처리할 일이 없습니다."). 건수가 있을 때만 노란 띠(`card todo`, 결정 85). 홈 데이터에 있는 숫자만 쓴다.
+
+### UI.featureList
+`UI.featureList([{title, items:[{text, href, badge}]}], title?)` → **'전체 기능'** 줄 링크 목록(`<nav class="card rail">`). 카드 수십 장을 대신하고, `badge`(처리할 수)는 `UI.todoList`와 같은 숫자를 재사용한다(0이면 안 보임). 840px 이상에서는 `UI.layoutHome`이 `.rail`을 알아보고 홈 왼쪽 레일 메뉴로 놓는다.
+
 ### UI.refreshStamp
 `UI.refreshStamp(onrefresh, at?)` → "15:20 기준 · ↻ 새로고침" 한 줄. **실시간이 아니라 불러온 시각**임을 알리고, 누르면 `onrefresh()`(보통 화면을 다시 불러온다). 홈(교사)·포털(학생·학부모)·요청 처리 목록 위에 하나씩. `at`을 안 주면 지금 시각. 순수 함수 `UI.util.clockText(Date)`·`waitedText(requestedAt, today)`('오늘/어제/N일 전 보냄')·`sortWaitedFirst(groups, today)`(하루 넘게 기다린 것을 위로, 새 배열)가 같이 있다(D16 G1·G3).
 

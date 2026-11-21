@@ -99,6 +99,34 @@ var UI = {};
   util.SHEET_GUARD_MS = 350;
   /** 시트 안 버튼 클릭을 받아도 되는가: 아직 안 열렸거나(openedAt 0) 열린 지 SHEET_GUARD_MS 이상 지났을 때만 true */
   util.sheetClickAllowed = function (openedAt, now) { return !openedAt || now - openedAt >= util.SHEET_GUARD_MS; };
+  /** '2027-03-26' + n일 → 'YYYY-MM-DD'(잘못된 값은 '') */
+  util.addDays = function (ymd, n) {
+    var p = util.ymdParse(ymd);
+    if (!p) return '';
+    var d = new Date(Date.UTC(p.y, p.m - 1, p.d + n));
+    return d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + d.getUTCDate()).slice(-2);
+  };
+  /**
+   * 오늘·내일 누가 빠지나(D17): listExceptions({scope:'range'}) 묶음 → {today:[…], tomorrow:[…]}. 확정만(요청·취소는 아직/더는 출석부에 반영되지 않는다).
+   * 한 줄 = {blocks, blocksText, display, type, short}. 시간대 순: 전체('ALL')가 먼저, 그다음 블록 글자 순, 같으면 이름 순.
+   */
+  util.whosOut = function (groups, today, tomorrow) {
+    var out = { today: [], tomorrow: [] };
+    (groups || []).forEach(function (g) {
+      if (!g || g.status !== '확정') return;
+      var dates = (g.rangeDates || g.dates || []).filter(function (x) { return !(g.canceledDates || []).length || g.canceledDates.indexOf(x) < 0; });
+      [['today', today], ['tomorrow', tomorrow]].forEach(function (k) {
+        if (dates.indexOf(k[1]) >= 0) out[k[0]].push({ blocks: g.blocks, blocksText: g.blocksText, display: g.display, type: g.type, short: g.short || g.type });
+      });
+    });
+    ['today', 'tomorrow'].forEach(function (k) {
+      out[k].sort(function (a, b) {
+        var ka = a.blocks === 'ALL' ? '' : String(a.blocks), kb = b.blocks === 'ALL' ? '' : String(b.blocks);
+        return ka < kb ? -1 : ka > kb ? 1 : (a.display < b.display ? -1 : a.display > b.display ? 1 : 0);
+      });
+    });
+    return out;
+  };
   /** 불러온 시각 '15:20' (Date를 받는다: 지금 시각을 안에서 읽지 않는다) */
   util.clockText = function (d) { return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); };
   /** 요청이 기다린 날수: requestedAt('2027-03-24T09:10:00')의 날짜 → today('2027-03-26')까지 달력 날수. 값이 이상하면 -1 */
@@ -202,15 +230,47 @@ var UI = {};
     var mainBox = el('div', { class: 'home-main' }, [el('h2', { class: 'home-h', text: todo ? '해야 할 일 ' + todo + '건' : '오늘 해야 할 일' })]);
     if (!todo) mainBox.appendChild(el('p', { class: 'home-none', text: '지금 처리할 일이 없습니다.' }));
     main.forEach(function (n) { mainBox.appendChild(n); });
-    var cols = el('div', { class: 'home-cols' }, [mainBox]);
+    var cols = el('div', { class: 'home-cols' + (side.some(function (n) { return has(n, 'rail'); }) ? ' has-rail' : '') }, [mainBox]);
     if (side.length) {
       var sideBox = el('div', { class: 'home-side' }, [el('h2', { class: 'home-h', text: '참고·바로가기' })]);
-      side.forEach(function (n) { sideBox.appendChild(n); });
+      side.slice().sort(function (x, y) { return (has(y, 'rail') ? 1 : 0) - (has(x, 'rail') ? 1 : 0); }).forEach(function (n) { sideBox.appendChild(n); });   // 전체 기능(.rail)이 맨 위
       cols.appendChild(sideBox);
     }
     root.appendChild(headBox);
     root.appendChild(cols);
     return { head: head.length, main: main.length, todo: todo, side: side.length };
+  };
+
+  /**
+   * UI.todoList({title, items:[{label, count, href, hint}], none}) — '오늘 처리할 것' 한 장(D17, 레퍼런스 ① When I Work 대시보드).
+   * 건수가 0보다 큰 줄만 보인다(0건은 숨김). 줄마다 [건수 | 이름 ›] 한 번 눌러 그 화면으로. 하나도 없으면 카드 대신 회색 한 줄(none).
+   * 건수가 있을 때만 노란 띠 카드(card todo — 띠는 건수 > 0에만 준다는 결정 85와 같은 원칙).
+   */
+  UI.todoList = function (opts) {
+    opts = opts || {};
+    var items = (opts.items || []).filter(function (i) { return i && Number(i.count) > 0; });
+    if (!items.length) return el('div', { class: 'card' }, [el('h2', { text: opts.title || '오늘 처리할 것' }), el('div', { class: 'muted', text: opts.none || '지금 처리할 일이 없습니다.' })]);
+    return el('div', { class: UI.cardClass('todo') }, [el('h2', { text: opts.title || '오늘 처리할 것' })].concat(items.map(function (i) {
+      return el('a', { class: 'todo-row', href: i.href }, [
+        el('span', { class: 'todo-n', 'aria-label': i.count + '건', text: Number(i.count) > 99 ? '99+' : String(i.count) }),
+        el('span', { class: 'todo-l' }, [el('b', { text: i.label }), i.hint ? el('span', { class: 'muted', text: i.hint }) : null]),
+        el('span', { class: 'todo-go', 'aria-hidden': 'true', text: '›' })]);
+    })));
+  };
+
+  /**
+   * UI.featureList(groups, title?) — '전체 기능' 한 장: [{title, items:[{text, href, badge}]}]. 줄 링크 목록이라 카드 수십 장을 대신한다.
+   * badge(처리할 수)는 todoList와 같은 숫자를 재사용하고 0이면 안 보인다. 840px 이상에서는 홈 왼쪽 레일 메뉴가 된다(UI.layoutHome이 .rail을 알아본다).
+   */
+  UI.featureList = function (groups, title) {
+    var kids = [el('h2', { text: title || '전체 기능' })];
+    (groups || []).forEach(function (g) {
+      kids.push(el('h3', { class: 'feature-h', text: g.title }));
+      (g.items || []).forEach(function (it) {
+        kids.push(el('a', { class: 'feature-row', href: it.href }, [el('span', { text: it.text }), UI.badge(it.badge)]));
+      });
+    });
+    return el('nav', { class: 'card rail', 'aria-label': title || '전체 기능' }, kids);
   };
 
   /**

@@ -220,3 +220,19 @@ test('D16 문서: 사진 전부 참조, requestedAt 부탁, screen_sheet 제외 
   pics.forEach((f) => assert.ok(md.includes('d16/' + f), f + ' 문서에 없음'));
   ['requestedAt', 'excGroupView_', '코딩A', '출석부 화면(`screen_sheet`)은 하지 않았습니다', '건너뛴 것·확인 못 한 것'].forEach((w) => assert.ok(md.includes(w), w));
 });
+
+// D17: 처리할 것·전체 기능·오늘 빠지는 학생 — 화면 약속, 문서 사진 12장, 서버 부탁
+test('D17 화면 약속과 문서: todoList·featureList·whosOut, 사진 전부 참조, 서버 부탁', () => {
+  const rd = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
+  const comp = rd('src/ui/Components.html'), adm = rd('src/ui/home_admin.html'), att = rd('src/ui/home_attendance.html'), hall = rd('src/ui/home_hall_teacher.html'), styles = rd('src/ui/Styles.html');
+  assert.ok(/UI\.todoList = function/.test(comp) && /UI\.featureList = function/.test(comp) && /Number\(i\.count\) > 0/.test(comp), '0건은 숨김');
+  assert.ok(/UI\.todoList\(/.test(adm) && /UI\.featureList\(/.test(adm) && /UI\.todoList\(/.test(att) && /UI\.featureList\(/.test(att), '두 홈이 모두 쓴다');
+  assert.ok(/whosOutCard_/.test(hall) && /call\('listExceptions', \{ scope: 'range'/.test(hall) && /UI\.util\.whosOut/.test(hall), '오늘 빠지는 학생은 기존 listExceptions');
+  assert.ok(/\.home-cols\.has-rail \{ grid-template-columns/.test(styles) && /\.todo-row \{/.test(styles) && /\.feature-row \{/.test(styles), '레일·줄 스타일');
+  const dir = path.join(ROOT, 'docs', 'design', 'refresh');
+  const md = fs.readFileSync(path.join(dir, 'd17.md'), 'utf8');
+  const pics = fs.readdirSync(path.join(dir, 'd17')).filter((f) => f.endsWith('.png'));
+  assert.ok(pics.length >= 12, '사진 12장 이상');
+  pics.forEach((f) => assert.ok(md.includes('d17/' + f), f + ' 문서에 없음'));
+  ['moves = {overdue}', 'timetable = {confirmPending}', '코딩A', '건너뛴 것·확인 못 한 것'].forEach((w) => assert.ok(md.includes('`d.' + w.replace(/^moves/, 'moves').replace(/^timetable/, 'timetable') + '`') || md.includes(w), w));
+});
