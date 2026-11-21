@@ -486,6 +486,117 @@ function cancelException(termId, groupId, reason, onlyDate) {
   return excFinishAuto_(res, user);
 }
 
+/* ───────────── C45 결정 86: 경고 없는 요청 일괄 확정 ───────────── */
+
+var EXC_BULK_MAX = 300;
+var EXC_BULK_REASON = {
+  warn: '같은 날 겹치는 특이사항이 있어 하나씩 확인해야 합니다.',
+  auto: '미인정 유형이라 하나씩 확정해야 합니다(자동 1OUT이 생깁니다).',
+  enroll: '이 운영 기간 명단에 없는 학생이라 확정할 수 없습니다.',
+  done: '이미 처리된 요청입니다. 목록을 새로 불러와 주세요.'
+};
+
+/** 묶음의 현재 모습(행 id·상태·고친 시각) 요약 — 미리 보기와 확정 사이에 바뀌었는지 가리는 표 */
+function excGroupSig_(rows) {
+  return dtyHash_(rows.map(function (r) { return r.id + '|' + String(r.status).trim() + '|' + (r.updated_at || ''); }).sort().join(';'));
+}
+
+/**
+ * 순수: 그 기간 행에서 일괄 확정 대상을 가른다. 대상 = 요청이 남은 묶음 중 하나씩 확정할 때 경고·거부가 없는 것
+ * (명단 밖 학생 없음, 같은 학생·날짜에 겹치는 다른 요청·확정 없음, 미인정 유형 아님).
+ * → {confirmable:[{groupId, sig, rows}], skipped:[{groupId, kind:'warn'|'auto'|'enroll', reason}]}  요청이 하나도 없는 묶음은 어느 쪽에도 없다
+ */
+function excBulkPlan_(rows, enrolled, autoOut) {
+  var groups = {}, order = [];
+  rows.forEach(function (r) {
+    var g = excGroupOf_(r);
+    if (!groups[g]) { groups[g] = []; order.push(g); }
+    groups[g].push(r);
+  });
+  var plan = { confirmable: [], skipped: [] };
+  order.forEach(function (gid) {
+    var mine = groups[gid], pending = mine.filter(function (r) { return String(r.status).trim() === '요청'; });
+    if (!pending.length) return;
+    var skip = function (kind) { plan.skipped.push({ groupId: gid, kind: kind, reason: EXC_BULK_REASON[kind] }); };
+    if (autoOut.indexOf(String(mine[0].type)) >= 0) { skip('auto'); return; }
+    if (pending.some(function (r) { return !enrolled[r.student_id]; })) { skip('enroll'); return; }
+    var others = rows.filter(function (r) { return excGroupOf_(r) !== gid; });
+    var warned = pending.some(function (r) { return excOverlapWarnings_(others, r.student_id, [r.date], r.blocks).length > 0; });
+    if (warned) { skip('warn'); return; }
+    plan.confirmable.push({ groupId: gid, sig: excGroupSig_(mine), rows: pending });
+  });
+  return plan;
+}
+
+function excEnrolledMap_(term) {
+  var enrolled = {};
+  readAll_('enrollments').forEach(function (e) { if (e.term_id === term.id) enrolled[e.student_id] = true; });
+  return enrolled;
+}
+
+/** token = "묶음id.표;묶음id.표…" — 묶음마다 미리 볼 때의 모습을 담아 확정 때 그 묶음만 stale로 남긴다 */
+function excBulkToken_(confirmable) { return confirmable.map(function (c) { return c.groupId + '.' + c.sig; }).join(';'); }
+function excBulkTokenMap_(token) {
+  var m = Object.create(null);
+  String(token || '').split(';').forEach(function (p) { var i = p.lastIndexOf('.'); if (i > 0) m[p.slice(0, i)] = p.slice(i + 1); });
+  return m;
+}
+
+/**
+ * 일괄 확정 미리 보기. 출결 담당·관리자만(exception.confirm). 아무것도 쓰지 않는다.
+ * → {ok, ended, confirmable:[groupId], skipped:[{groupId, kind, reason}], token, counts:{confirm, kept, warn, auto, other}}
+ */
+function previewBulkConfirm(termId) {
+  requirePermission_('exception.confirm');
+  var term = excFindTerm_(termId);
+  var empty = { ok: true, ended: false, confirmable: [], skipped: [], token: '', counts: { confirm: 0, kept: 0, warn: 0, auto: 0, other: 0 } };
+  if (excTermEnded_(term)) { empty.ended = true; return empty; }
+  var plan = excBulkPlan_(excRows_(term).rows, excEnrolledMap_(term), excSettings_(readAll_('settings', 'config')).autoOut);
+  var count = function (k) { return plan.skipped.filter(function (x) { return x.kind === k; }).length; };
+  return { ok: true, ended: false, confirmable: plan.confirmable.map(function (c) { return c.groupId; }), skipped: plan.skipped, token: excBulkToken_(plan.confirmable),
+    counts: { confirm: plan.confirmable.length, kept: plan.skipped.length, warn: count('warn'), auto: count('auto'), other: count('enroll') } };
+}
+
+/**
+ * 고른 묶음을 하나씩 확정과 똑같이 확정한다(묶음마다 audit_log 한 줄, 확정자·시각 기록). 락 안에서 다시 판정해
+ * 그사이 바뀐 묶음(미리 볼 때와 모습이 다름)·경고가 생긴 묶음·미인정 묶음은 확정하지 않고 남긴다. 일부가 실패해도 나머지는 진행한다.
+ * → {ok, confirmed:N, kept:M, failed:K, details:[{groupId, result:'kept'|'failed', reason}]}
+ */
+function confirmExceptionGroups(termId, groupIds, token) {
+  var user = requirePermission_('exception.confirm');
+  var ids = excUnique_((Array.isArray(groupIds) ? groupIds : []).map(function (g) { return String(g || '').trim(); }).filter(function (g) { return g; }));
+  if (!ids.length) return { ok: false, error: '확정할 요청을 골라 주세요.' };
+  if (ids.length > EXC_BULK_MAX) return { ok: false, error: '한 번에 ' + EXC_BULK_MAX + '건까지 확정할 수 있습니다.' };
+  var seen = excBulkTokenMap_(token);
+  return withLock_(function () {
+    var term = excFindTerm_(termId);
+    if (excTermEnded_(term)) return { ok: false, error: EXC_ENDED_MSG };
+    if (!excCanConfirm_(user)) excDenied_(user, 'exception.confirm', '일괄 확정 권한 재확인');
+    var sheet = termSheetName_('exceptions', term.id);
+    invalidate_('db', sheet);
+    invalidate_('db', 'enrollments');
+    var plan = excBulkPlan_(excRows_(term).rows, excEnrolledMap_(term), excSettings_(readAll_('settings', 'config')).autoOut);
+    var byConfirm = {}, bySkip = {};
+    plan.confirmable.forEach(function (c) { byConfirm[c.groupId] = c; });
+    plan.skipped.forEach(function (x) { bySkip[x.groupId] = x; });
+    var out = { ok: true, confirmed: 0, kept: 0, failed: 0, details: [] };
+    var keep = function (gid, reason) { out.kept++; out.details.push({ groupId: gid, result: 'kept', reason: reason }); };
+    ids.forEach(function (gid) {
+      var c = byConfirm[gid];
+      if (!c) { keep(gid, bySkip[gid] ? bySkip[gid].reason : EXC_BULK_REASON.done); return; }
+      if (seen[gid] !== c.sig) { keep(gid, STALE_MESSAGE); return; }   // 미리 본 뒤 다른 선생님이 고쳤거나 미리 보기에 없던 묶음
+      try {
+        var now = nowIso_();
+        bulkUpdateRecords_(sheet, c.rows.map(function (r) { return { id: r.id, patch: { status: '확정', confirmed_by: user.email, confirmed_at: now } }; }), user.email);
+        out.confirmed++;
+      } catch (e) {
+        out.failed++; out.details.push({ groupId: gid, result: 'failed', reason: '저장하지 못했습니다. 이 요청은 그대로 남았으니 하나씩 확정해 주세요.' });
+      }
+    });
+    return out;
+  });
+}
+
 /* ───────────── C43 G2·G4: 요청 카드 펼침(그날 칸)·기록 보기 ───────────── */
 
 var EXC_PEEK_MAX = 7;   // 한 묶음에서 그날 칸을 보여 주는 날 수(긴 묶음은 앞 7일)
