@@ -40,23 +40,25 @@
 
   /** 관리자 '오늘 처리할 것'(D17). 홈 데이터에 있는 숫자만 쓴다 — 없는 숫자(특이사항 확인 대기·오늘 빠지는 학생·복귀 예정일 지남·시간표 확인 대기)는 서버가 주면 자동으로 보인다 */
   function todoCard_(d) {
-    var o = d.out || {}, t = o.targets || {}, x = d.exc || {}, dc = d.docs || {}, f = d.food || {}, du = d.duty || {};
+    var o = d.out || {}, t = o.targets || {}, x = d.exc || {}, dc = d.docs || {}, f = d.food || {}, du = d.duty || {}, ib = d.inbox || {};   // ib = 확인함 종류별 건수(있으면 그 숫자를 쓴다)
+    var pending = ib.exception != null ? ib.exception : x.pending, ttWait = ib.timetable != null ? ib.timetable : d.timetable && d.timetable.confirmPending, docApps = ib.doc != null ? ib.doc : f.docMissing;
     return UI.todoList({ title: '오늘 처리할 것', items: [
-      { label: '특이사항 확인 대기', count: x.pending, href: d.appUrl + '?page=exceptions&tab=requests' },
+      { label: '특이사항 확인 대기', count: pending, href: d.appUrl + '?page=exceptions&tab=requests' },
       { label: '2OUT 대상 면담·퇴실 확정', count: (t.need || 0) + (t.ready || 0), hint: '면담 필요 ' + (t.need || 0) + ' · 확정 가능 ' + (t.ready || 0), href: d.appUrl + '?page=outs&tab=dismiss' },
       { label: '복귀 예정일이 지난 임시 퇴실', count: d.moves && d.moves.overdue, href: d.appUrl + '?page=moves' },
       { label: '서류 미제출', count: dc.items, hint: '학생 ' + (dc.students || 0) + '명', href: d.appUrl + '?page=docs' },
-      { label: '신청 서류 확인', count: f.docMissing, href: d.appUrl + '?page=moves' },
-      { label: '시간표 확인 대기', count: d.timetable && d.timetable.confirmPending, href: d.appUrl + '?page=timetable&role=admin' },
+      { label: '신청 서류 확인', count: docApps, href: d.appUrl + '?page=moves' },
+      { label: '시간표 확인 대기', count: ttWait, href: d.appUrl + '?page=timetable&role=admin' },
       { label: '근무표 빈 날', count: du.emptyDays, href: d.appUrl + '?page=duty' }
     ] });
   }
   /** 관리자 '전체 기능' 줄 링크(D17): 카드 열 몇 장을 대신한다. 숫자 배지는 위 '처리할 것'과 같은 값 */
   function featureList_(d) {
-    var o = d.out || {}, t = o.targets || {}, x = d.exc || {}, dc = d.docs || {}, A = d.appUrl;
+    var o = d.out || {}, t = o.targets || {}, x = d.exc || {}, dc = d.docs || {}, A = d.appUrl, ib = d.inbox || {};
+    var pending = ib.exception != null ? ib.exception : x.pending;
     return UI.featureList([
       { title: '출결', items: [
-        { text: '사전 특이사항', href: A + '?page=exceptions', badge: x.pending }, { text: '출결 결과 정리', href: A + '?page=results' }, { text: '학사 프로그램', href: A + '?page=programs' },
+        { text: '사전 특이사항', href: A + '?page=exceptions', badge: pending }, { text: '출결 결과 정리', href: A + '?page=results' }, { text: '학사 프로그램', href: A + '?page=programs' },
         { text: '출석부', href: A + '?page=sheet' }, { text: '좌석표', href: A + '?page=seats' }, { text: '떨어뜨릴 짝', href: A + '?page=avoid' }] },
       { title: '학생·생활', items: [
         { text: 'OUT 기록', href: A + '?page=outs&tab=record', badge: (t.need || 0) + (t.ready || 0) }, { text: '서류 체크리스트', href: A + '?page=docs', badge: dc.items },

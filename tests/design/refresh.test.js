@@ -234,5 +234,8 @@ test('D17 화면 약속과 문서: todoList·featureList·whosOut, 사진 전부
   const pics = fs.readdirSync(path.join(dir, 'd17')).filter((f) => f.endsWith('.png'));
   assert.ok(pics.length >= 12, '사진 12장 이상');
   pics.forEach((f) => assert.ok(md.includes('d17/' + f), f + ' 문서에 없음'));
-  ['moves = {overdue}', 'timetable = {confirmPending}', '코딩A', '건너뛴 것·확인 못 한 것'].forEach((w) => assert.ok(md.includes('`d.' + w.replace(/^moves/, 'moves').replace(/^timetable/, 'timetable') + '`') || md.includes(w), w));
+  ['`d.moves = {overdue}`', 'getInbox', '코딩A', '건너뛴 것·확인 못 한 것'].forEach((w) => assert.ok(md.includes(w), w));
+  const index = rd('src/ui/Index.html');
+  assert.ok(/call\('getInbox'\)\.catch/.test(index) && /data\.inbox = both\[1\]\.counts/.test(index), '확인함 건수를 홈이 같이 쓴다(실패해도 홈은 그린다)');
+  assert.ok(/ib\.exception != null \? ib\.exception : x\.pending/.test(adm) && /ib\.exception != null \? ib\.exception : x\.pending/.test(att), '확인함 숫자 우선, 없으면 홈 데이터');
 });

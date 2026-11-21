@@ -35,9 +35,13 @@
       var root = document.getElementById('home');
       var role = document.body.getAttribute('data-role');
       var teacherHome = role !== 'student' && role !== 'parent';
+      // 확인함(getInbox)의 종류별 건수를 관리자·출결 담당 홈 '오늘 처리할 것'과 배지가 같이 쓴다 — 숫자 출처를 하나로(실패해도 홈은 그대로 그린다)
+      var wantInbox = role === 'admin' || role === 'attendance';
       function load() {
-        call('getHomeData', role)
-          .then(function (data) {
+        Promise.all([call('getHomeData', role), wantInbox ? call('getInbox').catch(function () { return null; }) : null])
+          .then(function (both) {
+            var data = both[0];
+            if (wantInbox && both[1] && both[1].counts) data.inbox = both[1].counts;
             clear(root); renderHome(data, root); if (teacherHome) UI.layoutHome(root);
             if (teacherHome) root.insertBefore(UI.refreshStamp(load), root.firstChild);   // 학생·학부모 홈은 Portal이 같은 줄을 넣는다
           })
