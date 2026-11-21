@@ -25,6 +25,8 @@ function permissions_() {
     // 시간표(F9, C37): 학생 본인 제출, 학부모 동의(연결된 자녀), 담당교사·관리자 확인. 신원은 portalWho_. screen = 화면을 여는 역할만
     'timetable.screen': { roles: ['student', 'parent', 'hall_teacher', 'admin'] },
     'timetable.mine': { roles: ['student'] },
+    // 확인함(C46): 처리할 것이 하나라도 있을 수 있는 역할만. 줄마다 처리 권한은 종류별 기존 키·범위로 다시 판정한다(새 규칙 없음)
+    'inbox.view': { roles: ['admin', 'attendance', 'hall_teacher'] },
     'timetable.submit': { roles: ['student'] },
     'timetable.parent': { roles: ['parent'], scope: 'student' },
     'timetable.agree': { roles: ['parent'], scope: 'student' },

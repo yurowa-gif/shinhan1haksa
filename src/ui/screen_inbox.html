@@ -1,0 +1,48 @@
+<style>
+  .ib-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); color: inherit; text-decoration: none; min-height: var(--tap); word-break: keep-all; }
+  .ib-row:last-child { border-bottom: 0; }
+  .ib-who { font-weight: 700; }
+  .ib-go { display: flex; align-items: center; gap: 8px; grid-row: 1 / span 2; grid-column: 2; }
+  .ib-go .arrow { color: var(--muted); font-size: 1.25em; }
+  .ib-counts { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 4px; }
+</style>
+<script>
+  /**
+   * 확인함(C46): 내가 처리할 확인·확정·기록 대기 항목을 한 목록으로. 읽기 전용 — 줄을 누르면 그 항목을 처리하는 화면으로 간다.
+   * 서버(getInbox)가 내 권한으로 처리할 수 있는 것만 보내고, 줄에는 학생 라벨·요약 한 줄·접수일만 있다(메모·전화 없음).
+   */
+  function renderScreen(root) {
+    var U = UI.util;
+    var card = el('div', { class: 'card' }, [el('div', { class: 'loading', text: '불러오는 중…' })]);
+    root.appendChild(card);
+    function href(app, link) {
+      var q = ['page=' + encodeURIComponent(link.page)];
+      Object.keys(link.params || {}).forEach(function (k) { if (link.params[k]) q.push(encodeURIComponent(k) + '=' + encodeURIComponent(link.params[k])); });
+      return app + '?' + q.join('&');
+    }
+    function pillFor(kind, label) { return UI.statusPill(kind === 'out2_dismiss' ? 'out2' : 'todo', label); }
+    function load() {
+      call('getInbox').then(function (r) {
+        clear(card);
+        card.appendChild(UI.refreshStamp(load));
+        card.appendChild(el('h2', { text: '확인함 ' + r.total + '건' }));
+        if (!r.total) { card.appendChild(UI.emptyState('지금 처리할 것이 없습니다.')); return; }
+        card.appendChild(el('div', { class: 'muted', text: '오래 기다린 것부터 보입니다. 줄을 누르면 처리하는 화면이 열립니다.' }));
+        var counts = el('div', { class: 'ib-counts' });
+        Object.keys(r.counts).forEach(function (k) { counts.appendChild(el('span', { class: 'muted', text: r.labels[k] + ' ' + r.counts[k] + '건' })); });
+        card.appendChild(counts);
+        if (r.counts.exception) card.appendChild(UI.rowLink({ href: href(r.appUrl, { page: 'exceptions', params: { tab: 'requests' } }), text: '특이사항 요청 ' + r.counts.exception + '건 — 경고 없는 요청은 한 번에 확정할 수 있습니다' }));
+        r.items.forEach(function (i) {
+          var when = U.ymdParse(String(i.requestedAt || '').slice(0, 10)) ? ' · ' + U.formatDateKo(String(i.requestedAt).slice(0, 10)) + ' 접수' : '';
+          card.appendChild(el('a', { class: 'ib-row', href: href(r.appUrl, i.link) }, [
+            el('span', { class: 'ib-who', text: i.studentLabel }),
+            el('span', { class: 'muted', text: i.summary + when }),
+            el('span', { class: 'ib-go' }, [pillFor(i.kind, r.labels[i.kind]), el('span', { class: 'arrow', 'aria-hidden': 'true', text: '›' })])
+          ]));
+        });
+        if (r.more) card.appendChild(el('div', { class: 'muted', text: '오래된 ' + r.items.length + '건만 보입니다. 나머지 ' + r.more + '건은 위 건을 처리한 뒤 다시 불러오세요.' }));
+      }).catch(function (err) { clear(card); showError(card, err); });
+    }
+    load();
+  }
+</script>
