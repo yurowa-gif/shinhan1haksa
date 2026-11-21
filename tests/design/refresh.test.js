@@ -179,6 +179,7 @@ test('D15 ⑤b 반 고르기·서류: 문서·사진·화면 약속', () => {
   assert.ok(!/doc-line'? \}, \[el\('span', \{ text: t\.name \}\), stateButtons\(s, t\.id\)\]\)\);\s*\n\s*body\.appendChild\(row\)/.test(docs), '줄 안 토글 3개를 없앴다');
   const res = fs.readFileSync(path.join(ROOT, 'src', 'ui', 'screen_results.html'), 'utf8');
   assert.ok(/d\.classes\.length > 8 && grades\.length > 1/.test(res) && /label: '학년'/.test(res), '반 8개 초과면 학년 먼저');
+});
 
 // D15 ⑤a: 목록|상세 적용 — 문서가 사진 18장을 모두 싣고, 두 칸 CSS는 840px 이상에서만, 좁은 화면은 .has-detail 로 번갈아, 줄은 button
 test('D15 ⑤a 목록|상세 적용: 문서·사진·CSS 약속', () => {
