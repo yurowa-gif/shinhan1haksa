@@ -164,3 +164,19 @@ test('D15 ④ 시안 문서: 사진 전부 참조, 시안 단계 명시, 선택�
   assert.match(md, /선택지와 권장/);
   assert.match(md, /건너뛴 것·확인 못 한 것/);
 });
+
+// D15 ⑤a: 목록|상세 적용 — 문서가 사진 18장을 모두 싣고, 두 칸 CSS는 840px 이상에서만, 좁은 화면은 .has-detail 로 번갈아, 줄은 button
+test('D15 ⑤a 목록|상세 적용: 문서·사진·CSS 약속', () => {
+  const dir = path.join(ROOT, 'docs', 'design', 'refresh');
+  const md = fs.readFileSync(path.join(dir, 'list-detail-apply.md'), 'utf8');
+  const pics = fs.readdirSync(path.join(dir, 'list-detail-apply')).filter((f) => f.endsWith('.png'));
+  assert.ok(pics.length >= 18, '사진 18장 이상');
+  pics.forEach((f) => assert.ok(md.includes('list-detail-apply/' + f), f + ' 문서에 없음'));
+  ['명단 올리기 두 칸은 하지 않았습니다', 'noteCount', '건너뛴 것·확인 못 한 것'].forEach((w) => assert.ok(md.includes(w), w));
+  const styles = fs.readFileSync(path.join(ROOT, 'src', 'ui', 'Styles.html'), 'utf8');
+  assert.ok(/@media \(min-width: 840px\) \{[^@]*\.ld \{ display: grid;/.test(styles), '두 칸은 840px 이상에서만');
+  assert.ok(/@media \(max-width: 839px\) \{\s*\.ld\.has-detail > \.ld-list \{ display: none; \}/.test(styles), '좁으면 번갈아');
+  const counsel = fs.readFileSync(path.join(ROOT, 'src', 'ui', 'screen_counsel.html'), 'utf8');
+  assert.ok(/el\('button', \{ type: 'button', class: 'ld-pick'/.test(counsel) && /UI\.util\.studentLabel\(s\)/.test(counsel), '줄은 button, 학생 표기는 앱 표기');
+  assert.ok(/if \(!wideMq\.matches\) Nav\.go\(/.test(counsel), '좁을 때만 Nav 기록');
+});
