@@ -1,0 +1,25 @@
+feature,area,priority,original,clone,notes
+확정 대기 묶음(맨 위 숫자),inbox,must,yes,no,원본 알림 패널의 '내 조치 필요' 구역·종 배지(S01·S02). 우리는 첫 화면 맨 위에 둔다
+탭 2개(확정할 것/전체),inbox,must,yes,no,원본 S04·S06. 출결 담당 아닌 교사에게 첫 탭 숨김. 판정은 서버 requirePermission_
+내 요청은 내 확정 함에서 제외,inbox,should,yes,no,원본 S04·S06(자기 승인 방지). 담당자 1명일 때 예외는 ASSUMPTION 총괄 확인
+확정 대기 건 맨 위 정렬 + 상태 글자 태그,inbox,must,yes,no,원본 모바일 S11. 색만으로 구분하지 않음
+한 건 확정/반려 버튼,approval,must,yes,no,원본 S05·S07·S12. 휴대폰 세로용 큰 버튼
+반려 사유 입력,approval,must,yes,no,원본은 선택 입력(S05). 우리는 필수로 하고 요청 교사에게 알림
+확정·반려 후 요청자 자동 알림,notification,must,yes,no,원본 #2·#4. MailApp 사용
+문제 없는 것만 일괄 확정(n건),approval,should,yes,no,Deputy S17 패턴. 경고 정의(일정 겹침·지난 날짜·서류 미제출)는 총괄 확인
+상태와 경고를 다른 칸으로 표시,inbox,should,yes,no,Deputy #18
+확정 후 다음 건으로(Approve & Next),approval,could,yes,no,Deputy S16
+확정 전 그 학생의 그날 출석부 칸 함께 보기,approval,should,no,no,리뷰 T7 대응 + Deputy 긍정 요소. 원본 When I Work에는 근거 없음
+요청 이력(누가 넣고 바꾸고 확정했나),audit,must,yes,no,원본 Android 대화·활동(#6). 우리는 audit_log에서 읽음
+삭제 대신 취소(status 변경),audit,must,no,no,CLAUDE.md 규칙 4. 원본 근거 없음
+요청이 함에 영원히 남지 않게(모든 건 확정/반려/취소로 종료),inbox,must,no,no,리뷰 T4 대응
+승인자 = 출결 담당 역할 전원(한 사람에 묶지 않음),settings,must,no,no,리뷰 T3 대응
+오래된 대기 건 강조,inbox,should,no,no,리뷰 T1 대응(실시간 없음이라 화면이 놓침을 막음)
+알림 종류별 메일 켜기·끄기 + 하루 묶음,notification,could,yes,no,원본 S14(Email/Mobile 체크·방해 금지 시간). 우리는 메일만
+오늘의 예외 목록(오늘 걸린 확정 특이사항),dashboard,must,no,no,원본 관리자 대시보드 구성은 미확인. 모바일 대시보드 카드(S09) 패턴만 빌림
+새로고침 버튼 + 마지막 불러온 시각,inbox,must,no,no,실시간 없음 대응
+동시 처리 충돌 안내(다른 선생님이 먼저 처리),approval,must,no,no,LockService 안에서 상태 재확인
+마우스 올려 바로 승인,approval,could,yes,no,원본 S02. 휴대폰 우선이라 우리는 행 버튼으로 대체
+내보내기(기간·학생 선택),export,could,yes,no,원본 S08(5000건·2년). 우리는 Drive 출력물. 보관 기간은 학교 규정 확인
+제안 대상 바꾸기(교대 상대 변경),approval,could,yes,no,원본 S05. 우리 특이사항 요청에는 해당 없을 가능성 큼
+근무 변경 시 요청 자동 취소·기한 지나면 자동 만료,inbox,could,yes,no,원본 #8. 우리는 조용히 바꾸지 않고 '기한 지남' 경고만. 열린 질문일 수 있어 총괄 확인
