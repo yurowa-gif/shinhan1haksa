@@ -152,6 +152,10 @@
       "use": "화면",
       "guard": "requirePermission_"
     },
+    "getCounselRoster": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
     "getCounselNotes": {
       "use": "화면",
       "guard": "requirePermission_"
