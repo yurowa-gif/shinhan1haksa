@@ -31,6 +31,7 @@ function permissions_() {
     'timetable.list': { roles: ['admin', 'hall_teacher'] },
     'timetable.view': { roles: ['admin', 'hall_teacher'], scope: 'student', noDuty: true },
     'timetable.confirm': { roles: ['admin', 'hall_teacher'], scope: 'student', noDuty: true },
+    'timetable.enter': { roles: ['admin', 'hall_teacher'], scope: 'student', noDuty: true },   // 담당교사 대신 입력(결정 84)
     // 학생 한 명의 기본 정보 보기
     // wideView: 보기 키만 — 학사 교사도 이번 기간 학사생 전체를 본다(결정 45). 쓰기 키·counsel.view에는 달지 않는다
     'student.view': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom', 'student', 'parent'], scope: 'student', wideView: true },
@@ -112,6 +113,13 @@ function permissions_() {
     'meal.count': { roles: ['admin'] }
   };
 }
+
+/**
+ * 화면에 보이는 공통 오류 문구(writing.md 4.1, 한 곳). 권한 거부는 누구에게 요청하는지 알려 주고,
+ * '다른 사람이 먼저 고침'은 어느 기능이든 같은 말로 한다(저장 쪽은 stale:true와 함께 돌려준다).
+ */
+var DENIED_MESSAGE = '이 기능을 쓸 권한이 없습니다. 필요하면 관리자 선생님께 요청해 주세요.';
+var STALE_MESSAGE = '그사이 다른 선생님이 이 기록을 고쳤습니다. 새로 불러온 뒤 다시 저장해 주세요.';
 
 /** 한 번의 실행 안에서 접속자 정보를 다시 읽지 않도록 */
 var _authMemo = { user: undefined, portal: undefined };
@@ -309,7 +317,7 @@ function requirePermission_(action, context) {
   var user = getCurrentUser_();
   var deny = function (why) {
     logDenied_(user.email, action, why + (context ? ' ' + JSON.stringify(context) : ''));
-    throw new Error('권한이 없습니다.');
+    throw new Error(DENIED_MESSAGE);
   };
 
   if (!user.email) deny('이메일 확인 불가');

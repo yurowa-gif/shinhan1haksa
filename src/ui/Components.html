@@ -99,12 +99,43 @@ var UI = {};
   util.SHEET_GUARD_MS = 350;
   /** 시트 안 버튼 클릭을 받아도 되는가: 아직 안 열렸거나(openedAt 0) 열린 지 SHEET_GUARD_MS 이상 지났을 때만 true */
   util.sheetClickAllowed = function (openedAt, now) { return !openedAt || now - openedAt >= util.SHEET_GUARD_MS; };
+  /** 불러온 시각 '15:20' (Date를 받는다: 지금 시각을 안에서 읽지 않는다) */
+  util.clockText = function (d) { return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); };
+  /** 요청이 기다린 날수: requestedAt('2027-03-24T09:10:00')의 날짜 → today('2027-03-26')까지 달력 날수. 값이 이상하면 -1 */
+  util.waitedDays = function (requestedAt, today) {
+    var n = util.daysBetween(String(requestedAt || '').slice(0, 10), today);   // 같은 날 = 1(양 끝 포함), 이상하거나 미래 = 0
+    return n >= 1 ? n - 1 : -1;
+  };
+  /** '오늘 보냄' · '어제 보냄' · '3일 전 보냄'. 값이 없으면 '' */
+  util.waitedText = function (requestedAt, today) {
+    var n = util.waitedDays(requestedAt, today);
+    return n < 0 ? '' : n === 0 ? '오늘 보냄' : n === 1 ? '어제 보냄' : n + '일 전 보냄';
+  };
+  /** 하루 넘게 기다린 요청을 위로(오래된 것 먼저), 나머지는 들어온 순서 그대로. 새 배열을 돌려준다(서버 응답은 그대로) */
+  util.sortWaitedFirst = function (groups, today) {
+    return (groups || []).map(function (g, i) { return { g: g, i: i, n: util.waitedDays(g.requestedAt, today) }; })
+      .sort(function (a, b) {
+        var la = a.n >= 1, lb = b.n >= 1;
+        if (la !== lb) return la ? -1 : 1;
+        if (la && a.n !== b.n) return b.n - a.n;
+        return a.i - b.i;
+      }).map(function (x) { return x.g; });
+  };
+  /** Enter를 '주 버튼 누르기'로 볼 키 입력인가(입력칸 한 줄에서 맨 Enter만). 한글 입력 중(isComposing·229)·여러 줄 칸·선택 칸·버튼 위·Shift/Ctrl 조합·시트가 열려 있을 때는 아니다 */
+  util.enterPressesPrimary = function (ev, sheetOpen) {
+    if (!ev || ev.key !== 'Enter' || sheetOpen) return false;
+    if (ev.isComposing || ev.keyCode === 229 || ev.shiftKey || ev.ctrlKey || ev.altKey || ev.metaKey || ev.defaultPrevented) return false;
+    var t = ev.target || {};
+    if (String(t.tagName || '').toUpperCase() !== 'INPUT') return false;
+    return ['checkbox', 'radio', 'button', 'submit', 'file', 'range', 'color'].indexOf(String(t.type || 'text').toLowerCase()) < 0;
+  };
   UI.util = util;
 
   /* ───────── 작은 도우미(전역 아님) ───────── */
   function makeBtn(spec) {
     var b = el('button', { type: 'button', class: BTN_CLASS[spec.kind || 'primary'] || 'btn', text: spec.text });
     if (spec.disabled) b.disabled = true;
+    if (spec.enter) b.setAttribute('data-enter', '1');   // 입력칸에서 Enter를 누르면 이 버튼이 눌린다(확인 시트가 뜨는 버튼에만 — 바로 기록되는 버튼에는 달지 않는다)
     if (spec.onclick) b.addEventListener('click', function (e) { spec.onclick(e, b); });
     return b;
   }
@@ -134,6 +165,82 @@ var UI = {};
     return box;
   };
 
+  /**
+   * UI.rowLink({text, href}) 또는 UI.rowLink({text, onclick}) — '열기 ›' 한 줄(48px, 결정 85).
+   * 다른 화면으로 가는 링크는 버튼(.btn) 대신 이것을 쓴다. 홈의 할 일 카드(class "card todo")에서는 첫 줄 링크가 폭 가득 주 버튼 모양이 된다.
+   * 저장·확정처럼 실제로 일을 하는 버튼은 계속 .btn(makeBtn)을 쓴다.
+   */
+  UI.rowLink = function (opts) {
+    if (!opts || !opts.text) throw new Error('UI.rowLink: text가 필요합니다');
+    if (opts.href) return el('a', { class: 'row-link', href: opts.href, text: opts.text });
+    var b = el('button', { type: 'button', class: 'row-link', text: opts.text });
+    if (opts.onclick) b.addEventListener('click', function (e) { opts.onclick(e, b); });
+    return b;
+  };
+
+  /**
+   * UI.layoutHome(root) — 교사 홈의 카드들을 "맨 위 한 줄 + 해야 할 일 + 참고" 세 구역으로 다시 놓는다(D15 ②, 레퍼런스 ① GOV.UK 할 일 목록).
+   * 카드는 class로 종류를 알린다: `card todo`(진짜 할 일) · `card key`(중요) → 왼쪽(`.home-main`), 나머지 참고 카드 → 오른쪽(`.home-side`),
+   * 맨 위 카드(todo·key가 아닌 첫 카드, 예: 오늘 날짜·근무) → `.home-head`. 휴대폰은 한 줄로 head → 할 일 → 참고, 840px 이상은 두 열(CSS).
+   * 카드는 옮길 뿐 다시 만들지 않는다(눌림·id 그대로). 할 일이 없으면 "지금 처리할 일이 없습니다."를 한 줄로 쓴다(카드를 지우지 않는다).
+   */
+  UI.layoutHome = function (root) {
+    var kids = Array.prototype.slice.call(root.children);
+    var has = function (n, c) { return !!(n.classList && n.classList.contains(c)); };
+    var isCard = function (n) { return has(n, 'card'); };
+    var head = [], main = [], side = [], seenCard = false;
+    kids.forEach(function (n) {
+      if (!isCard(n)) head.push(n);                                 // 오류·안내 줄은 맨 위
+      else if (has(n, 'todo') || has(n, 'key')) main.push(n);
+      else if (!seenCard && !(n.querySelector && n.querySelector('ul.list'))) head.push(n);   // 맨 위 카드(오늘·전체 현황). 목록(ul.list)이 든 카드(담임 홈의 우리 반 명단)는 머리가 아니라 참고 열로
+      else side.push(n);
+      if (isCard(n)) seenCard = true;
+    });
+    var todo = main.filter(function (n) { return has(n, 'todo'); }).length;
+    kids.forEach(function (n) { root.removeChild(n); });
+    var headBox = el('div', { class: 'home-head' }, head);
+    var mainBox = el('div', { class: 'home-main' }, [el('h2', { class: 'home-h', text: todo ? '해야 할 일 ' + todo + '건' : '오늘 해야 할 일' })]);
+    if (!todo) mainBox.appendChild(el('p', { class: 'home-none', text: '지금 처리할 일이 없습니다.' }));
+    main.forEach(function (n) { mainBox.appendChild(n); });
+    var cols = el('div', { class: 'home-cols' }, [mainBox]);
+    if (side.length) {
+      var sideBox = el('div', { class: 'home-side' }, [el('h2', { class: 'home-h', text: '참고·바로가기' })]);
+      side.forEach(function (n) { sideBox.appendChild(n); });
+      cols.appendChild(sideBox);
+    }
+    root.appendChild(headBox);
+    root.appendChild(cols);
+    return { head: head.length, main: main.length, todo: todo, side: side.length };
+  };
+
+  /**
+   * UI.layoutPortal(root) — 학생·학부모 홈 본문(Portal)의 카드를 두 열로 나눈다(D15 ②). 맨 위 카드(이름)와 안내 줄은 위에 그대로,
+   * 나머지는 왼쪽 열(할 일·OUT·출결) / 오른쪽 열(`card side`: 자리·급식·상담·일정)로. 휴대폰은 한 줄(왼쪽 열 → 오른쪽 열)이고 840px 이상은 두 열(CSS `.pt-cols`).
+   */
+  UI.layoutPortal = function (root) {
+    var kids = Array.prototype.slice.call(root.children);
+    var has = function (n, c) { return !!(n.classList && n.classList.contains(c)); };
+    var head = [], a = [], b = [], seen = false;
+    kids.forEach(function (n) {
+      if (!has(n, 'card')) head.push(n);
+      else if (!seen) { head.push(n); seen = true; }
+      else if (has(n, 'side')) b.push(n);
+      else a.push(n);
+    });
+    if (!b.length) return { head: head.length, a: a.length, b: 0 };
+    kids.forEach(function (n) { root.removeChild(n); });
+    head.forEach(function (n) { root.appendChild(n); });
+    var colA = el('div', { class: 'pt-a' }, a), colB = el('div', { class: 'pt-b' }, b);
+    root.appendChild(el('div', { class: 'pt-cols' }, [colA, colB]));
+    return { head: head.length, a: a.length, b: b.length };
+  };
+
+  /**
+   * UI.cardClass(kind) — 홈 카드의 종류: 'todo'(진짜 할 일: 마감·미처리 건수 > 0일 때만), 'key'(중요한 숫자·상태), 그 밖에는 참고(상자 없음).
+   * 0건이면 todo를 붙이지 않는다(노란 띠가 늘 떠 있으면 아무것도 눈에 안 띈다).
+   */
+  UI.cardClass = function (kind) { return kind === 'todo' || kind === 'key' ? 'card ' + kind : 'card'; };
+
   /** UI.toast('저장했습니다.', {kind:'ok'|'warn'|'info', ms:3000}) — 아래에 잠깐 떴다 사라지는 한 줄 */
   UI.toast = function (message, opts) {
     opts = opts || {};
@@ -143,6 +250,21 @@ var UI = {};
     return node;
   };
 
+  if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('keydown', function (e) {
+    if (!util.enterPressesPrimary(e, !!document.querySelector('.sheet-scrim'))) return;
+    var btn = document.querySelector('button[data-enter]');
+    if (!btn || btn.disabled || !btn.offsetParent) return;
+    e.preventDefault();
+    btn.click();
+  });
+
+  /** UI.refreshStamp(onrefresh, at?) — '15:20 기준 · 새로고침'. 실시간이 아니라 불러온 시각임을 알리고, 눌러서 다시 불러오게 한다(홈·포털·요청 목록 위에 하나씩) */
+  UI.refreshStamp = function (onrefresh, at) {
+    var btn = makeBtn({ text: '새로고침', kind: 'secondary', onclick: function () { if (onrefresh) onrefresh(); } });
+    btn.className = 'btn secondary stamp-btn';
+    return el('div', { class: 'stamp' }, [el('span', { class: 'stamp-time', text: util.clockText(at || new Date()) + ' 기준' }), btn]);
+  };
+
   /** UI.actionBar([{text, onclick, kind:'primary'|'secondary'|'danger', disabled}], {mount:true}) — 아래 고정 바. mount면 body에 붙이고 main에 has-actionbar 표시 */
   UI.actionBar = function (buttons, opts) {
     var bar = el('div', { class: 'actionbar' }, (buttons || []).map(makeBtn));
@@ -150,6 +272,10 @@ var UI = {};
       document.body.appendChild(bar);
       var main = document.querySelector('main');
       if (main) main.classList.add('has-actionbar');
+      // 바 높이는 글자 크기·버튼 줄바꿈에 따라 달라진다(글자 150%에서 마지막 내용이 가려지던 것). 실제 높이를 --bar-h로 알려 main의 아래 여백이 따라가게 한다
+      var fit = function () { var h = bar.offsetHeight; if (h) document.documentElement.style.setProperty('--bar-h', h + 'px'); };
+      fit();
+      if (typeof ResizeObserver !== 'undefined') { try { new ResizeObserver(fit).observe(bar); } catch (e) { window.addEventListener('resize', fit); } } else window.addEventListener('resize', fit);
     }
     return bar;
   };
@@ -271,7 +397,7 @@ var UI = {};
   UI.segmented = function (opts) {
     opts = opts || {};
     var value = opts.value !== undefined ? opts.value : (opts.options && opts.options[0] ? opts.options[0].value : '');
-    var wrap = el('div', { class: 'segmented', role: 'radiogroup', 'aria-label': opts.label || '선택' });
+    var wrap = el('div', { class: (opts.options || []).length >= 5 ? 'segmented dense' : 'segmented', role: 'radiogroup', 'aria-label': opts.label || '선택' });
     function draw() {
       while (wrap.firstChild) wrap.removeChild(wrap.firstChild);
       (opts.options || []).forEach(function (o) {
@@ -379,7 +505,7 @@ var UI = {};
     return api;
   };
 
-  /** UI.confirmSheet({title, lead, lines, message, confirmText:'저장', cancelText:'취소', danger, onconfirm, oncancel}) — 열린 시트를 돌려준다. 포커스는 취소 쪽.
+  /** UI.confirmSheet({title, lead, lines, message, confirmText:'저장', cancelText:'돌아가기', danger, onconfirm, oncancel}) — 열린 시트를 돌려준다. 포커스는 취소 쪽.
       lead = 크고 굵게 한 줄(적용일처럼 꼭 봐야 할 것), lines = 그 아래 바뀌는 것 목록 */
   UI.confirmSheet = function (opts) {
     opts = opts || {};
@@ -390,7 +516,7 @@ var UI = {};
     var sheet = UI.bottomSheet({
       title: opts.title, content: el('div', {}, body),
       actions: [
-        { text: opts.cancelText || '취소', kind: 'secondary', onclick: function () { sheet.close(); if (opts.oncancel) opts.oncancel(); } },
+        { text: opts.cancelText || '돌아가기', kind: 'secondary', onclick: function () { sheet.close(); if (opts.oncancel) opts.oncancel(); } },
         { text: opts.confirmText || '확인', kind: opts.danger ? 'danger' : 'primary', onclick: function () { sheet.close(); if (opts.onconfirm) opts.onconfirm(); } }
       ]
     });
@@ -407,7 +533,7 @@ var UI = {};
     var sheet = UI.bottomSheet({
       title: opts.title, content: content,
       actions: [
-        { text: '닫기', kind: 'secondary', onclick: function () { sheet.close(); if (opts.oncancel) opts.oncancel(); } },
+        { text: '돌아가기', kind: 'secondary', onclick: function () { sheet.close(); if (opts.oncancel) opts.oncancel(); } },
         { text: opts.confirmText || '확인', kind: opts.danger === false ? 'primary' : 'danger', disabled: true,
           onclick: function () { var r = area.value.trim(); if (r.length < min) return; sheet.close(); if (opts.onconfirm) opts.onconfirm(r); } }
       ]

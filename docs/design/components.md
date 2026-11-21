@@ -21,7 +21,22 @@
 `UI.badge(n)` → `span.count`. 0 이하는 `null`(`el`의 자식으로 넣으면 건너뜀). 100 이상은 `99+`. 스크린리더용 `aria-label="n건"`.
 
 ### UI.emptyState
-`UI.emptyState(message, action?)` → 안내 상자. `action = {text, onclick, kind?}`면 버튼 하나를 붙인다. 문구는 다음 할 일을 쓴다(rules.md 5절).
+`UI.emptyState(message, action?)` → **왼쪽 정렬 한 줄**(결정 85). `action = {text, onclick, kind?}`면 버튼 하나를 붙인다. 문구는 다음 할 일을 쓴다(rules.md 5절).
+
+### UI.rowLink
+`UI.rowLink({text, href})` 또는 `UI.rowLink({text, onclick})` → `a.row-link` / `button.row-link` — **"열기 ›" 한 줄**(48px, 결정 85). **다른 화면으로 가는 링크는 버튼(`.btn`) 대신 이것을 쓴다.** 홈의 할 일 카드(`card todo`)에서는 그 카드의 **첫 줄 링크만** 폭 가득 코발트 주 버튼 모양이 된다. 저장·확정처럼 실제로 일을 하는 버튼은 계속 `.btn`(`makeBtn`·`UI.actionBar`)이다.
+
+### UI.layoutHome
+`UI.layoutHome(root)` — 교사 홈의 카드들을 **맨 위 한 줄(`.home-head`) + 해야 할 일(`.home-main`: `card todo`·`card key`) + 참고(`.home-side`)** 로 다시 놓는다. `Index.html`이 `renderHome` 뒤에 한 번 부른다(학생·학부모 홈은 부르지 않음). 카드는 옮길 뿐 다시 만들지 않는다. 할 일이 없으면 "지금 처리할 일이 없습니다." 한 줄. 휴대폰은 한 줄로 이어지고 840px 이상은 두 열(CSS `.home-cols`).
+
+### UI.layoutPortal
+`UI.layoutPortal(root)` — 학생·학부모 홈 본문의 카드를 **왼쪽 열(할 일·OUT·출결) / 오른쪽 열(`card side`: 자리·급식·상담·일정)** 로 나눈다. 맨 위 카드(이름)와 안내 줄은 위에 그대로. `Portal.html`이 홈을 다 그린 뒤 한 번 부른다. 휴대폰은 한 줄, 840px 이상은 두 열(CSS `.pt-cols`).
+
+### UI.cardClass
+`UI.cardClass(kind)` → 카드 class 문자열. `'todo'` = **진짜 할 일**(마감·미처리 건수가 0보다 클 때만, 노란 띠 상자), `'key'` = **중요한 숫자·상태**(OUT 등, 코발트 띠 상자), 그 밖(`''`)은 참고 정보(상자 없음, 줄로만 나눔). 0건이면 `todo`를 붙이지 않는다 — 노란 띠가 늘 떠 있으면 아무것도 눈에 안 띈다.
+
+### UI.refreshStamp
+`UI.refreshStamp(onrefresh, at?)` → "15:20 기준 · ↻ 새로고침" 한 줄. **실시간이 아니라 불러온 시각**임을 알리고, 누르면 `onrefresh()`(보통 화면을 다시 불러온다). 홈(교사)·포털(학생·학부모)·요청 처리 목록 위에 하나씩. `at`을 안 주면 지금 시각. 순수 함수 `UI.util.clockText(Date)`·`waitedText(requestedAt, today)`('오늘/어제/N일 전 보냄')·`sortWaitedFirst(groups, today)`(하루 넘게 기다린 것을 위로, 새 배열)가 같이 있다(D16 G1·G3).
 
 ### UI.toast
 `UI.toast(message, {kind:'ok'|'warn'|'info', ms:3000})` → 아래에 잠깐 뜨는 한 줄(`role="status"`). 저장 성공 같은 확인용이고, 되돌릴 수 없는 일의 확인은 `confirmSheet`를 쓴다.

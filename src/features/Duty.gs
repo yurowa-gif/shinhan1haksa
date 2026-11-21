@@ -110,7 +110,7 @@ function dtyMonthView_(m, user) {
     if (p.operating && open && p.date >= today_()) emptyDays++;
     return { date: p.date, weekdayKo: p.weekdayKo, operating: p.operating, memo: p.memo, end: p.end, overridden: p.overridden, slots: slots };
   });
-  return { teachers: teachers, days: days, emptyDays: emptyDays, swapCount: swapCount, warnings: warnings.filter(function (w, i, a) { return a.indexOf(w) === i; }) };
+  return { teachers: teachers, days: days, emptyDays: emptyDays, swapCount: swapCount, warnings: warnings.map(dtyWarnText_).filter(function (w, i, a) { return a.indexOf(w) === i; }) };
 }
 
 /**
@@ -209,7 +209,7 @@ function setDutyOperating(input) {
   var memoIn = memoGiven ? String(input.memo).trim() : '';
   if (memoIn.length > CAL_MEMO_MAX) return { ok: false, errors: [{ field: 'memo', message: '메모는 ' + CAL_MEMO_MAX + '자 안으로 적어 주세요.' }] };
   if (date < today_() && user.roles.indexOf('admin') < 0) {
-    return { ok: false, errors: [{ field: 'date', message: '지난 날짜는 바꿀 수 없습니다. 필요하면 관리자에게 알려 주세요.' }] };
+    return { ok: false, errors: [{ field: 'date', message: '지난 날짜는 바꿀 수 없습니다. 필요하면 관리자 선생님께 알려 주세요.' }] };
   }
   return withLock_(function () {
     ['duty_slots', 'day_schedules', 'blocks', 'users'].forEach(function (t) { invalidate_('db', t); });
@@ -320,7 +320,7 @@ function dtyRecordModel_(d) {
     generatedAt: dtyStamp_(nowIso_()), lastChangedAt: d.lastChangedAt,
     // 운영 안 하는 날의 근무 경고는 그날 근무 칸이 있으면 렌더러가 칸에서 찾아 같은 말로 적는다(중복 방지). 예비만 있는 날은 렌더러가 못 보므로 경고를 남긴다
     warnings: d.rec.warnings.filter(function (w) {
-      if (w.indexOf('운영 안 하는 날의 근무 행을 셌습니다') < 0) return true;
+      if (w.indexOf('은 운영하지 않는 날인데 근무 기록이 있어') < 0) return true;   // DutyRules dutyRecord_ 경고(R25 문구)
       var date = w.slice(0, 10);
       return !d.rec.teachers.some(function (t) { return t.dates.some(function (x) { return x.date === date; }); });
     }).map(dtyWarnText_)
@@ -410,7 +410,7 @@ function dtyDayTokens_(date) {
 
 function dtyStale_() { return { ok: false, stale: true, message: DTY_STALE_MSG, errors: [{ field: 'slot', message: DTY_STALE_MSG }] }; }
 
-var DTY_STARTED_MSG = '이미 시작한 근무는 근무표 담당자에게 대신 근무로 기록해 달라고 하세요.';
+var DTY_STARTED_MSG = '이미 시작한 근무는 근무표 담당 선생님께 대신 근무로 기록해 달라고 하세요.';
 
 /**
  * 그 칸의 근무가 이미 시작했는가(순수). now = 'yyyy-MM-ddTHH:mm:ss'(KST). 오늘 이전 날짜 칸은 시작한 것으로 본다.
@@ -466,11 +466,11 @@ function swapDuty(slotId, toUserId, opts) {
     // 없는 칸·취소된 칸·낡은 화면(그 사이 칸이 바뀜)·같은 (날짜, 칸)에 살아 있는 행이 둘일 때의 옛 행은 공격이 아니라 "화면이 낡음"이다.
     // R8(dutyOn_)이 쓰는 최신 행만(같은 물리 줄까지 비교) 교대할 수 있다 — 옛 행 id로 남의 근무를 빼앗는 길을 막는다
     var current = row && ruleRowLive_(row) ? dutyPick_(all, String(row.date).trim()).bySlot[String(row.slot).trim()] : null;
-    if (!current || current._row !== row._row || current.id !== row.id) throw new Error('근무표가 바뀌었습니다. 새로 고친 뒤 다시 해 주세요.');
+    if (!current || current._row !== row._row || current.id !== row.id) throw new Error('근무표가 바뀌었습니다. 새로 불러온 뒤 다시 해 주세요.');
     var denyIf = function (c) {
       if (!c.denied) return;
       logDenied_(user.email, 'duty.swap', c.why + ' ' + JSON.stringify({ slotId: String(slotId || ''), toUserId: String(toUserId || '') }));
-      throw new Error('권한이 없습니다.');
+      throw new Error(DENIED_MESSAGE);
     };
     var plan = dtyPlan_(String(row.date).trim(), calLoadCtx_());
     var swapCtx = { email: user.email, canEdit: canEdit, today: today_(), started: dtySlotStarted_(row, plan, nowIso_()) };

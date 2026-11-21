@@ -90,25 +90,25 @@ function parseRosterTable_(rows) {
     }
     var intIn = function (column, lo, hi) {
       var s = cell[column];
-      if (!/^\d+$/.test(s) || +s < lo || +s > hi) { err(column, column + '은(는) ' + lo + '~' + hi + ' 숫자여야 합니다: ' + s); return ''; }
+      if (!/^\d+$/.test(s) || +s < lo || +s > hi) { err(column, column + ' 칸은 ' + lo + '~' + hi + ' 사이 숫자여야 합니다' + ruleNowText_(s) + '. 숫자를 고쳐 주세요.'); return ''; }
       return String(+s);
     };
     var rec = { line: line };
     rec.student_no = cell['학번'];
-    if (!/^\d{5}$/.test(rec.student_no)) err('학번', '학번은 숫자 5자리여야 합니다: ' + rec.student_no);
+    if (!/^\d{5}$/.test(rec.student_no)) err('학번', '학번은 숫자 5자리여야 합니다' + ruleNowText_(rec.student_no) + '. 학번을 고쳐 주세요.');
     rec.grade = intIn('학년', 1, 3);
     rec.class_no = intIn('반', 1, 20);
     rec.number = intIn('번호', 1, 99);
     rec.name = cell['이름'];
-    if (!rec.name) err('이름', '이름이 비어 있습니다.');
+    if (!rec.name) err('이름', '이름이 비어 있습니다. 이름을 적어 주세요.');
     rec.gender = cell['성별'];
     if (rec.gender !== '남' && rec.gender !== '여') err('성별', '성별은 남 또는 여여야 합니다: ' + rec.gender);
     rec.track = cell['계열'];
-    if (['', '문', '이'].indexOf(rec.track) < 0) err('계열', '계열은 빈칸·문·이 중 하나여야 합니다: ' + rec.track);
+    if (['', '문', '이'].indexOf(rec.track) < 0) err('계열', '계열은 빈칸·문·이 중 하나여야 합니다' + ruleNowText_(rec.track) + '. 계열을 고쳐 주세요.');
 
     var ox = function (column, yes, no) {
       var b = rosterOx_(cell[column]);
-      if (b === null) { err(column, column + '은(는) O 또는 X여야 합니다: ' + cell[column]); return ''; }
+      if (b === null) { err(column, column + ' 칸은 O 또는 X여야 합니다' + ruleNowText_(cell[column]) + '. O나 X로 고쳐 주세요.'); return ''; }
       return b ? yes : no;
     };
     rec.hall = ox('학사', '입실', '퇴실');
@@ -118,22 +118,22 @@ function parseRosterTable_(rows) {
     var din = cell['석식'].replace(/\s+/g, '');
     rec.dinner = ({ '학사': '학사 석식', '학사석식': '학사 석식', '일반': '일반 석식', '일반석식': '일반 석식',
       '미실시': '미실시', 'X': '미실시', 'x': '미실시', '×': '미실시' })[din] || '';
-    if (!rec.dinner) err('석식', '석식은 학사·일반·미실시 중 하나여야 합니다: ' + cell['석식']);
+    if (!rec.dinner) err('석식', '석식은 학사·일반·미실시 중 하나여야 합니다' + ruleNowText_(cell['석식']) + '. 석식 칸을 고쳐 주세요.');
     rec.commute_type = cell['통학구분'] || '일반';
     if (['일반', '원거리(관내)', '원거리(관외)'].indexOf(rec.commute_type) < 0) {
-      err('통학구분', '통학구분은 일반·원거리(관내)·원거리(관외) 중 하나여야 합니다: ' + rec.commute_type);
+      err('통학구분', '통학구분은 일반·원거리(관내)·원거리(관외) 중 하나여야 합니다' + ruleNowText_(rec.commute_type) + '. 통학구분을 고쳐 주세요.');
     }
     rec.teacher_email = cell['담당교사이메일'].toLowerCase();
-    if (rec.teacher_email && !rosterEmailOk_(rec.teacher_email)) err('담당교사이메일', '이메일 형식이 아닙니다: ' + rec.teacher_email);
+    if (rec.teacher_email && !rosterEmailOk_(rec.teacher_email)) err('담당교사이메일', '이메일 주소가 아닙니다(' + rec.teacher_email + '). 주소를 고쳐 주세요.');
     rec.email = cell['학생구글계정'].toLowerCase();
-    if (rec.email && !rosterEmailOk_(rec.email)) err('학생구글계정', '이메일 형식이 아닙니다: ' + rec.email);
+    if (rec.email && !rosterEmailOk_(rec.email)) err('학생구글계정', '이메일 주소가 아닙니다(' + rec.email + '). 주소를 고쳐 주세요.');
     if (!rec.email) warnings.push(line + '줄: 학생 구글 계정이 비어 있습니다(학년이 바뀔 때 같은 학생을 잇는 데 씁니다).');
     if (!rec.teacher_email) warnings.push(line + '줄: 담당교사 이메일이 비어 있습니다.');
     rec.end_type = '23:50';
     rec.memo = cell['비고'];
     if (/^\d{5}$/.test(rec.student_no) && rec.grade && rec.class_no && rec.number &&
         rec.student_no !== rec.grade + ('0' + rec.class_no).slice(-2) + ('0' + rec.number).slice(-2)) {
-      warnings.push(line + '줄: 학번 ' + rec.student_no + '이(가) 학년·반·번호(' + rec.grade + '-' + rec.class_no + '-' + rec.number + ')와 다릅니다.');
+      warnings.push(line + '줄: 학번(' + rec.student_no + ')과 학년·반·번호(' + rec.grade + '-' + rec.class_no + '-' + rec.number + ')가 맞지 않습니다. 틀린 쪽을 고쳐 주세요.');
     }
     records.push(rec);
   }
@@ -155,7 +155,7 @@ function rosterDupErrors_(records, key, column, errors) {
   Object.keys(lines).forEach(function (v) {
     if (lines[v].length < 2) return;
     lines[v].forEach(function (ln) {
-      errors.push({ line: ln, column: column, message: column + ' ' + v + '이(가) 여러 줄에 있습니다(' + lines[v].join('·') + '줄).' });
+      errors.push({ line: ln, column: column, message: '같은 ' + column + '(' + v + ')이 여러 줄에 있습니다(' + lines[v].join('·') + '줄). 한 줄만 남겨 주세요.' });
     });
   });
 }
@@ -180,10 +180,10 @@ function parseGuardianTable_(rows) {
     if (row.length > 3 && row.slice(3).some(function (c) { return rosterStr_(c) !== ''; })) {
       errors.push({ line: line, column: '', message: '열이 3개보다 많습니다. 칸이 밀렸는지 확인해 주세요.' });
     }
-    if (!rosterEmailOk_(rec.parent_email)) errors.push({ line: line, column: '학부모구글계정', message: '이메일 형식이 아닙니다: ' + rec.parent_email });
-    if (!/^\d{5}$/.test(rec.student_no)) errors.push({ line: line, column: '학번', message: '학번은 숫자 5자리여야 합니다: ' + rec.student_no });
+    if (!rosterEmailOk_(rec.parent_email)) errors.push({ line: line, column: '학부모구글계정', message: '이메일 주소가 아닙니다(' + rec.parent_email + '). 주소를 고쳐 주세요.' });
+    if (!/^\d{5}$/.test(rec.student_no)) errors.push({ line: line, column: '학번', message: '학번은 숫자 5자리여야 합니다' + ruleNowText_(rec.student_no) + '. 학번을 고쳐 주세요.' });
     var k = rec.parent_email + '|' + rec.student_no;
-    if (seen[k]) errors.push({ line: line, column: '학번', message: seen[k] + '줄과 같은 연결입니다.' });
+    if (seen[k]) errors.push({ line: line, column: '학번', message: seen[k] + '줄과 같은 연결입니다. 한 줄만 남겨 주세요.' });
     else seen[k] = line;
     records.push(rec);
   }
@@ -270,7 +270,7 @@ function diffRoster_(records, existing, termId, ymd) {
       return rosterStr_(x.name) === rec.name && !(rec.email && e && e !== rec.email);
     });
     if (!same.length) {
-      return { rec: rec, student: null, note: '학번 ' + rec.student_no + '을(를) 쓰던 다른 학생 기록이 있어 새 학생으로 만듭니다(' +
+      return { rec: rec, student: null, note: '학번(' + rec.student_no + ')을 쓰던 다른 학생 기록이 있어 새 학생으로 만듭니다(' +
         byN.map(function (x) { return rosterStr_(x.name); }).join('·') + ')' };
     }
     if (same.length > 1) return { rec: rec, amb: { candidates: same, reason: '같은 학번·이름의 학생이 여럿입니다' } };
@@ -307,7 +307,7 @@ function diffRoster_(records, existing, termId, ymd) {
       return;
     }
     if (rec.teacher_email && !teacherEmails[rec.teacher_email]) {
-      out.warnings.push(rec.line + '줄: 담당교사 ' + rec.teacher_email + '이(가) 사용자 목록에 없습니다.');
+      out.warnings.push(rec.line + '줄: 담당교사 이메일(' + rec.teacher_email + ')이 사용자 목록에 없습니다. 사용자 목록에 먼저 넣어 주세요.');
     }
     if (m.note) out.warnings.push(rec.line + '줄: ' + m.note);
     var sid;
@@ -321,7 +321,7 @@ function diffRoster_(records, existing, termId, ymd) {
       });
       if (twins.length) {
         out.warnings.push(rec.line + '줄: 계정이 비어 있는 기존 학생 ' + twins.map(function (x) { return rosterStr_(x.student_no) + ' ' + rosterStr_(x.name); }).join('·') +
-          '과(와) 이름·성별이 같습니다. 같은 학생이면 그 학생에게 계정을 먼저 넣고 다시 올려 주세요.');
+          ' 학생과 이름·성별이 같습니다. 같은 학생이면 그 학생에게 계정을 먼저 넣고 다시 올려 주세요.');
       }
     } else {
       sid = rosterStr_(m.student.id);
@@ -337,8 +337,8 @@ function diffRoster_(records, existing, termId, ymd) {
       if (patch.student_no) {
         var holders = (byNo[patch.student_no] || []).filter(function (x) { return rosterStr_(x.id) !== sid; });
         if (holders.length) {
-          out.warnings.push(rec.line + '줄: 새 학번 ' + patch.student_no + '을(를) 다른 학생 기록(' +
-            holders.map(function (x) { return rosterStr_(x.name); }).join('·') + ')도 가지고 있습니다(학번은 학년도마다 다시 쓰임).');
+          out.warnings.push(rec.line + '줄: 새 학번(' + patch.student_no + ')을 다른 학생 기록(' +
+            holders.map(function (x) { return rosterStr_(x.name); }).join('·') + ')도 가지고 있습니다. 학번은 학년도마다 다시 쓰이니 같은 학생인지 확인해 주세요.');
         }
       }
     }
@@ -364,8 +364,8 @@ function diffRoster_(records, existing, termId, ymd) {
       if (now === p[1]) return;
       if (now !== '') {
         // ASSUMPTION: 이미 상태 기록이 있는 항목은 명단으로 바꾸지 않는다(F6·F7 기록과 급식 적용일 규칙을 덮지 않게).
-        out.warnings.push(rec.line + '줄: ' + rec.name + ' ' + p[0] + '이(가) 기록(' + now + ')과 명단(' + p[1] +
-          ')이 다릅니다. 바꾸려면 입퇴실·급식 변경으로 처리해 주세요.');
+        out.warnings.push(rec.line + '줄: ' + rec.name + '의 ' + p[0] + ' 값이 기록(' + now + ')과 명단(' + p[1] +
+          ')에서 다릅니다. 바꾸려면 입퇴실·급식 화면에서 바꿔 주세요.');
         return;
       }
       out.createChanges.push({ student_id: sid, item: p[0], value: p[1], effective_date: ymd, effective_date_auto: ymd,

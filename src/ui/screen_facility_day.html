@@ -38,7 +38,7 @@
         var to = state.range === 'week' ? addDays(weekFrom(state.date || todayGuess()), 6) : monthEnd(state.date || todayGuess());
         var from = state.range === 'week' ? weekFrom(state.date || todayGuess()) : (state.date || todayGuess()).slice(0, 8) + '01';
         call('getFacilityReport', { from: from, to: to }).then(function (r) { state.rep = r; state.isAdmin = true; drawHead(); drawStats(); })
-          .catch(function (err) { clear(body); drawHead(); body.appendChild(el('div', { class: 'notice warn', text: /권한/.test((err && err.message) || '') ? '누적표는 관리자만 볼 수 있습니다.' : ((err && err.message) || String(err)) })); });   // 누적표는 관리자만 열린다(서버 판정)
+          .catch(function (err) { clear(body); drawHead(); body.appendChild(el('div', { class: 'notice warn', text: /권한/.test((err && err.message) || '') ? '누적표는 관리자 선생님만 볼 수 있습니다.' : ((err && err.message) || String(err)) })); });   // 누적표는 관리자만 열린다(서버 판정)
       } else {
         call('getFacilityDay', state.date).then(function (r) { state.day = r; if (r.ok) { state.date = r.date; state.isAdmin = r.isAdmin; } drawHead(); drawDay(); }).catch(function (err) { clear(body); showError(body, err); });
       }
@@ -87,7 +87,7 @@
       ]));
       ctl.appendChild(el('div', { class: 'muted', style: 'margin-top:8px', text: r.students.length + '명 · 합계 ' + hm(r.totalMinutes) }));
       body.appendChild(ctl);
-      if (!r.students.length) { body.appendChild(el('div', { class: 'card' }, [UI.emptyState('이 기간에 쓴 시설 일지가 없습니다.')])); return; }
+      if (!r.students.length) { body.appendChild(el('div', { class: 'card' }, [UI.emptyState('이 운영 기간에 쓴 시설 일지가 없습니다.')])); return; }
       var table = el('table', { class: 'fd-table' });
       table.appendChild(el('thead', {}, [el('tr', {}, [el('th', { class: 'name', text: '학생' })].concat(r.dates.map(function (x) { return el('th', { text: x.date.slice(8).replace(/^0/, '') + '(' + x.weekdayKo + ')' }); })).concat([el('th', { text: '합계' })]))]));
       var tb = el('tbody');

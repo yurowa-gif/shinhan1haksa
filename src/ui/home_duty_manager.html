@@ -12,17 +12,17 @@
       return b;
     }
     var openText = x.open.map(function (o) { return (+o.date.slice(5, 7)) + '월 ' + (+o.date.slice(8, 10)) + '일(' + o.weekdayKo + ') ' + o.labels.join('·'); }).join(', ');
-    var c = el('div', { class: 'card' }, [
+    var c = el('div', { class: UI.cardClass(x.emptyDays > 0 ? 'todo' : '') }, [
       el('h2', { text: (+x.month.slice(5, 7)) + '월 근무표' }),
       el('div', { class: 'stats', style: 'margin:4px 0 12px' }, [emptyBox(x.emptyDays), statBox(x.swapCount, '이번 달 교대')]),
       el('div', { class: 'muted', text: x.open.length ? '남은 빈 날: ' + openText + (x.emptyDays > x.open.length ? ' 외 ' + (x.emptyDays - x.open.length) + '일' : '') : '비어 있는 날이 없습니다.' }),
-      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=duty', text: '근무 편성하기' })
+      UI.rowLink({ href: d.appUrl + '?page=duty', text: '근무 편성하기' })
     ]);
     root.insertBefore(c, root.firstChild);
     if (d.duty) root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '월말 근무 기록표' }),
       el('div', { class: 'muted', text: '실제 근무자 기준 교사별 합계를 확인하고 PDF·엑셀로 받습니다.' }),
-      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=duty&tab=record', text: '근무 기록표 열기' })
+      UI.rowLink({ href: d.appUrl + '?page=duty&tab=record', text: '근무 기록표 열기' })
     ]));
   }
 
@@ -34,8 +34,8 @@
     ]));
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '좌석표' }),
-      el('div', { class: 'muted', text: '학사생 자리를 확인합니다.' }),
-      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=seats', text: '좌석표 열기' })
+      el('div', { class: 'muted', text: '학사생 좌석을 확인합니다.' }),
+      UI.rowLink({ href: d.appUrl + '?page=seats', text: '좌석표 열기' })
     ]));
     try { renderStage2A(d, root); } catch (e) { showError(root, e); }   // 2단계 카드가 실패해도 나머지 카드는 그린다
     try { renderStage2B(d, root); } catch (e) { showError(root, e); }
@@ -58,7 +58,7 @@
       e.next.forEach(function (x) { lines.push(el('div', { class: 'muted' }, [md(x.start) + ' ' + x.title + ' (' + x.kind + ')'])); });
       if (!lines.length) lines.push(el('div', { class: 'muted', text: '오늘과 앞으로 2주 안에 등록된 일정이 없습니다.' }));
       root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '월별 일정' })].concat(lines, [
-        el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=calendar', text: '월별 일정 열기' })])));
+        UI.rowLink({ href: d.appUrl + '?page=calendar', text: '월별 일정 열기' })])));
     };
   })();
 </script>

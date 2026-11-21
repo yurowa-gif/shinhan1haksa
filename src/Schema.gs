@@ -18,7 +18,7 @@ var ROLES = ['admin', 'duty_manager', 'attendance', 'hall_teacher', 'homeroom', 
 
 var ROLE_LABELS = {
   admin: '관리자',
-  duty_manager: '근무표 담당자',
+  duty_manager: '근무표 담당',   // 화면에 보이는 이름만(저장 값은 duty_manager)
   attendance: '출결 담당',
   hall_teacher: '학사 교사',
   homeroom: '담임',

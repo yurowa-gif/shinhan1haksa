@@ -152,6 +152,10 @@
       "use": "화면",
       "guard": "requirePermission_"
     },
+    "getCounselRoster": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
     "getCounselNotes": {
       "use": "화면",
       "guard": "requirePermission_"
@@ -213,6 +217,14 @@
       "guard": "requirePermission_"
     },
     "returnTimetable": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "previewTimetableEnter": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "enterTimetableForStudent": {
       "use": "화면",
       "guard": "requirePermission_"
     }

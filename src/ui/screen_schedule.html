@@ -59,9 +59,9 @@
       clear(calBox);
       calBox.appendChild(el('h2', { text: '날짜별 일정' }));
       calBox.appendChild(el('div', { class: 'cal-nav' }, [
-        el('button', { type: 'button', class: 'btn secondary', text: '◀ 이전 달', onclick: function () { state.day = null; load(monthShift(state.month, -1)); } }),
+        el('button', { type: 'button', class: 'btn secondary', style: 'white-space:nowrap;padding:12px 10px', text: '◀ 이전 달', onclick: function () { state.day = null; load(monthShift(state.month, -1)); } }),
         el('span', { class: 'title', text: state.month.replace('-', '년 ') + '월' }),
-        el('button', { type: 'button', class: 'btn secondary', text: '다음 달 ▶', onclick: function () { state.day = null; load(monthShift(state.month, 1)); } })
+        el('button', { type: 'button', class: 'btn secondary', style: 'white-space:nowrap;padding:12px 10px', text: '다음 달 ▶', onclick: function () { state.day = null; load(monthShift(state.month, 1)); } })
       ]));
       var list = el('div');
       state.data.days.forEach(function (d) {
@@ -92,7 +92,7 @@
       ]));
       d.warnings.forEach(function (w) { dayBox.appendChild(el('div', { class: 'cal-warn', text: w })); });
       if (note) dayBox.appendChild(el('div', { class: 'cal-ok', text: note }));
-      if (!state.data.canEdit) { dayBox.appendChild(el('div', { class: 'muted', text: '일정 수정은 관리자만 할 수 있습니다.' })); return; }
+      if (!state.data.canEdit) { dayBox.appendChild(el('div', { class: 'muted', text: '일정 수정은 관리자 선생님만 할 수 있습니다.' })); return; }
 
       var operating = el('select', {}, [el('option', { value: 'TRUE', text: '운영' }), el('option', { value: 'FALSE', text: '운영 안 함' })]);
       var start = el('input', { type: 'text', inputmode: 'numeric', placeholder: '비우면 기본 ' + (state.data.defaults[d.dayType] ? state.data.defaults[d.dayType].start : '') });
@@ -147,7 +147,7 @@
     function drawBatch() {
       clear(batchBox);
       batchBox.appendChild(el('h2', { text: '기간 일괄 설정' }));
-      if (!state.data.canEdit) { batchBox.appendChild(el('div', { class: 'muted', text: '일괄 설정은 관리자만 할 수 있습니다.' })); return; }
+      if (!state.data.canEdit) { batchBox.appendChild(el('div', { class: 'muted', text: '일괄 설정은 관리자 선생님만 할 수 있습니다.' })); return; }
       batchBox.appendChild(el('div', { class: 'muted', text: '기간과 요일을 고르고 요일 유형·시작·종료를 한꺼번에 정합니다(예: 매주 수요일 18:00 시작, 공휴일을 "휴일"로). 비워 둔 칸은 바꾸지 않습니다. 운영 안 하는 날은 건너뜁니다.' }));
       var from = el('input', { type: 'date' }), to = el('input', { type: 'date' });
       var start = el('input', { type: 'text', inputmode: 'numeric', placeholder: '예 18:00', maxlength: '5' }), end = el('input', { type: 'text', inputmode: 'numeric', placeholder: '예 23:00', maxlength: '5' });
@@ -157,7 +157,7 @@
       var wk = el('div', { class: 'cal-actions' });
       KO.forEach(function (k, i) {
         var cb = el('input', { type: 'checkbox', id: 'bwd' + i }); checks.push(cb);
-        wk.appendChild(el('label', { for: 'bwd' + i, style: 'display:flex;align-items:center;gap:4px;min-height:44px' }, [cb, el('span', { text: k })]));
+        wk.appendChild(el('label', { for: 'bwd' + i, style: 'display:flex;align-items:center;justify-content:center;gap:4px;min-height:var(--tap);min-width:var(--tap);padding:0 6px' }, [cb, el('span', { text: k })]));
       });
       var msg = el('div'), pv = null;
       [localField('시작 날짜', from, 'from'), localField('끝 날짜', to, 'to'), localField('요일', wk, 'weekdays'), localField('요일 유형', dt, 'dayType'),
@@ -233,7 +233,7 @@
       var add = el('button', { type: 'button', class: 'btn secondary', text: '블록 추가', onclick: function () { rows.push({ start: '', end: '' }); redraw(); } });
       var save = el('button', { type: 'button', class: 'btn', text: '블록 저장' });
       blkBox.appendChild(el('div', { class: 'cal-actions' }, state.data.canEdit ? [add, save] : []));
-      if (!state.data.canEdit) blkBox.appendChild(el('div', { class: 'muted', text: '블록 수정은 관리자만 할 수 있습니다.' }));
+      if (!state.data.canEdit) blkBox.appendChild(el('div', { class: 'muted', text: '블록 수정은 관리자 선생님만 할 수 있습니다.' }));
       if (note) blkBox.appendChild(el('div', { class: 'cal-ok', text: note }));
       save.addEventListener('click', function () {
         save.disabled = true; clear(msg);

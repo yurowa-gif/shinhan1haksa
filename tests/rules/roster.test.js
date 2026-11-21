@@ -169,7 +169,7 @@ test('diffRoster_: 바뀐 칸만 update, 이미 기록이 있는 상태는 바�
     withCell(ROW2, '이름', '나학생2')]).records;
   const d = plain(ctx.diffRoster_(recs2, after, 'T1', '2027-04-01'));
   assert.deepStrictEqual(d.createChanges, []);
-  assert.strictEqual(d.warnings.filter((w) => w.indexOf('석식') >= 0 && w.indexOf('급식 변경') >= 0).length, 1, d.warnings.join('/'));
+  assert.strictEqual(d.warnings.filter((w) => w.indexOf('석식') >= 0 && w.indexOf('입퇴실·급식 화면에서 바꿔') >= 0).length, 1, d.warnings.join('/'));
   assert.deepStrictEqual(d.updateEnrollments.map((u) => u.patch), [{ teacher_email: 'teacher2@example.com' }]);
   assert.deepStrictEqual(d.updateStudents.map((u) => u.patch), [{ name: '나학생2' }]);
   assert.deepStrictEqual([d.createStudents.length, d.createEnrollments.length], [0, 0]);

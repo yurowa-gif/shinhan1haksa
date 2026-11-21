@@ -2,10 +2,14 @@
   .res-nav { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
   .res-nav .grow { flex: 1 1 auto; text-align: center; font-weight: 700; }
   .res-classes { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
-  .res-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+  .res-wrap { overflow: auto; max-height: 70vh; max-height: 70dvh; border: 1px solid var(--line); border-radius: var(--radius-sm); }   /* 상자 높이를 제한해 머리 행·이름 열·합계 행이 고정되게(G8) */
   .res-table { border-collapse: collapse; width: 100%; }
   .res-table th, .res-table td { border: 1px solid var(--line); padding: 0; text-align: center; font-size: .85rem; }
   .res-table th { background: var(--muted-weak); padding: 6px 4px; min-width: 52px; font-weight: 600; }
+  .res-table thead th { position: sticky; top: 0; z-index: 2; }
+  .res-table thead th.name { z-index: 3; }
+  .res-table tr.total th, .res-table tr.total td { position: sticky; bottom: 0; z-index: 2; box-shadow: 0 -1px 0 var(--line); }
+  .res-table tr.total th.name { z-index: 3; }
   .res-table th.off { color: var(--muted-ink); }
   .res-table th.name, .res-table td.name { position: sticky; left: 0; background: var(--card); text-align: left; padding: 6px 8px; white-space: nowrap; z-index: 1; min-width: 5.5em; }
   .res-cell { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-width: 52px; min-height: var(--tap); border: 0; background: transparent; color: var(--text); font: inherit; cursor: pointer; padding: 2px; }
@@ -98,14 +102,22 @@
       }
       if (d && d.classes && d.classes.length > 1) {
         var box = el('div', { class: 'res-classes', role: 'group', 'aria-label': '반' });
-        d.classes.forEach(function (c) {
+        var grades = [];
+        d.classes.forEach(function (c) { if (grades.indexOf(c.grade) < 0) grades.push(c.grade); });
+        var curGrade = d.pick ? d.pick.grade : d.classes[0].grade, shownClasses = d.classes;
+        if (d.classes.length > 8 && grades.length > 1) {   // 반이 많으면(28개) 학년을 먼저 고르고 그 학년의 반만 한 줄에 보인다(D15 ⑤)
+          head.appendChild(UI.segmented({ label: '학년', value: String(curGrade), options: grades.map(function (g) { return { value: String(g), label: g + '학년' }; }),
+            onchange: function (v) { var first = d.classes.filter(function (c) { return String(c.grade) === v; })[0]; if (first) { state.grade = first.grade; state.classNo = first.classNo; load(); } } }));
+          shownClasses = d.classes.filter(function (c) { return String(c.grade) === String(curGrade); });
+        }
+        shownClasses.forEach(function (c) {
           var on = d.pick && d.pick.grade === c.grade && String(d.pick.classNo) === String(c.classNo);
-          box.appendChild(el('button', { type: 'button', class: on ? 'chip on' : 'chip', 'aria-pressed': on ? 'true' : 'false', text: c.label, onclick: function () { state.grade = c.grade; state.classNo = c.classNo; load(); } }));
+          box.appendChild(el('button', { type: 'button', class: on ? 'chip on' : 'chip', 'aria-pressed': on ? 'true' : 'false', text: shownClasses === d.classes ? c.label : c.classNo + '반', onclick: function () { state.grade = c.grade; state.classNo = c.classNo; load(); } }));
         });
         head.appendChild(box);
       }
-      if (state.data && state.tab === 'grid' && !state.data.editable) head.appendChild(el('div', { class: 'notice info', text: '이 기간은 끝난 지 오래되어 볼 수만 있습니다(' + state.data.editUntil + '까지 고칠 수 있었습니다).' }));
-      if (state.data && state.tab === 'grid' && !state.data.canEdit) head.appendChild(el('div', { class: 'muted', text: '보기 전용입니다. 결과 입력은 출결 담당·관리자가 합니다.' }));
+      if (state.data && state.tab === 'grid' && !state.data.editable) head.appendChild(el('div', { class: 'notice info', text: '이 운영 기간은 끝난 지 오래되어 볼 수만 있습니다(' + state.data.editUntil + '까지 고칠 수 있었습니다).' }));
+      if (state.data && state.tab === 'grid' && !state.data.canEdit) head.appendChild(el('div', { class: 'muted', text: '보기 전용입니다. 결과 입력은 출결 담당·관리자 선생님이 합니다.' }));
     }
 
     /* ───────── 격자 ───────── */
@@ -198,7 +210,7 @@
           ]);
           if (isResult && c.canEdit && c.editable && r.status === '확정') {
             line.appendChild(el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:6px', text: '취소', onclick: function () {
-              UI.confirmWithReason({ title: r.kind + ' 결과 취소', message: s.name + ' ' + c.date + ' ' + r.type + (r.recognized ? '' : ' — 연결된 자동 1OUT도 함께 취소됩니다.'), reasonLabel: '취소 사유', confirmText: '결과 취소', minLength: 2,
+              UI.confirmWithReason({ title: r.kind + ' 결과 취소', message: s.name + ' ' + U.formatDateKo(c.date) + ' ' + r.type + (r.recognized ? '' : ' — 연결된 자동 1OUT도 함께 취소됩니다.'), reasonLabel: '취소 사유', confirmText: '결과 취소', minLength: 2,
                 onconfirm: function (reason) {
                   call('cancelResult', { studentId: s.id, date: c.date, kind: r.kind, reason: reason, range: { from: d.from, to: d.to }, token: d.token }).then(function (res) {
                     if (!res.ok) { UI.toast(res.error || (res.errors && res.errors[0].message) || '취소하지 못했습니다.', { kind: 'warn', ms: 5000 }); if (res.stale) reloadAll(); return; }
@@ -212,7 +224,7 @@
         content.appendChild(el('h3', { text: '이 날 기록' })); content.appendChild(list);
       }
       if (!c.canEdit || !c.editable) {
-        content.appendChild(el('div', { class: 'notice info', text: !c.canEdit ? '결과 입력은 출결 담당·관리자만 합니다.' : '끝난 기간이라 고칠 수 없습니다.' }));
+        content.appendChild(el('div', { class: 'notice info', text: !c.canEdit ? '결과 입력은 출결 담당·관리자 선생님만 합니다.' : '끝난 운영 기간이라 고칠 수 없습니다.' }));
         sheet = UI.bottomSheet({ title: s.name + ' ' + c.date.slice(5).replace('-', '/'), content: content, actions: [{ text: '닫기', kind: 'secondary', onclick: function () { sheet.close(); } }] }).open();
         return;
       }

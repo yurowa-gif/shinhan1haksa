@@ -107,6 +107,93 @@ test('statusPill: 알 수 없는 상태는 오류, 알려진 상태는 모두 PI
   kinds.forEach((c) => assert.ok(defined.has(c), c));
 });
 
+test('rowLink·cardClass(결정 85): 줄 링크는 href면 a, onclick이면 button이고 글자가 없으면 오류, 카드 종류는 todo·key만 상자 클래스를 붙인다', () => {
+  // 브라우저가 없으니 Client.html 의 el 자리에 아주 작은 가짜를 둔다(태그·속성·이벤트만 기록)
+  ctx.el = function (tag, attrs) { return { tag: tag, attrs: attrs || {}, listeners: {}, addEventListener(t, f) { this.listeners[t] = f; } }; };
+  assert.throws(() => UI.rowLink({}), /text/);
+  const a = UI.rowLink({ text: '출석부 열기', href: 'https://x/?page=sheet' });
+  assert.deepStrictEqual([a.tag, a.attrs.class, a.attrs.href, a.attrs.text], ['a', 'row-link', 'https://x/?page=sheet', '출석부 열기']);
+  let hit = 0;
+  const b = UI.rowLink({ text: '월별 일정 열기', onclick: () => { hit++; } });
+  assert.deepStrictEqual([b.tag, b.attrs.type, b.attrs.class], ['button', 'button', 'row-link']);
+  b.listeners.click({});
+  assert.strictEqual(hit, 1);
+  assert.deepStrictEqual(['', 'todo', 'key', 'x', undefined].map((k) => UI.cardClass(k)), ['card', 'card todo', 'card key', 'card', 'card']);
+  // Styles.html 에 .row-link .card.todo .card.key 가 있다
+  const defined = css.definedClasses(css.parseRules(css.styleText(css.readFile('src/ui/Styles.html'))));
+  ['row-link', 'todo', 'key'].forEach((c) => assert.ok(defined.has(c), c));
+  delete ctx.el;
+});
+
+test('layoutHome(D15 ②): 맨 위 카드는 head, todo·key 카드는 할 일 열, 나머지는 참고 열로 옮기고(다시 만들지 않는다), 할 일이 없으면 한 줄 안내를 쓴다', () => {
+  // 아주 작은 가짜 DOM: 자식 목록·class·appendChild·removeChild만
+  function node(tag, attrs, kids) {
+    const n = { tag, attrs: attrs || {}, children: [], parent: null,
+      classList: { contains: (c) => String((n.attrs.class || '')).split(/\s+/).indexOf(c) >= 0 },
+      appendChild(c) { if (c.parent) c.parent.removeChild(c); c.parent = n; n.children.push(c); return c; },
+      removeChild(c) { n.children.splice(n.children.indexOf(c), 1); c.parent = null; return c; } };
+    (kids || []).forEach((k) => n.appendChild(k));
+    return n;
+  }
+  ctx.el = node;
+  const card = (cls, id) => node('div', { class: cls, id });
+  const run = (cards) => { const root = node('div', {}); cards.forEach((c) => root.appendChild(c)); const r = UI.layoutHome(root); return { root, r }; };
+  const a = card('card', 'today'), b = card('card todo', 'docs'), c = card('card', 'sheet'), d = card('card key', 'out'), e = card('card', 'seats');
+  const { root, r } = run([a, b, c, d, e]);
+  assert.deepStrictEqual(plain(r), { head: 1, main: 2, todo: 1, side: 2 });
+  const [head, cols] = root.children;
+  assert.strictEqual(head.attrs.class, 'home-head');
+  assert.deepStrictEqual(head.children.map((x) => x.attrs.id), ['today']);
+  const [mainBox, sideBox] = cols.children;
+  assert.deepStrictEqual(mainBox.children.slice(1).map((x) => x.attrs.id), ['docs', 'out'], '할 일 열은 todo·key 카드가 원래 순서로');
+  assert.strictEqual(mainBox.children[0].attrs.text, '해야 할 일 1건');
+  assert.deepStrictEqual(sideBox.children.slice(1).map((x) => x.attrs.id), ['sheet', 'seats']);
+  assert.strictEqual(b.parent, mainBox, '카드는 옮겨졌을 뿐 같은 노드');
+  // 할 일이 하나도 없으면 한 줄 안내, 참고 카드가 없으면 참고 열을 만들지 않는다
+  const z = run([card('card', 'today'), card('card key', 'out')]);
+  const zMain = z.root.children[1].children[0];
+  assert.strictEqual(zMain.children[0].attrs.text, '오늘 해야 할 일');
+  assert.strictEqual(zMain.children[1].attrs.text, '지금 처리할 일이 없습니다.');
+  assert.strictEqual(z.root.children[1].children.length, 1);
+  // 목록(ul.list)이 든 첫 카드(담임 홈의 우리 반 명단)는 머리가 아니라 참고 열로
+  const listCard = node('div', { class: 'card', id: 'cls' }, [node('ul', { class: 'list' })]);
+  listCard.querySelector = (sel) => (sel === 'ul.list' ? listCard.children[0] : null);
+  const w = run([listCard, card('card todo', 't'), card('card', 'o')]);
+  assert.deepStrictEqual(plain(w.r), { head: 0, main: 1, todo: 1, side: 2 });
+  // 오류·안내 줄(card가 아닌 것)은 맨 위
+  const err = node('div', { class: 'error' });
+  const y = run([err, card('card', 'today'), card('card', 'x')]);
+  assert.deepStrictEqual(y.root.children[0].children.map((x) => x.attrs.class), ['error', 'card']);
+  delete ctx.el;
+});
+
+test('layoutPortal(D15 ②): 맨 위 카드(이름)·안내 줄은 위에 두고 나머지를 왼쪽(할 일·OUT·출결) / 오른쪽(side 카드)으로 옮긴다, side가 없으면 그대로', () => {
+  function node(tag, attrs, kids) {
+    const n = { tag, attrs: attrs || {}, children: [], parent: null,
+      classList: { contains: (c) => String((n.attrs.class || '')).split(/\s+/).indexOf(c) >= 0 },
+      appendChild(c) { if (c.parent) c.parent.removeChild(c); c.parent = n; n.children.push(c); return c; },
+      removeChild(c) { n.children.splice(n.children.indexOf(c), 1); c.parent = null; return c; } };
+    (kids || []).forEach((k) => n.appendChild(k));
+    return n;
+  }
+  ctx.el = node;
+  const card = (cls, id) => node('div', { class: cls, id });
+  const root = node('div', {});
+  ['card', 'notice warn', 'card todo', 'card key', 'card', 'card side', 'card side'].forEach((c, i) => root.appendChild(card(c, 'n' + i)));
+  const r = UI.layoutPortal(root);
+  assert.deepStrictEqual(plain(r), { head: 2, a: 3, b: 2 });
+  const [h1, h2, cols] = root.children;
+  assert.deepStrictEqual([h1.attrs.id, h2.attrs.id], ['n0', 'n1']);
+  assert.strictEqual(cols.attrs.class, 'pt-cols');
+  assert.deepStrictEqual(cols.children[0].children.map((x) => x.attrs.id), ['n2', 'n3', 'n4']);
+  assert.deepStrictEqual(cols.children[1].children.map((x) => x.attrs.id), ['n5', 'n6']);
+  const plainRoot = node('div', {});
+  ['card', 'card todo', 'card'].forEach((c, i) => plainRoot.appendChild(card(c, 'p' + i)));
+  assert.deepStrictEqual(plain(UI.layoutPortal(plainRoot)), { head: 1, a: 2, b: 0 });
+  assert.strictEqual(plainRoot.children.length, 3, 'side가 없으면 손대지 않는다');
+  delete ctx.el;
+});
+
 /* ───── 스타일 ───── */
 
 const rules = css.parseRules(css.styleText(css.readFile('src/ui/Styles.html')));
@@ -162,4 +249,39 @@ test('시트 두 번 탭 방지: 열린 직후 350ms는 시트 안 버튼 클릭
   const fn = html.slice(html.indexOf('UI.bottomSheet = function'), html.indexOf('UI.confirmSheet = function'));
   assert.ok(fn.indexOf('util.sheetClickAllowed(openedAt, Date.now())') > 0 && fn.indexOf('openedAt = Date.now()') > 0, 'open()이 시각을 남기고 버튼이 판정을 거친다');
   assert.ok(fn.indexOf('.map(makeBtn)') < 0, '시트 버튼을 가드 없이 만들지 않는다');
+});
+
+// D15 ④: Enter = 주 버튼 누르기 — 맨 Enter, 한 줄 입력칸에서만. 한글 입력 중·여러 줄·선택·버튼·조합키·시트 열림은 아니다
+test('util.enterPressesPrimary: 한 줄 입력칸의 맨 Enter만, 나머지는 거부', () => {
+  const U = UI.util, inp = { tagName: 'INPUT', type: 'text' };
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', target: inp }, false), true);
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', target: { tagName: 'INPUT', type: 'date' } }, false), true);
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', isComposing: true, target: inp }, false), false, '한글 조합 중');
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', keyCode: 229, target: inp }, false), false);
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', target: { tagName: 'TEXTAREA' } }, false), false, '여러 줄');
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', target: { tagName: 'SELECT' } }, false), false);
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', target: { tagName: 'BUTTON' } }, false), false);
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', target: { tagName: 'INPUT', type: 'checkbox' } }, false), false);
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', shiftKey: true, target: inp }, false), false);
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', ctrlKey: true, target: inp }, false), false);
+  assert.strictEqual(U.enterPressesPrimary({ key: 'Enter', target: inp }, true), false, '시트가 열려 있으면 시트가 처리');
+  assert.strictEqual(U.enterPressesPrimary({ key: 'a', target: inp }, false), false);
+});
+
+// D16: 불러온 시각·요청 경과 — 순수 함수
+test('util.clockText / waitedText / sortWaitedFirst', () => {
+  const U = UI.util;
+  assert.strictEqual(U.clockText(new Date(2027, 2, 26, 9, 5)), '09:05');
+  assert.strictEqual(U.clockText(new Date(2027, 2, 26, 15, 20)), '15:20');
+  const today = '2027-03-26';
+  assert.strictEqual(U.waitedText('2027-03-26T08:00:00', today), '오늘 보냄');
+  assert.strictEqual(U.waitedText('2027-03-25T23:50:00', today), '어제 보냄');
+  assert.strictEqual(U.waitedText('2027-03-23T10:00:00', today), '3일 전 보냄');
+  assert.strictEqual(U.waitedText('', today), '', '값이 없으면 빈 글');
+  assert.strictEqual(U.waitedText('이상한 값', today), '');
+  assert.strictEqual(U.waitedText('2027-03-30T10:00:00', today), '', '미래 날짜는 말하지 않는다');
+  const gs = [{ id: 'a', requestedAt: '2027-03-26T09:00:00' }, { id: 'b', requestedAt: '2027-03-25T09:00:00' }, { id: 'c', requestedAt: '2027-03-22T09:00:00' }, { id: 'd' }, { id: 'e', requestedAt: '2027-03-26T10:00:00' }];
+  assert.deepStrictEqual(U.sortWaitedFirst(gs, today).map((g) => g.id), ['c', 'b', 'a', 'd', 'e'], '하루 넘은 것(오래된 순)이 위, 나머지는 들어온 순서');
+  assert.deepStrictEqual(gs.map((g) => g.id), ['a', 'b', 'c', 'd', 'e'], '원래 배열은 그대로');
+  assert.deepStrictEqual(U.sortWaitedFirst([{ id: 'x' }, { id: 'y' }], today).map((g) => g.id), ['x', 'y'], 'requestedAt이 없으면 순서 그대로');
 });

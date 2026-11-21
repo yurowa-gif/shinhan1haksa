@@ -94,8 +94,8 @@ function vioIsLeft_(changes, studentId, ymd) {
   });
 }
 
-/** '이번 학기' | '이번 기간'(방학) */
-function vioPeriodWord_(term) { return term && String(term.type).trim() === '방학' ? '이번 기간' : '이번 학기'; }
+/** '이번 학기' | '이번 운영 기간'(방학) — 화면에 그대로 보이는 말이다 */
+function vioPeriodWord_(term) { return term && String(term.type).trim() === '방학' ? '이번 운영 기간' : '이번 학기'; }
 
 /**
  * 알림 받을 사람(순수): 담당교사·그 반 담임(활성만), 처음 2OUT이 되는 저장이면 관리자도(결정 49). 입력한 본인은 뺀다. C12(자동 OUT)도 쓴다.
@@ -188,7 +188,7 @@ function vioValidate_(input, user) {
   var enrollment = null;
   if (student && term) {
     enrollment = readAll_('enrollments').filter(function (e) { return e.term_id === term.id && e.student_id === student.id; })[0] || null;
-    if (!enrollment || !isActiveOn_(readAll_('status_changes'), enrollment, when.ymd)) add('studentId', '그날 학사생이 아닙니다(그 기간 명단에 없거나 입실 전·퇴실 뒤).');
+    if (!enrollment || !isActiveOn_(readAll_('status_changes'), enrollment, when.ymd)) add('studentId', '그날 학사생이 아닙니다(그 운영 기간 명단에 없거나 입실 전·퇴실 뒤).');
   }
   var rule = readAll_('violation_rules').filter(function (r) { return String(r.id) === String(input.ruleId || ''); })[0] || null;
   if (!rule || vioPickableRules_([rule]).length === 0) {
@@ -354,7 +354,7 @@ function listOuts(filter) {
   if (scope === 'today') term = termOnDate_(today, terms) || getCurrentTerm_();   // 오늘 탭은 고른 기간과 상관없이 그날이 속한 기간
   else if (filter.termId) {
     term = terms.filter(function (t) { return t.id === String(filter.termId); })[0];
-    if (!term) throw new Error('운영 기간을 찾을 수 없습니다. 새로 고친 뒤 다시 해 주세요.');
+    if (!term) throw new Error('운영 기간을 찾을 수 없습니다. 새로 불러온 뒤 다시 해 주세요.');
   } else term = getCurrentTerm_();
   var out = { ok: true, date: today, term: null, terms: terms.map(function (t) { return { id: t.id, name: t.name }; }), items: [], summary: [], canCancel: false, isAdmin: hasRole_(user, 'admin') };
   if (!term) return out;
@@ -364,7 +364,7 @@ function listOuts(filter) {
   enrollments.forEach(function (e) { if (e.term_id === term.id && normalizeEmail_(e.teacher_email) === user.email) myStudents[e.student_id] = true; });
   if (scope === 'student' && !visible[String(filter.studentId || '')]) {
     logDenied_(user.email, 'out.view', '범위 밖 학생');
-    throw new Error('권한이 없습니다.');
+    throw new Error(DENIED_MESSAGE);
   }
   var closed = vioTermClosed_(term);
   out.term = { id: term.id, name: term.name, type: term.type, start_date: term.start_date, end_date: term.end_date, closed: closed };
@@ -438,12 +438,12 @@ function cancelOut(termId, id, reason) {
   return withLock_(function () {
     ['terms', 'enrollments', 'students'].forEach(function (t) { invalidate_('db', t); });
     var term = readAll_('terms').filter(function (t) { return t.id === String(termId || ''); })[0];
-    if (!term) return err('termId', '운영 기간을 찾을 수 없습니다. 새로 고친 뒤 다시 해 주세요.');
+    if (!term) return err('termId', '운영 기간을 찾을 수 없습니다. 새로 불러온 뒤 다시 해 주세요.');
     if (vioTermClosed_(term)) return err('termId', '끝난 운영 기간의 OUT은 볼 수만 있습니다.');
     var sheet = termSheetName_('violations', term.id);
     invalidate_('db', sheet);
     var row = vioViolations_(term).filter(function (v) { return v.id === String(id || ''); })[0];
-    if (!row) return err('id', 'OUT 기록을 찾을 수 없습니다. 새로 고친 뒤 다시 해 주세요.');
+    if (!row) return err('id', 'OUT 기록을 찾을 수 없습니다. 새로 불러온 뒤 다시 해 주세요.');
     if (!ruleRowLive_(row)) return err('id', '이미 취소된 OUT입니다.');
     updateRecord_(sheet, row.id, { status: '취소', cancel_reason: why }, user.email);
     var rows = vioViolations_(term);
@@ -566,7 +566,7 @@ function setOutInstantRule(ruleId, instant) {
     ['violation_rules', 'settings'].forEach(function (n) { invalidate_(n === 'settings' ? 'config' : 'db', n); });
     var rules = readAll_('violation_rules'), id = String(ruleId || '');
     var rule = rules.filter(function (r) { return String(r.id) === id; })[0];
-    if (!rule) return { ok: false, errors: [{ field: 'id', message: '항목을 찾을 수 없습니다. 새로 고친 뒤 다시 해 주세요.' }] };
+    if (!rule) return { ok: false, errors: [{ field: 'id', message: '항목을 찾을 수 없습니다. 새로 불러온 뒤 다시 해 주세요.' }] };
     if (vioRuleView_(rule).isAuto) return { ok: false, errors: [{ field: 'id', message: '자동 항목은 즉시 퇴실로 정할 수 없습니다.' }] };
     var known = {};
     rules.forEach(function (r) { known[String(r.id)] = true; });
@@ -609,7 +609,7 @@ function saveOutRule(input) {
     invalidate_('db', 'violation_rules');
     var rows = readAll_('violation_rules'), autoKey = vioRuleKey_(DEFAULT_VIOLATION_RULES[0][0]), key = vioRuleKey_(name);
     var cur = input.id ? rows.filter(function (r) { return String(r.id) === String(input.id); })[0] : null;
-    if (input.id && !cur) return { ok: false, errors: [{ field: 'id', message: '항목을 찾을 수 없습니다. 새로 고친 뒤 다시 해 주세요.' }] };
+    if (input.id && !cur) return { ok: false, errors: [{ field: 'id', message: '항목을 찾을 수 없습니다. 새로 불러온 뒤 다시 해 주세요.' }] };
     var isAuto = !!cur && vioRuleKey_(cur.name) === autoKey;
     if (isAuto && key !== autoKey) return { ok: false, errors: [{ field: 'name', message: '자동 항목의 이름은 바꿀 수 없습니다.' }] };
     if (!isAuto && vioRuleBase_(name) === autoKey) return { ok: false, errors: [{ field: 'name', message: '자동 항목과 같은 이름은 쓸 수 없습니다.' }] };

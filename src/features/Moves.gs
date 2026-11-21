@@ -103,7 +103,7 @@ function inoutReentryDefaults_(changes, studentId, ymd) {
 function inoutSummary_(rec, plan, changes) {
   var lead = foodDateKo_(rec.effectiveDate) + '부터 ' + rec.type;
   var lines = [];
-  if (rec.type === '학사 퇴실' || rec.type === '학사 및 기숙사 퇴실' || rec.temp) lines.push('자리 공석');
+  if (rec.type === '학사 퇴실' || rec.type === '학사 및 기숙사 퇴실' || rec.temp) lines.push('좌석 비움');
   if (rec.temp) lines.push('복귀 예정일 ' + foodDateKo_(rec.returnDate) + ' · 건강상 임시 퇴실은 재입실을 막지 않습니다');
   plan.rows.slice(1).forEach(function (r) {
     var d = foodDateKo_(r.effective_date);
@@ -282,7 +282,7 @@ function saveMove(input, expect) {
     if (!c.plan || c.errors.length) return { ok: false, errors: c.errors };
     var rec = c.rec, plan = c.plan, head = plan.rows[0];
     var s = inoutSummary_(rec, plan, d.changes);
-    if (String(expect || '') !== inoutSignature_(plan)) return { ok: false, stale: true, error: '확인한 뒤 다른 변경이 있었습니다. 다시 확인해 주세요.' };
+    if (String(expect || '') !== inoutSignature_(plan)) return { ok: false, stale: true, error: STALE_MESSAGE };
     var w = foodWrite_({
       student_id: rec.studentId, item: head.item, value: head.value, requested_at: head.requested_at, effective_date: head.effective_date,
       effective_date_auto: head.effective_date_auto, reason: rec.temp ? head.reason : rec.reason, doc_submitted: rec.doc ? 'TRUE' : 'FALSE', source: 'F6',
@@ -313,7 +313,7 @@ function inoutUndoCheck_(headId) {
   if (inoutIsDismissRow_(head)) requirePermission_('out.dismiss');
   if (String(head.status || '유효') !== '유효') return { already: true };
   var today = today_();
-  if (head.effective_date < today && user.roles.indexOf('admin') < 0) return { error: '적용일이 지난 퇴실은 관리자만 취소할 수 있습니다.' };
+  if (head.effective_date < today && user.roles.indexOf('admin') < 0) return { error: '적용일이 지난 퇴실은 관리자 선생님만 취소할 수 있습니다.' };
   var changes = readAll_('status_changes').filter(function (c) { return c.student_id === head.student_id; });
   var plan = moveUndoPlan_(changes, head.id, { today: today });
   if (!plan.toCancel.length) return { error: inoutKo_(plan.warnings[0] || '취소할 내용이 없습니다.') };
@@ -362,7 +362,7 @@ function cancelMove(headId, reason, expect) {
     if (c.already) return { ok: true, already: true };
     if (c.error) return { ok: false, errors: [{ field: '', message: c.error }] };
     if (why.length < 2 || why.length > EXC_REASON_MAX) return { ok: false, errors: [{ field: 'reason', message: '취소 사유를 2자 이상 ' + EXC_REASON_MAX + '자 안으로 적어 주세요.' }] };
-    if (String(expect || '') !== inoutUndoSignature_(c.plan)) return { ok: false, stale: true, error: '확인한 뒤 다른 변경이 있었습니다. 다시 확인해 주세요.' };
+    if (String(expect || '') !== inoutUndoSignature_(c.plan)) return { ok: false, stale: true, error: STALE_MESSAGE };
     var tag = function (x) { var r = String(x.cancel_reason || ''); return /^\[자동\] /.test(r) ? r : '[자동] ' + c.head.id + ' ' + (r || '퇴실 취소로 함께 취소'); };
     var patches = [{ id: c.head.id, patch: { status: '취소', cancel_reason: why } }];
     c.plan.toCancel.forEach(function (x) { if (x.id !== c.head.id) patches.push({ id: x.id, patch: { status: '취소', cancel_reason: tag(x) } }); });
@@ -430,7 +430,7 @@ function previewConvertTempLeave(headId) {
   var until = ban.until ? foodDateKo_(ban.until) + '까지 다시 들어올 수 없습니다.' : '다음 학기가 끝날 때까지 다시 들어올 수 없습니다(다음 학기가 아직 등록되지 않았습니다).';
   return { ok: true, errors: [], lead: foodDateKo_(c.head.effective_date) + ' 임시 퇴실을 일반 퇴실로 바꿉니다',
     lines: ['재입실 제한은 처음 임시 퇴실한 날(' + foodDateKo_(c.head.effective_date) + ')부터 셉니다.' + (ban.banned ? ' ' + until : ''),
-      '급식·자리는 임시 퇴실 때와 같이 이미 정리되어 있어 그대로입니다.', '기록은 지우지 않고 임시 퇴실 신청서를 취소 처리합니다.'],
+      '급식·좌석은 임시 퇴실 때와 같이 이미 정리되어 있어 그대로입니다.', '기록은 지우지 않고 임시 퇴실 신청서를 취소 처리합니다.'],
     warnings: c.plan.warnings, expect: inoutConvertSignature_(c) };
 }
 
@@ -446,7 +446,7 @@ function convertTempLeave(headId, expect) {
     var c = inoutConvertCheck_(headId);
     if (c.error) return { ok: false, errors: [{ field: '', message: c.error }] };
     if (c.plan.errors.length) return { ok: false, errors: c.plan.errors.map(function (m) { return { field: '', message: m }; }) };
-    if (String(expect || '') !== inoutConvertSignature_(c)) return { ok: false, stale: true, error: '확인한 뒤 다른 변경이 있었습니다. 다시 확인해 주세요.' };
+    if (String(expect || '') !== inoutConvertSignature_(c)) return { ok: false, stale: true, error: STALE_MESSAGE };
     var head = c.plan.rows[0], old = c.head;
     var human = String(old.memo || '').replace(/^\[임시\] return:\d{4}-\d{2}-\d{2}\s*/, '');
     var cancels = [{ id: old.id, cancel_reason: '일반 퇴실로 바꿈' }], seen = {};

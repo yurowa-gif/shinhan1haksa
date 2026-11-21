@@ -143,7 +143,7 @@
         ])
       ]);
       if (!x.operating) {
-        card.appendChild(el('div', { class: 'muted', text: (x.memo ? '메모: ' + x.memo + ' · ' : '') + (state.data.canOperate ? '눌러서 운영으로 바꿀 수 있습니다.' : '근무표 담당자·관리자가 바꿉니다.') }));
+        card.appendChild(el('div', { class: 'muted', text: (x.memo ? '메모: ' + x.memo + ' · ' : '') + (state.data.canOperate ? '눌러서 운영으로 바꿀 수 있습니다.' : '근무표 담당자·관리자 선생님이 바꿉니다.') }));
       } else {
         if (x.memo) card.appendChild(el('div', { class: 'muted', text: '메모: ' + x.memo }));
         card.appendChild(el('ul', { class: 'list' + (state.data.canEdit ? ' duty-proxy' : '') }, x.slots.map(function (s) { return slotRow(s, x); })));
@@ -211,8 +211,8 @@
         UI.field(proxy ? '실제 근무자' : '바꿀 선생님', sel),
         reason ? UI.field('이유(선택)', reason, { hint: '예: 병가, 학교 행사' }) : null,
         el('div', { class: 'notice info', text: proxy
-          ? '예비 감독이 대신 근무하면 근무표 담당자가 기록합니다. 실제 근무자가 되면 월말 근무 기록표에 근무로 들어가고 예비 지정에서는 빠집니다. 예비 본인에게는 교대 버튼이 없습니다.'
-          : '상대 선생님과 근무표 담당자에게 알림이 갑니다. 승인 절차는 없습니다.' }),
+          ? '예비 감독이 대신 근무하면 근무표 담당 선생님이 기록합니다. 실제 근무자가 되면 월말 근무 기록표에 근무로 들어가고 예비 지정에서는 빠집니다. 예비 본인에게는 교대 버튼이 없습니다.'
+          : '상대 선생님과 근무표 담당 선생님께 알림이 갑니다. 승인 절차는 없습니다.' }),
         err
       ]);
       function chosenName() { var o = sel.options[sel.selectedIndex]; return o ? o.text : ''; }
@@ -231,7 +231,7 @@
           sheet.close();
           var msg = proxy ? '대신 근무로 기록했습니다.' : '교대했습니다.';
           var fail = msg + ' 메일을 보내지 못했습니다. 상대 선생님께 직접 알려 주세요.';
-          UI.toast(r.notified ? msg + ' 상대 선생님과 근무표 담당자에게 메일을 보냈습니다.' : fail, r.notified ? undefined : { kind: 'warn', ms: 8000 });
+          UI.toast(r.notified ? msg + ' 상대 선생님과 근무표 담당 선생님께 메일을 보냈습니다.' : fail, r.notified ? undefined : { kind: 'warn', ms: 8000 });
           load(state.month, { week: state.week, note: r.notified ? '' : fail, noteWarn: !r.notified, scrollTop: true });
         }).catch(function (e) { busy = false; refresh(); err.textContent = (e && e.message) || String(e); });
       }
@@ -241,7 +241,7 @@
           { text: proxy ? '기록하기' : '교대하기', disabled: true, onclick: function () {
             if (busy || !sel.value) return;
             UI.confirmSheet({ title: proxy ? '대신 근무를 기록합니다' : '근무를 교대합니다', lead: dayKo(x) + ' ' + s.label + ': ' + s.name + ' → ' + chosenName(),
-              lines: [(proxy ? '실제 근무자로 기록되고 ' : '') + '상대 선생님과 근무표 담당자에게 메일이 갑니다', '승인 절차가 없어 바로 바뀝니다'],
+              lines: [(proxy ? '실제 근무자로 기록되고 ' : '') + '상대 선생님과 근무표 담당 선생님께 메일이 갑니다', '승인 절차가 없어 바로 바뀝니다'],
               confirmText: proxy ? '기록하기' : '교대하기', onconfirm: function () { doSwap(false); } });
           } }]
       });
@@ -299,7 +299,7 @@
       function refresh() { if (sheet) sheet.buttons[1].disabled = busy || !dirty(); }
 
       var content = el('div', {}, [
-        pastLocked ? el('div', { class: 'notice warn', text: '지난 날짜는 바꿀 수 없습니다. 실제로 바뀐 근무는 아래 [대신 근무 기록]으로 남겨 주세요. 운영 여부는 필요하면 관리자에게 알려 주세요.' }) : null,
+        pastLocked ? el('div', { class: 'notice warn', text: '지난 날짜는 바꿀 수 없습니다. 실제로 바뀐 근무는 아래 [대신 근무 기록]으로 남겨 주세요. 운영 여부는 필요하면 관리자 선생님께 알려 주세요.' }) : null,
         pastLocked ? el('div', {}, x.slots.filter(function (q) { return q.canSwap; }).map(function (q) {
           return el('button', { type: 'button', class: 'btn secondary row-btn', style: 'margin:4px 8px 8px 0', text: q.label + ' 대신 근무 기록',
             onclick: function () { sheet.close(); openSwap(x, q); } });
@@ -344,7 +344,7 @@
       function save() {
         if (busy || !dirty()) return;
         busy = true; refresh(); err('');
-        if (opChanged() && !wantOn() && x.operating && !d.canOperate) return fail(new Error('권한이 없습니다.'));
+        if (opChanged() && !wantOn() && x.operating && !d.canOperate) return fail(new Error('이 기능을 쓸 권한이 없습니다. 필요하면 관리자 선생님께 요청해 주세요.'));
         if (opChanged()) saveOp(null); else saveSlots(false);
       }
       sheet = UI.bottomSheet({

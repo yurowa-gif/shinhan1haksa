@@ -57,7 +57,7 @@ test('적용일이 지난 퇴실은 학사 교사 거부(관리자만), 관리�
   const r = saveOk(env, HALL, input(non, '학사 퇴실', '2027-03-03T15:00:00', '2027-03-05'));
   env.setNow('2027-03-08T10:00:00');
   const t = cancel(env, HALL, r.id);
-  assert.strictEqual(t.p.ok, false); assert.match(t.p.errors[0].message, /관리자만/);
+  assert.strictEqual(t.p.ok, false); assert.match(t.p.errors[0].message, /관리자 선생님만/);
   assert.strictEqual(t.r.ok, false);
   assert.strictEqual(rowsOf(env, non).find((x) => x.id === r.id).status, '유효');
   const a = cancel(env, ADMIN, r.id);
@@ -139,7 +139,7 @@ test('재입실이 있는 퇴실을 취소하면 재입실·기숙사 입실 기
   const ctx = env.call(ADMIN, 'getMoveContext', dorm, '2027-03-08');
   saveOk(env, ADMIN, input(dorm, '학사 입실', '2027-03-03T15:30:00', '2027-03-08', { meals: ctx.reentry.meals }));
   const c = cancel(env, ADMIN, leave.id, '퇴실 자체가 잘못');
-  assert.ok(c.p.warnings.some((w) => /재입실 기록\(\d+월 \d+일\)도 함께 취소됩니다/.test(w)), JSON.stringify(c.p.warnings));
+  assert.ok(c.p.warnings.some((w) => /\d+월 \d+일\(.\) 재입실 기록도 함께 취소됩니다/.test(w)), JSON.stringify(c.p.warnings));
   assert.ok(c.p.warnings.every((w) => !/\d{4}-\d{2}-\d{2}/.test(w)), '경고 속 날짜는 월·일로');
   assert.strictEqual(c.r.ok, true, JSON.stringify(c.r));
   assert.strictEqual(snap(env, dorm), before);

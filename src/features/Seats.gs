@@ -65,7 +65,7 @@ function parseSeatGridTsv_(text) {
       else if (/^\d+\.\s*\S+/.test(v)) { kind = '좌석'; namedCount++; }
       else if (SEAT_KINDS.indexOf(v) >= 0) kind = v;
       if (!kind) {
-        errors.push({ line: i + 1 + rowOffset, column: j + 1, message: i + 1 + rowOffset + '행 ' + (j + 1) + '열 "' + v.slice(0, 12) + '"을(를) 알 수 없습니다. 칸에는 공석·"1. 이름"·기둥·비상문·창문 중 하나(또는 빈칸)만 적어 주세요.' });
+        errors.push({ line: i + 1 + rowOffset, column: j + 1, message: i + 1 + rowOffset + '행 ' + (j + 1) + '열 "' + v.slice(0, 12) + '" 칸을 알 수 없습니다. 칸에는 공석·"1. 이름"·기둥·비상문·창문 중 하나(또는 빈칸)만 적어 주세요.' });
         return;
       }
       if (kind === '좌석') seatCount++;
@@ -149,7 +149,7 @@ function seatGridPlan_(existing, desired, assignedSeatIds, rows, cols, style, pa
   var warnPast = function (s, what) {
     if (!pastOnly[s.id] || pastWarned[s.id]) return;
     pastWarned[s.id] = true;
-    warnings.push(s.row + '행 ' + s.col + '열은 지난 기간에 쓰인 자리입니다. ' + what + ' 지난 날짜의 출석부를 다시 뽑으면 바뀐 격자로 나옵니다.');
+    warnings.push(s.row + '행 ' + s.col + '열은 지난 운영 기간에 쓰인 자리입니다. ' + what + ' 지난 날짜의 출석부를 다시 뽑으면 바뀐 격자로 나옵니다.');
   };
   Object.keys(want).forEach(function (k) {
     var c = want[k], s = have[k], label = labels[k] || '';
@@ -237,7 +237,7 @@ function seatNewRow_(termId, seatId, studentId, validFrom) {
  */
 function planSeatAssign_(live, termId, seatId, studentId, seatKinds, enrolledIds, staleSeatIds, ymd, termStart) {
   if (seatKinds[seatId] !== '좌석') return { ok: false, error: '좌석이 아닌 칸입니다.', ops: [] };
-  if (enrolledIds.indexOf(studentId) < 0) return { ok: false, error: '이 기간에 등록된 학생이 아닙니다.', ops: [] };
+  if (enrolledIds.indexOf(studentId) < 0) return { ok: false, error: '이 운영 기간에 등록된 학생이 아닙니다.', ops: [] };
   var target = seatAssignmentAt_(live, seatId, ymd);
   if (target.bounded) return { ok: false, error: '날짜를 좁힌 배정이 있는 자리입니다(3단계에서 다룹니다).', ops: [] };
   var mine = live.filter(function (a) { return a.student_id === studentId && !seatEnded_(a, ymd); });
@@ -285,7 +285,7 @@ function planSeatSwap_(live, a, b, seatKinds, staleSeatIds, ymd, termId, termSta
 function seatGenderWarning_(space, student) {
   if (!space || !student || space.gender === '혼성' || !space.gender) return '';
   if (student.gender && student.gender !== space.gender) {
-    return student.name + ' 학생(' + student.gender + ')이(가) ' + space.gender + ' 전용 ' + space.name + '에 앉았습니다.';
+    return student.name + ' 학생(' + student.gender + ')이 ' + space.gender + ' 전용 ' + space.name + '에 앉았습니다.';
   }
   return '';
 }
@@ -344,7 +344,7 @@ function seatApplyOps_(sheet, ops, email) {
   bulkAppend_(sheet, creates, email);
 }
 
-var SEAT_LAYOUT_STALE_MSG = '다른 관리자가 먼저 이 공간을 바꿨습니다. 화면을 새로 불러온 뒤 다시 해 주세요.';
+var SEAT_LAYOUT_STALE_MSG = '다른 선생님이 먼저 이 공간을 바꿨습니다. 화면을 새로 불러온 뒤 다시 해 주세요.';
 
 /**
  * 한 공간의 '화면이 최신인가' 표(격자·공간 저장용). 공간 행과 그 공간 칸 행 전부(취소 포함)의 id·상태·모양·updated_at을 해시한다.

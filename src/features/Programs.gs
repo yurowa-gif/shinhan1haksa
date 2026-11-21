@@ -36,7 +36,7 @@ function prgValidate_(input, ctx) {
   else {
     term = termOnDate_(date, ctx.terms);
     if (!term) add('date', '이 날짜는 어떤 운영 기간에도 속하지 않습니다. 운영 기간을 먼저 만들어 주세요.');
-    else if (term.end_date < ctx.today) add('date', '"' + term.name + '"은(는) 끝난 기간입니다. 끝난 운영 기간의 프로그램은 볼 수만 있습니다.');
+    else if (term.end_date < ctx.today) add('date', '"' + term.name + '" 운영 기간은 이미 끝났습니다. 끝난 운영 기간의 프로그램은 볼 수만 있습니다.');
   }
   var spec = String(input.blocks || '').trim() || 'ALL', parsed = parseBlockSpec_(spec);
   if (parsed.errors.length) add('blocks', '시간을 다시 골라 주세요. ' + parsed.errors[0]);
@@ -45,7 +45,7 @@ function prgValidate_(input, ctx) {
   var ids = [];
   (Array.isArray(input.studentIds) ? input.studentIds : []).forEach(function (x) { x = String(x || '').trim(); if (x && ids.indexOf(x) < 0) ids.push(x); });
   if (ctx.needStudents && !ids.length) add('studentIds', '참가 학생을 한 명 이상 골라 주세요.');
-  if (!prgTypeOf_(ctx.settings)) add('name', '사전 특이사항 유형에 "' + PRG_TYPE_BASE + '"이(가) 없습니다. 설정(exception.types)에 먼저 넣어 주세요.');
+  if (!prgTypeOf_(ctx.settings)) add('name', '사전 특이사항 유형에 "' + PRG_TYPE_BASE + '" 항목이 없습니다. 설정(exception.types)에 먼저 넣어 주세요.');
   return { ok: !errors.length, errors: errors, term: term,
     rec: { name: name, date: date, blocks: parsed.errors.length ? '' : (parsed.all ? 'ALL' : formatBlockSpec_(parsed)), memo: memo, studentIds: ids } };
 }
@@ -69,7 +69,7 @@ function prgStudentChecks_(d, term, date, ids, rows, blocks) {
   d.enrollments.forEach(function (e) { if (e.term_id === term.id) enr[e.student_id] = e; });
   ids.forEach(function (id) {
     var s = byId[id];
-    if (!s) { errors.push({ field: 'studentIds', message: '찾을 수 없는 학생이 있습니다. 새로 고친 뒤 다시 해 주세요.' }); return; }
+    if (!s) { errors.push({ field: 'studentIds', message: '찾을 수 없는 학생이 있습니다. 새로 불러온 뒤 다시 해 주세요.' }); return; }
     if (!enr[id]) { errors.push({ field: 'studentIds', message: s.name + ' 학생은 "' + term.name + '" 명단에 없습니다. 명단 올리기에서 먼저 등록해 주세요.' }); return; }
     if (!isActiveOn_(d.changes, enr[id], date)) inactive++;
     if (excOverlapWarnings_(rows, id, [date], blocks).length) overlap++;
@@ -107,7 +107,7 @@ function getProgramContext(date) {
   var ymd = String(date || '').trim() || today;
   if (!ymdIsValid_(ymd)) throw new Error('날짜를 골라 주세요.');
   var term = termOnDate_(ymd, d.terms) || getCurrentTerm_();
-  if (!term) throw new Error('운영 기간이 없습니다. 관리자에게 운영 기간을 만들어 달라고 요청해 주세요.');
+  if (!term) throw new Error('운영 기간이 없습니다. 관리자 선생님께 운영 기간을 만들어 달라고 요청해 주세요.');
   var out = { today: today, date: ymd, canEdit: canEdit, term: { id: term.id, name: term.name, start_date: term.start_date, end_date: term.end_date, ended: term.end_date < today }, students: [], blocks: [], operating: true };
   var plan = resolveDayPlan_(ymd, { termType: calTermTypeOn_(d.terms, ymd), daySchedule: pickDaySchedule_(readAll_('day_schedules'), ymd),
     blocks: readAll_('blocks'), defaults: calDefaults_(readAll_('settings', 'config')) });
@@ -130,7 +130,7 @@ function listPrograms(filter) {
   var canEdit = hasAnyAllowedRole_(user.roles, permissions_()['program.edit'].roles);
   var d = prgLoad_();
   var term = filter && filter.termId ? d.terms.filter(function (t) { return t.id === String(filter.termId); })[0] : (termOnDate_(d.today, d.terms) || getCurrentTerm_());
-  if (!term) throw new Error('운영 기간이 없습니다. 관리자에게 운영 기간을 만들어 달라고 요청해 주세요.');
+  if (!term) throw new Error('운영 기간이 없습니다. 관리자 선생님께 운영 기간을 만들어 달라고 요청해 주세요.');
   var byId = {};
   d.students.forEach(function (s) { byId[s.id] = s; });
   var exById = {};
@@ -268,7 +268,7 @@ function addProgramStudents(programId, studentIds, confirmOverlap) {
     (Array.isArray(studentIds) ? studentIds : []).forEach(function (x) { x = String(x || '').trim(); if (x && ids.indexOf(x) < 0) ids.push(x); });
     if (!ids.length) return { ok: false, errors: [{ field: 'studentIds', message: '더할 학생을 한 명 이상 골라 주세요.' }] };
     var type = prgTypeOf_(f.d.settings);
-    if (!type) return { ok: false, errors: [{ field: 'studentIds', message: '사전 특이사항 유형에 "' + PRG_TYPE_BASE + '"이(가) 없습니다. 설정(exception.types)에 먼저 넣어 주세요.' }] };
+    if (!type) return { ok: false, errors: [{ field: 'studentIds', message: '사전 특이사항 유형에 "' + PRG_TYPE_BASE + '" 항목이 없습니다. 설정(exception.types)에 먼저 넣어 주세요.' }] };
     var already = {};
     f.d.participants.forEach(function (x) { if (x.program_id === f.prog.id && prgLive_(x)) already[x.student_id] = true; });
     var fresh = ids.filter(function (id) { return !already[id]; });

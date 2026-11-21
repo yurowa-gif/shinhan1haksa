@@ -58,7 +58,7 @@
       body.appendChild(el('h2', { text: (ctx.term ? ctx.term.name + ' · ' : '') + '급식 변경' }));
       if (saved) body.appendChild(savedCard(saved.text, 'getMealConfirmPdf', saved.id, function () { return alive; }, function () { saved = null; draw(); }));
       if (!ctx.canEdit) {
-        body.appendChild(el('div', { class: 'notice info', text: '급식 변경은 담당교사와 관리자만 신청합니다. 이 화면에서는 볼 수만 있습니다.' }));
+        body.appendChild(el('div', { class: 'notice info', text: '급식 변경은 담당 선생님과 관리자 선생님만 신청합니다. 이 화면에서는 볼 수만 있습니다.' }));
         return;
       }
       if (!ctx.students.length) { body.appendChild(UI.emptyState('신청할 수 있는 학생이 없습니다. 이번 운영 기간 명단과 담당교사를 확인해 주세요.')); return; }
@@ -181,7 +181,7 @@
           onconfirm: function () {
             busy = true; drawBar();
             call('saveMealChange', payload(), p.expect).then(function (r) {
-              if (r.ok) UI.toast(r.duplicate ? '이미 저장된 신청서입니다.' : r.superseded ? '기록으로 저장했습니다.' : r.dateKo + '부터 ' + r.label + '(으)로 저장했습니다.');   // 다른 탭으로 옮긴 뒤 와도 결과는 알린다
+              if (r.ok) UI.toast(r.duplicate ? '이미 저장된 신청서입니다.' : r.superseded ? '기록으로 저장했습니다.' : r.dateKo + '부터 적용되는 신청을 저장했습니다(' + r.label + ').');   // 다른 탭으로 옮긴 뒤 와도 결과는 알린다
               if (!alive) return;
               if (r.stale) { busy = false; UI.toast(r.error, { kind: 'warn', ms: 5000 }); refresh(); return; }
               if (!r.ok) { busy = false; UI.toast((r.errors && r.errors[0] && r.errors[0].message) || r.blocked || '저장하지 못했습니다.', { kind: 'warn', ms: 5000 }); refresh(); return; }
@@ -346,16 +346,16 @@
       var want = prefillId; prefillId = '';
       call('confirmOutDismissal', want).then(function (r) {
         if (!alive) return;
-        if (r.ok) dismiss = r.prefill; else dismissMsg = '2OUT 퇴실 확정을 열 수 없습니다: ' + String(r.reason).replace(/\.$/, '') + '. OUT 화면의 [퇴실 대상]에서 확인해 주세요.';
+        if (r.ok) dismiss = r.prefill; else dismissMsg = '2OUT 퇴실 신청서를 열지 못했습니다. ' + String(r.reason).replace(/\.$/, '') + '. OUT 화면의 [퇴실 대상] 탭에서 상태를 확인해 주세요.';
         draw();
-      }).catch(function (err) { if (!alive) return; dismissMsg = '2OUT 퇴실 확정을 열 수 없습니다: ' + ((err && err.message) || err); draw(); });
+      }).catch(function (err) { if (!alive) return; dismissMsg = '2OUT 퇴실 신청서를 열지 못했습니다. 잠시 뒤 다시 해 보고, 또 안 되면 관리자 선생님께 알려 주세요.'; draw(); });
     }).catch(function (err) { if (!alive) return; clear(body); showError(body, err); });
 
     function draw() {
       resetState();   // 다시 그릴 때마다 이전 선택·서류 체크를 비운다
       dateTouched = false;
       clear(body); removeBar();
-      if (!ctx.canEdit) { body.appendChild(el('div', { class: 'notice info', text: '입퇴실은 담당교사와 관리자만 신청합니다. 이 화면에서는 볼 수만 있습니다.' })); return; }
+      if (!ctx.canEdit) { body.appendChild(el('div', { class: 'notice info', text: '입퇴실은 담당 선생님과 관리자 선생님만 신청합니다. 이 화면에서는 볼 수만 있습니다.' })); return; }
       if (!ctx.students.length) { body.appendChild(UI.emptyState('신청할 수 있는 학생이 없습니다. 이번 운영 기간 명단과 담당교사를 확인해 주세요.')); return; }
 
       if (savedMove) body.appendChild(savedCard(savedMove.text, 'getMoveConfirmPdf', savedMove.id, function () { return alive; }, function () { savedMove = null; draw(); }));
@@ -418,7 +418,7 @@
           extra.appendChild(el('div', { class: 'card' }, [el('h2', { text: '임시 퇴실' }), rf,
             el('div', { class: 'notice info', style: 'word-break:keep-all', text: '임시 퇴실은 건강상 사유만 씁니다. 사유 칸에는 건강상 이유(예: 독감 입원)만 적어 주세요. 가정 사정·대회 출전 같은 짧은 부재는 사전 특이사항으로 적습니다.' }),
             el('a', { href: (function () { var b = document.querySelector('a.back'); return b ? b.href.split('#')[0] + '?page=exceptions' : '#'; })(), style: 'display:inline-flex;align-items:center;min-height:44px;color:var(--accent)', text: '사전 특이사항 입력으로 가기' }),
-            el('div', { class: 'muted', style: 'word-break:keep-all', text: '임시 퇴실도 일반 퇴실처럼 급식을 끊고 자리를 비웁니다. 다른 점은 다시 들어오는 것을 막지 않는 것뿐입니다.' })]));
+            el('div', { class: 'muted', style: 'word-break:keep-all', text: '임시 퇴실도 일반 퇴실처럼 급식을 끊고 좌석을 비웁니다. 다른 점은 다시 입실할 수 있다는 것입니다.' })]));
         }
         if (hallLeave()) {
           dinnerSeg = UI.segmented({ label: '석식', value: dinner, options: [{ value: '중단', label: '중단' }, { value: '일반 석식', label: '일반 석식으로' }], onchange: function (v) { dinner = v; dinnerField.setError(''); refresh(); } });
@@ -434,7 +434,7 @@
           extra.appendChild(el('div', { class: 'card' }, [el('h2', { text: '재입실 급식' }),
             el('div', { class: 'muted', style: 'margin-bottom:8px;word-break:keep-all', text: '기본값은 ' + mctx.reentry.leaveKo + ' 퇴실 전날의 값입니다. 재입실일부터 적용됩니다.' }),
             UI.field('조식', bkSeg), UI.field('석식', dnSeg),
-            el('div', { class: 'notice info', style: 'word-break:keep-all', text: '옛 자리가 다른 학생에게 넘어갔으면 좌석표에서 자리 배정이 필요합니다.' })]));
+            el('div', { class: 'notice info', style: 'word-break:keep-all', text: '예전 좌석이 다른 학생에게 넘어갔으면 좌석을 새로 배정해 주세요.' })]));
         } else if (type === '기숙사 입실' || type === '기숙사 퇴실') {
           var cb = el('input', { type: 'checkbox' }); cb.checked = breakfastOn;
           cb.addEventListener('change', function () { breakfastOn = cb.checked; refresh(); });
@@ -474,7 +474,7 @@
         }
         (last.warnings || []).forEach(function (w) { result.appendChild(el('div', { class: 'notice warn', text: w })); });
       }
-      function drawBar() { removeBar(); bar = UI.actionBar([{ text: '비우기', kind: 'secondary', onclick: reset }, { text: '입퇴실 신청', disabled: !ready(), onclick: confirmSave }], { mount: true }); }
+      function drawBar() { removeBar(); bar = UI.actionBar([{ text: '비우기', kind: 'secondary', onclick: reset }, { text: '입퇴실 신청', enter: true, disabled: !ready(), onclick: confirmSave }], { mount: true }); }
       function refresh(retried) {
         var mine = ++seq; clearTimeout(timer);   // 학생을 비우는 경우에도 진행 중인 미리보기를 무효로 한다
         last = null; drawResult(); drawBar();
@@ -492,12 +492,12 @@
       function gateClosed(p) {
         var g = dismiss && (p.errors || []).filter(function (e) { return e.field === 'gate'; })[0];
         if (!g) return false;
-        dismiss = null; dismissMsg = '2OUT 퇴실 확정을 열 수 없습니다: ' + String(g.message).replace(/\.$/, '') + '. OUT 화면의 [퇴실 대상]에서 확인해 주세요.';
+        dismiss = null; dismissMsg = '2OUT 퇴실 신청서를 열지 못했습니다. ' + String(g.message).replace(/\.$/, '') + '. OUT 화면의 [퇴실 대상] 탭에서 상태를 확인해 주세요.';
         draw(); return true;
       }
       function confirmSave() {
         var p = last;
-        UI.confirmSheet({ title: '입퇴실을 저장합니다', lead: p.lead, lines: [U.studentLabel(picked) + ' (' + picked.grade + '-' + picked.classNo + ' ' + picked.number + '번)'].concat(dismiss ? ['2OUT 퇴실 확정'] : []).concat(p.lines).concat(type === '학사 입실' ? ['옛 자리가 넘어갔으면 자리 배정이 필요합니다'] : []).concat(doc ? [] : ['서류 미제출로 기록됩니다']).concat(p.warnings || []).concat(/퇴실/.test(type) && !dismiss ? ['새 달 5일이 지나 퇴실하면 그달 비용을 냅니다'] : []),
+        UI.confirmSheet({ title: '입퇴실을 저장합니다', lead: p.lead, lines: [U.studentLabel(picked) + ' (' + picked.grade + '-' + picked.classNo + ' ' + picked.number + '번)'].concat(dismiss ? ['2OUT 퇴실 확정'] : []).concat(p.lines).concat(type === '학사 입실' ? ['예전 좌석이 다른 학생에게 넘어갔으면 좌석을 새로 배정해 주세요.'] : []).concat(doc ? [] : ['서류 미제출로 기록됩니다']).concat(p.warnings || []).concat(/퇴실/.test(type) && !dismiss ? ['새 달 5일이 지나 퇴실하면 그달 비용을 냅니다'] : []),
           confirmText: '입퇴실 저장', danger: /퇴실/.test(type), onconfirm: function () {
             busy = true; drawBar();
             call('saveMove', payload(), p.expect).then(function (r) {

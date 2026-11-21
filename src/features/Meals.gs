@@ -50,6 +50,9 @@ var FOOD_RULE_TEXT = {
   next_monday: '수요일 마감 시각 전 신청이라 다음 주 월요일부터 적용됩니다.',
   monday_after_next: '수요일 마감 시각이 지나 신청해서 다다음 주 월요일부터 적용됩니다.',
   initial: '지금 그 급식이 없어 신청일부터 적용됩니다.',
+  entry_date: '입실일에 맞췄습니다.',
+  leave_date: '퇴실일에 맞췄습니다.',
+  vacation_start: '방학 시작 전에 신청해서 방학 시작일부터 적용됩니다.',
   manual: '선생님이 직접 고친 날짜입니다.'
 };
 
@@ -153,7 +156,7 @@ function foodCutoff_(settingRows) {
   (settingRows || []).forEach(function (r) { if (String(r.key || '').trim() === 'meal.morning_cutoff') raw = String(r.value || '').trim(); });
   if (!raw) DEFAULT_SETTINGS.forEach(function (s) { if (s[0] === 'meal.morning_cutoff') raw = s[1]; });
   var hm = hmNorm_(raw);
-  if (!hm) throw new Error('설정 "meal.morning_cutoff" 값("' + raw + '")이 시각(예: 11:30)이 아닙니다. 설정을 고친 뒤 다시 시도해 주세요.');
+  if (!hm) throw new Error('급식 마감 시각 설정("' + raw + '")이 시각 모양이 아닙니다. 관리자 선생님께 11:30처럼 고쳐 달라고 요청해 주세요.');
   return hm;
 }
 
@@ -291,8 +294,8 @@ function foodWarnTexts_(rec, plan, manual, eff, changes, today, terms) {
     changes.forEach(function (c) {
       var e = String(c.effective_date);
       if (c.item !== rec.item || String(c.status || '유효') !== '유효' || gone[c.id] || c.value === rec.value || !ymdIsValid_(e)) return;
-      if (e > eff) add(foodDateKo_(e) + '부터 ' + c.value + '(으)로 바뀌는 신청이 있어 이 신청을 덮습니다.');
-      else if (e > today && e < eff) add(foodDateKo_(e) + '부터 ' + c.value + '(으)로 바뀌는 대기 신청이 먼저 적용됩니다. 필요하면 직접 취소해 주세요.');
+      if (e > eff) add(foodDateKo_(e) + '부터 적용되는 변경 신청(' + c.value + ')이 있어 이 신청이 그 신청을 덮습니다.');
+      else if (e > today && e < eff) add(foodDateKo_(e) + '부터 적용되는 대기 신청(' + c.value + ')이 먼저 적용됩니다. 필요하면 직접 취소해 주세요.');
     });
   }
   return w;
@@ -338,7 +341,7 @@ function foodCheck_(input, d) {
   return { errors: errors, rec: rec, term: term, plan: plan, manual: p.manual, eff: eff,
     permYmd: foodPermYmd_(term, eff),
     warnings: foodWarnTexts_(rec, plan, p.manual, eff, d.changes, today, d.terms),
-    blocked: plan.blocked ? foodDateKo_(eff) + '에는 학사 퇴실 상태라 ' + rec.item + ' ' + rec.value + '을(를) 새로 신청할 수 없습니다.' : '' };
+    blocked: plan.blocked ? foodDateKo_(eff) + '에는 학사 퇴실 상태라 ' + rec.item + ' 신청(' + rec.value + ')을 새로 받을 수 없습니다.' : '' };
 }
 
 /**
@@ -348,9 +351,9 @@ function foodCheck_(input, d) {
 function foodTermErrors_(studentId, eff, term, terms, enrollments, today, what) {
   if (!term) return [{ field: 'effectiveDate', message: '적용일이 속한 운영 기간이 없습니다.' }];
   var effTerm = foodTermOf_(eff, terms);
-  var noList = function (t) { return [{ field: 'studentId', message: '"' + t.name + '" 명단에 없는 학생입니다. 관리자에게 명단 등록을 요청해 주세요.' }]; };
+  var noList = function (t) { return [{ field: 'studentId', message: '"' + t.name + '" 명단에 없는 학생입니다. 관리자 선생님께 명단 등록을 요청해 주세요.' }]; };
   if (term.end_date < today) {
-    return effTerm && effTerm.id !== term.id ? noList(effTerm) : [{ field: 'effectiveDate', message: '"' + term.name + '"은(는) 끝난 기간입니다. 끝난 기간의 ' + what + '은 받지 않습니다.' }];
+    return effTerm && effTerm.id !== term.id ? noList(effTerm) : [{ field: 'effectiveDate', message: '"' + term.name + '" 운영 기간은 이미 끝났습니다. 끝난 운영 기간의 ' + what + '은 받지 않습니다.' }];
   }
   return enrollments.some(function (e) { return e.term_id === term.id && e.student_id === studentId; }) ? [] : noList(term);
 }
@@ -366,8 +369,8 @@ function foodAuthorize_(input, c) {
     // 안내는 틀리지 않을 때만: 역할은 되는 교사(출결 전용 계정 등 제외)가 그 학생의 다른 기간 담당이고, 대상 기간이 끝나지 않았고 학생이 그 기간 명단에 있을 때
     var mine = readAll_('enrollments').filter(function (en) { return en.student_id === sid && normalizeEmail_(en.teacher_email) === u.email; });
     var inTerm = c.term ? readAll_('enrollments').some(function (en) { return en.term_id === c.term.id && en.student_id === sid; }) : false;
-    if (c.term && c.eff && e.message === '권한이 없습니다.' && c.term.end_date >= today_() && inTerm && mine.length && hasAnyAllowedRole_(u.roles, permissions_()['status.edit'].roles)) {
-      throw new Error('이 신청(적용일 ' + foodDateKo_(c.eff) + ')은 ' + c.term.name + ' 담당교사나 관리자가 합니다.');
+    if (c.term && c.eff && e.message === DENIED_MESSAGE && c.term.end_date >= today_() && inTerm && mine.length && hasAnyAllowedRole_(u.roles, permissions_()['status.edit'].roles)) {
+      throw new Error('이 신청(적용일 ' + foodDateKo_(c.eff) + ')은 ' + c.term.name + ' 담당 선생님이나 관리자 선생님이 합니다.');
     }
     throw e;
   }
@@ -458,7 +461,7 @@ function foodBefore_(changes, headId) {
   });
 }
 
-var FOOD_UNFINISHED = '이전 저장이 중간에 끊겨 덜 끝났습니다. 관리자에게 알려 주세요.';
+var FOOD_UNFINISHED = '이전 저장이 중간에 끊겨 덜 끝났습니다. 관리자 선생님께 알려 주세요.';
 
 /**
  * 저장했다는 대표 행이 있는데 취소 쓰기가 빠졌나(다시 눌렀을 때 "이미 저장"으로 넘기지 않으려고).
@@ -570,7 +573,7 @@ function saveMealChange(input, expect) {
     }
     if (c.blocked) return { ok: false, blocked: c.blocked };
     if (String(expect || '') !== foodSignature_(plan, c.warnings)) {
-      return { ok: false, stale: true, error: '확인한 뒤 다른 변경이 있었습니다. 다시 확인해 주세요.' };
+      return { ok: false, stale: true, error: STALE_MESSAGE };
     }
     // 결정 58: 더 새 신청에 덮인 신청서도 종이 기록으로 남긴다(status 취소). 덮은 행이 나중에 취소되면 되살릴 수 있다.
     // supersededBy는 규칙(R11a)이 주는 필드 — 아직 없으면 id 없이 꼬리표만 쓴다.

@@ -2,15 +2,15 @@
   /** 2단계 A 카드(CODING-A: 근무·OUT·면담). 이 함수의 몸통만 고친다(docs/plan/stage2.md 1절). 오늘 카드의 #home-duty 줄(내 근무, screens.md 학사 교사)도 여기서 채운다 */
   function renderStage2A(d, root) {
     if (d.out && d.out.canRecord) {
-      root.appendChild(el('div', { class: 'card' }, [
+      root.appendChild(el('div', { class: UI.cardClass(d.out.out1 || d.out.out2 ? 'key' : '') }, [
         el('h2', { text: 'OUT 기록' }),
         el('div', { class: 'muted', text: '숫자와 이름은 내 담당 학생 기준입니다.' }),
         el('div', { class: 'muted', text: '오늘 적발한 학생의 OUT을 30초 안에 기록합니다.' }),
         el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin:8px 0' }, [
-          UI.statusPill('out1', '1OUT ' + (d.out.out1 || 0) + '명'), UI.statusPill('out2', '퇴실 대상 ' + (d.out.out2 || 0) + '명'), UI.statusPill('mute', '오늘 ' + (d.out.today || 0) + '건')]),
+          (d.out.out1 ? UI.statusPill('out1', '1OUT ' + d.out.out1 + '명') : UI.statusPill('mute', '1OUT 0명')), (d.out.out2 ? UI.statusPill('out2', '퇴실 대상 ' + d.out.out2 + '명') : UI.statusPill('mute', '퇴실 대상 0명')), UI.statusPill('mute', '오늘 ' + (d.out.today || 0) + '건')]),
         d.out.list && d.out.list.length ? el('ul', { class: 'list' }, d.out.list.map(function (r) { return el('li', {}, [el('span', { text: UI.util.studentLabel(r.student) }), r.count >= 2 ? UI.statusPill('out2') : UI.statusPill('out1')]); })) : null,
-        el('a', { class: 'btn', style: 'margin-top:4px', href: d.appUrl + '?page=outs&tab=record', text: 'OUT 기록하기' }),
-        el('a', { class: 'btn secondary', style: 'margin:4px 0 0 8px', href: d.appUrl + '?page=outs&tab=term', text: (d.out.periodWord === '이번 기간' ? '이번 기간 보기' : '이번 학기 보기') })
+        UI.rowLink({ href: d.appUrl + '?page=outs&tab=record', text: 'OUT 기록하기' }),
+        UI.rowLink({ href: d.appUrl + '?page=outs&tab=term', text: (d.out.periodWord || '이번 학기') + ' 보기' })
       ]));
     }
     var x = d.duty, line = document.getElementById('home-duty');
@@ -25,14 +25,14 @@
             UI.statusPill('todo', '내 근무'), el('b', { text: x.today.label + (x.today.end ? ' (' + x.today.end + '까지)' : '') })]));
         } else line.appendChild(el('div', { text: '오늘은 근무가 없습니다.' }));
         if (x.next) line.appendChild(el('div', { class: 'muted', text: '다음 근무: ' + (+x.next.date.slice(5, 7)) + '월\u00a0' + (+x.next.date.slice(8, 10)) + '일(' + x.next.weekdayKo + ')\u00a0' + x.next.label }));
-        if (x.today || x.next) line.appendChild(el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=duty&date=' + (x.today ? d.today : x.next.date), text: '내 근무 교대' }));
+        if (x.today || x.next) line.appendChild(UI.rowLink({ href: d.appUrl + '?page=duty&date=' + (x.today ? d.today : x.next.date), text: '내 근무 교대' }));
       }
     }
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '근무표' }),
       el('div', { class: 'muted', text: '내 근무와 이번 달 근무표를 봅니다.' }),
-      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=duty', text: '근무표 보기' }),
-      el('a', { class: 'btn secondary', style: 'margin:12px 0 0 8px', href: d.appUrl + '?page=duty&tab=record', text: '내 근무 기록' })
+      UI.rowLink({ href: d.appUrl + '?page=duty', text: '근무표 보기' }),
+      UI.rowLink({ href: d.appUrl + '?page=duty&tab=record', text: '내 근무 기록' })
     ]));
   }
 
@@ -40,7 +40,7 @@
   function renderHome(d, root) {
     var m = (d.exc && d.exc.mine) || { requested: 0, confirmed: 0, canceled: 0 };
     root.appendChild(el('div', { class: 'card' }, [
-      el('h2', { text: '오늘 ' + d.today }),
+      el('h2', { text: '오늘 ' + UI.util.formatDateKo(d.today) }),
       el('div', { class: 'muted', text: d.termName }),
       el('div', { class: 'muted', id: 'home-duty' })
     ]));
@@ -50,50 +50,50 @@
         UI.statusPill('requested', '요청 ' + m.requested), UI.statusPill('confirmed', '확정 ' + m.confirmed), UI.statusPill('canceled', '취소 ' + m.canceled)
       ]),
       el('div', { class: 'muted', text: '요청은 출결 담당 선생님이 확인하면 출석부에 반영됩니다. 내 담당 학생에게만 보낼 수 있습니다.' }),
-      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=exceptions', text: '요청 보내기' }),
-      el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=programs', text: '학사 프로그램 열기' })
+      UI.rowLink({ href: d.appUrl + '?page=exceptions', text: '요청 보내기' }),
+      UI.rowLink({ href: d.appUrl + '?page=programs', text: '학사 프로그램 열기' })
     ]));
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '내 담당 학생 (' + d.students.length + '명)' }),
-      studentList(d.students, '이번 기간 담당 학생이 없습니다.')
+      studentList(d.students, '이번 운영 기간 담당 학생이 없습니다.')
     ]));
     if (d.docs && !d.docs.error) {
-      root.appendChild(el('div', { class: 'card' }, [
+      root.appendChild(el('div', { class: UI.cardClass(d.docs.items ? 'todo' : '') }, [
         el('h2', { text: '서류 체크리스트' }),
         el('div', { style: 'margin:8px 0' }, [d.docs.items ? UI.statusPill('todo', '미제출 ' + d.docs.items + '건 · 학생 ' + d.docs.students + '명') : UI.statusPill('confirmed', d.docs.types ? '모두 제출' : '서류 종류 없음')]),
         el('div', { class: 'muted', text: '학기 초 서류(동의서 등)를 냈는지 표시합니다.' }),
-        el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=docs', text: '서류 체크리스트 열기' })
+        UI.rowLink({ href: d.appUrl + '?page=docs', text: '서류 체크리스트 열기' })
       ]));
     }
     if (d.counsel && !d.counsel.error) {
       var cn = d.counsel;
-      root.appendChild(el('div', { class: 'card' }, [
+      root.appendChild(el('div', { class: UI.cardClass(cn.withoutNote ? 'todo' : '') }, [
         el('h2', { text: '상담일지' }),
-        el('div', { style: 'margin:8px 0' }, [cn.withoutNote ? UI.statusPill('todo', '이번 기간 상담 기록 없는 학생 ' + cn.withoutNote + '명') : UI.statusPill('confirmed', cn.total ? '담당 학생 모두 기록 있음' : '담당 학생 없음')]),
-        el('div', { class: 'muted', style: 'word-break:keep-all', text: '최근 30일 내가 쓴 상담 ' + cn.mine30 + '건 · 내용은 담당교사·담임·관리자만 봅니다.' }),
-        el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=counsel', text: '상담일지 열기' })
+        el('div', { style: 'margin:8px 0' }, [cn.withoutNote ? UI.statusPill('todo', '이번 운영 기간 상담 기록 없는 학생 ' + cn.withoutNote + '명') : UI.statusPill('confirmed', cn.total ? '담당 학생 모두 기록 있음' : '담당 학생 없음')]),
+        el('div', { class: 'muted', style: 'word-break:keep-all', text: '최근 30일 내가 쓴 상담 ' + cn.mine30 + '건 · 내용은 담당교사·담임·관리자 선생님만 봅니다.' }),
+        UI.rowLink({ href: d.appUrl + '?page=counsel', text: '상담일지 열기' })
       ]));
     }
     if (d.timetable && !d.timetable.error) {
       var tt = d.timetable;
-      root.appendChild(el('div', { class: 'card' }, [
+      root.appendChild(el('div', { class: UI.cardClass(tt.todo ? 'todo' : '') }, [
         el('h2', { text: tt.monthKo + ' 시간표' }),
         el('div', { style: 'margin:8px 0' }, [tt.todo ? UI.statusPill('todo', '확인 필요 ' + tt.todo + '명') : UI.statusPill('confirmed', '확인할 시간표 없음')]),
         el('div', { class: 'muted', style: 'word-break:keep-all', text: (tt.open ? '제출 마감까지 ' + tt.daysLeft + '일(' + tt.endKo + ')' : '지금은 제출 기간이 아닙니다') + ' · 미제출 ' + tt.missing + '명(담당 ' + tt.total + '명)' }),
-        el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=timetable&role=hall_teacher', text: '시간표 열기' })
+        UI.rowLink({ href: d.appUrl + '?page=timetable&role=hall_teacher', text: '시간표 열기' })
       ]));
     }
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '출석부' }),
       el('div', { class: 'muted', text: '날짜를 고르면 그날 출석부를 미리 보고 PDF로 받습니다.' }),
-      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=sheet', text: '출석부 열기' })
+      UI.rowLink({ href: d.appUrl + '?page=sheet', text: '출석부 열기' })
     ]));
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '좌석표' }),
-      el('div', { class: 'muted', text: '학생을 빈 자리에 앉히고 두 자리를 맞바꿉니다.' }),
-      el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=seats', text: '좌석표 열기' }),
-      el('a', { class: 'btn secondary', style: 'margin:12px 0 0 8px', href: d.appUrl + '?page=avoid', text: '떨어뜨릴 짝' }),
-      el('a', { class: 'btn secondary', style: 'margin:12px 0 0 8px', href: d.appUrl + '?page=contacts', text: '연락처' })
+      el('div', { class: 'muted', text: '학생을 빈 좌석에 앉히고 좌석 2개를 맞바꿉니다.' }),
+      UI.rowLink({ href: d.appUrl + '?page=seats', text: '좌석표 열기' }),
+      UI.rowLink({ href: d.appUrl + '?page=avoid', text: '떨어뜨릴 짝' }),
+      UI.rowLink({ href: d.appUrl + '?page=contacts', text: '연락처' })
     ]));
     try { renderStage2A(d, root); } catch (e) { showError(root, e); }   // 2단계 카드가 실패해도 나머지 카드는 그린다
     try { renderStage2B(d, root); } catch (e) { showError(root, e); }
@@ -109,8 +109,8 @@
         el('h2', { text: '기숙사 빈 자리' }),
         el('div', { class: 'stats', style: 'margin:4px 0 12px' }, [statBox(dm.male.vacant, '남 빈 자리(정원 ' + dm.male.capacity + ')'), statBox(dm.female.vacant, '여 빈 자리(정원 ' + dm.female.capacity + ')')]),
         el('div', { class: 'muted', style: 'word-break:keep-all', text: '기숙 ' + dm.dormCount + '명 · 방 배정 안 됨 ' + dm.unassignedCount + '명' }),
-        el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=rooms&tab=stats', text: '정원 현황판 열기' }),
-        el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=rooms', text: '방 배정 열기' })
+        UI.rowLink({ href: d.appUrl + '?page=rooms&tab=stats', text: '정원 현황판 열기' }),
+        UI.rowLink({ href: d.appUrl + '?page=rooms', text: '방 배정 열기' })
       ]));
     }
     if (f.tempLeave && f.tempLeave.n) {   // 복귀 예정일이 지난 건강상 임시 퇴실(결정 77④): 담당교사가 [일반 퇴실로 바꾸기]로 정리한다
@@ -120,7 +120,7 @@
       });
       if (f.tempLeave.n > f.tempLeave.list.length) tk.push(el('div', { class: 'muted', style: 'margin-top:8px', text: '그 밖에 ' + (f.tempLeave.n - f.tempLeave.list.length) + '명이 더 있습니다.' }));
       tk.push(el('div', { class: 'muted', style: 'margin-top:8px;word-break:keep-all', text: '학생을 눌러 기록에서 [일반 퇴실로 바꾸기]를 누를 수 있습니다. 복귀했다면 입퇴실 신청에서 학사 입실을 기록해 주세요.' }));
-      root.appendChild(el('div', { class: 'card' }, tk));
+      root.appendChild(el('div', { class: UI.cardClass('todo') }, tk));
     }
     var n = f.docMissing || 0;
     var kids = [el('h2', { text: '급식·입퇴실 서류' }),
@@ -129,9 +129,9 @@
       kids.push(el('a', { style: 'display:block;padding:10px 0;border-bottom:1px solid var(--line);color:var(--accent)', href: d.appUrl + '?page=moves&tab=history&student=' + encodeURIComponent(x.studentId) + (x.ymd ? '&date=' + x.ymd : ''), text: x.label + ' ' + x.kind }));
     });
     if (f.docMore) kids.push(el('div', { class: 'muted', style: 'margin-top:8px', text: '그 밖에 ' + f.docMore + '건이 더 있습니다.' }));
-    kids.push(el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=moves&tab=meal', text: '급식 변경 신청' }));
-    kids.push(el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=moves', text: '입퇴실 신청' }));
-    root.appendChild(el('div', { class: 'card' }, kids));
+    kids.push(UI.rowLink({ href: d.appUrl + '?page=moves&tab=meal', text: '급식 변경 신청' }));
+    kids.push(UI.rowLink({ href: d.appUrl + '?page=moves', text: '입퇴실 신청' }));
+    root.appendChild(el('div', { class: UI.cardClass(n ? 'todo' : '') }, kids));
   }
   /** 월별 일정 카드(C34, 결정 80): 오늘 일정과 다음 일정. 맨 아래에 붙인다 */
   (function () {
@@ -146,7 +146,7 @@
       e.next.forEach(function (x) { lines.push(el('div', { class: 'muted' }, [md(x.start) + ' ' + x.title + ' (' + x.kind + ')'])); });
       if (!lines.length) lines.push(el('div', { class: 'muted', text: '오늘과 앞으로 2주 안에 등록된 일정이 없습니다.' }));
       root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '월별 일정' })].concat(lines, [
-        el('a', { class: 'btn secondary', style: 'margin-top:12px', href: d.appUrl + '?page=calendar', text: '월별 일정 열기' })])));
+        UI.rowLink({ href: d.appUrl + '?page=calendar', text: '월별 일정 열기' })])));
     };
   })();
   /** 시설 일지 카드(C35, F10): 오늘 일지 수와 링크. 학사 교사는 오늘 근무일 때만(서버가 판정), 이름은 없다 */
@@ -158,9 +158,9 @@
       if (!f || f.error || !f.onDuty) return;
       var kids = [el('h2', { text: '시설 일지' }), el('div', { style: 'margin:8px 0' }, [f.count ? UI.statusPill('todo', '오늘 일지 ' + f.count + '건') : UI.statusPill('mute', '오늘 쓴 일지 없음')]),
         el('div', { class: 'muted', style: 'word-break:keep-all', text: f.isAdmin ? '학생이 쓴 시설 사용 일지와 학생 × 날짜 누적표를 봅니다.' : '오늘 학생들이 말씀드리고 쓴 시설 사용 일지입니다.' }),
-        el('a', { class: 'btn', style: 'margin-top:12px', href: d.appUrl + '?page=facilityday', text: '오늘 시설 일지 보기' })];
-      if (f.isAdmin) kids.push(el('a', { class: 'btn secondary', style: 'margin-top:8px', href: d.appUrl + '?page=facilityday&tab=stats', text: '누적표 보기' }));
-      root.appendChild(el('div', { class: 'card' }, kids));
+        UI.rowLink({ href: d.appUrl + '?page=facilityday', text: '오늘 시설 일지 보기' })];
+      if (f.isAdmin) kids.push(UI.rowLink({ href: d.appUrl + '?page=facilityday&tab=stats', text: '누적표 보기' }));
+      root.appendChild(el('div', { class: UI.cardClass(f.count ? 'key' : '') }, kids));
     };
   })();
 </script>

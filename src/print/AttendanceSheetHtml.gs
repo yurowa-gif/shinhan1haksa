@@ -920,9 +920,9 @@ function printRenderSheet_(model, opts) {
   var head = '<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>' + printEsc_(model.title || '출석부') + '</title>' +
     '<style>@page { size: A4 landscape; margin: 8mm; } html, body { margin: 0; padding: 0; } ' +
     'body { font-family: ' + PRINT_FONT + '; color: #000; background: #fff; ' + PRINT_COLOR_EXACT + ' } table { empty-cells: show; }</style></head><body>';
-  if (!model.operating) return head + printNoticePage_(model, '은(는) 운영하지 않는 날입니다.') + '</body></html>';
-  if (!printCleanSpaces_(model).spaces.length) return head + printNoticePage_(model, '은(는) 출석부에 쓸 공간(좌석 배치)이 없습니다. 좌석 배치에서 먼저 공간과 좌석을 만들어 주세요.') + '</body></html>';
-  if (!model.blocks || !model.blocks.length) return head + printNoticePage_(model, '은(는) 자습 블록이 없습니다. 자습 일정·블록에서 확인해 주세요.') + '</body></html>';
+  if (!model.operating) return head + printNoticePage_(model, '운영하지 않는 날입니다.') + '</body></html>';
+  if (!printCleanSpaces_(model).spaces.length) return head + printNoticePage_(model, '출석부에 쓸 공간(좌석 배치)이 없습니다. 좌석 배치에서 먼저 공간과 좌석을 만들어 주세요.') + '</body></html>';
+  if (!model.blocks || !model.blocks.length) return head + printNoticePage_(model, '자습 블록이 없습니다. 자습 일정·블록에서 확인해 주세요.') + '</body></html>';
   var lay = printLayout_(model, opts);
   var total = lay.pages;
   var out = [];

@@ -30,7 +30,7 @@
         var slot = el('div');
         var row = el('div', { class: 'ct-row' }, [
           el('span', { text: s.display + (s.hasContact ? '' : ' (연락처 없음)') }),
-          el('button', { type: 'button', class: 'btn secondary row-btn', text: '연락처 보기', onclick: function () { show(s, slot); } })
+          el('button', { type: 'button', class: 'btn secondary row-btn row-open', text: '연락처 보기', onclick: function () { show(s, slot); } })
         ]);
         body.appendChild(row); body.appendChild(slot);
       });
@@ -43,8 +43,8 @@
         clear(slot);
         var box = el('div', { class: 'notice info' });
         box.appendChild(phoneLine('학생', r.phone));
-        r.guardians.forEach(function (g) { box.appendChild(phoneLine('보호자' + (g.relation ? '(' + g.relation + ')' : '') + (g.name ? ' ' + g.name : ''), g.phone)); });
-        if (!r.guardians.length) box.appendChild(el('div', { class: 'muted', text: '연결된 보호자가 없습니다.' }));
+        r.guardians.forEach(function (g) { box.appendChild(phoneLine('학부모' + (g.relation ? '(' + g.relation + ')' : '') + (g.name ? ' ' + g.name : ''), g.phone)); });
+        if (!r.guardians.length) box.appendChild(el('div', { class: 'muted', text: '연결된 학부모가 없습니다.' }));
         slot.appendChild(box);
       }).catch(function (err) { if (mine !== seq) return; clear(slot); showError(slot, err); });
     }

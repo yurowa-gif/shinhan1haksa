@@ -72,7 +72,7 @@ test('방 저장: 끝난 기간이면 거부하고 room_assignments는 그대로
   const before = JSON.stringify(env.rows('room_assignments'));
   const r = plain(env.call(HALL, 'saveRoomAssignments', term.id, moved, tok));
   assert.strictEqual(r.ok, false, JSON.stringify(r));
-  assert.ok(/끝난 기간/.test(JSON.stringify(r.errors)), JSON.stringify(r));
+  assert.ok(/끝난 운영 기간/.test(JSON.stringify(r.errors)), JSON.stringify(r));
   assert.strictEqual(JSON.stringify(env.rows('room_assignments')), before, '쓰기 없음');
 });
 

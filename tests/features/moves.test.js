@@ -117,8 +117,8 @@ test('끝난 기간·명단 밖 학생은 오류, 석식을 안 고르면 오류
   const { non } = pick(env);
   const un = env.rows('students').find((s) => s.name === '가짜미등록').id;
   const ended = prev(env, ADMIN, input(non, '학사 퇴실', '2027-03-02T10:00:00', '2027-02-20'));
-  assert.ok(ended.errors.some((e) => e.message.includes('끝난 기간')));
-  assert.ok(prev(env, ADMIN, input(un, '학사 입실', '2027-03-03T10:00:00', '2027-03-05')).errors.some((e) => e.message.includes('명단에 없는') && e.message.includes('관리자에게')));
+  assert.ok(ended.errors.some((e) => e.message.includes('이미 끝났습니다')));
+  assert.ok(prev(env, ADMIN, input(un, '학사 입실', '2027-03-03T10:00:00', '2027-03-05')).errors.some((e) => e.message.includes('명단에 없는') && e.message.includes('관리자 선생님께')));
   const noDinner = prev(env, ADMIN, input(non, '학사 퇴실', '2027-03-03T10:00:00', '2027-03-05', { dinner: '' }));
   assert.ok(noDinner.errors.some((e) => e.field === 'dinner'));
 });
@@ -214,7 +214,7 @@ test('기간 경계(결정 60 보충): 2/28에 3/8 적용 퇴실 → 새 기간 
   const i = input(non, '학사 퇴실', '2027-02-28T10:00:00', '2027-03-08');
   Object.keys(env.cache).filter((k) => k.indexOf('script:deny:') === 0).forEach((k) => delete env.cache[k]);
   const before = env.rows('audit_log').length;
-  assert.throws(() => prev(env, OLD, i), /이 신청\(적용일 .*\)은 .* 담당교사나 관리자가 합니다/);
+  assert.throws(() => prev(env, OLD, i), /이 신청\(적용일 .*\)은 .* 담당 선생님이나 관리자 선생님이 합니다/);
   assert.ok(env.rows('audit_log').slice(before).some((r) => r.action === 'denied:status.edit' && r.created_by === OLD));
   const r = saveOk(env, HALL, i);
   assert.strictEqual(r.ok, true);

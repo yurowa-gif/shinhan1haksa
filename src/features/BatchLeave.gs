@@ -28,7 +28,7 @@ function batValidate_(input, ctx) {
   if (!/^\d+$/.test(grade) || ctx.grades.indexOf(grade) < 0) err('grade', '학년을 골라 주세요.');
   var eff = String(input.effectiveDate || '').trim();
   if (!ymdIsValid_(eff)) err('effectiveDate', '퇴실일을 날짜로 입력해 주세요.');
-  else if (ctx.term && (eff < ctx.term.start_date || eff > ymdAddDays_(ctx.term.end_date, 1))) err('effectiveDate', '퇴실일은 이번 운영 기간("' + ctx.term.name + '", ' + ctx.term.end_date + '까지) 안이어야 합니다.');
+  else if (ctx.term && (eff < ctx.term.start_date || eff > ymdAddDays_(ctx.term.end_date, 1))) err('effectiveDate', '퇴실일이 이번 운영 기간 밖입니다. "' + ctx.term.name + '" 시작일(' + foodDateKo_(ctx.term.start_date) + ')부터 끝난 다음 날(' + foodDateKo_(ymdAddDays_(ctx.term.end_date, 1)) + ')까지 골라 주세요.');
   var at = foodNormAt_(input.requestedAt);
   if (!at) err('requestedAt', '신청 일시를 날짜와 시각까지 입력해 주세요(예: 2027-03-03T10:45).');
   else if (at > ctx.now) err('requestedAt', '신청 일시가 지금보다 늦습니다.');
@@ -151,7 +151,7 @@ function previewBatchLeave(input) {
 function saveBatchLeave(input, expect) {
   var user = requirePermission_('batch.leave');
   var ex = batParseExpect_(expect);
-  if (!ex) return { ok: false, stale: true, error: '확인한 뒤 다시 저장해 주세요. 미리보기부터 다시 해 주세요.' };
+  if (!ex) return { ok: false, stale: true, error: '저장 전 미리 보기 내용이 없습니다. 미리 보기를 다시 한 뒤 저장해 주세요.' };
   return withLock_(function () {
     ['terms', 'students', 'enrollments', 'status_changes'].forEach(function (n) { invalidate_('db', n); });
     invalidate_('config', 'settings');
@@ -163,7 +163,7 @@ function saveBatchLeave(input, expect) {
     if (v.errors.length) return { ok: false, errors: v.errors };
     var c = batPlan_(v.rec, d, ex.b);
     if (!c.plan.plans.length) return { ok: false, errors: [{ field: 'grade', message: '퇴실시킬 학생이 없습니다. 다시 미리보기를 해 주세요.' }] };
-    if (batSignature_(ex.b, c) !== ex.s) return { ok: false, stale: true, error: '확인한 뒤 다른 변경이 있었습니다. 미리보기부터 다시 해 주세요.' };
+    if (batSignature_(ex.b, c) !== ex.s) return { ok: false, stale: true, error: STALE_MESSAGE };
     var rows = [], patches = [];
     c.plan.plans.forEach(function (p) {
       var headId = Utilities.getUuid(), h = p.rows[0];
@@ -245,7 +245,7 @@ function undoBatchLeave(batchId, reason, expect) {
     ['terms', 'students', 'enrollments', 'status_changes'].forEach(function (n) { invalidate_('db', n); });
     var c = batUndoCheck_(batchId);
     if (c.error) return { ok: false, errors: [{ field: '', message: c.error }] };
-    if (String(expect || '') !== batUndoSignature_(c)) return { ok: false, stale: true, error: '확인한 뒤 다른 변경이 있었습니다. 다시 확인해 주세요.' };
+    if (String(expect || '') !== batUndoSignature_(c)) return { ok: false, stale: true, error: STALE_MESSAGE };
     var patches = [], seen = {};
     c.undo.plans.forEach(function (p) {
       var tag = function (x) { var r = String(x.cancel_reason || ''); return /^\[자동\] /.test(r) ? r : '[자동] ' + p.headId + ' ' + (r || '일괄 퇴실 되돌리기로 함께 취소'); };

@@ -1,0 +1,74 @@
+/* 방향 C — 부드러운 묶음: 연한 푸른 회색 바탕에 '한 장의 흰 판' 안에 구역을 줄로 나눈다(설정 앱처럼). 할 일은 판 위에 떠 있는 색 상자.
+   한 줄 이유: 학생·학부모처럼 처음 쓰는 사람이 '한 덩어리 안에서 위에서 아래로' 읽게 하고, 둥글고 큰 글씨로 부담을 낮춘다. 색은 초록청 한 색. */
+:root {
+  --bg: #f1f3f2; --card: #ffffff; --text: #17201d; --muted: #556059; --line: #e1e6e3;
+  --accent: #0d6b57; --accent-weak: #e2f3ee; --accent-ink: #0a5444;
+  --radius: 22px; --radius-sm: 14px; --shadow: 0 -6px 20px rgba(23, 32, 29, .10);
+  --focus: #0a5444;
+}
+body { background: var(--bg); letter-spacing: -.01em; }
+/* 머리줄: 흰 바탕, 큰 제목, 아래 그림자 한 줄 */
+header.top { background: var(--card); border-bottom: 0; box-shadow: 0 1px 0 var(--line); padding: 16px; }
+header.top h1 { font-size: 1.2rem; font-weight: 800; letter-spacing: -.03em; }
+header.top .who { font-size: .82rem; }
+.back { color: var(--accent-ink); font-weight: 700; }
+
+/* 한 장의 판: main 자체가 흰 판. 카드는 판 안의 구역(가는 줄). 할 일(.todo)은 초록 바탕 상자 */
+main { background: var(--card); border-radius: var(--radius); margin: 12px; padding: 6px 18px 12px; max-width: none; }
+.card { background: transparent; border: 0; border-radius: 0; margin: 0; padding: 16px 0 8px; border-top: 1px solid var(--line); }
+.card:first-child { border-top: 0; padding-top: 10px; }
+.card h2 { font-size: 1.15rem; font-weight: 800; letter-spacing: -.02em; margin: 0 0 8px; }
+.card:first-child h2 { font-size: 1.5rem; letter-spacing: -.03em; }
+.card.todo { background: var(--accent-weak); border: 0; border-radius: var(--radius-sm); margin: 12px 0; padding: 16px; }
+.card.todo h2 { color: var(--accent-ink); font-size: 1.25rem; }
+.card.key h2 { font-size: 1.15rem; }
+.muted { color: var(--muted); }
+
+/* 숫자·핵심은 크게 */
+.card.key .pill.out-1, .card.key .pill.out-2 { font-size: 1.7rem; font-weight: 800; padding: 4px 18px; }
+.stat { background: var(--accent-weak); border-radius: var(--radius-sm); }
+.stat .n { font-size: 2.4rem; letter-spacing: -.05em; line-height: 1.05; color: var(--accent-ink); }
+
+/* 버튼: 판 안에서는 오른쪽 '›' 줄, 할 일 상자 안의 주 버튼은 폭 가득 둥근 초록 */
+.btn { border-radius: var(--radius-sm); font-weight: 700; }
+.card > .btn, .card > a.btn { display: flex; width: 100%; justify-content: space-between; min-height: var(--tap); padding: 10px 0; margin: 0; border: 0; border-top: 1px solid var(--line);
+  border-radius: 0; background: transparent; color: var(--accent-ink); text-align: left; }
+.card > .btn::after { content: "›"; font-size: 1.5rem; line-height: 1; color: var(--muted); }
+.card.todo > .btn:not(.secondary):first-of-type { background: var(--accent); color: #fff; border: 0; border-radius: var(--radius-sm); padding: 14px 18px; margin-top: 12px; font-size: 1.05rem; }
+.card.todo > .btn:not(.secondary)::after { color: #fff; }
+.card.todo > .btn.secondary { border-top-color: #bcded4; }
+.btn.secondary { background: var(--card); border: 1.5px solid var(--accent); color: var(--accent-ink); }
+.actionbar { background: var(--card); box-shadow: var(--shadow); border-top: 0; }
+.actionbar > .btn { border-radius: var(--radius-sm); padding: 14px 18px; font-size: 1.05rem; }
+
+/* 상태 표시: 모양 하나(둥근 알약, 테두리 없음). 색 + 앞 글자 + 글자 */
+.pill { border: 0 !important; padding: 3px 12px; font-weight: 800; }
+.pill.s-canceled { text-decoration: line-through; }
+.notice { border: 0; border-radius: var(--radius-sm); }
+.error { border-radius: var(--radius-sm); }
+
+/* 목록·표 */
+.pt-row, .tt-row, .fc-log, ul.list li { border-bottom: 1px solid var(--line); }
+.tt-row { padding: 14px 0; }
+.tt-main b { font-size: 1.1rem; font-weight: 800; }
+
+/* 탭·칩·토글 */
+.segmented { background: var(--bg); border: 0; border-radius: var(--radius-sm); padding: 4px; gap: 4px; }
+.seg { border: 0; border-radius: 10px; background: transparent; color: var(--text); font-weight: 700; }
+.seg.on { background: var(--card); color: var(--accent-ink); box-shadow: 0 1px 3px rgba(23, 32, 29, .16); }
+.chip, .tab { border-color: var(--line); background: var(--card); }
+.chip.on, .tab.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 800; }
+
+/* 입력칸 + 시각 칸이 카드 밖으로 나가던 것을 고친다 */
+.field input, .field select, .field textarea { border: 0; border-radius: var(--radius-sm); background: var(--bg); padding: 8px 14px; }
+.field label { font-weight: 700; color: var(--text); font-size: .88rem; }
+.fc-times { gap: 10px; }
+.fc-times .field { flex: 1 1 0; min-width: 0; }
+.fc-times input[type="time"] { min-width: 0; width: 100%; }
+
+/* 눌러서 가는 보조 버튼도 같은 '열기 ›' 줄로(테두리 상자가 입력칸처럼 보이던 것) · 빈 상태는 한 줄로 */
+.card > .btn.secondary, .card > a.btn.secondary { border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; padding-left: 0; padding-right: 0; }
+.empty { text-align: left; padding: 4px 0 10px; }
+.empty p { margin: 0 0 4px; }
+/* 글자 150%에서 긴 알약이 화면 밖으로 나가던 것(지금도 나간다): 알약 안에서 줄을 바꾼다 */
+.pill { white-space: normal; max-width: 100%; }

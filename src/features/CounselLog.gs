@@ -121,6 +121,43 @@ function getCounselNotes(studentId) {
   return { student: one, canWrite: mine, types: cnlTypes_(), notes: notes };
 }
 
+/** 그 학생의 상담 기록을 이 교사가 볼 수 있는가 — counsel.view와 같은 판정(Auth.gs studentFacts_·canAccessStudentByFacts_ 재사용, 새 규칙 없음) */
+function cnlCanView_(user, student) {
+  var rule = permissions_()['counsel.view'];
+  return canAccessStudentByFacts_(user.roles, studentFacts_(user, student, '', rule.dutyWindow, rule.noDuty), rule.roles, !!rule.wideView);
+}
+
+/**
+ * 상담일지 노트북 목록용(C42): 이 교사가 counsel.view로 볼 수 있는 이번 기간 학사생과 살아 있는 상담 수·가장 최근 상담 날짜. 내용·유형·대상·교사는 넣지 않는다.
+ * 담당교사 = 자기 담당 학생, 담임 = 자기 반, 관리자 = 전체. 취소된 상담은 세지 않는다. 목록 권한 counsel.list(역할만), 학생별은 counsel.view 판정.
+ * → {ok, students:[{id, grade, classNo, number, name, count, lastDate('' = 없음)}]} (학번 순)
+ */
+function getCounselRoster() {
+  var user = requirePermission_('counsel.list');
+  var term = getCurrentTerm_();
+  if (!term) return { ok: true, students: [] };
+  var byId = {};
+  readAll_('students').forEach(function (s) { byId[s.id] = s; });
+  var seen = {}, list = [];
+  readAll_('enrollments').forEach(function (e) {
+    var s = byId[e.student_id];
+    if (e.term_id !== term.id || !s || seen[s.id]) return;
+    seen[s.id] = true;
+    if (cnlCanView_(user, s)) list.push(s);
+  });
+  var count = {}, last = {};
+  readAll_('counsel_notes', 'counsel').forEach(function (n) {
+    if (!ruleRowLive_(n)) return;
+    var id = ruleStr_(n.student_id), d = String(n.date || '');
+    count[id] = (count[id] || 0) + 1;
+    if (d > (last[id] || '')) last[id] = d;
+  });
+  list.sort(function (a, b) { return String(a.student_no).localeCompare(String(b.student_no)); });
+  return { ok: true, students: list.map(function (s) {
+    return { id: s.id, grade: +s.grade, classNo: s.class_no, number: s.number, name: s.name, count: count[s.id] || 0, lastDate: last[s.id] || '' };
+  }) };
+}
+
 function cnlFindNote_(noteId) { return findById_('counsel_notes', String(noteId || ''), 'counsel'); }
 
 /** 같은 상담(학생·날짜·유형·대상·교사·내용이 같은 유효 행)이 이미 있나 */
@@ -164,14 +201,14 @@ function saveCounselNote(input) {
  */
 function cnlOwnNote_(noteId, user) {
   var note = cnlFindNote_(noteId);
-  if (!note) return { error: '상담 기록을 찾을 수 없습니다. 새로 고친 뒤 다시 해 주세요.' };
+  if (!note) return { error: '상담 기록을 찾을 수 없습니다. 새로 불러온 뒤 다시 해 주세요.' };
   if (String(note.type).trim() === CNS_TYPE_OUT2) return { error: "'2OUT 학부모 면담'은 OUT 화면의 [퇴실 대상]에서만 취소합니다." };
   if (normalizeEmail_(note.teacher_email) !== user.email) {
     logDenied_(user.email, 'counsel.cancel', '남이 쓴 상담');
-    throw new Error('권한이 없습니다.');
+    throw new Error(DENIED_MESSAGE);
   }
   requirePermission_('counsel.save', { studentId: note.student_id });   // 지금도 그 학생의 담당교사여야 한다
-  if (!ruleRowLive_(note)) return { error: '이미 취소된 상담입니다. 새로 고친 뒤 다시 해 주세요.' };
+  if (!ruleRowLive_(note)) return { error: '이미 취소된 상담입니다. 새로 불러온 뒤 다시 해 주세요.' };
   return { note: note };
 }
 

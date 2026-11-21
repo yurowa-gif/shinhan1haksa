@@ -156,7 +156,7 @@ test('끝난 기간: 종료 14일 안은 저장 가능(안내), 지나면 읽기
   const t = x.term;
   x.env.asOwner((c) => c.updateRecord_('terms', t.id, { end_date: '2027-03-09' }, ADMIN));
   const p = x.prev(ATT, [x.cell(x.a)]);
-  assert.ok(p.ok && p.ended && p.warnings.some((w) => w.includes('끝난 기간 정리')), JSON.stringify(p));
+  assert.ok(p.ok && p.ended && p.warnings.some((w) => w.includes('끝난 운영 기간의 기록 정리')), JSON.stringify(p));
   x.env.setNow('2027-03-30T09:00:00');
   const q = x.prev(ATT, [x.cell(x.a)]);
   assert.strictEqual(q.ok, false);

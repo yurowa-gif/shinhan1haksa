@@ -16,7 +16,6 @@ var RES_MAX_CELLS = 500;
 var RES_MAX_RANGE_DAYS = 62;
 var RES_KINDS = ['결석', '지각', '조퇴'];
 var RES_AUTO_REASON = '결과 정리에서 바꿈';
-var RES_STALE_MSG = '다른 선생님이 먼저 바꿨습니다. 새로 불러온 뒤 다시 해 주세요.';
 var RES_MARK = { '결석': '×', '지각': '△', '조퇴': '조' };
 
 /* ───────────── 순수 도우미 ───────────── */
@@ -265,7 +264,7 @@ function resPlan_(user, payload) {
     c = c || {};
     var sid = String(c.studentId || ''), date = String(c.date || '').trim();
     var s = students[sid];
-    if (!s) { err('studentId', '이번 기간 학사생이 아니거나 볼 수 없는 학생입니다.'); return; }
+    if (!s) { err('studentId', '이번 운영 기간 학사생이 아니거나 볼 수 없는 학생입니다.'); return; }
     if (!ymdIsValid_(date) || !ctx.plans[date]) { err('date', '이 범위 안의 날짜가 아닙니다.'); return; }
     var w = attGridWritable_(ctx.term, date, today, RES_GRACE_DAYS);
     if (!w.ok) { err('date', w.reason); return; }
@@ -300,7 +299,7 @@ function resPlan_(user, payload) {
     warnings.push(x.wasResult ? x.label + ' ' + x.date.slice(5) + ' 이미 입력한 결과 "' + x.type + '"(' + x.blocks + ')를 새 결과로 바꿉니다.'
       : x.label + ' ' + x.date.slice(5) + ' 사전 특이사항 "' + x.type + '"(' + x.blocks + ')를 결과로 바꿉니다.');
   });
-  if (ended) warnings.push('끝난 기간 정리입니다("' + ctx.term.name + '"은(는) ' + ctx.term.end_date + '에 끝났고 ' + ymdAddDays_(ctx.term.end_date, RES_GRACE_DAYS) + '까지 정리할 수 있습니다).');
+  if (ended) warnings.push('끝난 운영 기간의 기록 정리입니다. "' + ctx.term.name + '" 운영 기간은 ' + foodDateKo_(ctx.term.end_date) + '에 끝났고 ' + foodDateKo_(ymdAddDays_(ctx.term.end_date, RES_GRACE_DAYS)) + '까지 정리할 수 있습니다.');
   var groups = {}, outGroups = {};
   items.forEach(function (it) {
     var g = it.student.raw.id + '|' + it.date;
@@ -339,7 +338,7 @@ function saveResults(payload, sig) {
     if (term0) invalidate_('db', termSheetName_('exceptions', term0.id));
     var p = resPlan_(user, payload);
     if (!p.ok) return { ok: false, errors: p.errors };
-    if (typeof sig !== 'string' || sig !== p.sig) return { ok: false, stale: true, error: RES_STALE_MSG };
+    if (typeof sig !== 'string' || sig !== p.sig) return { ok: false, stale: true, error: STALE_MESSAGE };
     var ctx = p.ctx, sheet = termSheetName_('exceptions', ctx.term.id);
     if (excRows_(ctx.term).missing) ensureTermSheet_('exceptions', ctx.term.id);
     var now = nowIso_();
@@ -377,10 +376,10 @@ function cancelResult(input) {
     var ctx = resLoad_(user, range.from, range.to, { noFixed: true });
     if (ctx.error) return { ok: false, error: ctx.error };
     if (!ctx.plans[date]) return { ok: false, error: '이 범위 안의 날짜가 아닙니다.' };
-    if (!resEditable_(ctx.term, ctx.today)) return { ok: false, error: '"' + ctx.term.name + '"은(는) 끝난 지 ' + RES_GRACE_DAYS + '일이 지나 취소할 수 없습니다.' };
+    if (!resEditable_(ctx.term, ctx.today)) return { ok: false, error: '"' + ctx.term.name + '" 운영 기간이 끝난 지 ' + RES_GRACE_DAYS + '일이 지나 취소할 수 없습니다.' };
     var s = resStudents_(ctx).filter(function (x) { return x.raw.id === String(input.studentId || ''); })[0];
     if (!s) return { ok: false, error: '볼 수 없는 학생입니다.' };
-    if (typeof input.token !== 'string' || input.token !== resToken_(ctx)) return { ok: false, stale: true, error: RES_STALE_MSG };
+    if (typeof input.token !== 'string' || input.token !== resToken_(ctx)) return { ok: false, stale: true, error: STALE_MESSAGE };
     var why = String(input.reason || '').trim(), kind = String(input.kind || '');
     if (RES_KINDS.indexOf(kind) < 0) return { ok: false, errors: [{ field: 'kind', message: '취소할 결과(결석·지각·조퇴)를 골라 주세요.' }] };
     if (why.length < EXC_CANCEL_REASON_MIN) return { ok: false, errors: [{ field: 'reason', message: '취소 사유를 ' + EXC_CANCEL_REASON_MIN + '자 이상 적어 주세요.' }] };
@@ -393,7 +392,7 @@ function cancelResult(input) {
     var typeOf = {};
     rowsOf.forEach(function (r) { typeOf[r.id] = r.type; });
     var ids = hit.exceptionIds.filter(function (id) { return resOwnType_(typeOf[id]); });   // 학원·프로그램 같은 사전 특이사항은 여기서 취소하지 않는다
-    if (!ids.length) return { ok: false, errors: [{ field: 'kind', message: '이 ' + kind + '은(는) 결과 화면에서 넣은 것이 아니라 취소할 수 없습니다. 사전 특이사항 화면에서 고쳐 주세요.' }] };
+    if (!ids.length) return { ok: false, errors: [{ field: 'kind', message: '이 기록(' + kind + ')은 결과 화면에서 넣은 것이 아니라 여기서 취소할 수 없습니다. 사전 특이사항 화면에서 고쳐 주세요.' }] };
     var since = vioAutoSince_(ctx.exSettings.autoOut, nowIso_());
     bulkUpdateRecords_(sheet, ids.map(function (id) { return { id: id, patch: { status: '취소', cancel_reason: why } }; }), user.email);
     var auto = vioAfterExceptionWrite_(ctx.term, [s.raw.id], user.email, since);

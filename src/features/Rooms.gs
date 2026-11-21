@@ -190,7 +190,7 @@ function roomSeedOf_(seed) {
 function previewRoomDraft(termId, seed) {
   var user = requirePermission_('room.edit');
   var d = roomLoad_(termId);
-  if (d.today > d.term.end_date) return { ok: false, errors: [{ field: '', message: '끝난 기간의 방 배정은 바꿀 수 없습니다.' }] };
+  if (d.today > d.term.end_date) return { ok: false, errors: [{ field: '', message: '끝난 운영 기간의 방 배정은 바꿀 수 없습니다.' }] };
   var sd = roomSeedOf_(seed);
   var draft = roomDraft_(d.rooms, d.dorm.map(function (s) { return { id: s.id, gender: s.gender, grade: s.grade }; }), d.changes, d.avoids, d.ymd, sd);
   var cur = {};
@@ -224,7 +224,7 @@ function saveRoomAssignments(termId, assignments, expect) {
   return withLock_(function () {
     roomFresh_();
     var d = roomLoad_(termId);
-    if (d.today > d.term.end_date) return { ok: false, errors: [{ field: '', message: '끝난 기간의 방 배정은 바꿀 수 없습니다.' }] };
+    if (d.today > d.term.end_date) return { ok: false, errors: [{ field: '', message: '끝난 운영 기간의 방 배정은 바꿀 수 없습니다.' }] };
     var n = roomNormalize_(d, assignments);
     if (n.errors.length) return { ok: false, errors: n.errors };
     // 바뀌는 학생 = 지금 효력이 있는 방(기숙사생 기준)과 계획의 방이 다른 학생. 끝내거나 취소하는 행은 그 학생들의 행뿐이다.

@@ -298,7 +298,10 @@ test('D13 frontend-design 검토와 rules.md 8절: 라이선스·출처·판정(
   const review = css.readFile('docs/design/frontend-design-review.md');
   ['anthropics/skills', 'skills/frontend-design/SKILL.md', 'Apache License 2.0', '코드를 복사하지 않고 원칙만', '가져온다', '가져오지 않는다', '바꿔 가져온다', '외부 라이브러리·웹폰트·애니메이션 없음', '4.5:1', 'rules.md 반영 제안', '확인 못 한 것'].forEach((t) => assert.ok(review.indexOf(t) >= 0, t));
   const rules = css.readFile('docs/design/rules.md');
-  ['## 8. 화면을 그리기 전 한 줄 계획과 점검', '한 동작의 이름', '오류에 사과하지 않는다', '학생·학부모 화면', 'docs/design/frontend-design-review.md'].forEach((t) => assert.ok(rules.indexOf(t) >= 0, t));
+  ['## 8. 화면을 그리기 전 한 줄 계획과 점검', '학생·학부모 화면', 'docs/design/frontend-design-review.md', 'writing.md'].forEach((t) => assert.ok(rules.indexOf(t) >= 0, t));
+  // 문구 규칙은 writing.md 로 옮겼다(결정 85): 한 동작의 이름·오류에 사과하지 않기가 거기 있다
+  const writing = css.readFile('docs/design/writing.md');
+  ['같은 낱말', '사과'].forEach((t) => assert.ok(writing.indexOf(t) >= 0, 'writing.md 에 ' + t + ' 규칙이 없다'));
   // 기존 규칙이 남아 있다(이번 변경은 더한 것뿐)
   ['## 4. 상태 표시', '## 6. 확인·사유 입력이 필요한 동작', '글자 대비 4.5:1', '개인 정보', '빈 상태'].forEach((t) => assert.ok(rules.indexOf(t) >= 0, t));
 });

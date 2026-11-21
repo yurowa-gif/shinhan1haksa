@@ -4,7 +4,7 @@
  * buildFakeData_(opts)  : 시트를 건드리지 않는 순수 함수. tests/에서 node로 검사한다.
  * seedFakeData()        : 편집기에서 실행. 가짜 학생 30명 + 운영 기간 + 담당·학부모 연결을 시트에 쓴다.
  *
- * 시험 계정 이메일은 코드에 적지 않고 Script Properties에 넣는다.
+ * 시험 계정 이메일은 코드에 적지 않고 Script Properties에 넣는다. 이름 칸에는 직함 없이 사람 이름만 둔다(화면이 "이름 선생님"으로 부르므로, writing.md 6절).
  *   TEST_STUDENT_EMAIL  : 가짜 학생 1번에 연결
  *   TEST_PARENT_EMAIL   : 가짜 학생 1·2번(형제)의 학부모로 연결 → 자녀 전환 탭 시험
  *   TEST_TEACHER_EMAIL  : (선택) 학사 교사, 가짜 학생 일부의 담당
@@ -118,17 +118,17 @@ function buildFakeData_(opts) {
   }
 
   if (opts.studentEmail) {
-    users.push({ email: opts.studentEmail, name: students[0].name + '(시험 학생)', roles: 'student', homeroom_class: '', active: 'TRUE', memo: '시험 계정' });
+    users.push({ email: opts.studentEmail, name: students[0].name, roles: 'student', homeroom_class: '', active: 'TRUE', memo: '시험 계정' });
   }
   if (opts.parentEmail) {
-    users.push({ email: opts.parentEmail, name: '시험 학부모', roles: 'parent', homeroom_class: '', active: 'TRUE', memo: '시험 계정' });
+    users.push({ email: opts.parentEmail, name: '정하윤', roles: 'parent', homeroom_class: '', active: 'TRUE', memo: '시험 계정' });
   }
   if (opts.teacherEmail) {
-    users.push({ email: opts.teacherEmail, name: '시험 학사교사', roles: 'hall_teacher', homeroom_class: '', active: 'TRUE', memo: '시험 계정' });
+    users.push({ email: opts.teacherEmail, name: '오지후', roles: 'hall_teacher', homeroom_class: '', active: 'TRUE', memo: '시험 계정' });
   }
   if (opts.homeroomEmail) {
     users.push({
-      email: opts.homeroomEmail, name: '시험 담임', roles: 'homeroom',
+      email: opts.homeroomEmail, name: '문서윤', roles: 'homeroom',
       homeroom_class: students[0].grade + '-' + students[0].class_no, active: 'TRUE', memo: '시험 계정'
     });
   }

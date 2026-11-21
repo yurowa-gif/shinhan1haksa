@@ -51,8 +51,28 @@ function ptlOuts_(term, studentId) {
   return out;
 }
 
-/** 이번 기간 출결 특이사항(사전·결과 모두 같은 탭). 유형·날짜·상태(확정·확인 대기·취소)만 — 사유·요청자·확정자는 보내지 않는다. */
-function ptlExceptions_(term, studentId, today) {
+/**
+ * 출결 기록 한 줄 이유(C44, hr-gap G6). 유형·상태로만 정한다 — 사유 칸(교사 메모일 수 있음)·요청자·확정자는 쓰지 않는다.
+ * 미인정 유형(exception.auto_out_types)은 OUT으로 센다는 말을 붙인다(학부모는 'OUT 1번', 학생은 '1OUT', writing.md 7절). 취소·모르는 유형은 ''(화면에 줄이 안 생긴다). 순수 함수.
+ */
+function ptlReason_(type, state, autoOut, parent) {
+  type = String(type || '');
+  if (state === '취소') return '';
+  if (autoOut.indexOf(type) >= 0) {
+    var out = parent ? 'OUT 1번' : '1OUT';
+    return state === '확정' ? '미인정이라 ' + out + '으로 셉니다.' : '미인정이라 ' + (parent ? '확인되면 ' : '확정되면 ') + out + '이 됩니다.';
+  }
+  if (type.indexOf('병') === 0) return '병으로 인한 기록입니다.';
+  if (type.indexOf('가정') === 0) return '가정 사유 기록입니다.';
+  if (type.indexOf('학원') === 0) return '학원 일정 기록입니다.';
+  if (type.indexOf('학사 외') === 0) return '학사 밖 프로그램 참가 기록입니다.';
+  if (type.indexOf('학사 내') === 0) return '학사 안 프로그램 참가 기록입니다.';
+  if (type.indexOf('기타') === 0) return '기타 사유 기록입니다.';
+  return '';
+}
+
+/** 이번 기간 출결 특이사항(사전·결과 모두 같은 탭). 유형·날짜·저장된 상태(요청·확정·취소, 화면이 학부모에게는 '확인 중'으로 풀어 쓴다)·이유 한 줄(ptlReason_)만 — 사유·요청자·확정자는 보내지 않는다. */
+function ptlExceptions_(term, studentId, today, parent) {
   if (!term) return [];
   var settings = excSettings_(readAll_('settings', 'config')), seen = {}, list = [];
   excRows_(term).rows.filter(function (r) { return String(r.student_id) === studentId; })
@@ -62,7 +82,9 @@ function ptlExceptions_(term, studentId, today) {
       if (seen[key] || !ymdIsValid_(String(r.date))) return;
       seen[key] = true;
       list.push({ date: String(r.date), dateKo: foodDateKo_(r.date), type: String(r.type), short: settings.typeShort[String(r.type)] || String(r.type),
-        state: ruleStr_(r.status) === '취소' ? '취소' : ruleStr_(r.status) === '확정' ? '확정' : '확인 대기', upcoming: String(r.date) > today });
+        state: ruleStr_(r.status) === '취소' ? '취소' : ruleStr_(r.status) === '확정' ? '확정' : '요청', upcoming: String(r.date) > today });
+      var last = list[list.length - 1];
+      last.reason = ptlReason_(last.type, last.state, settings.autoOut, !!parent);
     });
   return list.slice(0, PTL_EXC_MAX);
 }
@@ -146,7 +168,7 @@ function getPortalStudent(studentId, month) {
   var today = today_(), term = getCurrentTerm_();
   var own = portalWho_().ownStudentIds.indexOf(sid) >= 0;   // 본인 판정도 신원 한 곳(portalWho_)에서
   var res = { viewer: own ? 'student' : 'parent', today: today, term: term ? { name: term.name } : null, student: ptlStudentOne_(student),
-    teacher: ptlTeacherName_(term, sid), outs: ptlOuts_(term, sid), exceptions: ptlExceptions_(term, sid, today), seat: ptlSeat_(term, sid, today), room: ptlRoom_(term, sid),
+    teacher: ptlTeacherName_(term, sid), outs: ptlOuts_(term, sid), exceptions: ptlExceptions_(term, sid, today, !own), seat: ptlSeat_(term, sid, today), room: ptlRoom_(term, sid),
     todo: ttcTodo_(sid, own, today), status: ptlStatus_(sid, today), pending: ptlPending_(sid, today), upcoming: ptlUpcoming_(today, 3), month: ptlMonth_(m) };
   if (!own) res.counsel = ptlCounsel_(sid);
   return res;

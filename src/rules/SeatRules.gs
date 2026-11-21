@@ -146,7 +146,7 @@ function seatDraft_(spaces, seats, students, prev, fixed, avoids, seed) {
   (fixed || []).filter(Boolean).sort(bySeat).forEach(function (f) {
     var sid = ruleStr_(f.seat_id), pid = ruleStr_(f.student_id);
     if (!st[pid] || where[pid]) return;
-    if (!board.seats[sid] || who[sid]) { warnings.push(pid + ' 학생의 고정 자리(' + sid + ')를 쓸 수 없어 새로 배정합니다'); return; }
+    if (!board.seats[sid] || who[sid]) { warnings.push(pid + ' 학생의 고정 좌석(' + sid + ')을 쓸 수 없어 새 좌석을 배정합니다.'); return; }
     put(sid, pid, true);
   });
   // 2. 3학년 지난 자리
@@ -184,15 +184,15 @@ function seatDraft_(spaces, seats, students, prev, fixed, avoids, seed) {
     var ver = isVer(pid), cands = pool(pid, ver);
     if (!cands.length) {   // 베리타스는 SA가 모자라면 1층으로, 아니면 1층이 모자라면 같은 성별 SA실 남은 자리로
       cands = pool(pid, !ver);
-      if (cands.length && ver) warnings.push(pid + ' 학생(베리타스): SA실 자리가 모자라 1층에 배정했습니다');
+      if (cands.length && ver) warnings.push(pid + ' 학생(베리타스)은 SA실 좌석이 모자라 1층에 배정했습니다.');
       if (cands.length && !ver) toSa++;
     }
-    if (!cands.length) { unplaced.push(pid); warnings.push(pid + ' 학생: 앉을 자리가 없습니다'); return; }
+    if (!cands.length) { unplaced.push(pid); warnings.push(pid + ' 학생이 앉을 좌석이 없습니다. 좌석을 늘리거나 직접 배정해 주세요.'); return; }
     var best = [], bc = Infinity;   // 가장 싼 자리들 중 seed로 하나(같은 값이면 앞자리만 고르지 않게)
     cands.forEach(function (sid) { var c = cost(sid, pid); if (c < bc) { bc = c; best = [sid]; } else if (c === bc) best.push(sid); });
     put(best[Math.floor(rnd() * best.length)], pid, false);
   });
-  if (toSa) warnings.push('1층 자리가 모자라 ' + toSa + '명을 SA실에 앉혔습니다');
+  if (toSa) warnings.push('1층 좌석이 모자라 ' + toSa + '명을 SA실에 배정했습니다.');
 
   // 개선: 위반 칸의 학생을 같은 구역(SA 여부·성별 맞음)의 다른 학생과 맞바꾸거나 빈자리로 옮겨 비용이 줄면 한다. 바뀌는 것이 없을 때까지(최대 30회).
   var movable = function (sid) { return who[sid] && !locked[sid]; };

@@ -8,8 +8,7 @@
 var DOC_STATES = ['제출', '미제출', '해당없음'];
 var DOC_NAME_MAX = 40;
 var DOC_DESC_MAX = 100;
-var DOC_STALE_MSG = '다른 선생님이 먼저 바꿨습니다. 새로 불러온 뒤 다시 해 주세요.';
-var DOC_NO_TAB_MSG = '이 기간의 서류 탭이 아직 없습니다. 관리자가 편집기에서 setup()을 한 번 실행해 주세요.';
+var DOC_NO_TAB_MSG = '이 운영 기간의 서류 탭이 아직 없습니다. 관리자 선생님이 편집기에서 setup()을 한 번 실행해 주세요.';
 
 function docLiveTypes_() {
   return readAll_('doc_types').filter(function (t) { return String(t.status || '').trim() !== '취소'; })
@@ -127,7 +126,7 @@ function saveDocState(input) {
     var term = getCurrentTerm_();
     if (!term) return { ok: false, error: '운영 기간이 없습니다.' };
     var enrolled = readAll_('enrollments').some(function (e) { return e.term_id === term.id && e.student_id === studentId; });
-    if (!enrolled) return { ok: false, error: '이번 기간 학사생이 아닙니다.' };
+    if (!enrolled) return { ok: false, error: '이번 운영 기간 학사생이 아닙니다.' };
     if (!docLiveTypes_().some(function (t) { return t.id === typeId; })) return { ok: false, error: '없어졌거나 취소된 서류 종류입니다. 새로 불러와 주세요.', stale: true };
     var sheet = termSheetName_('student_docs', term.id);
     var loaded = docRows_(term);
@@ -135,7 +134,7 @@ function saveDocState(input) {
     invalidate_('db', sheet);
     var cur = docIndex_(readAll_(sheet));
     var now = docStateOf_(cur, studentId, typeId);
-    if (typeof input.expect !== 'string' || input.expect !== now) return { ok: false, stale: true, error: DOC_STALE_MSG };
+    if (typeof input.expect !== 'string' || input.expect !== now) return { ok: false, stale: true, error: STALE_MESSAGE };
     if (now === state) return { ok: true, state: state, unchanged: true };
     var row = (cur[studentId] || {})[typeId];
     var patch = { state: state, submitted_date: state === '제출' ? today_() : '' };
@@ -163,8 +162,8 @@ function saveDocType(input) {
     if (live.some(function (t) { return t.name === name && t.id !== input.id; })) return { ok: false, errors: [{ field: 'name', message: '같은 이름의 서류가 이미 있습니다.' }] };
     if (input.id) {
       var row = live.filter(function (t) { return t.id === input.id; })[0];
-      if (!row) return { ok: false, stale: true, error: DOC_STALE_MSG };
-      if (typeof input.token !== 'string' || input.token !== String(row.updated_at || '')) return { ok: false, stale: true, error: DOC_STALE_MSG };
+      if (!row) return { ok: false, stale: true, error: STALE_MESSAGE };
+      if (typeof input.token !== 'string' || input.token !== String(row.updated_at || '')) return { ok: false, stale: true, error: STALE_MESSAGE };
       updateRecord_('doc_types', row.id, { name: name, description: desc, sort_order: order === '' ? row.sort_order : order }, user.email);
       return { ok: true, id: row.id };
     }
@@ -180,8 +179,8 @@ function cancelDocType(id, token) {
   return withLock_(function () {
     invalidate_('db', 'doc_types');
     var row = docLiveTypes_().filter(function (t) { return t.id === String(id || ''); })[0];
-    if (!row) return { ok: false, stale: true, error: DOC_STALE_MSG };
-    if (typeof token !== 'string' || token !== String(row.updated_at || '')) return { ok: false, stale: true, error: DOC_STALE_MSG };
+    if (!row) return { ok: false, stale: true, error: STALE_MESSAGE };
+    if (typeof token !== 'string' || token !== String(row.updated_at || '')) return { ok: false, stale: true, error: STALE_MESSAGE };
     updateRecord_('doc_types', row.id, { status: '취소' }, user.email);
     return { ok: true };
   });

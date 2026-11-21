@@ -150,7 +150,7 @@ test('일반 퇴실 뒤 재입실은 막히고(자진 퇴실 문구), 임시 퇴
   const re = (sid) => move(sid, '학사 입실', '2027-03-12T09:00:00', '2027-03-12', { meals: { '조식': '실시', '석식': '학사 석식' } });
   const blocked = prev(env, HALL, re(non));
   assert.strictEqual(blocked.ok, false);
-  assert.ok(blocked.errors.some((e) => /퇴실\(3월 5일\)로/.test(e.message) && /다시 들어올 수 없습니다/.test(e.message)), JSON.stringify(blocked.errors));
+  assert.ok(blocked.errors.some((e) => /3월 5일\(금\)에 퇴실해/.test(e.message) && /다시 들어올 수 없습니다/.test(e.message)), JSON.stringify(blocked.errors));
   assert.strictEqual(prev(env, HALL, re(dorm)).ok, true);
 });
 

@@ -323,10 +323,10 @@ test('기간이 끝난 다음 날(사이 날) 아침: 오늘 날짜는 dateOk fa
   assert.deepStrictEqual([call(x, T2, 'getOutContext', '').dutyYesterday, call(x, T2, 'getOutContext', end).dateOk], [false, false], '이틀 뒤는 안내도 날짜도 닫힘');
 });
 
-test('방학 기간이면 periodWord가 "이번 기간", 학기면 "이번 학기"', () => {
+test('방학이면 periodWord가 "이번 운영 기간", 학기면 "이번 학기"', () => {
   const x = makeEnv();
   x.env.asOwner((c) => c.updateRecord_('terms', x.term.id, { type: '방학' }, ADMIN));
-  assert.strictEqual(call(x, T1, 'getOutContext', '').periodWord, '이번 기간');
+  assert.strictEqual(call(x, T1, 'getOutContext', '').periodWord, '이번 운영 기간');
 });
 
 test('꺼진 항목은 "지금 쓰지 않는 항목", 오류 문구에 ISO 날짜 형식이 없다', () => {

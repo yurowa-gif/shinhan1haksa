@@ -15,7 +15,7 @@
 
     var termSelect, ymdField, textarea, textField, checkBtn;
     var bar = UI.actionBar([
-      { text: '저장', kind: 'primary', disabled: true, onclick: onSave },
+      { text: '저장', kind: 'primary', enter: true, disabled: true, onclick: onSave },
       { text: '지우기', kind: 'secondary', onclick: function () { if (textarea) { textarea.value = ''; } setPreview(null); } }
     ], { mount: true });
     var saveBtn = bar.querySelectorAll('button')[0];
@@ -38,9 +38,9 @@
         options: [{ value: 'students', label: '학생 명단' }, { value: 'guardians', label: '학부모 연결' }, { value: 'contacts', label: '연락처' }],
         onchange: function (v) { state.tab = v; state.preview = null; state.snapshot = ''; saveBtn.disabled = true; build(); }
       }));
-      termSelect = el('select', {}, state.ctx.terms.map(function (t) { return el('option', { value: t.id, text: t.name + ' (' + t.start_date + ' ~ ' + t.end_date + ')' }); }));
+      termSelect = el('select', {}, state.ctx.terms.map(function (t) { return el('option', { value: t.id, text: t.name + ' (' + UI.util.formatDateKo(t.start_date, true) + ' ~ ' + UI.util.formatDateKo(t.end_date, true) + ')' }); }));
       termSelect.value = state.ctx.defaultTermId;
-      head.appendChild(UI.field('운영 기간', termSelect, { name: 'term', hint: '이 기간의 학사생 명단으로 올립니다.' }));
+      head.appendChild(UI.field('운영 기간', termSelect, { name: 'term', hint: '이 운영 기간의 학사생 명단으로 올립니다.' }));
       if (state.tab === 'students') {
         ymdField = UI.dateField({ label: '상태 적용일', value: defaultYmd(), name: 'ymd', onchange: function () { onInputChanged(); } });
         head.appendChild(ymdField);
@@ -65,9 +65,9 @@
       textarea = el('textarea', { class: 'roster-text', placeholder: '첫 줄(머리글)부터 함께 붙여넣으세요.\n열 순서: ' + cols });
       textarea.addEventListener('input', onInputChanged);
       textField = UI.field(state.tab === 'students' ? '학생 명단' : state.tab === 'contacts' ? '연락처 명단' : '학부모 연결 명단', textarea, { name: 'text',
-        hint: state.tab === 'contacts' ? '비운 칸은 바꾸지 않습니다. 학부모 연결을 먼저 올린 뒤 보호자 줄을 올려 주세요. 번호는 미리보기에 나오지 않습니다.' : '구글 시트에서 복사해 붙이거나 CSV를 붙입니다. 이 단계에서는 아직 저장되지 않습니다.' });
+        hint: state.tab === 'contacts' ? '비운 칸은 바꾸지 않습니다. 학부모 연결을 먼저 올린 뒤 학부모 연락처 줄을 올려 주세요. 번호는 미리 보기에 나오지 않습니다.' : '구글 시트에서 복사해 붙이거나 CSV를 붙입니다. 이 단계에서는 아직 저장되지 않습니다.' });
       inputCard.appendChild(textField);
-      checkBtn = el('button', { type: 'button', class: 'btn secondary', text: '확인', onclick: onCheck });
+      checkBtn = el('button', { type: 'button', class: 'btn secondary', text: '미리 보기', onclick: onCheck });
       inputCard.appendChild(el('div', { class: 'roster-actions' }, [checkBtn]));
       clear(resultBox);
       resultBox.appendChild(el('div', { class: 'notice info', text: '저장하려면 먼저 [확인]을 눌러 결과를 봐 주세요. 저장 버튼은 확인한 뒤에 켜집니다.' }));
@@ -169,9 +169,9 @@
           card.appendChild(nameList(p.lists.leaving));
         }
       } else if (state.tab === 'contacts') {
-        card.appendChild(kv([['학생 전화 변경', k.students + '명'], ['보호자 연락처 변경', k.guardians + '건'], ['이미 같음', k.same + '건']]));
+        card.appendChild(kv([['학생 전화 변경', k.students + '명'], ['학부모 연락처 변경', k.guardians + '건'], ['이미 같음', k.same + '건']]));
         if (p.lists.students.length) { card.appendChild(el('h2', { style: 'margin-top:12px', text: '학생 전화가 바뀌는 학생' })); var su = el('ul', { class: 'roster-list' }); p.lists.students.slice(0, 60).forEach(function (n) { su.appendChild(el('li', { text: n })); }); card.appendChild(su); }
-        if (p.lists.guardians.length) { card.appendChild(el('h2', { style: 'margin-top:12px', text: '보호자 연락처가 바뀌는 학생' })); var gu = el('ul', { class: 'roster-list' }); p.lists.guardians.slice(0, 60).forEach(function (n) { gu.appendChild(el('li', { text: n })); }); card.appendChild(gu); }
+        if (p.lists.guardians.length) { card.appendChild(el('h2', { style: 'margin-top:12px', text: '학부모 연락처가 바뀌는 학생' })); var gu = el('ul', { class: 'roster-list' }); p.lists.guardians.slice(0, 60).forEach(function (n) { gu.appendChild(el('li', { text: n })); }); card.appendChild(gu); }
       } else {
         card.appendChild(kv([['새 연결', k.newLinks + '건'], ['건너뜀', k.skipped + '건'], ['새 계정', k.newUsers + '개'], ['역할 추가', k.updatedUsers + '개']]));
         card.appendChild(el('h2', { style: 'margin-top:12px', text: '연결 대상 확인' }));
@@ -199,13 +199,13 @@
         ? '새 학생 ' + p.counts.newStudents + '명, 정보 변경 ' + p.counts.updatedStudents + '명, 상태 기록 ' + p.counts.newChanges + '건, 새 계정 ' + p.counts.newUsers + '개를 저장합니다.' +
           (p.counts.leaving ? ' 퇴실 후보 ' + p.counts.leaving + '명은 저장하지 않고 표시만 합니다.' : '') +
           (p.counts.banned ? ' 2OUT 퇴실로 막힌 ' + p.counts.banned + '명은 빼고 저장합니다.' : '')
-        : state.tab === 'contacts' ? '학생 전화 ' + p.counts.students + '명, 보호자 연락처 ' + p.counts.guardians + '건을 저장합니다.'
+        : state.tab === 'contacts' ? '학생 전화 ' + p.counts.students + '명, 학부모 연락처 ' + p.counts.guardians + '건을 저장합니다.'
         : '학부모 연결 ' + p.counts.newLinks + '건, 새 계정 ' + p.counts.newUsers + '개를 저장합니다.';
-      UI.confirmSheet({ title: '저장할까요?', message: msg, confirmText: '저장', cancelText: '취소', onconfirm: function () {
+      UI.confirmSheet({ title: '저장할까요?', message: msg, confirmText: '저장', onconfirm: function () {
         state.busy = true; saveBtn.disabled = true;
         call(students ? 'commitRoster' : state.tab === 'contacts' ? 'commitContacts' : 'commitGuardians', textarea.value, opts(), expectOf(p)).then(function (r) {
           state.busy = false;
-          if (!r.ok) { setPreview(null); drawResult(r); UI.toast(r.stale ? '다시 확인해 주세요.' : '저장하지 못했습니다.', { kind: 'warn' }); return; }
+          if (!r.ok) { setPreview(null); drawResult(r); UI.toast(r.stale ? '그사이 다른 선생님이 명단을 바꿨습니다. [미리 보기]를 다시 눌러 주세요.' : '저장하지 못했습니다. 아래 고칠 곳을 확인해 주세요.', { kind: 'warn', ms: 6000 }); return; }
           UI.toast(r.nothingToDo ? '변경 없음' : '저장했습니다.', { kind: 'ok' });
           textarea.value = ''; setPreview(null);
           resultBox.appendChild(el('div', { class: 'notice ok', text: '저장했습니다. ' + (students ? '이어서 학부모 연결을 올려 주세요.' : state.tab === 'guardians' ? '이어서 연락처를 올릴 수 있습니다.' : '') }));

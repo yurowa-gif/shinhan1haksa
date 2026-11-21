@@ -119,7 +119,7 @@ test('attGridCell_ 학습량: 사전 특이사항·고정 일정 블록은 빠�
 test('attGridCell_: 운영 안 하는 날은 marks·results가 비고, 그날 확정 특이사항이 있으면 경고(세지 않음)', () => {
   const c = cell([EX('미인정결석', 'ALL')], PLAN('2027-03-08', { operating: false, blocks: [] }));
   assert.deepStrictEqual([c.operating, c.marks, c.results, c.study], [false, [], [], { blocks: 0, studiedBlocks: 0, minutes: 0, studiedMinutes: 0, missed: [] }]);
-  assert.match(c.warnings[0], /운영 안 하는 날의 특이사항 1건/);
+  assert.match(c.warnings[0], /^3월 8일\(월\)은 운영하지 않는 날이라 특이사항 1건을 결과에 세지 않았습니다\.$/);
   assert.deepStrictEqual(cell([], PLAN('2027-03-08', { operating: false })).warnings, []);
 });
 
@@ -162,7 +162,7 @@ table('attResultReplaces_: 같은 학생·같은 날 살아 있는 행 중 블�
 test('attResultReplaces_: keepIds는 빼고, 결과 블록 표기가 틀리면 Error', () => {
   const rows = [EX('병결', 'ALL', { id: 'a' }), EX('미인정지각', '18:30-20:00', { id: 'b' })];
   assert.deepStrictEqual(plain(ctx.attResultReplaces_(rows, 's1', '2027-03-08', 'ALL', ['a'])), ['b']);
-  assert.throws(() => ctx.attResultReplaces_(rows, 's1', '2027-03-08', '20:00-18:00'), /블록 표기/);
+  assert.throws(() => ctx.attResultReplaces_(rows, 's1', '2027-03-08', '20:00-18:00'), /읽을 수 없는 시간입니다\(20:00-18:00\)\. 18:00-20:00처럼 적어 주세요/);
   assert.throws(() => ctx.attResultReplaces_(rows, 's1', '2027-03-08', ''), /비어/);
 });
 
@@ -171,13 +171,13 @@ table('attGridWritable_: 기간 안·오늘 이전 날짜만, 끝난 기간은 �
   ['2027-03-08', '2027-03-08', undefined, true, ''],
   ['2027-03-08', '2027-07-30', undefined, true, ''],
   ['2027-07-16', '2027-07-30', undefined, true, ''],
-  ['2027-07-16', '2027-07-31', undefined, false, '기간이 끝나고 14일이 지나'],
-  ['2027-07-16', '2027-07-20', 3, false, '기간이 끝나고 3일이 지나'],
+  ['2027-07-16', '2027-07-31', undefined, false, '운영 기간이 끝나고 14일이 지나'],
+  ['2027-07-16', '2027-07-20', 3, false, '운영 기간이 끝나고 3일이 지나'],
   ['2027-07-16', '2027-07-16', 0, true, ''],
   ['2027-03-09', '2027-03-08', undefined, false, '아직 오지 않은 날'],
-  ['2027-03-01', '2027-03-08', undefined, false, '이 기간의 날짜가 아닙니다'],
-  ['2027-07-17', '2027-07-20', undefined, false, '이 기간의 날짜가 아닙니다'],
-  ['2027-02-30', '2027-03-08', undefined, false, '날짜 형식']
+  ['2027-03-01', '2027-03-08', undefined, false, '3월 1일(월)은 이 운영 기간의 날짜가 아닙니다'],
+  ['2027-07-17', '2027-07-20', undefined, false, '7월 17일(토)은 이 운영 기간의 날짜가 아닙니다'],
+  ['2027-02-30', '2027-03-08', undefined, false, '날짜를 읽을 수 없습니다']
 ], ([ymd, today, g, ok, why]) => {
   const r = plain(ctx.attGridWritable_(TERM, ymd, today, g));
   assert.strictEqual(r.ok, ok);

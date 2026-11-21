@@ -105,20 +105,43 @@ test('기본 글자·보조 글자·주 버튼·오류·안내 줄 대비가 4.5
   });
 });
 
-test('색만으로 구분하지 않는다: 확정·요청·취소·1OUT·퇴실 대상은 앞 글자(모양)가 서로 다르고, 학·가·병은 테두리 모양이 다르다', () => {
+test('색만으로 구분하지 않는다: 알약은 모양 하나(테두리 없음)이고, 확정·요청·취소·1OUT·퇴실 대상은 앞 글자가 서로 다르며, 학·가·병은 서로 다른 색 + 글자 자체가 다르다(결정 85)', () => {
   const shape = {};
-  ['s-confirmed', 's-requested', 's-canceled', 'out-1', 'out-2'].forEach((n) => {
+  ['s-confirmed', 's-requested', 's-canceled', 'out-1', 'out-2', 'todo'].forEach((n) => {
     const before = css.declsFor(rules, '.pill.' + n + '::before').content;
     assert.ok(before, '.pill.' + n + '::before content 없음');
     shape[n] = before;
   });
-  assert.strictEqual(new Set(Object.values(shape)).size, 5, '앞 글자가 겹친다: ' + JSON.stringify(shape));
-  const borders = ['c-hak', 'c-ga', 'c-byung'].map((n) => {
+  assert.strictEqual(new Set(Object.values(shape)).size, 6, '앞 글자가 겹친다: ' + JSON.stringify(shape));
+  // 알약 모양은 하나: 기본 .pill 에 테두리 없음, 종류별로 점선·이중선 같은 테두리 모양을 다시 정하지 않는다
+  assert.strictEqual(css.declsFor(rules, '.pill').border, '0', '알약은 테두리가 없다');
+  PILLS.forEach((n) => {
     const d = css.declsFor(rules, '.pill.' + n);
-    return d['border-style'] + '/' + (d['border-width'] || '');
+    assert.ok(!d['border-style'] && !d['border-width'] && !d.border, '.pill.' + n + ' 가 테두리 모양을 따로 정했다');
   });
-  assert.strictEqual(new Set(borders).size, 3, '학·가·병 테두리가 겹친다: ' + borders.join(' , '));
+  // 학·가·병: 글자 자체가 다르고(UI.statusPill의 낱말) 글자색도 서로 다르다
+  const inks = ['c-hak', 'c-ga', 'c-byung'].map((n) => css.declsFor(rules, '.pill.' + n).color);
+  assert.strictEqual(new Set(inks).size, 3, '학·가·병 글자색이 겹친다: ' + inks.join(' , '));
   assert.ok(css.declsFor(rules, '.pill.s-canceled')['text-decoration'].indexOf('line-through') >= 0, '취소는 취소선');
+});
+
+test('결정 85: 카드는 기본이 상자 없음, 상자는 .todo(노란 띠)·.key(코발트 띠)뿐이고, 줄 링크(.row-link)는 48px이며 할 일 카드의 첫 줄 링크만 주 버튼 모양이다', () => {
+  const card = css.declsFor(rules, '.card');
+  assert.strictEqual(card.background, 'transparent');
+  assert.strictEqual(card.border, '0');
+  assert.ok(css.declsFor(rules, '.card.todo')['border-left'].indexOf('--signal') > 0, '할 일 카드 노란 띠');
+  assert.ok(css.declsFor(rules, '.card.key')['border-left'].indexOf('--accent') > 0, '중요 카드 코발트 띠');
+  assert.ok(/--tap/.test(css.declsFor(rules, '.row-link')['min-height']), '줄 링크 48px');
+  assert.ok(css.declsFor(rules, '.row-link::after').content, '줄 링크 끝 ›');
+  const first = rules.find((r) => r.selectors.some((x) => /^\.card\.todo > \.row-link:not\(/.test(x)));
+  assert.ok(first && /--accent/.test(first.decls.background), '할 일 카드의 첫 줄 링크는 주 버튼 모양');
+  // 머리줄은 코발트 면 + 흰 글자(앱 이름이 한눈에), 학생·학부모 화면은 body.tone-soft 한 클래스로 흰 판
+  assert.ok(/--accent/.test(css.declsFor(rules, 'header.top').background));
+  assert.ok(css.declsFor(rules, 'body.tone-soft main').background === 'var(--card)', '학생·학부모 화면은 흰 판 하나');
+  // 강조 노랑 위의 글자 대비
+  const ratio = css.contrast(css.parseColor(tokens['--signal-ink']), css.parseColor(tokens['--signal']));
+  assert.ok(ratio >= 4.5, '노랑 위 글자 대비 ' + ratio.toFixed(2));
+  assert.ok(css.contrast(css.parseColor('#dbe5ff'), css.parseColor(tokens['--accent'])) >= 4.5, '머리줄 작은 글씨 대비');
 });
 
 test('안내 줄(.error, .notice.*)에도 앞 글자(모양)가 있다', () => {
@@ -181,4 +204,12 @@ test('한국어 줄바꿈: .seg·.sheet h2·.sheet-body·.sheet-lead 는 word-br
   const m = /([^{}\n]*)\{\s*word-break:\s*keep-all;\s*overflow-wrap:\s*anywhere;\s*\}/.exec(styles);
   assert.ok(m, 'keep-all 규칙이 없다');
   ['.seg', '.sheet h2', '.sheet-body', '.sheet-lead'].forEach((sel) => assert.ok(m[1].split(',').map((x) => x.trim()).indexOf(sel) >= 0, sel));
+});
+
+// D15 ④: 글자 크기 이름 4개 — Styles.html 안에는 .9rem(보조)보다 작은 글자가 없다(알약 앞 기호 .7em 제외)
+test('Styles.html: 글자 크기는 보조(.9rem) 이상, --font-xs는 --font-sm과 같은 값', () => {
+  const css = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'src', 'ui', 'Styles.html'), 'utf8');
+  assert.match(css, /--font-xs: var\(--font-sm\)/);
+  const small = [...css.matchAll(/font-size:\s*(\.\d+)rem/g)].filter((m) => parseFloat(m[1]) < 0.9);
+  assert.deepStrictEqual(small.map((m) => m[0]), [], '0.9rem보다 작은 글자 크기');
 });

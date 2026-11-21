@@ -104,7 +104,7 @@ test('2OUT 퇴실 학생의 재입실(saveMove·previewMove)은 "2OUT 퇴실로 
   const i = { studentId: s, type: '학사 입실', requestedAt: '2027-03-03T10:00:00', effectiveDate: '2027-03-10', dinner: '중단', docSubmitted: false,
     meals: { '조식': '실시', '석식': '학사 석식' } };
   const p = env.call(ADMIN, 'previewMove', i);
-  assert.strictEqual(p.ok, false); assert.ok(p.errors.some((e) => /2OUT 퇴실로 .*까지 다시 들어올 수 없습니다/.test(e.message)), JSON.stringify(p.errors));
+  assert.strictEqual(p.ok, false); assert.ok(p.errors.some((e) => /2OUT으로 퇴실해 .*다시 들어올 수 없습니다/.test(e.message)), JSON.stringify(p.errors));
   const n0 = env.rows('status_changes').length;
   const r = env.call(ADMIN, 'saveMove', i, p.expect || '');
   assert.strictEqual(r.ok, false); assert.strictEqual(env.rows('status_changes').length, n0);
@@ -128,7 +128,7 @@ test('식수 집계(결정 35 보충): 7월 퇴실 학생의 석식이 방학 �
 
 test('막힌 학생의 "기록과 명단이 다릅니다 … 입퇴실로 처리해 주세요" 경고는 미리보기에서 빠진다(그 안내를 따라가도 막히므로). 막히지 않은 학생의 같은 경고는 남는다', () => {
   const o20 = (env) => ({ termId: term(env, '2027 1학기').id, ymd: '2027-03-20' });
-  const warnOf = (env, sid, text) => env.as(ADMIN, (c) => c.rosterPlan_(text, o20(env), { terms: c.readAll_('terms'), today: c.today_(), existing: c.rosterLoadExisting_() })).warnings.filter((w) => /이\(가\) 기록\(/.test(w) && w.indexOf(env.rows('students').find((x) => x.id === sid).name) >= 0);
+  const warnOf = (env, sid, text) => env.as(ADMIN, (c) => c.rosterPlan_(text, o20(env), { terms: c.readAll_('terms'), today: c.today_(), existing: c.rosterLoadExisting_() })).warnings.filter((w) => / 값이 기록\(/.test(w) && w.indexOf(env.rows('students').find((x) => x.id === sid).name) >= 0);
   const env = makeEnv();
   const { s } = pick2(env);
   const text = rosterText(env, term(env, '2027 1학기').id);
