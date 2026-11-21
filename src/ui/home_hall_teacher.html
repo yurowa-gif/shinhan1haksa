@@ -64,7 +64,8 @@
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '오늘 ' + UI.util.formatDateKo(d.today) }),
       el('div', { class: 'muted', text: d.termName }),
-      el('div', { class: 'muted', id: 'home-duty' })
+      el('div', { class: 'muted', id: 'home-duty' }),
+      UI.rowLink({ href: d.appUrl + '?page=inbox', text: '확인함 — 내가 처리할 것 모아 보기' })
     ]));
     root.appendChild(whosOutCard_(d));   // 오늘 빠지는 학생(D17 ⑨): 감독 중 출석부와 대조하기 쉽게 시간대 순 한 줄 목록
     root.appendChild(el('div', { class: 'card' }, [

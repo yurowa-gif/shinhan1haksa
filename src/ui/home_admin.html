@@ -71,6 +71,7 @@
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '전체 현황' }),
       el('div', { class: 'muted', text: UI.util.formatDateKo(d.today) + ' · ' + d.termName }),
+      UI.rowLink({ href: d.appUrl + '?page=inbox', text: '확인함 — 내가 처리할 것 모아 보기' }),
       el('div', { class: 'stats', style: 'margin-top:12px' }, [
         statBox(d.counts.students, '이번 운영 기간 학사생'),
         statBox(d.counts.allStudents, '등록 학생(전체)'),

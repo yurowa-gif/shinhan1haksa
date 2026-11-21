@@ -1,6 +1,6 @@
 <style>
   .res-nav { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
-  .res-nav .grow { flex: 1 1 auto; text-align: center; font-weight: 700; }
+  .res-nav .grow { flex: 1 1 0; min-width: 0; text-align: center; font-weight: 700; }   /* 좁은 화면에서 이전·다음 버튼이 아랫줄로 밀리지 않게 가운데 글이 줄을 바꾼다 */
   .res-classes { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
   .res-wrap { overflow: auto; max-height: 70vh; max-height: 70dvh; border: 1px solid var(--line); border-radius: var(--radius-sm); }   /* 상자 높이를 제한해 머리 행·이름 열·합계 행이 고정되게(G8) */
   .res-table { border-collapse: collapse; width: 100%; }
@@ -32,7 +32,8 @@
   function renderScreen(root) {
     var U = UI.util;
     var wide = window.innerWidth >= 900;
-    var state = { tab: 'grid', view: wide ? 'week' : 'day', date: window.SCREEN_DATE || localToday(), grade: null, classNo: null, data: null, totals: null, totRange: 'week', open: null, records: {}, seq: 0 };
+    var state = { tab: 'grid', view: wide ? 'week' : 'day', date: window.SCREEN_DATE || localToday(), grade: null, classNo: null, data: null, totals: null, totRange: 'week', open: null, records: {}, seq: 0, mode: 'date', stu: null, hideNormal: true };
+    function isPhone() { return window.innerWidth < 840; }
     var head = el('div', { class: 'card' });
     var body = el('div');
     root.appendChild(head); root.appendChild(body);
@@ -70,9 +71,13 @@
       var mine = ++state.seq;
       clear(body); body.appendChild(el('div', { class: 'muted', text: '불러오는 중…' }));
       var fn = state.tab === 'totals' ? 'getResultTotals' : 'getResultGrid';
-      call(fn, filterArg()).then(function (d) {
+      var byStudent = state.tab === 'grid' && isPhone() && state.mode === 'student';   // 휴대폰 [학생별]: 같은 범위의 누적(결석·지각·조퇴·OUT·학습량)도 함께 받는다
+      var arg = filterArg();
+      Promise.all([call(fn, arg), byStudent ? call('getResultTotals', arg) : null]).then(function (both) {
+        var d = both[0];
         if (mine !== state.seq) return;
         if (!d.ok) { clear(body); body.appendChild(el('div', { class: 'error', text: d.error })); drawHead(); return; }
+        if (byStudent) { if (!both[1].ok) { clear(body); body.appendChild(el('div', { class: 'error', text: both[1].error })); drawHead(); return; } state.stu = both[1]; } else state.stu = null;
         if (state.tab === 'totals') state.totals = d; else state.data = d;
         if (d.pick) { state.grade = d.pick.grade; state.classNo = d.pick.classNo; }
         if (state.tab === 'grid') state.date = d.from;   // 화면 날짜도 서버 범위로 맞춘다
@@ -96,6 +101,13 @@
         if (g && g.from <= g.termStart) prev.disabled = true;   // 기간 처음·끝에서 멈춘다
         if (g && g.to >= g.termEnd) next.disabled = true;
         head.appendChild(el('div', { class: 'res-nav' }, [prev, el('div', { class: 'grow', text: r.from === r.to ? U.formatDateKo(r.from, true) : U.formatRangeKo(r.from, r.to) }), next]));
+        if (isPhone()) {   // 휴대폰: 날짜별 목록 | 학생 1명 = 1줄(G7)
+          head.appendChild(el('div', { style: 'margin-top:8px' }, [UI.segmented({ label: '묶음', value: state.mode, options: [{ value: 'date', label: '날짜별' }, { value: 'student', label: '학생별' }],
+            onchange: function (v) { state.mode = v; state.open = null; if (v === 'student' && state.view === 'day') state.view = 'week'; load(); } })]));
+        } else if (state.view !== 'day') {   // PC 격자: 정상 칸 비우기(기본 켬). 끄면 정상 칸에 ○가 보인다
+          head.appendChild(el('div', { style: 'margin-top:8px' }, [el('button', { type: 'button', class: state.hideNormal ? 'chip on' : 'chip', 'aria-pressed': state.hideNormal ? 'true' : 'false', text: '정상 칸 비우기',
+            onclick: function () { state.hideNormal = !state.hideNormal; drawHead(); draw(); } })]));
+        }
       } else {
         head.appendChild(el('div', { style: 'margin-top:8px' }, [UI.segmented({ label: '범위', value: state.totRange, options: [{ value: 'week', label: '이 주' }, { value: 'month', label: '이번 달' }, { value: 'term', label: '학기' }],
           onchange: function (v) { state.totRange = v; load(); } })]));
@@ -148,9 +160,54 @@
       });
       body.appendChild(el('div', { class: 'card' }, [list, el('div', { class: 'muted', style: 'margin-top:8px', text: '결과 ' + d.resultCount + '건. 미인정은 자동 1OUT입니다.' })]));
     }
+    /** 휴대폰 [학생별](C47, G7): 학생 1명 = 1줄 — 결석·지각·조퇴(인정/미인정)·OUT·학습량. 예외 있는 학생이 위, 누르면 그 학생의 예외 날짜(이유 한 줄) */
+    var PRE_WHY = [['학', '학원 일정'], ['가', '가정 일정'], ['병', '병으로 인한 기록'], ['가정', '가정 사유'], ['학원', '학원 일정'], ['외부', '학사 밖 프로그램'], ['내부', '학사 안 프로그램'], ['무', '미인정 기록']];
+    function preWhy(text) {   // 칸 글자(출석부 약어) → 쉬운 말. 모르는 글자는 그대로 보인다
+      return String(text).split('·').map(function (p) {
+        var exact = PRE_WHY.filter(function (x) { return x[0] === p; })[0] || PRE_WHY.filter(function (x) { return p.indexOf(x[0]) === 0 && x[0].length > 1; })[0] || PRE_WHY.filter(function (x) { return p.indexOf(x[0]) === 0; })[0];
+        return exact ? exact[1] : p;
+      }).join(', ');
+    }
+    function preShown(c) {   // 칸 글자에서 '정상 종료'(예외가 아니라 평소 칸)를 뺀 것
+      var end = state.data && state.data.endLabel;
+      return String(c[0] || '').split('·').filter(function (p) { return p && p !== end; }).join('·');
+    }
+    function cellReason(c) { return ((preShown(c) ? preWhy(preShown(c)) + '. ' : '') + (c[2] ? '미인정이라 자동 1OUT입니다.' : '')).trim(); }
+    function kindsOf(mark) { return String(mark).split('').map(function (m) { return KIND_SHORT[m] || m; }).join('·'); }
+    function countsText(total) {
+      var parts = ['결석', '지각', '조퇴'].map(function (k) { var a = total[k]['인정'], b = total[k]['미인정']; return a + b ? k + ' ' + (a + b) + (b ? '(미인정 ' + b + ')' : '') : ''; }).filter(function (x) { return x; });
+      return parts.length ? parts.join(' · ') : '결석·지각·조퇴 없음';
+    }
+    function drawStudentLines() {
+      var d = state.data, by = {}, list = el('div');
+      state.stu.rows.forEach(function (r) { by[r.student.id] = r; });
+      var rows = d.students.map(function (s, i) { var cs = d.cells[s.id] || {}; return { s: s, r: by[s.id], dates: Object.keys(cs).filter(function (k) { return cs[k][1] || preShown(cs[k]); }).sort(), i: i }; });
+      rows.sort(function (a, b) { return (b.dates.length > 0) - (a.dates.length > 0) || a.i - b.i; });   // 예외 있는 학생 위로, 같으면 번호 순서
+      rows.forEach(function (x) {
+        var s = x.s, total = x.r ? x.r.total : null, card = el('div', { class: 'res-rec' });
+        card.appendChild(el('button', { type: 'button', class: 'res-cell', 'aria-expanded': state.open === s.id ? 'true' : 'false', style: 'align-items:flex-start;text-align:left;min-height:var(--tap)', onclick: function () { state.open = state.open === s.id ? null : s.id; draw(); } }, [
+          el('b', { text: who(s) }),
+          el('span', { class: 'muted', text: total ? countsText(total) : '' }),
+          el('span', { class: 'muted', text: total ? 'OUT ' + x.r.outs + ' · 학습 ' + short(total['학습량']) : '' })
+        ]));
+        if (state.open === s.id) {
+          if (!x.dates.length) card.appendChild(el('div', { class: 'muted', text: '이 기간에 예외 칸이 없습니다.' }));
+          x.dates.forEach(function (date) {
+            var c = d.cells[s.id][date], dx = d.dates.filter(function (q) { return q.date === date; })[0];
+            card.appendChild(el('button', { type: 'button', class: 'res-cell', style: 'align-items:flex-start;text-align:left;border-top:1px solid var(--line)', onclick: function () { openCell(s, date); } }, [
+              el('span', {}, [el('b', { text: date.slice(5).replace('-', '/') + (dx ? ' ' + dx.weekdayKo : '') }), ' ' + (c[1] ? kindsOf(c[1]) + (c[2] ? ' 미인정' : ' 인정') : preShown(c))]),
+              el('span', { class: 'muted', text: cellReason(c) })
+            ]));
+          });
+        }
+        list.appendChild(card);
+      });
+      body.appendChild(el('div', { class: 'card' }, [list, el('div', { class: 'muted', style: 'margin-top:8px', text: '한 줄 = 학생 1명(예외가 있는 학생이 위). 결석·지각·조퇴는 이 범위, OUT은 이번 기간 합계입니다. 이름을 누르면 예외 날짜가, 날짜를 누르면 결과 입력이 열립니다. 결과 ' + d.resultCount + '건.' })]));
+    }
     function drawGrid() {
       var d = state.data;
       if (!d.students.length) { body.appendChild(UI.emptyState('볼 수 있는 학생이 없습니다.')); return; }
+      if (isPhone() && state.mode === 'student' && state.stu) { drawStudentLines(); return; }
       if (d.dates.length === 1) { drawDayList(); return; }
       var table = el('table', { class: 'res-table' });
       var tr = el('tr', {}, [el('th', { class: 'name', text: '학생' })]);
@@ -165,7 +222,7 @@
           if (!x.operating) td.appendChild(el('span', { class: 'muted', text: '–' }));
           else {
             var b = el('button', { type: 'button', class: 'res-cell' + (c && c[2] ? ' bad' : ''), 'aria-label': s.name + ' ' + x.date + (c ? ' ' + (c[1] || c[0]) : ' 결과 없음'), onclick: function () { openCell(s, x.date); } }, [
-              c && c[0] ? el('span', { class: 'pre', text: c[0] }) : null, c && c[1] ? el('span', { class: 'mark', text: c[1] }) : (c ? null : el('span', { class: 'muted', text: '·' }))
+              c && (state.hideNormal ? preShown(c) : c[0]) ? el('span', { class: 'pre', text: state.hideNormal ? preShown(c) : c[0] }) : null, c && c[1] ? el('span', { class: 'mark', text: c[1] }) : (c && !(state.hideNormal && !preShown(c)) ? null : (state.hideNormal ? null : el('span', { class: 'muted', text: '○' })))
             ]);
             td.appendChild(b);
           }
@@ -176,7 +233,7 @@
       table.appendChild(tb);
       body.appendChild(el('div', { class: 'card' }, [
         el('div', { class: 'res-wrap' + (d.dates.length === 1 ? ' res-day-list' : '') }, [table]),
-        el('div', { class: 'muted', style: 'margin-top:8px', text: '× 결석 · △ 지각 · 조 조퇴 · "미"는 미인정(자동 1OUT). 회색 글자는 사전 특이사항입니다. 칸을 누르면 결과를 넣거나 취소합니다. 결과 ' + d.resultCount + '건.' })
+        el('div', { class: 'muted', style: 'margin-top:8px', text: '× 결석 · △ 지각 · 조 조퇴 · "미"는 미인정(자동 1OUT). 회색 글자는 사전 특이사항입니다. 비어 있는 칸은 정상 출석입니다(위 [정상 칸 비우기]를 끄면 ○로 보입니다). 칸을 누르면 결과를 넣거나 취소합니다. 결과 ' + d.resultCount + '건.' })
       ]));
     }
 
