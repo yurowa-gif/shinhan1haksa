@@ -94,3 +94,14 @@ test('G4 권한: 그 요청을 볼 수 있는 사람(보기 범위 또는 내가
   assert.strictEqual(plain(x.env.call(ATT, 'getExceptionHistory', x.term.id, 'no-such-group')).ok, false);
   assert.strictEqual(x.env.rows('audit_log').filter((a) => a.action === 'denied:exception.view').length >= 1, true);
 });
+
+test('listExceptions 응답에 묶음마다 requestedAt(요청한 시각)이 있다 — 화면이 경과 시간을 보이는 데 쓴다(읽기 전용, 이메일 아님)', () => {
+  const x = makeEnv();
+  const req = save(x, TEACHER, { studentId: x.mine[0].id });
+  const g = plain(x.env.call(ATT, 'listExceptions', { scope: 'pending' })).groups.find((q) => q.groupId === req.groupId);
+  assert.ok(g, '요청 처리 목록에 있다');
+  assert.strictEqual(g.requestedAt, '2027-03-03T20:00:00');
+  assert.ok(!/@/.test(g.requestedAt));
+  const mineList = plain(x.env.call(TEACHER, 'listExceptions', { scope: 'mine' })).groups.find((q) => q.groupId === req.groupId);
+  assert.strictEqual(mineList.requestedAt, '2027-03-03T20:00:00');
+});
