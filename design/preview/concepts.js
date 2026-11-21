@@ -52,7 +52,8 @@ function prep(app) {
 async function measure(page, phone) {
   return page.evaluate((phone) => {
     const vis = (el) => { const r = el.getBoundingClientRect(), cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none' && !el.closest('[hidden],[aria-hidden="true"]'); };
-    const rgba = (s) => { const m = String(s).match(/[\d.]+/g); return m ? [+m[0], +m[1], +m[2], m[3] === undefined ? 1 : +m[3]] : [0, 0, 0, 0]; };
+    const cv = document.createElement('canvas'); cv.width = cv.height = 1; const cx = cv.getContext('2d', { willReadFrequently: true }), memo = {};   // oklch()·color-mix()도 읽게 캔버스로 풀어 낸다
+    const rgba = (s) => { if (memo[s]) return memo[s]; cx.clearRect(0, 0, 1, 1); cx.fillStyle = '#000'; cx.fillStyle = String(s); cx.fillRect(0, 0, 1, 1); const d = cx.getImageData(0, 0, 1, 1).data; const a = d[3] / 255; return (memo[s] = a ? [d[0], d[1], d[2], Math.round(a * 100) / 100] : [0, 0, 0, 0]); };
     const lum = (c) => { const f = (v) => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }; return .2126 * f(c[0]) + .7152 * f(c[1]) + .0722 * f(c[2]); };
     const over = (top, bot) => { const a = top[3]; return [0, 1, 2].map((i) => top[i] * a + bot[i] * (1 - a)).concat(1); };
     const bgOf = (el) => { const st = []; for (let e = el; e; e = e.parentElement) { const cs = getComputedStyle(e); if (cs.backgroundImage && cs.backgroundImage !== 'none' && !/tablewrap/.test(e.className)) return null; const c = rgba(cs.backgroundColor); if (c[3] > 0) { st.push(c); if (c[3] === 1) break; } } let b = [255, 255, 255, 1]; for (let i = st.length - 1; i >= 0; i--) b = over(st[i], b); return b; };
@@ -144,3 +145,4 @@ async function main() {
   try { if (!only) await shootAll(browser, want, font150); if (!font150) await boards(browser, want); } finally { await browser.close(); }
 }
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
+module.exports = { SCREENS, E, NOW, PHONE, LAPTOP, prep, measure, board };

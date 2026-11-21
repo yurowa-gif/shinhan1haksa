@@ -1,0 +1,33 @@
+/* 3 감색 면: 머리줄과 hero가 이어진 진한 면 하나. 아래는 흰 바탕에 조용한 줄. 둥근 모서리 12px */
+header.top { background: var(--primary); position: static; }
+header.top .who { color: color-mix(in oklch, var(--primary-foreground) 75%, var(--primary)); }
+main { padding-top: 0; }
+.card, body.tone-soft .card { background: none; border: 0; padding: 16px 4px 8px; margin: 0 0 12px; }
+.card.todo, .card.key, body.tone-soft .card.todo, body.tone-soft .card.key, details.fold { background: var(--card); border: 0; box-shadow: 0 0 0 1px var(--border); border-radius: 12px; padding: 16px; margin: 0 0 12px; }
+body.tone-soft main { background: none; border-radius: 0; margin: 0 auto; padding: 0 16px 16px; }
+body.tone-soft .card.todo h2 { color: var(--foreground); }
+.card.pt-outline { padding: 12px 16px; }
+.pill { border-radius: 6px; font-weight: 700; }
+.pill.todo, .pill.s-requested, .pill.out-1 { background: var(--warning-soft); color: var(--warning); }
+.todo-n { color: var(--primary); font-weight: 800; font-size: 1.5rem; }
+.count { background: var(--primary); color: var(--primary-foreground); border-radius: 6px; }
+.stat { background: none; padding: 0; } .stats { gap: 8px 24px; grid-template-columns: repeat(3, auto); justify-content: start; }
+.btn.secondary { border: 1px solid var(--input); }
+.seg.on { background: var(--card); box-shadow: 0 0 0 1px var(--border); }
+.sheet { border-radius: 20px 20px 0 0; } .actionbar { background: var(--card); }
+.stamp { margin-top: 8px; }
+/* hero: 화면 폭 전체의 감색 면(머리줄과 이어짐), 큰 숫자는 살구색 */
+.card.hero, body.tone-soft .card.hero, body.tone-soft .card.hero:first-child { background: var(--primary); color: var(--primary-foreground); margin: 0 -16px 8px; padding: 8px 16px 24px; border-radius: 0 0 24px 24px; box-shadow: none; }
+.hero-eyebrow { color: color-mix(in oklch, var(--primary-foreground) 75%, var(--primary)); }
+.hero-big { font-size: 6rem; color: var(--point); letter-spacing: -.03em; }
+.hero-unit, .hero-cap { color: var(--primary-foreground); }
+.hero-name { font-size: 2.6rem; }
+.hero-facts b { color: var(--point); font-weight: 800; }
+.card.hero .muted, .card.hero .stat .l { color: color-mix(in oklch, var(--primary-foreground) 75%, var(--primary)); }
+.card.hero .stat .n { color: var(--primary-foreground); font-size: 1.5rem; font-weight: 800; }
+.card.hero .stats { margin-top: 16px; padding-top: 12px; border-top: 1px solid color-mix(in oklch, var(--primary-foreground) 25%, var(--primary)); }
+.card.hero .row-link { color: var(--primary-foreground); border-color: color-mix(in oklch, var(--primary-foreground) 25%, var(--primary)); margin-top: 12px; }
+.card.hero .row-link::after { color: var(--primary-foreground); }
+.card.hero .pill { background: color-mix(in oklch, var(--primary-foreground) 16%, var(--primary)); color: var(--primary-foreground); }
+.card.hero :focus-visible { outline-color: var(--primary-foreground); }
+@media (min-width: 600px) { .card.hero, body.tone-soft .card.hero { margin: 0 0 12px; border-radius: 0 0 24px 24px; padding: 12px 24px 24px; } }
