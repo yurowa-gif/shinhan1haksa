@@ -485,6 +485,142 @@ function cancelException(termId, groupId, reason, onlyDate) {
   return excFinishAuto_(res, user);
 }
 
+/* ───────────── C43 G2·G4: 요청 카드 펼침(그날 칸)·기록 보기 ───────────── */
+
+var EXC_PEEK_MAX = 7;   // 한 묶음에서 그날 칸을 보여 주는 날 수(긴 묶음은 앞 7일)
+var EXC_FIXED_LABEL = { '학': '학원', '가': '가정' };
+
+/** 묶음의 한 행 id → 묶음 id(group_id가 빈 옛 행은 자기 id) */
+function excGroupOf_(r) { return String(r.group_id || r.id); }
+
+/**
+ * G2 순수: 그 학생의 날짜마다 "그날 칸" 한 줄 — 그날 쓰이는 고정 일정('학'·'가')과 이미 있는(요청·확정) 다른 묶음의 특이사항.
+ * 사유·이메일·이름은 넣지 않는다. → [{date, dateKo, fixed:[{code,label,blocksText}], exceptions:[{type,status,blocksText}], line}]
+ */
+function excDayLines_(studentId, groupId, dates, rows, fixedRows) {
+  return dates.slice(0, EXC_PEEK_MAX).map(function (date) {
+    var wk = ymdWeekdayKo_(date);
+    var fixed = effectiveFixedRows_(fixedRows, studentId, date).filter(function (f) { return String(f.weekday || '').trim() === wk; }).map(function (f) {
+      var code = String(f.code || '').trim();
+      return { code: code, label: EXC_FIXED_LABEL[code] || code, blocksText: excBlocksText_(String(f.blocks || '').trim() || 'ALL') };
+    });
+    var exceptions = rows.filter(function (r) {
+      return r.student_id === studentId && String(r.date) === date && excGroupOf_(r) !== groupId && EXC_LIVE.indexOf(String(r.status).trim()) >= 0;
+    }).map(function (r) { return { type: String(r.type), status: String(r.status).trim(), blocksText: excBlocksText_(r.blocks) }; });
+    var parts = fixed.map(function (f) { return '고정 일정 ' + f.label + '(' + f.code + ') ' + f.blocksText; })
+      .concat(exceptions.map(function (e) { return '이미 있는 특이사항 ' + e.type + ' ' + e.blocksText + '(' + e.status + ')'; }));
+    return { date: date, dateKo: foodDateKo_(date), fixed: fixed, exceptions: exceptions, line: foodDateKo_(date) + ': ' + (parts.length ? parts.join(' · ') : '겹치는 일정 없음') };
+  });
+}
+
+/**
+ * G2: 요청 카드를 펼칠 때 부른다 — 그 묶음 학생의 그날 칸(고정 일정·이미 있는 특이사항). 요청 처리와 같은 권한(exception.confirm).
+ * → {ok, days:[{dateKo, line, fixed, exceptions}], moreDays}
+ */
+function getExceptionDayView(termId, groupId) {
+  requirePermission_('exception.confirm');
+  var gid = String(groupId || '').trim();
+  if (!gid) return { ok: false, error: '묶음을 찾을 수 없습니다. 목록을 새로 불러와 주세요.' };
+  var term = excFindTerm_(termId);
+  var rows = excRows_(term).rows;
+  var mine = rows.filter(function (r) { return excGroupOf_(r) === gid; });
+  if (!mine.length) return { ok: false, error: '묶음을 찾을 수 없습니다. 목록을 새로 불러와 주세요.' };
+  var dates = mine.filter(function (r) { return String(r.status).trim() !== '취소'; }).map(function (r) { return String(r.date); }).sort();
+  var days = excDayLines_(mine[0].student_id, gid, dates, rows, readAll_('fixed_schedules'));
+  return { ok: true, days: days, moreDays: Math.max(0, dates.length - days.length) };
+}
+
+var EXC_HIST_COLS = { status: '상태', type: '유형', blocks: '블록', reason: '사유', date: '날짜' };
+var EXC_HIST_MAX = 60;
+
+/** 자유 글(사유·취소 사유)에 섞였을 수 있는 전화번호·이메일을 가린다 */
+function excScrub_(t) {
+  return String(t === undefined || t === null ? '' : t).replace(/[^\s@]+@[^\s@]+/g, '(이메일 생략)').replace(/\+?\d[\d\s-]{6,}\d/g, '(번호 생략)').slice(0, EXC_REASON_MAX);
+}
+
+function excJson_(s) { try { return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+
+/**
+ * G4 순수: audit_log 줄 중 이 묶음(행 id 집합 ids) 것만 골라 사람이 읽는 줄로. 이메일·다른 학생·전체 JSON은 내보내지 않는다.
+ * groupRows = 그 묶음의 행(등록 줄에서 유형·날짜·블록을 읽는 데만 쓴다).
+ * → [{at(YYYY-MM-DDTHH:mm), atKo, who, what, why}] 오래된 순
+ */
+function excHistoryEntries_(auditRows, sheetName, ids, groupRows, namesByEmail) {
+  var first = groupRows[0] || {};
+  var dates = groupRows.map(function (r) { return String(r.date); }).sort();
+  var dateRange = !dates.length ? '' : dates.length === 1 || dates[0] === dates[dates.length - 1] ? foodDateKo_(dates[0]) : foodDateKo_(dates[0]) + ' ~ ' + foodDateKo_(dates[dates.length - 1]);
+  var dateOf = {};
+  groupRows.forEach(function (r) { dateOf[r.id] = String(r.date); });
+  var out = [];
+  // 요청 상태로 등록했다가 나중에 확정한 묶음인가(확정 줄이 audit_log에 있으면 등록 때는 요청이었다)
+  var confirmedLater = auditRows.some(function (a) {
+    if (String(a.sheet) !== sheetName || String(a.action) !== 'bulk_update') return false;
+    var b = excJson_(a.before) || {}, n = excJson_(a.after) || {};
+    return Object.keys(n).some(function (id) { return ids[id] && n[id] && n[id].status === '확정' && b[id] && b[id].status === '요청'; });
+  });
+  auditRows.forEach(function (a) {
+    if (String(a.sheet) !== sheetName) return;
+    var act = String(a.action), who = namesByEmail[normalizeEmail_(a.created_by)] || '(등록 안 된 교사)';
+    var at = String(a.created_at || '');
+    var entry = { at: at.slice(0, 16), atKo: ymdIsValid_(at.slice(0, 10)) ? foodDateKo_(at.slice(0, 10)) + ' ' + at.slice(11, 16) : '', who: who, what: '', why: '' };
+    if (act === 'bulk_create' || act === 'create') {
+      var made = act === 'create' ? [String(a.row_id)] : (excJson_(a.after) || []);
+      if (!made.some(function (id) { return ids[id]; })) return;
+      entry.what = (confirmedLater ? '요청 등록' : String(first.status) === '요청' ? '요청 등록' : '등록(바로 확정)') + ': ' + [first.type, excBlocksText_(first.blocks), dateRange].join(' · ');
+      entry.why = excScrub_(first.reason);
+      out.push(entry); return;
+    }
+    if (act !== 'bulk_update' && act !== 'update') return;
+    var before = act === 'update' ? (a.row_id ? (function () { var o = {}; o[a.row_id] = excJson_(a.before) || {}; return o; })() : {}) : (excJson_(a.before) || {});
+    var after = act === 'update' ? (a.row_id ? (function () { var o = {}; o[a.row_id] = excJson_(a.after) || {}; return o; })() : {}) : (excJson_(a.after) || {});
+    var changes = {}, touched = [], why = '';
+    Object.keys(after).forEach(function (id) {
+      if (!ids[id]) return;
+      touched.push(id);
+      var b = before[id] || {}, n = after[id] || {};
+      Object.keys(EXC_HIST_COLS).forEach(function (col) {
+        if (n[col] === undefined || String(n[col]) === String(b[col] === undefined ? '' : b[col])) return;
+        var key = col + '\u0001' + String(b[col] === undefined ? '' : b[col]) + '\u0001' + String(n[col]);
+        changes[key] = changes[key] || { col: col, from: b[col] === undefined ? '' : b[col], to: n[col] };
+      });
+      if (n.cancel_reason && !why) why = n.cancel_reason;
+    });
+    if (!touched.length) return;
+    var text = Object.keys(changes).map(function (k) {
+      var c = changes[k], show = function (v) { return c.col === 'reason' ? excScrub_(v) : c.col === 'blocks' ? excBlocksText_(v) : c.col === 'date' && ymdIsValid_(String(v)) ? foodDateKo_(String(v)) : String(v); };
+      return EXC_HIST_COLS[c.col] + ' ' + (show(c.from) || '(없음)') + ' → ' + show(c.to);
+    });
+    if (!text.length) return;   // 확인한 시각·고친 사람 같은 내부 칸만 바뀐 줄
+    var part = touched.length < groupRows.length ? ' (' + (touched.length <= 3 ? touched.map(function (id) { return foodDateKo_(dateOf[id] || ''); }).join(', ') : touched.length + '일') + '만)' : '';
+    entry.what = text.join(' · ') + part;
+    entry.why = excScrub_(why);
+    out.push(entry);
+  });
+  return out.sort(function (x, y) { return x.at < y.at ? -1 : x.at > y.at ? 1 : 0; }).slice(0, EXC_HIST_MAX);
+}
+
+/**
+ * G4: "기록 보기" — 그 요청(묶음)의 audit_log 줄만: 누가(이름)·언제·무엇(이전 → 새 값)·왜. 그 요청을 볼 수 있는 사람만(보기 범위 또는 내가 낸 요청).
+ * → {ok, entries:[{atKo, who, what, why}]}
+ */
+function getExceptionHistory(termId, groupId) {
+  var user = requirePermission_('exception.view');
+  var gid = String(groupId || '').trim();
+  if (!gid) return { ok: false, error: '묶음을 찾을 수 없습니다. 목록을 새로 불러와 주세요.' };
+  var term = excFindTerm_(termId);
+  var d = excLoad_();
+  var mine = excRows_(term).rows.filter(function (r) { return excGroupOf_(r) === gid; });
+  if (!mine.length) return { ok: false, error: '묶음을 찾을 수 없습니다. 목록을 새로 불러와 주세요.' };
+  var visible = excVisibleIds_(user, d.enrollments, d.students, term.id, excViewWide_());
+  if (!visible[mine[0].student_id] && mine[0].requested_by !== user.email) excDenied_(user, 'exception.view', '범위 밖 요청 기록');
+  var names = {};
+  readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = u.name; });
+  var ids = Object.create(null);
+  mine.forEach(function (r) { ids[r.id] = true; });
+  var entries = excHistoryEntries_(readAll_('audit_log'), termSheetName_('exceptions', term.id), ids, mine, names);
+  return { ok: true, entries: entries.map(function (e) { return { atKo: e.atKo, who: e.who, what: e.what, why: e.why }; }) };
+}
+
 /**
  * 홈 카드용 요약(getHomeData가 부른다). 출결 담당·관리자: 확정할 요청 수(끝나지 않은 모든 기간)와 오늘·내일 특이사항 학생 수,
  * 학사 교사·담임: 내가 보낸 요청의 처리 상태 수, 담임은 학생별 요청 중 건수(perStudent). 기간·탭이 없으면 0.
