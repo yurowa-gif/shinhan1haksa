@@ -106,3 +106,7 @@ details.fold > summary::after { margin: 0 0 0 8px; width: 1.2em; height: 1.2em; 
 .card.hero .stat { background: var(--background); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 8px 12px; } .card.hero .stat .n { font-size: 1.5rem; }
 .card.hero #home-duty { margin-top: 12px; color: var(--foreground); }
 .hero-art { position: absolute !important; pointer-events: none; }
+/* hero 아래 숫자 칸: 휴대폰에서는 한 줄에 '숫자 + 설명'(세 칸으로 쪼개면 설명이 한 낱말씩 줄바꿈된다). 600px부터 세 칸 */
+.card.hero .stats { grid-template-columns: 1fr; gap: 8px; }
+.card.hero .stat { display: flex; align-items: baseline; gap: 12px; padding: 8px 12px; } .card.hero .stat .n { min-width: 2.2em; }
+@media (min-width: 600px) { .card.hero .stats { grid-template-columns: repeat(3, 1fr); } .card.hero .stat { display: block; } }

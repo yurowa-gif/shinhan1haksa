@@ -6,7 +6,8 @@
 .bento-main .hero-art { right: -24px; top: -24px; width: 200px; height: 200px; background: radial-gradient(circle, color-mix(in srgb, var(--primary-foreground) 55%, transparent) 1.5px, transparent 2px) 0 0 / 14px 14px; -webkit-mask: radial-gradient(circle at 70% 30%, #000 20%, transparent 70%); mask: radial-gradient(circle at 70% 30%, #000 20%, transparent 70%); }
 .bento-main .row-link.hero-cta { background: var(--primary-foreground); color: var(--primary); border: 0; border-radius: var(--r-md); padding: 12px 16px; font-weight: 600; margin-top: 16px; justify-content: center; gap: 4px; border-top: 0; }
 .bento-main .row-link.hero-cta::after { color: var(--primary); margin-left: 4px; }
-.card.hero .stats { display: contents; } .card.hero .stat { grid-column: span 2; background: var(--card); box-shadow: var(--shadow-xs); }
+.card.hero .stats { display: contents; } .card.hero .stat { grid-column: 1 / -1; background: var(--card); box-shadow: var(--shadow-xs); }
+@media (min-width: 600px) { .card.hero .stat { grid-column: span 2; } }
 .card.hero #home-duty, .card.hero > .row-link:not(.hero-cta) { background: var(--card); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 8px 12px; margin: 0; box-shadow: var(--shadow-xs); }
 .card.hero #home-duty .row-link { border-top: 1px solid var(--border); }
 .hero-fact { background: color-mix(in srgb, var(--primary-foreground) 8%, transparent); border-color: color-mix(in srgb, var(--primary-foreground) 25%, transparent); }
