@@ -89,7 +89,8 @@ var SCREENS = {
   facility: { file: 'ui/screen_facility', title: '시설 일지', view: 'facility.write' },
   facilityday: { file: 'ui/screen_facility_day', title: '시설 일지 보기', view: 'facility.view' },
   counsel: { file: 'ui/screen_counsel', title: '상담일지', view: 'counsel.list' },
-  timetable: { file: 'ui/screen_timetable', title: '시간표', view: 'timetable.screen' }
+  timetable: { file: 'ui/screen_timetable', title: '시간표', view: 'timetable.screen' },
+  inbox: { file: 'ui/screen_inbox', title: '확인함', view: 'inbox.view' }
 };
 
 /**
@@ -148,6 +149,11 @@ function homeFileFor_(role) {
 
 /* ───────────── 홈 화면 데이터 ───────────── */
 
+/** 관리자·출결 담당 홈의 숫자 셋(C48). 실패해도 홈은 열린다 — 숫자가 없으면 화면이 그 줄을 숨긴다 */
+function homeExtra_(base, user, role) {
+  try { Object.assign(base, inboxHomeInfo_(user, role)); } catch (e) { console.error('홈 숫자: ' + e.message); }
+}
+
 /**
  * 역할별 홈 데이터.
  * @param {string} role 보고 싶은 홈의 역할(접속자가 가진 역할이어야 함)
@@ -193,11 +199,14 @@ function getHomeData(role) {
         guardianLinks: readAll_('guardian_links').length
       };
       base.roleCounts = roleCounts;
+      base.exc = excHomeInfo_(user);
+      homeExtra_(base, user, 'admin');
       return base;
 
     case 'attendance':
       base.studentCount = termStudentIds_(term).length;
       base.exc = excHomeInfo_(user);
+      homeExtra_(base, user, 'attendance');
       return base;
 
     case 'duty_manager':

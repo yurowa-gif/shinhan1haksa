@@ -85,3 +85,29 @@ test('C41 학생·학부모 화면 문구: 저장 값 → 학부모 표기는 pt
   const fc = ui('screen_facility.html');
   assert.ok(fc.includes("title: '일지 취소 처리'") && fc.includes("confirmText: '취소 처리', cancelText: '돌아가기'") && fc.includes('기록은 지워지지 않고 \\"취소\\"로 남습니다. 다시 쓰려면 새로 써 주세요.'.replace(/\\"/g, '"')), '시설 일지 취소 시트');
 });
+
+test('C47 결과 정리 화면: 휴대폰 [학생별] 보기(학생 1줄·예외 학생 위로·예외 날짜 + 이유 한 줄)와 PC [정상 칸 비우기] 기본 켬', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'ui', 'screen_results.html'), 'utf8');
+  assert.ok(/mode: 'date', stu: null, hideNormal: true/.test(html), '기본: 날짜별, 정상 칸 비우기 켬');
+  assert.ok(/function isPhone\(\) \{ return window\.innerWidth < 840; \}/.test(html), '휴대폰 기준 840px');
+  assert.ok(/label: '묶음'[\s\S]{0,200}'학생별'/.test(html) && /정상 칸 비우기/.test(html), '묶음·정상 칸 비우기 컨트롤');
+  assert.ok(/getResultTotals', arg/.test(html) && !/\bgetResultOuts?\b/.test(html), '누적은 기존 서버 함수(getResultTotals)');
+  // 이유 한 줄 도우미를 꺼내 확인한다
+  const grab = (name) => new RegExp('function ' + name + '\\([^)]*\\) \\{[\\s\\S]*?\\n    \\}').exec(html)[0];
+  const pre = /var PRE_WHY = [^\n]*\n/.exec(html)[0];
+  const ctx = {};
+  vm.runInNewContext('var state = { data: { endLabel: "정상 종료" } };' + pre + grab('preWhy') + grab('preShown') + grab('cellReason') + '\nvar KIND_SHORT = { "×": "결석", "△": "지각", "조": "조퇴" };' + grab('kindsOf') + ';this.preShown = preShown; this.preWhy = preWhy; this.cellReason = cellReason; this.kindsOf = kindsOf;', ctx);
+  assert.strictEqual(ctx.preWhy('학'), '학원 일정');
+  assert.strictEqual(ctx.preWhy('가'), '가정 일정');
+  assert.strictEqual(ctx.preWhy('병결'), '병으로 인한 기록');
+  assert.strictEqual(ctx.preWhy('가정'), '가정 사유');
+  assert.strictEqual(ctx.preWhy('외부'), '학사 밖 프로그램');
+  assert.strictEqual(ctx.preWhy('무지'), '미인정 기록');
+  assert.strictEqual(ctx.preWhy('모름'), '모름', '모르는 글자는 그대로');
+  assert.strictEqual(ctx.preWhy('학·병결'), '학원 일정, 병으로 인한 기록');
+  assert.strictEqual(ctx.cellReason(['', '×', 1]), '미인정이라 자동 1OUT입니다.');
+  assert.strictEqual(ctx.cellReason(['학', '', 0]), '학원 일정.');
+  assert.strictEqual(ctx.kindsOf('×△'), '결석·지각');
+  assert.strictEqual(ctx.preShown(['정상 종료', '', 0]), '', '정상 종료 글자는 예외가 아니다');
+  assert.strictEqual(ctx.preShown(['학·정상 종료', '', 0]), '학');
+});

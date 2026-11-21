@@ -89,7 +89,7 @@ test('docs/design/refresh/apply.md(D15 2단계 ①): 바꾼 것·할 일 기준�
   // 문서의 "할 일" 표가 실제 코드와 같다: 홈 파일마다 UI.cardClass('todo') 가 건수 조건과 함께 있고, 홈의 .btn 링크는 UI.rowLink 로 바뀌었다
   ['home_admin', 'home_attendance', 'home_duty_manager', 'home_hall_teacher', 'home_homeroom'].forEach((f) => {
     const src = css.readFile('src/ui/' + f + '.html');
-    assert.ok(/UI\.cardClass\(.*'todo'/.test(src), f + ' 에 할 일 카드가 없다');
+    assert.ok(/UI\.cardClass\(.*'todo'/.test(src) || /UI\.todoList\(/.test(src), f + ' 에 할 일 카드가 없다');   // D17·D18: 출결 담당 홈은 UI.todoList(건수 > 0인 줄만, 카드의 todo 띠도 그 안에서)
     assert.ok(!/class: 'btn( secondary)?'[^}]*href:/.test(src), f + ' 에 이동용 .btn 이 남아 있다(UI.rowLink 로)');
   });
   assert.ok(/UI\.cardClass\('todo'\)/.test(css.readFile('src/ui/Portal.html')), 'Portal 할 일 카드');
@@ -219,4 +219,35 @@ test('D16 문서: 사진 전부 참조, requestedAt 부탁, screen_sheet 제외 
   assert.ok(pics.length >= 20, '사진 20장 이상');
   pics.forEach((f) => assert.ok(md.includes('d16/' + f), f + ' 문서에 없음'));
   ['requestedAt', 'excGroupView_', '코딩A', '출석부 화면(`screen_sheet`)은 하지 않았습니다', '건너뛴 것·확인 못 한 것'].forEach((w) => assert.ok(md.includes(w), w));
+});
+
+// D17: 처리할 것·전체 기능·오늘 빠지는 학생 — 화면 약속, 문서 사진 12장, 서버 부탁
+test('D17 화면 약속과 문서: todoList·featureList·whosOut, 사진 전부 참조, 서버 부탁', () => {
+  const rd = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
+  const comp = rd('src/ui/Components.html'), adm = rd('src/ui/home_admin.html'), att = rd('src/ui/home_attendance.html'), hall = rd('src/ui/home_hall_teacher.html'), styles = rd('src/ui/Styles.html');
+  assert.ok(/UI\.todoList = function/.test(comp) && /UI\.featureList = function/.test(comp) && /Number\(i\.count\) > 0/.test(comp), '0건은 숨김');
+  assert.ok(/UI\.todoList\(/.test(adm) && /UI\.featureList\(/.test(adm) && /UI\.todoList\(/.test(att) && /UI\.featureList\(/.test(att), '두 홈이 모두 쓴다');
+  assert.ok(/whosOutCard_/.test(hall) && /call\('listExceptions', \{ scope: 'range'/.test(hall) && /UI\.util\.whosOut/.test(hall), '오늘 빠지는 학생은 기존 listExceptions');
+  assert.ok(/\.home-cols\.has-rail \{ grid-template-columns/.test(styles) && /\.todo-row \{/.test(styles) && /\.feature-row \{/.test(styles), '레일·줄 스타일');
+  const dir = path.join(ROOT, 'docs', 'design', 'refresh');
+  const md = fs.readFileSync(path.join(dir, 'd17.md'), 'utf8');
+  const pics = fs.readdirSync(path.join(dir, 'd17')).filter((f) => f.endsWith('.png'));
+  assert.ok(pics.length >= 12, '사진 12장 이상');
+  pics.forEach((f) => assert.ok(md.includes('d17/' + f), f + ' 문서에 없음'));
+  ['moves = {overdue}', 'timetable = {confirmPending}', '코딩A', '건너뛴 것·확인 못 한 것'].forEach((w) => assert.ok(md.includes('`d.' + w.replace(/^moves/, 'moves').replace(/^timetable/, 'timetable') + '`') || md.includes(w), w));
+});
+
+// D18: 현황 접기·해야 할 일 숫자·출결 담당 정리 — 화면 약속과 문서 사진 10장
+test('D18 화면 약속과 문서: 현황 접기, 줄 수 세기, 시간표 줄 삭제, 사진 10장', () => {
+  const rd = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
+  const comp = rd('src/ui/Components.html'), adm = rd('src/ui/home_admin.html'), att = rd('src/ui/home_attendance.html'), styles = rd('src/ui/Styles.html');
+  assert.ok(/el\('details', \{ class: 'card fold' \}/.test(adm) && /details\.fold > summary/.test(styles) && /has\(n, 'fold'\)/.test(comp), '관리자 홈 숫자·상태 카드를 접힌 현황 한 장으로');
+  assert.ok(/querySelectorAll\('\.todo-row'\)\.length/.test(comp) && /!todo && !hasList/.test(comp), '해야 할 일 N건 = 처리할 줄 수');
+  assert.ok(!/timetable&role=attendance/.test(att) && !/confirmPending/.test(att), '출결 담당 홈에는 시간표 확인 대기 줄이 없다(권한 없음)');
+  const dir = path.join(ROOT, 'docs', 'design', 'refresh');
+  const md = fs.readFileSync(path.join(dir, 'd18.md'), 'utf8');
+  const pics = fs.readdirSync(path.join(dir, 'd18')).filter((f) => f.endsWith('.png'));
+  assert.ok(pics.length >= 10, '사진 10장 이상');
+  pics.forEach((f) => assert.ok(md.includes('d18/' + f), f + ' 문서에 없음'));
+  ['5,225px → 2,017px', '건너뛴 것·확인 못 한 것'].forEach((w) => assert.ok(md.includes(w), w));
 });

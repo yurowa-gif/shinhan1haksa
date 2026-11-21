@@ -36,14 +36,38 @@
     ]));
   }
 
+  /** 오늘·내일 빠지는 학생 카드(D17 ⑨, 레퍼런스 BambooHR Who's out). 기존 listExceptions(범위) 호출을 그대로 쓴다 — 홈 데이터에는 명단이 없어서 카드만 나중에 채운다 */
+  function whosOutCard_(d) {
+    var box = el('div', { class: 'card out-card' }, [el('h2', { text: '오늘 빠지는 학생' }), el('div', { class: 'muted', text: '불러오는 중…' })]);
+    if (typeof call !== 'function') return box;
+    var tomorrow = UI.util.addDays(d.today, 1);
+    call('listExceptions', { scope: 'range', from: d.today, to: tomorrow }).then(function (r) {
+      var w = UI.util.whosOut(r.groups, d.today, tomorrow);
+      clear(box); box.appendChild(el('h2', { text: '오늘 빠지는 학생 ' + w.today.length + '명' }));
+      function day(label, list) {
+        box.appendChild(el('div', { class: 'out-day', text: label + ' · ' + list.length + '명' }));
+        if (!list.length) { box.appendChild(el('div', { class: 'muted', text: '없습니다.' })); return; }
+        list.forEach(function (x) {
+          var kind = /^병/.test(x.type) ? 'byung' : /^학원/.test(x.type) ? 'hak' : /^가정/.test(x.type) ? 'ga' : 'mute';
+          box.appendChild(el('div', { class: 'out-row' }, [el('span', { class: 'out-when', text: x.blocksText }), el('span', { class: 'out-who', text: x.display }), UI.statusPill(kind, x.short)]));
+        });
+      }
+      day('오늘 ' + UI.util.formatDateKo(d.today), w.today); day('내일 ' + UI.util.formatDateKo(tomorrow), w.tomorrow);
+      box.appendChild(el('div', { class: 'muted', text: '확정된 특이사항만 나옵니다. 요청 중인 것은 출결 담당 선생님이 확정하면 들어옵니다.' }));
+    }).catch(function () { clear(box); box.appendChild(el('h2', { text: '오늘 빠지는 학생' })); box.appendChild(el('div', { class: 'muted', text: '불러오지 못했습니다. 위의 새로고침을 눌러 주세요.' })); });
+    return box;
+  }
+
   /** 학사 교사 홈: 오늘, 내가 보낸 특이사항 요청 상태, 내 담당 학생 (PRD 8절) */
   function renderHome(d, root) {
     var m = (d.exc && d.exc.mine) || { requested: 0, confirmed: 0, canceled: 0 };
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '오늘 ' + UI.util.formatDateKo(d.today) }),
       el('div', { class: 'muted', text: d.termName }),
-      el('div', { class: 'muted', id: 'home-duty' })
+      el('div', { class: 'muted', id: 'home-duty' }),
+      UI.rowLink({ href: d.appUrl + '?page=inbox', text: '확인함 — 내가 처리할 것 모아 보기' })
     ]));
+    root.appendChild(whosOutCard_(d));   // 오늘 빠지는 학생(D17 ⑨): 감독 중 출석부와 대조하기 쉽게 시간대 순 한 줄 목록
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '내가 보낸 특이사항 요청' }),
       el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin:8px 0' }, [

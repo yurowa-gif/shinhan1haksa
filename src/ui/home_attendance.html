@@ -4,43 +4,28 @@
     var x = d.exc || { pending: 0, today: 0, tomorrow: 0 };
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '오늘 ' + UI.util.formatDateKo(d.today) }),
-      el('div', { class: 'muted', text: d.termName + ' · 학사생 ' + d.studentCount + '명' })
+      el('div', { class: 'muted', text: d.termName + ' · 학사생 ' + d.studentCount + '명' }),
+      UI.rowLink({ href: d.appUrl + '?page=inbox', text: '확인함 — 내가 처리할 것 모아 보기' })
     ]));
-    root.appendChild(el('div', { class: UI.cardClass(x.pending ? 'todo' : '') }, [
-      el('h2', {}, ['특이사항 요청 ', UI.badge(x.pending)]),
-      el('div', { class: 'muted', text: x.pending ? '확정할 요청이 ' + x.pending + '건 있습니다.' : '확정할 요청이 없습니다.' }),
-      UI.rowLink({ href: d.appUrl + '?page=exceptions&tab=requests', text: '요청 처리' })
-    ]));
-    root.appendChild(el('div', { class: 'card' }, [
-      el('h2', { text: '오늘·내일 특이사항' }),
-      el('div', { class: 'muted', text: '오늘 ' + x.today + '명 · 내일 ' + x.tomorrow + '명' }),
-      UI.rowLink({ href: d.appUrl + '?page=exceptions', text: '특이사항 입력' }),
-      UI.rowLink({ href: d.appUrl + '?page=results', text: '출결 결과 정리' }),
-      UI.rowLink({ href: d.appUrl + '?page=programs', text: '학사 프로그램 열기' })
+    var A = d.appUrl, dc = d.docs || {}, o = d.out || {};
+    root.appendChild(UI.todoList({ title: '오늘 처리할 것', items: [   // 출결 담당은 시간표 확인 권한이 없어 그 줄은 없다(D18)
+      { label: '특이사항 확인 대기', count: x.pending, href: A + '?page=exceptions&tab=requests' },
+      { label: '오늘 빠지는 학생', count: x.today, hint: '내일 ' + (x.tomorrow || 0) + '명', href: A + '?page=exceptions&tab=list' },
+      { label: '퇴실 대상(2OUT)', count: o.out2, href: A + '?page=outs&tab=term' },
+      { label: '복귀 예정일이 지난 임시 퇴실', count: d.moves && d.moves.overdue, href: A + '?page=moves' },
+      { label: '서류 미제출', count: dc.items, hint: '학생 ' + (dc.students || 0) + '명', href: A + '?page=docs' }
+    ] }));
+    root.appendChild(UI.featureList([
+      { title: '출결', items: [{ text: '특이사항 입력·요청 처리', href: A + '?page=exceptions', badge: x.pending }, { text: '출결 결과 정리', href: A + '?page=results' }, { text: '학사 프로그램', href: A + '?page=programs' },
+        { text: '출석부', href: A + '?page=sheet' }, { text: '좌석표', href: A + '?page=seats' }] },
+      { title: '학생·생활', items: [{ text: 'OUT 현황', href: A + '?page=outs&tab=term' }, { text: '서류 체크리스트', href: A + '?page=docs', badge: dc.items }] }
     ]));
     if (d.out && !d.out.error) root.appendChild(el('div', { class: UI.cardClass(d.out.out1 || d.out.out2 ? 'key' : '') }, [
       el('h2', { text: 'OUT 현황' }),
       el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin:8px 0' }, [(d.out.out1 ? UI.statusPill('out1', '1OUT ' + d.out.out1 + '명') : UI.statusPill('mute', '1OUT 0명')), (d.out.out2 ? UI.statusPill('out2', '퇴실 대상 ' + d.out.out2 + '명') : UI.statusPill('mute', '퇴실 대상 0명'))]),
       UI.rowLink({ href: d.appUrl + '?page=outs&tab=term', text: (d.out.periodWord || '이번 학기') + ' 보기' })
     ]));
-    if (d.docs && !d.docs.error) {
-      root.appendChild(el('div', { class: UI.cardClass(d.docs.items ? 'todo' : '') }, [
-        el('h2', { text: '서류 체크리스트' }),
-        el('div', { style: 'margin:8px 0' }, [d.docs.items ? UI.statusPill('todo', '미제출 ' + d.docs.items + '건 · 학생 ' + d.docs.students + '명') : UI.statusPill('confirmed', d.docs.types ? '모두 제출' : '서류 종류 없음')]),
-        el('div', { class: 'muted', text: '학기 초 서류(동의서 등)를 냈는지 표시합니다.' }),
-        UI.rowLink({ href: d.appUrl + '?page=docs', text: '서류 체크리스트 열기' })
-      ]));
-    }
-    root.appendChild(el('div', { class: 'card' }, [
-      el('h2', { text: '출석부' }),
-      el('div', { class: 'muted', text: '날짜를 고르면 그날 출석부를 미리 보고 PDF로 받습니다.' }),
-      UI.rowLink({ href: d.appUrl + '?page=sheet', text: '출석부 열기' })
-    ]));
-    root.appendChild(el('div', { class: 'card' }, [
-      el('h2', { text: '좌석표' }),
-      el('div', { class: 'muted', text: '학사생 좌석을 확인합니다(배정은 학사 교사·관리자).' }),
-      UI.rowLink({ href: d.appUrl + '?page=seats', text: '좌석표 열기' })
-    ]));
+    // 서류 미제출은 위 '처리할 것' 줄과 '전체 기능'에 있어 같은 카드를 또 두지 않는다(D18, 해야 할 일 숫자가 엇갈리지 않게)
   }
   /** 월별 일정 카드(C34, 결정 80): 오늘 일정과 다음 일정. 맨 아래에 붙인다 */
   (function () {
