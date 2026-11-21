@@ -32,3 +32,5 @@ main > .ld > .ld-list, .ld > .ld-detail { background: #fff; border: 1px solid va
 @media (min-width: 840px) {
   main.home > nav.tabs { background: #fff; border: 1px solid var(--g5); border-radius: 12px; padding: 8px; }
 }
+/* 학·가·병: B만 옅은 색 알약을 남긴다(주색·의미 색과 겹치지 않는 색상, 밝기는 3단계·11단계와 같게). A·C는 회색 알약 */
+:root { --code-hak-weak: oklch(.952 .03 255); --code-hak-ink: oklch(.40 .11 255); --code-ga-weak: oklch(.952 .03 310); --code-ga-ink: oklch(.40 .11 310); --code-byung-weak: oklch(.952 .03 350); --code-byung-ink: oklch(.40 .11 350); }
