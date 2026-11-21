@@ -1,0 +1,108 @@
+/* D20 시안 공통 = "평양 UI": shadcn/ui(new-york-v4, MIT) 부품 규격을 React 없이 CSS로 옮긴 것. 값은 themes.js(tweakcn 프리셋)가 앞에 붙인다.
+   테마를 바꿔도 이 파일은 그대로다 — 색·모서리·그림자·글꼴 변수만 바뀐다(tweakcn 방식). 안별 파일(t*.css)에는 hero 그림만 있다.
+   shadcn과 다르게 둔 것: 누르는 칸 높이 48px(shadcn h-9=36px), 가장 작은 글자 16px(shadcn text-xs=12px) — 우리 규칙(rules 1절). */
+:root {
+  /* shadcn 반경 단계: sm = r-4, md = r-2, lg = r, xl = r+4 */
+  --r-sm: max(0px, calc(var(--radius) - 4px)); --r-md: max(0px, calc(var(--radius) - 2px)); --r-lg: var(--radius); --r-xl: calc(var(--radius) + 4px);
+  /* [다리] shadcn 변수 → 지금 앱 토큰 */
+  --bg: var(--background); --text: var(--foreground); --muted: var(--muted-foreground); --line: var(--border);
+  --accent: var(--primary); --accent-weak: var(--muted-sh); --accent-ink: var(--foreground); --focus: var(--focus-ink);
+  --signal: var(--warning-soft); --signal-ink: var(--warning); --warn: var(--destructive); --warn-weak: var(--destructive-soft);
+  --ok: var(--success); --ok-ink: var(--success); --ok-weak: var(--success-soft);
+  --caution-ink: var(--warning); --caution-weak: var(--warning-soft); --caution-line: var(--warning);
+  --muted-ink: var(--muted-foreground); --muted-weak: var(--muted-sh);
+  --code-hak-ink: var(--foreground); --code-hak-weak: transparent; --code-ga-ink: var(--foreground); --code-ga-weak: transparent; --code-byung-ink: var(--foreground); --code-byung-weak: transparent;
+  --out1-ink: var(--warning); --out1-weak: var(--warning-soft); --out1-line: var(--warning); --out2: var(--destructive); --out2-ink: var(--destructive-foreground);
+  --radius-sm: var(--r-md); --radius-pill: 999px; --shadow: var(--shadow-lg);
+}
+body { font-family: var(--font-body), "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; letter-spacing: 0; }
+header.top h1, .card h2, .sheet h2, .hero-big, .hero-name, .stat .n, .todo-n { font-family: var(--font-head), var(--font-body), sans-serif; letter-spacing: 0; }
+.btn, .row-link, .pill { letter-spacing: 0; }
+:focus-visible, iframe:focus { outline: 2px solid var(--focus-ink); outline-offset: 2px; box-shadow: 0 0 0 5px color-mix(in srgb, var(--focus-halo) 50%, transparent); }   /* shadcn: ring 3px ring/50 + 우리 기준(3:1) 바깥선 */
+/* 머리줄: 바탕색 + 아래 선(shadcn 사이트 머리줄 방식) */
+header.top { background: var(--background); color: var(--foreground); border-bottom: 1px solid var(--border); }
+header.top h1 { color: var(--foreground); font-size: var(--font-lg); font-weight: 700; } header.top .who { color: var(--muted-foreground); } header.top :focus-visible { outline-color: var(--focus-ink); }
+.back { color: var(--foreground); font-weight: 500; }
+a:not([class]), a[class=""] { color: var(--foreground) !important; text-decoration: underline; text-underline-offset: 3px; }   /* 글 속 링크: 주색 글자 대신 밑줄(주색이 옅은 테마에서도 읽히게) */
+/* Card: rounded-xl border shadow-sm, 안쪽 24px(휴대폰 16px). 카드는 '할 일'·'중요'에만(결정 85의 구조 유지), 참고 구역은 상자 없이 */
+.card, body.tone-soft .card { background: none; border: 0; padding: 16px 4px 8px; margin: 0 0 8px; }
+.card.todo, .card.key, body.tone-soft .card.todo, body.tone-soft .card.key, details.fold { background: var(--card); color: var(--card-foreground); border: 1px solid var(--border); border-radius: var(--r-xl); box-shadow: var(--shadow-sm); padding: 16px; margin: 0 0 16px; }
+body.tone-soft main { background: none; border-radius: 0; margin: 0 auto; padding: 8px 16px 16px; }
+body.tone-soft { font-size: 1rem; } body.tone-soft .card.todo h2 { color: var(--card-foreground); }
+.card h2, body.tone-soft .card h2, .card.todo h2 { font-size: var(--font-lg); line-height: 1.3; font-weight: 700; margin: 0 0 8px; }
+.home-h, .feature-h, .out-day { font-weight: 500; color: var(--muted-foreground); } .home-h { margin: 24px 4px 8px; } .feature-h { margin: 16px 0 4px; }
+.stat .n { font-size: 2rem; line-height: 1.2; color: var(--foreground); font-weight: 700; }
+/* Button: rounded-md font-medium. default = primary, outline = border bg-background shadow-xs, destructive */
+.btn { background: var(--primary); color: var(--primary-foreground); border: 1px solid transparent; border-radius: var(--r-md); font-weight: 600; box-shadow: var(--shadow-xs); }
+.btn.secondary { background: var(--background); color: var(--foreground); border: 1px solid var(--border); }
+.btn.danger:not(:disabled):not([aria-disabled="true"]) { background: var(--destructive); border-color: var(--destructive); color: var(--destructive-foreground); }
+.btn:disabled, .btn[aria-disabled="true"] { background: var(--muted-sh); color: var(--muted-foreground); border-color: var(--border); box-shadow: none; }
+.btn.secondary.row-open, .btn.secondary.stamp-btn { box-shadow: none; border: 0; background: none; color: var(--foreground); }
+.card.todo > .row-link:not(.row-link ~ .row-link) { background: var(--primary); color: var(--primary-foreground); border-radius: var(--r-md); box-shadow: var(--shadow-xs); padding: 12px 16px; font-size: 1rem; font-weight: 600; margin-top: 12px; }
+.card.todo > .row-link:not(.row-link ~ .row-link)::after { color: var(--primary-foreground); }
+/* Input: rounded-md border shadow-xs px-3 (테두리는 3:1 값) */
+.field input, .field select, .field textarea, body.tone-soft .field input, body.tone-soft .field select, body.tone-soft .field textarea { border: 1px solid var(--field-border); background: var(--background); border-radius: var(--r-md); box-shadow: var(--shadow-xs); padding: 8px 12px; }
+.field label { font-weight: 500; }
+/* Tabs: list = bg-muted rounded-lg p-[3px], trigger = rounded-md, 고른 것 bg-background shadow-sm */
+.segmented, body.tone-soft .segmented { background: var(--muted-sh); border-radius: var(--r-lg); padding: 3px; gap: 0; }
+.seg { border-radius: var(--r-md); font-weight: 500; color: var(--muted-foreground); } .seg.on { background: var(--background); color: var(--foreground); box-shadow: var(--shadow-sm); }
+.chip, .tab { border: 1px solid var(--border); background: var(--background); border-radius: var(--r-md); box-shadow: var(--shadow-xs); font-weight: 500; }
+.chip.on.on, .tab.on.on { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); font-weight: 600; }
+/* Badge: rounded-full px-2 py-0.5 font-medium. 상태 = 옅은 바탕, 분류(학·가·병·보조) = outline */
+.pill { border-radius: 999px; padding: 2px 10px; font-weight: 600; border: 1px solid transparent; }
+.pill.mute, .pill.c-hak, .pill.c-ga, .pill.c-byung { border-color: var(--border); color: var(--foreground); background: none; }
+.pill.out-2 { background: var(--destructive); color: var(--destructive-foreground); }
+.card.key *:not(li) > .pill.out-1, .card.key *:not(li) > .pill.out-2, body.tone-soft .card.key *:not(li) > .pill.out-1, body.tone-soft .card.key *:not(li) > .pill.out-2 { font-size: var(--font-lg); padding: 4px 12px; }
+.count { background: var(--foreground); color: var(--background); border-radius: 999px; font-weight: 600; }
+.todo-n { background: none; color: var(--foreground); border-radius: 0; padding: 0; min-width: 1.8em; text-align: left; font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* 목록(Material 3 목록 참고: 한 줄 56 · 두 줄 72): 줄 높이를 넉넉히, 글자는 본문색 */
+.row-link, .feature-row { color: var(--foreground); font-weight: 400; min-height: 56px; } .todo-row { min-height: 56px; }
+.feature-row { justify-content: flex-start; } .feature-row > :first-child { flex: 1 1 auto; }
+/* Dialog·Sheet: overlay black/50, 내용 bg-background border shadow-lg p-6, 가운데 창 rounded-lg. 아래 시트는 Material 3처럼 위 모서리만 크게 */
+.sheet-scrim { background: rgba(0, 0, 0, .5); }
+.sheet { background: var(--background); border: 1px solid var(--border); border-bottom: 0; box-shadow: var(--shadow-lg); border-radius: calc(var(--radius) * 3) calc(var(--radius) * 3) 0 0; padding: 24px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
+.sheet-lead { color: var(--foreground); } .sheet h2 { font-weight: 600; }
+@media (min-width: 840px) { .sheet { border-radius: var(--r-lg); border-bottom: 1px solid var(--border); padding: 24px; } }
+.actionbar { background: var(--background); box-shadow: none; border-top: 1px solid var(--border); }
+.notice, .error, .toast { border-radius: var(--r-lg); border: 1px solid var(--border); background: var(--card); color: var(--foreground); }
+.notice.info { background: var(--muted-sh); } .error, .field .fix { color: var(--destructive); } .error { border-color: var(--destructive); }
+.ld-pick { border-radius: var(--r-md); border-left: 0; } .ld-pick[aria-current="true"] { background: var(--muted-sh); color: var(--foreground); font-weight: 600; }
+.rg-cell.has { background: var(--muted-sh); border-color: var(--field-border); }
+.tablewrap, .rg-cell, .picker-item, .duty-day, .seat-cell { border-radius: var(--r-md); }
+table.data thead th, table.data thead th:first-child, table.data tr.total th, table.data tr.total td { background: var(--muted-sh); color: var(--foreground); } table.data th:first-child, table.data td:first-child { background: var(--background); }
+.tablewrap { background: var(--background); }
+details.fold > summary { color: var(--foreground); font-weight: 600; }
+.field { margin-bottom: 16px; }
+@media (hover: hover) { .row-link:hover, .feature-row:hover, .todo-row:hover, .chip:hover, .tab:hover, .ld-pick:hover, .btn.secondary:hover { background: var(--accent-sh); color: var(--accent-foreground); } .btn:hover { filter: brightness(.95); } .row-link:hover .muted, .todo-row:hover .muted, .ld-pick:hover .muted, .feature-row:hover .muted { color: inherit; } }
+/* ── 아이콘(Lucide, ISC): 글자 기호(✓ … ⊘ ▲ ⛔ ● ⚠ ⓘ ↻ › ←)를 SVG로 ── */
+.pill::before, .notice::before, .error::before, .toast::before, .row-link::after, .feature-row::after, .todo-go::before, .stamp-btn::before, .chip.on::before, .seg.on::before, .back::before, details.fold > summary::after, .seat-cell.sel .seat-no::before {
+  content: "" !important; display: inline-block; flex: 0 0 auto; width: 1.05em; height: 1.05em; background: currentColor; vertical-align: -0.16em; margin-right: .3em;
+  -webkit-mask: var(--ic) center / contain no-repeat; mask: var(--ic) center / contain no-repeat; font-size: inherit; }
+.pill.s-confirmed, .notice.ok, .toast.ok, .chip.on, .seg.on, .seat-cell.sel .seat-no { --ic: var(--i-check); }
+.pill.s-requested { --ic: var(--i-ellipsis); } .pill.s-canceled { --ic: var(--i-ban); }
+.pill.out-1, .notice.warn, .toast.warn, .error { --ic: var(--i-triangle-alert); } .pill.out-2 { --ic: var(--i-octagon-alert); } .pill.todo { --ic: var(--i-circle-dot); }
+.notice.info, .toast.info { --ic: var(--i-info); }
+.pill.mute::before, .pill.c-hak::before, .pill.c-ga::before, .pill.c-byung::before { content: none !important; }
+.row-link, .feature-row, .todo-go { --ic: var(--i-chevron-right); }
+.row-link::after, .feature-row::after { margin: 0 0 0 8px; width: 1.2em; height: 1.2em; color: var(--muted-foreground); }
+.todo-go { font-size: 0; color: var(--muted-foreground); } .todo-go::before { font-size: 1.2rem; margin: 0; }
+.stamp-btn { --ic: var(--i-refresh-cw); } .back { --ic: var(--i-arrow-left); } .back::before { margin-right: .4em; }
+details.fold > summary { --ic: var(--i-chevron-down); } details.fold[open] > summary { --ic: var(--i-chevron-up); }
+details.fold > summary::after { margin: 0 0 0 8px; width: 1.2em; height: 1.2em; }
+/* ── hero(21st.dev Heroes 방식: 큰 글자 + 강한 시각 요소 하나 + 버튼 하나). 움직임 없음. 그림은 t*.css ── */
+.card.hero, body.tone-soft .card.hero, body.tone-soft .card.hero:first-child { position: relative; overflow: hidden; background: var(--card); color: var(--card-foreground); border: 1px solid var(--border); border-radius: var(--r-xl); box-shadow: var(--shadow-sm); padding: 20px 16px 16px; margin: 8px 0 16px; }
+.card.hero > h2, .card.hero > .muted:not(#home-duty) { display: none; }
+.card.hero > * { position: relative; }
+.hero-eyebrow { font-size: var(--font-sm); color: var(--muted-foreground); }
+.hero-row { display: flex; align-items: baseline; gap: 8px 12px; flex-wrap: wrap; margin-top: 4px; }
+.hero-big { font-size: 6rem; line-height: 1; font-weight: 800; font-variant-numeric: tabular-nums; }
+.hero-unit { font-size: var(--font-lg); font-weight: 700; } .hero-cap { font-size: var(--font-xl); font-weight: 700; line-height: 1.25; flex: 1 1 6em; }
+.hero-name { font-size: 2.4rem; line-height: 1.15; font-weight: 800; margin: 4px 0 12px; }
+.hero-facts { display: flex; flex-wrap: wrap; gap: 8px 12px; } .hero-fact { flex: 1 1 7em; border: 1px solid var(--border); border-radius: var(--r-lg); padding: 8px 12px; background: var(--background); }
+.hero-fact b { display: block; font-family: var(--font-head), sans-serif; font-size: 2.2rem; line-height: 1.1; font-variant-numeric: tabular-nums; } .hero-fact b small { font-size: 1rem; font-weight: 500; }
+.card.hero > .row-link.hero-cta { background: var(--primary); color: var(--primary-foreground); border: 1px solid transparent; border-radius: var(--r-md); box-shadow: var(--shadow-xs); padding: 12px 16px; font-weight: 600; margin-top: 16px; justify-content: center; gap: 4px; }
+.card.hero > .row-link.hero-cta::after { color: var(--primary-foreground); margin-left: 4px; }
+.card.hero .stats { margin-top: 12px; gap: 8px; grid-template-columns: repeat(3, 1fr); }
+.card.hero .stat { background: var(--background); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 8px 12px; } .card.hero .stat .n { font-size: 1.5rem; }
+.card.hero #home-duty { margin-top: 12px; color: var(--foreground); }
+.hero-art { position: absolute !important; pointer-events: none; }

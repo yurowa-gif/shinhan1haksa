@@ -1,0 +1,15 @@
+/* 나 Vintage Paper: 프리셋의 옆으로 떨어지는 그림자와 4px 모서리 그대로. hero = 가운데 정렬 큰 명조 숫자 + 안쪽 이중 테두리(책 속표지처럼) */
+header.top { border-bottom: 3px double var(--border); } header.top h1 { font-size: 1.25rem; }
+.row-link, .feature-row, .todo-row, ul.list li, .ld-row, .out-row { border-top-style: dotted; border-bottom-style: dotted; border-color: var(--field-border); }
+.todo-n { color: var(--primary); } .count { background: var(--primary); color: var(--primary-foreground); }
+.home-h { color: var(--foreground); font-weight: 700; border-bottom: 1px solid var(--border); padding-bottom: 4px; margin: 28px 0 8px; }
+/* hero */
+.card.hero, body.tone-soft .card.hero, body.tone-soft .card.hero:first-child { padding: 28px 24px 20px; box-shadow: var(--shadow-lg); text-align: center; }
+.hero-art { inset: 8px; border: 3px double var(--primary); border-radius: var(--r-sm); }
+.hero-row { justify-content: center; align-items: center; flex-direction: column; gap: 0; }
+.hero-big { font-size: 7rem; color: var(--primary); font-weight: 700; }
+.hero-unit { display: none; } .hero-cap { flex: 0 0 auto; }
+.hero-cap::before, .hero-name::after { content: ""; display: block; width: 72px; height: 0; border-top: 1px solid var(--primary); margin: 8px auto 12px; box-shadow: 0 3px 0 -2px var(--primary); }
+.hero-name::after { margin-bottom: 0; }
+.hero-facts { justify-content: center; } .hero-fact { text-align: center; } .hero-fact b { color: var(--primary); }
+.card.hero #home-duty { text-align: left; }
