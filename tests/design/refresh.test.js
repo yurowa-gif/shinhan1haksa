@@ -164,3 +164,19 @@ test('D15 ④ 시안 문서: 사진 전부 참조, 시안 단계 명시, 선택�
   assert.match(md, /선택지와 권장/);
   assert.match(md, /건너뛴 것·확인 못 한 것/);
 });
+
+// D15 ⑤b: 반 고르기(학년 먼저)·서류(알약+열기+시트) — 문서가 사진 15장을 모두 싣고, 화면이 약속을 지킨다
+test('D15 ⑤b 반 고르기·서류: 문서·사진·화면 약속', () => {
+  const dir = path.join(ROOT, 'docs', 'design', 'refresh');
+  const md = fs.readFileSync(path.join(dir, 'docs-results.md'), 'utf8');
+  const pics = fs.readdirSync(path.join(dir, 'docs-results')).filter((f) => f.endsWith('.png'));
+  assert.ok(pics.length >= 15, '사진 15장 이상');
+  pics.forEach((f) => assert.ok(md.includes('docs-results/' + f), f + ' 문서에 없음'));
+  assert.match(md, /건너뛴 것·확인 못 한 것/);
+  const docs = fs.readFileSync(path.join(ROOT, 'src', 'ui', 'screen_docs.html'), 'utf8');
+  assert.ok(/UI\.bottomSheet\(/.test(docs) && /call\('saveDocState'/.test(docs), '시트 + 기존 saveDocState');
+  assert.ok(/못 받은 서류 ' \+ m\.length/.test(docs) && /stateRank/.test(docs), '알약 + 못 받은 학생 위로');
+  assert.ok(!/doc-line'? \}, \[el\('span', \{ text: t\.name \}\), stateButtons\(s, t\.id\)\]\)\);\s*\n\s*body\.appendChild\(row\)/.test(docs), '줄 안 토글 3개를 없앴다');
+  const res = fs.readFileSync(path.join(ROOT, 'src', 'ui', 'screen_results.html'), 'utf8');
+  assert.ok(/d\.classes\.length > 8 && grades\.length > 1/.test(res) && /label: '학년'/.test(res), '반 8개 초과면 학년 먼저');
+});

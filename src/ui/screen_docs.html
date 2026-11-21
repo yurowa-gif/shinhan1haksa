@@ -5,11 +5,15 @@
   .doc-btns { display: flex; gap: 6px; flex-wrap: wrap; }
   .doc-btns button { min-height: 44px; }
   .doc-btns button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .doc-who { display: flex; justify-content: space-between; align-items: center; gap: 4px 8px; flex-wrap: wrap; }
+  .doc-who > .doc-name { flex: 1 1 9em; min-width: 0; }
+  .doc-who > .doc-side { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+  .doc-sheet .doc-line + .doc-line { border-top: 1px solid var(--line); padding-top: 8px; }
 </style>
 <script>
   /** 서류 체크리스트 화면(C27, 결정 75①): 미제출 목록 / 서류별 보기, 칸마다 [제출][미제출][해당없음], 관리자는 서류 종류 관리. */
   function renderScreen(root) {
-    var data = null, seq = 0, busy = false, mode = 'missing', typeId = '';
+    var data = null, seq = 0, busy = false, mode = 'missing', typeId = '', openId = '', sheet = null, sheetBody = null;
     var head = el('div', { class: 'card' });
     var body = el('div', { class: 'card' });
     var progBox = el('div', { class: 'card' });
@@ -29,7 +33,37 @@
     function typeName(id) { var t = data.types.filter(function (x) { return x.id === id; })[0]; return t ? t.name : ''; }
 
     function draw() {
-      drawHead(); drawProgress(); drawBody(); drawTypes();
+      drawHead(); drawProgress(); drawBody(); drawTypes(); refreshSheet();
+    }
+    /* ───── 학생 한 명의 서류 시트: 서류마다 [제출][미제출][해당없음] 토글(기존 saveDocState 그대로, 바뀐 뒤 다시 불러오면 시트도 새로 그린다) ───── */
+    function sheetContent(student) {
+      var box = el('div', { class: 'doc-sheet' });
+      if (!data.canEdit) box.appendChild(el('div', { class: 'muted', text: '보기만 할 수 있습니다. 표시는 담당 선생님·관리자 선생님이 합니다.' }));
+      data.types.forEach(function (t) { box.appendChild(el('div', { class: 'doc-line' }, [el('span', { text: t.name }), stateButtons(student, t.id)])); });
+      return box;
+    }
+    function refreshSheet() {
+      if (!sheetBody || !openId) return;
+      var st = data.students.filter(function (x) { return x.id === openId; })[0];
+      if (!st) { if (sheet) sheet.close(); return; }
+      clear(sheetBody); sheetBody.appendChild(sheetContent(st));
+    }
+    function openSheet(st) {
+      openId = st.id;
+      var content = el('div');
+      sheet = UI.bottomSheet({ title: UI.util.studentLabel(st) + ' · ' + st.grade + '-' + st.classNo + ' ' + st.number + '번', content: content,
+        actions: [{ text: '닫기', kind: 'secondary', onclick: function () { sheet.close(); } }], onclose: function () { openId = ''; sheet = null; sheetBody = null; } });
+      sheetBody = content;
+      sheet.open();
+      content.appendChild(sheetContent(st));
+    }
+    var stateRank = { '미제출': 0, '제출': 1, '해당없음': 2 };
+    /** 학생 한 줄: 이름 · 상태 알약 하나 + [열기 ›]. 줄 안에서 서류별 상태를 바꾸지 않는다(시트에서 바꾼다) */
+    function docRow(st, pill, sub) {
+      return el('div', { class: 'doc-row' }, [
+        el('div', { class: 'doc-who' }, [el('div', { class: 'doc-name' }, [el('b', { text: UI.util.studentLabel(st) }), el('div', { class: 'muted', text: st.grade + '-' + st.classNo + ' ' + st.number + '번' + (st.teacher ? ' · 담당 ' + st.teacher : '') })]),
+          el('div', { class: 'doc-side' }, [pill, el('button', { type: 'button', class: 'btn secondary row-btn row-open', text: '열기', 'aria-label': UI.util.studentLabel(st) + ' 서류 열기', onclick: function () { openSheet(st); } })])]),
+        sub ? el('div', { class: 'muted', text: sub }) : null]);
     }
     function drawHead() {
       clear(head);
@@ -75,19 +109,20 @@
       if (!data.canEdit) body.appendChild(el('div', { class: 'muted', text: '보기만 할 수 있습니다. 표시는 담당 선생님·관리자 선생님이 합니다.' }));
       if (mode === 'type') {
         if (!data.students.length) { body.appendChild(UI.emptyState('볼 수 있는 학생이 없습니다.')); return; }
-        data.students.forEach(function (s) {
-          body.appendChild(el('div', { class: 'doc-row' }, studentLine(s).concat([stateButtons(s, typeId)])));
+        var kinds = { '미제출': ['todo', '미제출'], '제출': ['confirmed', '제출'], '해당없음': ['mute', '해당없음'] };
+        data.students.slice().sort(function (x, y) { return (stateRank[x.docs[typeId]] || 0) - (stateRank[y.docs[typeId]] || 0); }).forEach(function (s) {
+          var cur = s.docs[typeId] || '미제출', k = kinds[cur] || kinds['미제출'];
+          body.appendChild(docRow(s, UI.statusPill(k[0], k[1])));   // 못 받은(미제출) 학생이 위로
         });
         return;
       }
-      var list = data.students.filter(function (s) { return data.types.some(function (t) { return s.docs[t.id] === '미제출'; }); });
+      var miss = function (s) { return data.types.filter(function (t) { return s.docs[t.id] === '미제출'; }); };
+      var list = data.students.filter(function (s) { return miss(s).length; });
       if (!list.length) { body.appendChild(UI.emptyState(data.students.length ? '미제출 서류가 없습니다.' : '볼 수 있는 학생이 없습니다.')); return; }
+      list.sort(function (x, y) { return miss(y).length - miss(x).length; });   // 못 받은 서류가 많은 학생이 위로
       list.forEach(function (s) {
-        var row = el('div', { class: 'doc-row' }, studentLine(s));
-        data.types.filter(function (t) { return s.docs[t.id] === '미제출'; }).forEach(function (t) {
-          row.appendChild(el('div', { class: 'doc-line' }, [el('span', { text: t.name }), stateButtons(s, t.id)]));
-        });
-        body.appendChild(row);
+        var m = miss(s);
+        body.appendChild(docRow(s, UI.statusPill('todo', '못 받은 서류 ' + m.length + '건'), m.map(function (t) { return t.name; }).join(', ')));
       });
     }
 
