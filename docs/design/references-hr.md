@@ -92,3 +92,119 @@
 - HiBob 홈의 Who's out 위젯 여부.
 - 시프티 관리자 대시보드의 실제 배치(도움말 목차만).
 - 제품 화면 사진은 보지 않았다(텍스트 도움말 기준). 배치의 세부(카드 크기·색)는 이 문서의 범위가 아니다.
+
+---
+
+## 5. 1단계 스크리닝 점수표(실제 제품)
+
+> 2026-11-21 추가(총괄 W3 3단계 계획의 1단계). 기준 5개, 각 1~3점, 합계 15점.
+> ⓐ 우리 핵심 조각(예외 승인·월간 격자·스케줄·모바일 본인 화면)과 맞음 · ⓑ 공개 근거 충분(도움말·공식 영상으로 화면 흐름을 다시 그릴 수 있음) · ⓒ 휴대폰 + PC 둘 다 · ⓓ 한국어·학교 같은 비IT 사용자 친화 · ⓔ 우리 규모(학사생 약 180명·교사 8명)에 맞는 단순함.
+> 점수는 2~4절의 공개 근거로 매겼다. ⓑ가 1인 제품은 3단계(정밀 replica)에서 화면 흐름을 다시 그리기 어렵다.
+
+| 순위 | 제품 | ⓐ 조각 | ⓑ 근거 | ⓒ 두 기기 | ⓓ 친화 | ⓔ 단순 | **합계** | 강한 조각 | 메모 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | **Connecteam** | 3 | 3 | 3 | 1 | 3 | **13** | 월간 타임시트(문제 날 표시)·승인·잠금 | 현장 근무자용이라 단순. 영어 |
+| 1 | **When I Work** | 3 | 3 | 3 | 1 | 3 | **13** | 요청 승인함·교대 스케줄·모바일 카드 | 소규모 매장용, 승인 필요 여부를 설정으로 |
+| 1 | **flex** | 3 | 2 | 3 | 3 | 2 | **13** | 예외(누락) 대시보드·내 근무 | 국내·한국어. 도움말은 기능 설명 위주(흐름 일부만) |
+| 1 | **시프티** | 3 | 2 | 3 | 3 | 2 | **13** | 요청 유형별 승인·스케줄·근태 현황 | 국내. 공개 도움말은 목차 수준(ⓑ 약함) |
+| 5 | **Deputy** | 3 | 3 | 3 | 1 | 2 | **12** | 타임시트 일괄 승인("경고 없는 것만") | 도움말 상세 |
+| 5 | **Factorial** | 3 | 3 | 3 | 1 | 2 | **12** | 월간 타임시트 예외 열·알림 | 오류 4종을 열로 |
+| 5 | 네이버웍스 | 2 | 3 | 3 | 3 | 1 | 12 | 일자별 예외 한눈에·기록 출처 | 관리자 메뉴가 깊음(ⓔ 1) |
+| 8 | 알밤 | 2 | 1 | 2 | 3 | 3 | 11 | 기록 수정 요청 | 공개 근거 적음 |
+| 8 | 원티드스페이스 | 2 | 1 | 3 | 3 | 2 | 11 | 모바일 본인 화면·마감 | 공개 근거 적음 |
+| 8 | Homebase | 3 | 1 | 3 | 1 | 3 | 11 | 타임시트 경고·잠금 | 공식 도움말 원문 못 봄 |
+| 8 | BambooHR | 2 | 3 | 3 | 1 | 2 | 11 | 승인함(✓/✕)·Who's out | 타임시트보다 휴가 중심 |
+| 12 | Workday(모바일 ESS) | 2 | 3 | 3 | 1 | 1 | 10 | 모바일 본인 화면(잔여·이력) | 대기업용 |
+| 13 | Gusto | 2 | 2 | 2 | 1 | 2 | 9 | 홈 "중요한 할 일" | 급여 중심 |
+| 13 | Personio | 2 | 3 | 2 | 1 | 1 | 9 | 규칙 위반만 결재 | 규칙 엔진은 과함 |
+| 15 | Rippling | 2 | 1 | 3 | 1 | 1 | 8 | 일괄 승인 | 공식 도움말 못 봄 |
+| 15 | HiBob | 2 | 1 | 3 | 1 | 1 | 8 | 모바일 상태·잔여 | |
+| 15 | 다우오피스·카카오워크 | 1 | 1 | 2 | 3 | 1 | 8 | — | 공개 근태 화면 못 찾음(미확인) |
+
+**후보 Top 6**(합계 → 같으면 ⓐ·ⓑ 순): **Connecteam · When I Work · flex · 시프티 · Deputy · Factorial**.
+네이버웍스(12)는 ⓐ·ⓔ에서 밀렸지만 "기록 출처 표시"와 한국어 화면 근거가 좋아 2단계에서 보조 레퍼런스로 쓸 만하다.
+
+**2단계에 넘길 메모(조각별 가장 강한 후보)**
+- 승인함·예외 대시보드: When I Work(근거 3) / flex(한국어, 예외 필터)
+- 월간 타임시트: Connecteam / Factorial / Deputy(일괄 승인)
+- 모바일 본인 화면: When I Work·Connecteam(모바일 우선) / 원티드스페이스·Workday(근거 차이 큼)
+- 국내 제품(flex·시프티)은 ⓑ가 2라 3단계에서 화면 흐름을 다시 그릴 때 공식 영상·앱스토어 설명으로 보충해야 한다.
+
+## 6. 시안 레퍼런스(Behance·Dribbble) — 실제 제품과 구분
+
+> 선생님이 준 링크: [Behance "HR platform ui design"](https://www.behance.net/search/projects/HR%20platform%20ui%20design?locale=ko_KR), [Dribbble "hr website ui"](https://dribbble.com/search/hr-website-ui).
+> **두 검색 페이지는 이 세션 네트워크에서 막혔다**(접속 실패). 그래서 웹 검색(attendance dashboard · time tracking · leave management · shift scheduling · HR mobile app · 근태관리)으로 개별 프로젝트 링크를 찾았다.
+> **한계:** 시안은 그림이라 이 세션은 화면을 보지 못했다. 아래 "몇 개에서 봤나"는 **제목·설명 글에 그 요소가 적힌 수**다(그림만 보고 셀 수 있는 수보다 적다). Behance는 검색 색인에 프로젝트가 거의 잡히지 않아(HR360 1건) 같은 작가들이 Contra에 올린 사례 글로 보충했다. 목표였던 "각 15~20개"에는 Behance가 못 미친다.
+> 시안은 실제 제품이 아니다. **"실제 제품에도 있나"가 '있음'인 패턴만 우리 화면에 옮길 근거로 쓴다.** 이미지는 저장소에 넣지 않는다.
+
+### 6.1 훑어본 시안(링크만)
+
+| 출처 | 제목 | 글에 적힌 요소 |
+| --- | --- | --- |
+| Behance | [HR Dashboard Concept — HR360](https://behance.net/gallery/189238867/HR-Dashboard-Concept-HR360) | 급여 계산·출결 추적·보상, 급여 표 |
+| Dribbble | [Employee Attendance Dashboard](https://www.dribbble.com/shots/23633181-Employee-Attendance-Dashboard) | 출결 대시보드 |
+| Dribbble | [Tables dashboard HR Management](https://dribbble.com/shots/24516318-Tables-dashboard-HR-Management) | 직원 출결 표 |
+| Dribbble | [Astrea System — HR Management Dashboard](https://dribbble.com/shots/22946378-Astrea-System-HR-Management-Dashboard) | HR 대시보드 |
+| Dribbble | [Dynamics — Dashboard HRIS](https://dribbble.com/shots/24172962-Dynamics-Dashboard-HRIS) | HRIS 대시보드 |
+| Dribbble | [iiHuman: Employee Management Dashboard](https://dribbble.com/shots/24084377-iiHuman-Efficient-Employee-Management-Dashboard) | 직원 관리 대시보드 |
+| Dribbble | [HRM Dashboard](https://dribbble.com/shots/15565798-HRM-Dashboard) | HRM 대시보드 |
+| Dribbble | [HR Dashboard — UI Design](https://dribbble.com/shots/24227366-HR-Dashboard-UI-Design) | HR 대시보드 |
+| Dribbble | [HR 컬렉션(Ifeoma Nkemdilim)](https://dribbble.com/ifeomacreates/collections/7725421-HR-Dashboard) | 출결 추적·출결 대시보드 샷 10개 묶음 |
+| Dribbble | [Timesheet 컬렉션](https://dribbble.com/rusnikitaa/collections/7149109-Timesheet) | Karyaone HR 출결 대시보드(위치 추적·준수) 등 |
+| Dribbble | [Findez 등 Dark 컬렉션](https://dribbble.com/ashikxql/collections/6409776-Dark) | 출결 카드·일정 보기·프로필 |
+| Dribbble | [Parcelle(HRMS Dashboard — Attendance)](https://dribbble.com/parcelle) | 도넛 차트·휴가 정책 |
+| Dribbble | [HR Attendance App Design](https://www.dribbble.com/shots/23355998-HR-Attendance-App-Design) | 출퇴근 버튼·휴가 신청·출결 이력(모바일) |
+| Dribbble | [Cloudforce HR Mobile — Apply and Approve Leaves](https://dribbble.com/shots/18631864-Cloudforce-HR-Mobile-App-Apply-and-Approve-Leaves) | 모바일 휴가 신청·승인 |
+| Dribbble | [Nami — HR Management Mobile App](https://dribbble.com/shots/21667286-Nami-HR-Management-Mobile-App) | 출결·휴가 관리(모바일) |
+| Dribbble | [Synergie — Payroll & Time Tracking Companion](https://dribbble.com/shots/14527552-Synergie-HR-Payroll-Time-Tracking-Companion-App) | 타임시트·수동 입력·승인 흐름 |
+| Dribbble | [Shift scheduling system — Dipendenti in Cloud](https://dribbble.com/shots/19314988-Shift-scheduling-system-Dipendenti-in-Cloud) | 시간축(타임라인) 근무표·게시/임시 저장 |
+| Dribbble | [HR Portal Design Concept](https://dribbble.com/shots/23652213-HR-Portal-Design-Concept) | 남은 휴가(연차·병가·가족돌봄) 잔여 |
+| Dribbble | [Leave Management App(Synergy Codes)](https://dribbble.com/SynergyCodes/projects/5480860-Leave-Management-App) | 휴가 요청 관리 |
+| Dribbble | [Leave Tracker and Sick Leave App 컬렉션](https://dribbble.com/MaramAbuHilal/collections/1925330-Leave-Tracker-and-Sick-Leave-App) | 휴가 홈·달력 |
+| Dribbble | [HRMS app UI/UX case study](https://dribbble.com/shots/20651099-HRMS-app-UI-UX-case-study) | HRMS 앱 사례 |
+| Dribbble | [Attendance management app 컬렉션](https://dribbble.com/Dhannyyogasukmawan/collections/6123085-Attendance-management-app) | iOS 휴가 신청 화면 |
+| Contra(Behance 작가) | [TalentTrack — HR Management Dashboard](https://contra.com/p/UbWrcgUo-talent-track-hr-management-dashboard-design) | 핵심 지표 카드(총원·출근율·급여), 오늘 날짜 머리줄, 알림 |
+| Contra(Behance 작가) | [BordUp — HR Management Dashboard](https://contra.com/p/bov2ZlYU-bord-up-hr-management-dashboard) | 휴가 신청·승인·잔여, 온라인 출결 |
+| Contra | [TeamHub HR Management Dashboard](https://contra.com/p/PeEMQPPQ-team-hub-hr-management-dashboard-design) | 직원·출결·성과·채용 한 대시보드 |
+| Contra | [Employee Self Service Portal](https://contra.com/p/QoeEPqce-employee-self-service-portal-uiux-design) | 직원 셀프서비스 |
+| Contra | [Employee Management Dashboard(사례 글)](https://contra.com/community/upawEyoJ-uiux-design-for-employee-management-dashboard) | "휴가 요청·승인을 스프레드시트로 하던 문제" |
+
+### 6.2 패턴별 집계(시안 + 실제 제품)
+
+| 패턴 | 시안 글에서 본 수 | 대표 시안 링크 | 실제 제품에도 있나 | 우리 화면 어디에 |
+| --- | --- | --- | --- | --- |
+| 상단 요약 지표 카드(총원·출근율·지각·휴가 중) | 6 이상(TalentTrack, HR360, Employee Attendance, Astrea, Dynamics, iiHuman) | [TalentTrack](https://contra.com/p/UbWrcgUo-talent-track-hr-management-dashboard-design), [Employee Attendance](https://www.dribbble.com/shots/23633181-Employee-Attendance-Dashboard) | **있음**(flex 대시보드, 네이버웍스 현황, Gusto 홈 할 일) | 관리자·출결 담당 홈 맨 위 → Top 1. 단 **"처리할 것" 숫자**로(예쁜 통계가 아니라) |
+| 출결 표(사람 × 날짜) | 4(Tables dashboard, Timesheet 컬렉션, Karyaone, Synergie) | [Tables dashboard](https://dribbble.com/shots/24516318-Tables-dashboard-HR-Management) | **있음**(Connecteam·Factorial·Deputy 타임시트, 네이버웍스 일자별) | 출결 결과 월간 격자 → Top 4 |
+| 휴가(특이사항) 신청 → 승인 흐름 | 6(Cloudforce, HR Attendance App, Nami, Synergie, Leave Mgmt, BordUp) | [Cloudforce](https://dribbble.com/shots/18631864-Cloudforce-HR-Mobile-App-Apply-and-Approve-Leaves), [Leave Mgmt](https://dribbble.com/SynergyCodes/projects/5480860-Leave-Management-App) | **있음**(BambooHR Inbox, When I Work, Rippling, Gusto) | 요청 승인함 → Top 2·3 |
+| 잔여·상태 카드(남은 휴가) | 3(HR Portal, BordUp, Leave Tracker) | [HR Portal](https://dribbble.com/shots/23652213-HR-Portal-Design-Concept) | **있음**(Workday, HiBob, 원티드스페이스) | 학생 포털 "내 상태 한 장"(OUT 0/2 등) → Top 5 |
+| 모바일 출퇴근 큰 버튼 | 3(HR Attendance App, Findez, AveHR) | [HR Attendance App](https://www.dribbble.com/shots/23355998-HR-Attendance-App-Design) | 있음(원티드스페이스·알밤 등) | **우리는 쓰지 않음**(출석은 종이 출석부·근무교사) |
+| 근무 시간축(타임라인) 스케줄 | 1(Dipendenti) | [Dipendenti](https://dribbble.com/shots/19314988-Shift-scheduling-system-Dipendenti-in-Cloud) | 있음(When I Work·Deputy 스케줄) | 근무표 달 화면 — 우리는 하루 2칸(21:30·23:00조)이라 시간축보다 **달력 칸**이 맞음 |
+| 달력 보기(휴가·일정) | 2(Leave Tracker, Findez) | [Leave Tracker](https://dribbble.com/MaramAbuHilal/collections/1925330-Leave-Tracker-and-Sick-Leave-App) | 있음(BambooHR Who's Out 달력, Workday 팀 달력) | 월별 일정·근무표(이미 있음) |
+| 도넛·원 차트(출근 비율) | 1 이상(Parcelle) | [Parcelle](https://dribbble.com/parcelle) | 드묾(실제 제품 도움말에서 핵심 화면으로 못 봄) | **쓰지 않음 권장** — 비율보다 "누가"가 중요 |
+| 위치 추적·지도 | 1(Karyaone) | [Timesheet 컬렉션](https://dribbble.com/rusnikitaa/collections/7149109-Timesheet) | 있음(시프티·알밤 위치 기반 출퇴근) | **쓰지 않음**(개인정보) |
+| 한 대시보드에 출결·급여·성과·채용 | 3(TeamHub, HR360, iiHuman) | [TeamHub](https://contra.com/p/PeEMQPPQ-team-hub-hr-management-dashboard-design) | 있음(올인원 HR) | **피함** — 역할별 홈에 그 역할 일만 |
+
+### 6.3 시안에서만 본 스타일(실제 제품 근거 약함 → 참고만)
+
+- 큰 통계 숫자 + 도넛·막대 차트가 화면 대부분을 차지하는 대시보드: 시안에는 흔하지만 실제 근태 제품 도움말의 핵심 화면은 **목록·표·승인함**이다.
+- 사진 아바타가 줄마다 있는 직원 목록: 우리는 쓰지 않는다(학생 사진).
+- 다크 모드·그라데이션 카드: 색 이야기라 이 문서 범위 밖(D15 몫).
+
+### 6.4 근거 수(빈도)로 다시 정렬한 Top 10
+
+실제 제품(2·3절, 16개) + 시안(6.2)에서 같은 패턴을 본 수를 더했다. 시안 수는 글 기준이라 낮게 잡혔다.
+
+| 순위 | 패턴(0절 번호) | 실제 제품 수 | 시안 수 | 합 |
+| --- | --- | --- | --- | --- |
+| 1 | 요청 승인함·일괄 확정(②③) | 8(BambooHR·When I Work·Rippling·Gusto·Deputy·Personio·Workday·시프티) | 6 | 14 |
+| 2 | 오늘 예외만 보이는 대시보드(①) | 5(flex·네이버웍스·Gusto·Homebase·Factorial) | 6 | 11 |
+| 3 | 월간 타임시트 예외 표시·고정 열(④) | 6(Connecteam·Factorial·Deputy·Homebase·네이버웍스·flex) | 4 | 10 |
+| 4 | 모바일 내 상태 한 장(⑤) | 5(Workday·HiBob·원티드스페이스·When I Work·flex 내 근무) | 3 | 8 |
+| 5 | 처리할 요청 수 배지(⑦) | 3(When I Work·BambooHR·Gusto) | (시안 알림 아이콘 1 이상) | 4 |
+| 6 | 마감·잠금(⑧) | 3(Homebase·Connecteam·원티드스페이스) | 0 | 3 |
+| 7 | Who's out(⑨) | 2(BambooHR·Workday) | 2(달력) | 4 |
+| 8 | 빠진 사람 찾기 + 알림(⑥) | 2(flex·Factorial) | 0 | 2 |
+| 9 | 규칙 위반만 결재(⑩) | 1(Personio) | 0 | 1 |
+| 10 | 기록 출처 표시(새로) | 1(네이버웍스) | 0 | 1 |
+
+> 빈도로 보면 0절 순서와 거의 같다. 다만 **요청 승인함이 1위**로 올라온다(실제 제품·시안 모두 가장 흔함). Who's out(⑨)은 배지(⑦)와 비슷한 근거 수다.
