@@ -227,6 +227,14 @@
     "getExceptionHistory": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "previewBulkConfirm": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "confirmExceptionGroups": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }

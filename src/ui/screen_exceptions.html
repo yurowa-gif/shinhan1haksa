@@ -379,6 +379,38 @@
       })();
     }
 
+    /** 결정 86: 경고 없는 요청 일괄 확정. 대상이 1건 이상일 때만 버튼을 보이고, 미인정 유형·경고 있는 요청은 남겨 하나씩 본다 */
+    function drawBulk(box, groups, reload) {
+      var termIds = [], seen = {};
+      groups.forEach(function (g) { if (!seen[g.termId]) { seen[g.termId] = true; termIds.push(g.termId); } });
+      Promise.all(termIds.map(function (t) { return call('previewBulkConfirm', t).then(function (p) { p.termId = t; return p; }); })).then(function (ps) {
+        var sum = function (k) { return ps.reduce(function (n, p) { return n + ((p.counts && p.counts[k]) || 0); }, 0); };
+        var n = sum('confirm'), m = sum('kept');
+        if (n < 1) return;
+        var detail = '확정 ' + n + '건 · 남김 ' + m + '건(경고 ' + sum('warn') + ' · 미인정 ' + sum('auto') + (sum('other') ? ' · 명단 밖 ' + sum('other') : '') + ')';
+        var btn = el('button', { type: 'button', class: 'btn', text: '경고 없는 요청 ' + n + '건 확정', onclick: function () {
+          UI.confirmSheet({ title: '일괄 확정', lead: detail, lines: ['겹침 경고가 있거나 미인정 유형인 요청은 남깁니다. 아래 목록에서 하나씩 확인해 주세요.', '기록은 하나씩 확정할 때와 같게 남습니다.'], confirmText: '확정',
+            onconfirm: function () {
+              var tot = { confirmed: 0, kept: 0, failed: 0 }, chain = Promise.resolve();
+              ps.forEach(function (p) {
+                if (!p.confirmable.length) return;
+                chain = chain.then(function () { return call('confirmExceptionGroups', p.termId, p.confirmable, p.token).then(function (r) {
+                  if (!r.ok) { tot.failed += p.confirmable.length; UI.toast(r.error, { kind: 'warn', ms: 5000 }); return; }
+                  tot.confirmed += r.confirmed; tot.kept += r.kept; tot.failed += r.failed;
+                }); });
+              });
+              chain.then(function () {
+                var bad = tot.failed > 0;
+                UI.toast('확정 ' + tot.confirmed + '건 · 남김 ' + (tot.kept + m) + '건' + (bad ? ' · 실패 ' + tot.failed + '건. 실패한 요청은 하나씩 확정해 주세요.' : ''), { kind: bad ? 'warn' : 'ok', ms: bad ? 8000 : undefined });
+                reload();
+              }).catch(function (err) { fail(err); reload(); });
+            } });
+        } });
+        box.appendChild(el('div', { class: 'exc-actions' }, [btn]));
+        box.appendChild(el('div', { class: 'muted', text: '남는 요청: ' + m + '건(경고 있는 요청과 미인정 유형은 하나씩 확정합니다).' }));
+      }).catch(function () { /* 미리 보기를 못 불러와도 목록은 그대로 쓴다 */ });
+    }
+
     function drawRequests(scope, emptyText) {
       var card = el('div', { class: 'card' }, [el('div', { class: 'loading', text: '불러오는 중…' })]);
       body.appendChild(card);
@@ -388,6 +420,7 @@
           card.appendChild(UI.refreshStamp(load));   // 불러온 시각 + 다시 불러오기
           card.appendChild(el('h2', { text: scope === 'pending' ? '처리할 요청 ' + r.groups.length + '건' : '내 요청·입력 ' + r.groups.length + '건' }));
           if (!r.groups.length) { card.appendChild(UI.emptyState(emptyText)); return; }
+          if (scope === 'pending') { var bulkBox = el('div'); card.appendChild(bulkBox); drawBulk(bulkBox, r.groups, load); }
           var gs = scope === 'pending' ? U.sortWaitedFirst(r.groups, state.ctx.today) : r.groups;   // 하루 넘게 기다린 요청이 위로(정렬만, 서버 응답은 그대로)
           gs.forEach(function (g) { card.appendChild(groupCard(g, load, { waited: scope === 'pending' })); });
         }).catch(function (err) { clear(card); showError(card, err); });
