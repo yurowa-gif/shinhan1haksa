@@ -18,6 +18,7 @@
  *   포커스   Tab으로 갈 때 보이지 않는 요소에 가거나, 포커스 표시(outline·box-shadow)가 없거나, tabindex>0
  *   콘솔     콘솔 오류·페이지 오류
  *   줄길이   노트북·데스크톱 칸에서 글 덩어리의 가장 긴 한 줄이 45em·760px 중 작은 값을 넘음(line-length.js)
+ *   링크     역할별 홈(home:*)의 줄 링크(a[href]의 ?page=…, 숨은 것 포함)를 같은 계정으로 열면 '권한 없음' 화면이 나온다(T10)
  */
 const fs = require('fs');
 const path = require('path');
@@ -27,6 +28,7 @@ const { isHarnessNoise } = require('./console-filter.js');
 const { LINE_SELECTOR, LINE_SKIP, longLines } = require('./line-length.js');
 
 const OUT = path.join(__dirname, 'out', 'devices');
+const APP_URL = 'https://script.google.com/macros/s/FAKE/exec';   // 가짜 ScriptApp.getService().getUrl()(gas-fakes.js)과 같음
 const NOW = '2027-03-26T10:00:00', TODAY = '2027-03-26';   // 시간표 제출 기간이 열린 날(stage7-real.js와 같음)
 const ACC = {
   admin: 'test.admin@example.com', hall_teacher: 'test.teacher@example.com', attendance: 'test.attendance@example.com', homeroom: 'test.homeroom@example.com',
@@ -59,6 +61,16 @@ function screenList(app) {
     else list.push({ id: page, email: ACC[can[0]], query: 'page=' + page });
   }
   return list;
+}
+
+/** 링크 판정: 화면 안 a[href] 가운데 앱 주소(?page=…)를 같은 계정으로 실제 doGet에 넣어 '권한 없음'이 나오는 것 → ['?page=… → 권한 없음'] */
+function deniedLinks(app, email, hrefs) {
+  const bad = [];
+  for (const q of [...new Set(hrefs.map((h) => { try { const u = new URL(h, APP_URL); return u.origin + u.pathname === APP_URL ? u.search : ''; } catch (e) { return ''; } }).filter((q) => /[?&]page=/.test(q)))]) {
+    const title = app.env.as(email, (c) => c.doGet({ parameter: Object.fromEntries(new URLSearchParams(q)) })._title);
+    if (String(title).startsWith('권한 없음')) bad.push(q + ' → 권한 없음');
+  }
+  return bad;
 }
 
 /** 가짜 데이터 보충: 오늘 근무교사 = 시험교사, 학생 시설 일지 한 건(그날 일지에 줄이 보이게) */
@@ -176,6 +188,10 @@ async function checkOne(browser, app, sc, dev) {
     if (r.covered.length) fails['가림'] = r.covered;
     if (r.clipped.length) fails['잘림'] = r.clipped;
     if (focus.length) fails['포커스'] = focus;
+    if (sc.id.startsWith('home:')) {
+      const links = deniedLinks(app, sc.email, await s.page.$$eval('a[href]', (as) => as.map((a) => a.getAttribute('href'))));
+      if (links.length) fails['링크'] = links;
+    }
     const long = longLines(r.lines);
     if (long.length) fails['줄길이'] = long;
     const errs = consoleErr.concat(s.errors.map((e) => 'pageerror: ' + e.slice(0, 120)));
@@ -208,7 +224,7 @@ function compare(base, results, screens) {
 }
 
 function reportMd(results, screens) {
-  const codes = ['넘침', '작은칸', '입력글자', '가림', '잘림', '포커스', '콘솔', '줄길이'];
+  const codes = ['넘침', '작은칸', '입력글자', '가림', '잘림', '포커스', '콘솔', '줄길이', '링크'];
   const lines = ['# 기기 행렬 점검 결과', '', '실행: `npm run devices` · 기준 시각(가짜) ' + NOW + ' · 브라우저: Chromium만(아이폰 칸은 크기·터치 흉내, Safari 아님)', '',
     '칸: `통과` 또는 실패 이유 코드(개수). 코드 뜻은 design/preview/devices.js 머리말.', '',
     '| 화면 | ' + DEVICES.map((d) => d.id).join(' | ') + ' |', '| --- |' + DEVICES.map(() => ' --- |').join('')];
@@ -256,7 +272,7 @@ const BAD_PAGE = `<!doctype html><meta name=viewport content="width=device-width
 const GOOD_PAGE = `<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><style>body{margin:0;font:16px sans-serif;padding-bottom:100px}
   .bar{position:fixed;left:0;right:0;bottom:0;height:80px;background:#ccc} button{min-height:48px;min-width:48px} input{font-size:16px;min-height:48px}
   :focus{outline:3px solid blue}</style><button>좋다</button><input aria-label="글"><div style="height:1200px"></div><button>마지막</button><div class=bar></div>`;
-async function selfTest(browser) {
+async function selfTest(browser, app) {
   const run = async (html) => {
     const page = await browser.newPage(Object.assign({ viewport: { width: 360, height: 800 } }, MOBILE));
     const errs = [];
@@ -279,9 +295,12 @@ async function selfTest(browser) {
   };
   bad['줄길이'] = await lineOf('<p>' + longText + '</p>');
   good['줄길이'] = await lineOf('<div style="max-width:720px"><p>' + longText + '</p><ul><li>짧은 항목<div style="width:1000px;height:4px"></div></li></ul></div>');
+  // 링크: 학생 계정에 운영 기간 화면 링크는 실패, 학생 시간표 링크는 통과
+  bad['링크'] = deniedLinks(app, ACC.student, [APP_URL + '?page=terms']).length > 0;
+  good['링크'] = deniedLinks(app, ACC.student, [APP_URL + '?page=timetable&role=student', 'https://example.com/']).length > 0;
   const missed = Object.keys(bad).filter((k) => !bad[k]), noisy = Object.keys(good).filter((k) => good[k]);
   if (missed.length || noisy.length) throw new Error('판정 도구 자체 점검 실패 — 못 잡음: ' + missed.join(',') + ' / 깨끗한 페이지에서 잡음: ' + noisy.join(','));
-  console.log('판정 도구 자체 점검: 여덟 가지 모두 잡고, 깨끗한 페이지는 통과');
+  console.log('판정 도구 자체 점검: 아홉 가지 모두 잡고, 깨끗한 페이지는 통과');
 }
 
 async function main() {
@@ -294,7 +313,7 @@ async function main() {
   const app = makeApp({ now: NOW, seed });
   const screens = screenList(app).filter((sc) => !want.length || want.some((w) => sc.id === w || sc.id.split(':')[0] === w));
   const browser = await launchKo();
-  await selfTest(browser);
+  await selfTest(browser, app);
   const results = {};
   const t0 = Date.now();
   try {
