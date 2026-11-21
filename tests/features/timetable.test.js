@@ -182,7 +182,7 @@ test('교사 목록: 담당 학생만(다른 교사는 안 보임, 관리자는 
   assert.ok(!/@/.test(textOf(l1)));
   const home = call(x, x.teacher, 'getHomeData', 'hall_teacher').timetable;
   assert.deepStrictEqual([home.todo, home.open, home.month], [1, true, MONTH]);
-  assert.ok(!('timetable' in call(x, ADMIN, 'getHomeData', 'admin')) || call(x, ADMIN, 'getHomeData', 'admin').timetable === null);
+  { const at = call(x, ADMIN, 'getHomeData', 'admin').timetable; assert.ok(!at || (Object.keys(at).length === 1 && 'confirmPending' in at), '관리자 홈에는 학사 교사 카드 숫자(todo·missing·total…)가 없고 확인 대기 수만 있다'); };
 });
 
 test('홈 할 일: 학생은 기간에 안 냈으면 submit·돌려보내졌으면 returned, 학부모는 동의할 게 있으면 agree, 아니면 없다', () => {
