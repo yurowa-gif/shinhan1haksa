@@ -207,7 +207,7 @@ function getResultGrid(filter) {
   return {
     ok: true, term: { id: ctx.term.id, name: ctx.term.name }, termStart: ctx.term.start_date, termEnd: ctx.term.end_date, from: ctx.from, to: ctx.to, today: ctx.today,
     dates: ctx.dates.map(function (d) { return { date: d, weekdayKo: ymdWeekdayKo_(d), operating: ctx.plans[d].operating }; }),
-    classes: f.classes, pick: f.pick, students: f.shown.map(function (s) { return s.view; }), cells: cells, resultCount: resultCount,
+    classes: f.classes, pick: f.pick, students: f.shown.map(function (s) { return s.view; }), cells: cells, resultCount: resultCount, endLabel: ctx.shSettings.endLabel,   // endLabel = 정상 종료 글자(예외가 아닌 칸 글자라 화면이 비운다, C47)
     token: resToken_(ctx), canEdit: hasAnyAllowedRole_(user.roles, permissions_()['exception.confirm'].roles), editable: resEditable_(ctx.term, ctx.today),
     editUntil: ymdAddDays_(ctx.term.end_date, RES_GRACE_DAYS)
   };
@@ -415,6 +415,8 @@ function getResultTotals(filter) {
   if (ctx.error) return { ok: false, error: ctx.error };
   var all = resStudents_(ctx), f = resFilter_(all, filter);
   var exBy = resRowsByStudent_(ctx.rows), fixedBy = resRowsByStudent_(ctx.fixed || []);
+  var outOpts = vioOutOpts_(), outBy = {};   // 이번 기간 살아 있는 OUT 합계(C47, 휴대폰 학생별 줄). 기간 전체 값이라 범위와 상관없다
+  vioViolations_(ctx.term).forEach(function (v) { if (ruleRowLive_(v)) outBy[String(v.student_id)] = (outBy[String(v.student_id)] || 0) + outWeight_(v, outOpts); });
   var rows = f.shown.map(function (s) {
     var rowsOf = (exBy[s.raw.id] || []).filter(function (r) { var d = String(r.date); return d >= ctx.from && d <= ctx.to; });
     var cells = [];
@@ -422,7 +424,7 @@ function getResultTotals(filter) {
       if (!ctx.plans[d].operating || statusOn_(ctx.changes, s.raw.id, '학사', d) !== '입실') return;
       cells.push(resCell_(ctx, s, rowsOf.filter(function (r) { return String(r.date) === d; }), fixedBy[s.raw.id] || [], d));
     });
-    return { student: s.view, total: attResultTotals_(cells) };
+    return { student: s.view, total: attResultTotals_(cells), outs: outBy[s.raw.id] || 0 };
   });
   var sum = { '결석': { '인정': 0, '미인정': 0 }, '지각': { '인정': 0, '미인정': 0 }, '조퇴': { '인정': 0, '미인정': 0 }, '학습량': { days: 0, minutes: 0, studiedMinutes: 0, missedMinutes: {} } };
   rows.forEach(function (r) {
