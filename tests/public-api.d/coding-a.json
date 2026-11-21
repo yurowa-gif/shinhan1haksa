@@ -219,6 +219,14 @@
     "searchFacilityStudents": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getExceptionDayView": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getExceptionHistory": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }

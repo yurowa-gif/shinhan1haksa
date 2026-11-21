@@ -7,6 +7,10 @@
   .exc-time { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
   .exc-time input { width: 8em; min-height: var(--tap); padding: 8px 12px; font: inherit; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); color: var(--text); }
   .exc-cancelled { text-decoration: line-through; color: var(--muted); }
+  .exc-peek { margin-top: 8px; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--bg-soft, rgba(127,127,127,.08)); word-break: keep-all; }
+  .exc-peek div + div { margin-top: 4px; }
+  .exc-hist { padding: 8px 0; border-bottom: 1px solid var(--line); word-break: keep-all; }
+  .exc-hist:last-child { border-bottom: 0; }
 </style>
 <script>
   /**
@@ -265,6 +269,36 @@
       if (g.canceledDates && g.canceledDates.length && !cancelled) item.appendChild(el('div', { class: 'muted', text: '취소된 날: ' + g.canceledDates.map(ymdKo).join(', ') }));
       if (g.rangeCanceled && !cancelled) item.appendChild(el('div', { class: 'notice info', text: '이 날은 취소되었습니다. 묶음의 다른 날은 그대로입니다.' }));
       if (cancelled && g.cancelReason) item.appendChild(el('div', { class: 'muted', text: '취소 사유: ' + g.cancelReason }));
+      // G2·G4(C43): 확정할 요청은 "그날 칸 보기"(고정 일정·이미 있는 특이사항 한 줄), 모든 카드에 "기록 보기"(누가·언제·무엇·왜)
+      var tools = el('div', { class: 'exc-actions' }), peekBox = null;
+      if (g.canConfirm) {
+        peekBox = el('div', { class: 'exc-peek', style: 'display:none' });
+        var peekBtn = el('button', { type: 'button', class: 'btn secondary', text: '그날 칸 보기', onclick: function () {
+          if (peekBox.style.display !== 'none') { peekBox.style.display = 'none'; peekBtn.textContent = '그날 칸 보기'; return; }
+          peekBox.style.display = 'block'; peekBtn.textContent = '그날 칸 접기';
+          if (peekBox.firstChild) return;
+          peekBox.appendChild(el('div', { class: 'muted', text: '불러오는 중…' }));
+          call('getExceptionDayView', g.termId, g.groupId).then(function (r) {
+            clear(peekBox);
+            if (!r.ok) { peekBox.appendChild(el('div', { class: 'muted', text: r.error })); return; }
+            r.days.forEach(function (d) { peekBox.appendChild(el('div', { text: d.line })); });
+            if (r.moreDays) peekBox.appendChild(el('div', { class: 'muted', text: '뒤 ' + r.moreDays + '일은 줄이지 않고 생략했습니다.' }));
+          }).catch(function (err) { clear(peekBox); peekBox.style.display = 'none'; peekBtn.textContent = '그날 칸 보기'; fail(err); });
+        } });
+        tools.appendChild(peekBtn);
+      }
+      tools.appendChild(el('button', { type: 'button', class: 'btn secondary', text: '기록 보기', onclick: function () {
+        call('getExceptionHistory', g.termId, g.groupId).then(function (r) {
+          if (!r.ok) { UI.toast(r.error, { kind: 'warn', ms: 5000 }); return; }
+          var body = el('div', {}, r.entries.length ? r.entries.map(function (e) {
+            return el('div', { class: 'exc-hist' }, [el('b', { text: e.atKo + ' · ' + e.who }), el('div', { text: e.what }), e.why ? el('div', { class: 'muted', text: '이유: ' + e.why }) : null]);
+          }) : [el('div', { class: 'muted', text: '남은 기록이 없습니다.' })]);
+          var sheet = UI.bottomSheet({ title: g.display + ' · ' + g.short + ' 기록', content: body, actions: [{ text: '닫기', kind: 'secondary', onclick: function () { sheet.close(); } }] });
+          sheet.open();
+        }).catch(fail);
+      } }));
+      item.appendChild(tools);
+      if (peekBox) item.appendChild(peekBox);
       if (g.reason) {
         var memo = el('div', { class: 'muted', text: '메모: ' + g.reason, style: 'display:none' });
         var toggle = el('button', { type: 'button', class: 'btn secondary', text: '메모 보기', onclick: function () {

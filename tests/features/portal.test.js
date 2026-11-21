@@ -70,7 +70,7 @@ test('학생 홈: 본인 OUT(날짜·항목·몇 OUT, 메모 없음)·취소 OUT
     '취소 OUT도 "취소"로 남지만 합계에는 안 센다');
   assert.ok(d.outs.items.every((i) => Object.keys(i).sort().join() === 'date,dateKo,ruleName,status,weight'), '메모·취소 사유·입력자 칸 없음');
   assert.deepStrictEqual(d.exceptions.filter((e) => e.date === '2027-03-04').map((e) => [e.type, e.state, e.upcoming]), [['병결', '확정', true]]);
-  assert.ok(d.exceptions.every((e) => Object.keys(e).sort().join() === 'date,dateKo,short,state,type,upcoming'), '사유 칸 없음');
+  assert.ok(d.exceptions.every((e) => Object.keys(e).sort().join() === 'date,dateKo,reason,short,state,type,upcoming'), '사유 칸 없음');
   assert.strictEqual(d.status['학사'], '입실');
   assert.ok(!('counsel' in d), '학생 응답에는 상담 줄이 없다');
   const text = textOf(d);
@@ -189,4 +189,28 @@ test('취소된 특이사항은 "취소"로 남고(사유 없음), 신원 판정
   assert.ok(!textOf(d).includes('가짜 취소 사유') && !textOf(d).includes(M_EXC));
   const src = require('fs').readFileSync(require('path').join(__dirname, '../../src/features/Portal.gs'), 'utf8');
   assert.ok(!/guardian_links|getCurrentUser_|ptlWho_|\b(student|st|s|me)\.email\b/.test(src.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')), '신원은 portalWho_만');
+});
+
+test('C44 출결 기록 이유 한 줄: 유형·상태로만 정한다(미인정은 OUT으로 센다는 말, 학부모는 "OUT 1번"·학생은 "1OUT"), 취소·모르는 유형은 빈 줄, 사유 메모는 응답에 없다', () => {
+  const x = makeEnv();
+  const R = (type, state, parent) => x.env.asOwner((c) => c.ptlReason_(type, state, ['미인정지각', '미인정조퇴', '미인정결석'], parent));
+  assert.strictEqual(R('미인정지각', '확정', false), '미인정이라 1OUT으로 셉니다.');
+  assert.strictEqual(R('미인정결석', '확정', true), '미인정이라 OUT 1번으로 셉니다.');
+  assert.strictEqual(R('미인정조퇴', '요청', false), '미인정이라 확정되면 1OUT이 됩니다.');
+  assert.strictEqual(R('미인정조퇴', '요청', true), '미인정이라 확인되면 OUT 1번이 됩니다.');
+  assert.strictEqual(R('미인정지각', '취소', false), '', '취소는 이유 줄이 없다');
+  assert.deepStrictEqual(['병결', '병지각', '병조퇴', '가정사유(가족여행 포함)', '학원(보강 포함)', '학사 외 프로그램', '학사 내 프로그램(파워클래스·면접특강 등)', '기타', '없는 유형'].map((t) => R(t, '확정', false)),
+    ['병으로 인한 기록입니다.', '병으로 인한 기록입니다.', '병으로 인한 기록입니다.', '가정 사유 기록입니다.', '학원 일정 기록입니다.', '학사 밖 프로그램 참가 기록입니다.', '학사 안 프로그램 참가 기록입니다.', '기타 사유 기록입니다.', '']);
+  assert.strictEqual(plain(x.env.call(ATT, 'saveException', { studentId: x.me.id, from: '2027-03-05', blocks: 'ALL', type: '미인정지각', reason: M_EXC })).ok, true);
+  assert.strictEqual(plain(x.env.call(ATT, 'saveException', { studentId: x.me.id, from: '2027-03-06', blocks: 'ALL', type: '학원(보강 포함)', reason: M_EXC })).ok, true);
+  const s = call(x, STUDENT, 'getPortalStudent', x.me.id);
+  const by = (d, date) => d.exceptions.find((e) => e.date === date);
+  assert.strictEqual(by(s, '2027-03-05').reason, '미인정이라 1OUT으로 셉니다.');
+  assert.strictEqual(by(s, '2027-03-06').reason, '학원 일정 기록입니다.');
+  assert.ok(!textOf(s.exceptions).includes(M_EXC), '사유(교사·학생이 적은 글)는 이유 줄에 안 들어간다');
+  if (x.kids.some((k) => k.id === x.me.id)) {
+    const p = call(x, PARENT, 'getPortalStudent', x.me.id);
+    assert.strictEqual(by(p, '2027-03-05').reason, '미인정이라 OUT 1번으로 셉니다.');
+    assert.ok(!textOf(p.exceptions).includes(M_EXC) && !textOf(p.exceptions).includes('1OUT'), '학부모 표기');
+  }
 });
