@@ -1,0 +1,34 @@
+/* C 「편안한 안내장」: 머리줄 색 면을 없애고 큰 제목과 넉넉한 여백으로 읽는다. 둥근 모양, 할 일만 옅은 초록 바탕에 담는다 */
+:root { --bg: var(--g2); --radius: 20px; --radius-sm: 14px; --tap: 52px; }
+body { line-height: 1.6; }
+header.top { background: var(--bg); color: var(--text); padding-top: max(20px, env(safe-area-inset-top, 0px)); padding-bottom: 12px; }
+header.top h1 { color: var(--text); font-size: var(--font-xl); line-height: 1.3; } header.top .who { color: var(--muted); }
+header.top :focus-visible { outline-color: var(--focus); }
+.back { color: var(--accent-ink); }
+main { padding-top: 4px; }
+/* 구역: 상자 없이 넉넉한 여백으로만 나눔(S2). 선은 줄 사이에만 */
+.card, body.tone-soft .card { border: 0; padding: 12px 4px; margin: 0 0 20px; }
+body.tone-soft main { background: none; border-radius: 0; padding: 4px 4px 16px; }
+.card.todo, body.tone-soft .card.todo { background: var(--a3); border: 0; border-radius: 20px; box-shadow: none; padding: 20px; margin: 8px 0 24px; }
+.card.key, body.tone-soft .card.key { background: #fff; border: 0; border-radius: 20px; box-shadow: none; padding: 20px; margin: 8px 0 24px; }
+.card.todo h2, body.tone-soft .card.todo h2 { color: var(--a12); }
+.card.todo .muted { color: var(--a11); }
+.card.todo > .row-link:not(.row-link ~ .row-link) { border-radius: 999px; padding: 12px 24px; font-size: 1rem; font-weight: 700; color: #fff; }
+.card.todo > .row-link:not(.row-link ~ .row-link)::after { color: #fff; }
+.card.todo .todo-row, .card.todo .row-link { border-top-color: var(--a6); }
+.card.todo .todo-n { background: #fff; color: var(--a11); }
+.row-link, .feature-row, .todo-row { padding-top: 12px; padding-bottom: 12px; }
+.home-h { font-size: var(--font-sm); margin: 28px 4px 8px; }
+/* 숫자 칸: 둥근 흰 타일 */
+.stats { gap: 12px; } .stat { border-radius: 16px; padding: 16px; background: #fff; }
+.todo-n, .count { border-radius: 999px; }
+details.fold { background: #fff; border-radius: 20px; margin-bottom: 20px; }
+.btn { border-radius: 999px; padding: 12px 24px; } .chip, .tab { border-color: var(--g7); background: #fff; }
+.segmented { border-radius: 999px; background: var(--g4); } .seg { border-radius: 999px; }
+body.tone-soft .segmented { background: var(--g4); }
+.field input, .field select, .field textarea, body.tone-soft .field input, body.tone-soft .field select, body.tone-soft .field textarea { border: 1px solid var(--field-line); background: #fff; border-radius: 14px; padding: 8px 16px; }
+.notice, .error { border-radius: 16px; padding: 16px; }
+.actionbar { background: var(--bg); box-shadow: none; }
+.sheet { border-radius: 28px 28px 0 0; padding: 24px 20px calc(20px + env(safe-area-inset-bottom, 0px)); }
+.ld-pick { border-radius: 14px; border-left: 0; padding: 8px 16px; } .ld-pick[aria-current="true"] { background: var(--a3); color: var(--a12); }
+@media (min-width: 840px) { .sheet { border-radius: 28px; } main.home > nav.tabs .tab { border-radius: 999px; } }
