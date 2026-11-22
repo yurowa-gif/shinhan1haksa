@@ -100,12 +100,16 @@ test('3단계 선생님 확인 체크리스트: 번호(A1~E8)가 겹치지 않�
   [...src.matchAll(/^def\('([^']+)'/gm)].map((m) => m[1]).forEach((id) => assert.ok(doc.indexOf('`' + id + '`') >= 0, '`' + id + '` 시안 사진이 없다'));
 });
 
-test('rules.md 가 글꼴을 내려받지 않는다는 결정과 UI 용어집 링크를 적고, Styles 에 글꼴 내려받는 코드가 없다', () => {
+test('rules.md 가 웹폰트 결정(결정 88: Pretendard, OFL, 못 받으면 기기 기본 글꼴)과 UI 용어집 링크를 적고, Styles 가 내려받는 글꼴은 버전을 못 박은 Pretendard 한 곳뿐이다', () => {
   const rules = css.readFile('docs/design/rules.md');
-  assert.ok(rules.indexOf('글꼴 파일을 내려받지 않는다') >= 0 && rules.indexOf('OFL') >= 0 && rules.indexOf('로딩 시간') >= 0);
+  assert.ok(rules.indexOf('결정 88') >= 0 && rules.indexOf('Pretendard') >= 0 && rules.indexOf('OFL') >= 0 && rules.indexOf('로딩 시간') >= 0 && rules.indexOf('기기 기본 한글 글꼴') >= 0);
   assert.ok(rules.indexOf('docs/design/ui-vocabulary.md') >= 0);
   const styles = css.readFile('src/ui/Styles.html');
-  assert.ok(!/@font-face|fonts\.googleapis|cdn\.jsdelivr/.test(styles), '글꼴을 내려받는 코드가 들어갔다');
+  assert.ok(!/@font-face|fonts\.googleapis/.test(styles), '글꼴을 직접 정의하거나 다른 곳에서 받는 코드가 들어갔다');
+  const sheets = [...styles.matchAll(/<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepStrictEqual(sheets, ['https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css'], '바깥에서 받는 스타일은 버전을 못 박은 Pretendard 조각 글꼴 하나뿐');
+  // 못 받아도 화면이 보이게: font-family 맨 뒤에 기기 기본 한글 글꼴과 sans-serif 가 있다
+  assert.ok(/font-family: "Pretendard Variable", "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif/.test(styles), '기기 기본 글꼴로 내려가는 순서');
 });
 
 test('D11 상담 신청 예시: UI 프롬프트 틀 칸이 모두 채워져 있고, 시안 이름·사진·미정 표시가 문서에 있다', () => {

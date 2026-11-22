@@ -87,6 +87,17 @@ async function openPage(browser, app, o) {
     const html = pageHtml(app, state.email, u.search.replace(/^\?/, ''));
     route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html });
   });
+  // 웹폰트(결정 88): 화면은 jsDelivr에서 Pretendard를 받는다. 미리보기 환경은 그 주소가 막혀 있으므로 가짜로 내려 준다 —
+  //   PRETENDARD_DIR(npm 패키지 pretendard를 받아 둔 폴더)가 있으면 그 파일을, 없으면 빈 CSS(= 실제에서 글꼴을 못 받은 경우와 같은 모습, 기기 기본 글꼴).
+  const FONT_URL = 'https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/', FONT_DIR = process.env.PRETENDARD_DIR || '';
+  await page.route('https://cdn.jsdelivr.net/**', (route) => {
+    const url = route.request().url().split('?')[0];
+    const rel = url.indexOf(FONT_URL) === 0 ? url.slice(FONT_URL.length).replace('.min.css', '.css') : '';
+    const file = FONT_DIR && rel ? path.join(FONT_DIR, 'dist', 'web', 'variable', rel) : '';
+    const type = /\.css$/.test(url) ? 'text/css' : 'font/woff2';
+    if (file && fs.existsSync(file)) return route.fulfill({ status: 200, contentType: type, headers: { 'access-control-allow-origin': '*' }, body: fs.readFileSync(file) });
+    route.fulfill({ status: 200, contentType: type, headers: { 'access-control-allow-origin': '*' }, body: '' });
+  });
   await page.exposeFunction('__gasCall', (fn, argsJson) => {
     try {
       const v = app.env.call(state.email, fn, ...JSON.parse(argsJson));
