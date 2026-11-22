@@ -59,6 +59,9 @@ test('Styles.html 의 CSS 안에 외부 주소(url(http…), @import, @font-face
   assert.ok(!/@import|@font-face/.test(stylesHtml));
   const hosts = [...stylesHtml.matchAll(/(?:href|src)="(https?:\/\/[^"\/]+)/g)].map((m) => m[1]);
   assert.deepStrictEqual([...new Set(hosts)], ['https://cdn.jsdelivr.net']);
+  // 아이콘(Lucide, ISC)은 바깥 요청 없이 data: 주소로 들어 있고, 출처·라이선스가 적혀 있다
+  assert.ok(/--i-check: url\("data:image\/svg\+xml,/.test(stylesHtml) && /Lucide Icons — ISC License/.test(stylesHtml));
+  assert.ok(require('fs').existsSync(require('path').join(__dirname, '..', '..', 'design', 'preview', 'concepts2', 'icons', 'LICENSE')), 'Lucide 라이선스 전문 파일');
 });
 
 test('Styles.html 에 가로 스크롤을 만드는 고정 너비(px 360 초과)가 없다', () => {
@@ -108,14 +111,17 @@ test('기본 글자·보조 글자·주 버튼·오류·안내 줄 대비가 4.5
   });
 });
 
-test('색만으로 구분하지 않는다: 알약은 모양 하나(테두리 없음)이고, 확정·요청·취소·1OUT·퇴실 대상은 앞 글자가 서로 다르며, 학·가·병은 서로 다른 색 + 글자 자체가 다르다(결정 85)', () => {
+test('색만으로 구분하지 않는다: 알약은 모양 하나(테두리 없음)이고, 확정·요청·취소·1OUT·퇴실 대상·할 일은 앞 아이콘이 서로 다르며(결정 88), 학·가·병은 서로 다른 색 + 글자 자체가 다르다(결정 85)', () => {
   const shape = {};
   ['s-confirmed', 's-requested', 's-canceled', 'out-1', 'out-2', 'todo'].forEach((n) => {
-    const before = css.declsFor(rules, '.pill.' + n + '::before').content;
-    assert.ok(before, '.pill.' + n + '::before content 없음');
-    shape[n] = before;
+    const d = css.declsFor(rules, '.pill.' + n + '::before');
+    assert.ok(d.content, '.pill.' + n + '::before content 없음');
+    const icon = (String(d.mask || '').match(/var\((--i-[a-z-]+)\)/) || [])[1];
+    assert.ok(icon && tokens[icon], '.pill.' + n + '::before 아이콘(mask: var(--i-…))이 없거나 :root에 없다');
+    assert.ok(/currentColor/.test(d.background), '아이콘 색은 글자색을 따른다(대비는 글자와 같다)');
+    shape[n] = icon;
   });
-  assert.strictEqual(new Set(Object.values(shape)).size, 6, '앞 글자가 겹친다: ' + JSON.stringify(shape));
+  assert.strictEqual(new Set(Object.values(shape)).size, 6, '앞 아이콘이 겹친다: ' + JSON.stringify(shape));
   // 알약 모양은 하나: 기본 .pill 에 테두리 없음, 종류별로 점선·이중선 같은 테두리 모양을 다시 정하지 않는다
   assert.strictEqual(css.declsFor(rules, '.pill').border, '0', '알약은 테두리가 없다');
   PILLS.forEach((n) => {
@@ -136,7 +142,7 @@ test('결정 85 구조 + 결정 88 모양: 카드는 기본이 상자 없음, �
   assert.ok(/--card/.test(box.background) && /--line/.test(box['box-shadow']), '할 일·중요 카드는 흰 판 + 가는 테두리');
   ['.card.todo', '.card.key'].forEach((sel) => assert.ok(!css.declsFor(rules, sel)['border-left'], sel + ' 에 색 띠가 다시 생겼다'));
   assert.ok(/--tap/.test(css.declsFor(rules, '.row-link')['min-height']), '줄 링크 48px');
-  assert.ok(css.declsFor(rules, '.row-link::after').content, '줄 링크 끝 ›');
+  assert.ok(/--i-chevron-right/.test(css.declsFor(rules, '.row-link::after').mask), '줄 링크 끝 화살표 아이콘');
   const first = rules.find((r) => r.selectors.some((x) => /^\.card\.todo > \.row-link:not\(/.test(x)));
   assert.ok(first && /--accent/.test(first.decls.background), '할 일 카드의 첫 줄 링크는 주 버튼 모양');
   // 머리줄은 감색 면 + 밝은 글자(색 면은 여기 한 곳), 학생·학부모 화면도 같은 안(결정 88: 흰 판을 따로 두지 않는다)
