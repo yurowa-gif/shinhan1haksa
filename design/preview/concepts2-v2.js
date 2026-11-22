@@ -1,7 +1,8 @@
 /**
  * D21 시안 2차본(코드 병합 없음): **tweakcn 프리셋 4개**(Mono·Vintage Paper·Starry Night·Supabase) + shadcn/ui 부품 규격 + 21st.dev식 hero + 눈누 한글 웹폰트 + Lucide 아이콘.
  * 1차본(concepts2.js, 직접 지은 색 값)은 그대로 두고, 이 파일은 v2/ 폴더의 테마·CSS를 쓴다.
- * 실행: FONT_DIR=<글꼴 npm 패키지를 받은 폴더> node design/preview/concepts2-v2.js [m p n s] [--font150] [--boards]
+ * 실행: FONT_DIR=<글꼴 npm 패키지를 받은 폴더> node design/preview/concepts2-v2.js [m p n s] [--font150] [--boards] [--nohero]
+ *   --nohero: 홈 맨 위 hero를 만들지 않고(선생님 결정 2026-11-22) 지금 화면 구조 그대로에 테마만 입힌다 → nh-<안>-<화면>.png, v2-nohero-*.png
  *   → design/preview/out/concepts2v2/<안>-<화면>.png, v2-board-<안>-phone.png · v2-board-<안>-laptop.png · v2-compare-*.png(지금·1차 3안·2차 4안), report.json
  *   비교 그림에는 1차본 사진(out/concepts2/t*.png — concepts2.js로 먼저 찍는다)이 필요하다.
  * 글꼴은 저장소에 넣지 않는다: npm i pretendard wanted-sans @fontsource-variable/hahmlet. 아이콘은 concepts2/icons/*.svg (Lucide, ISC).
@@ -49,12 +50,12 @@ async function serveFonts(page, stats) {
 }
 /** hero: 지금 화면의 첫 카드(오늘·전체 현황·이름)를 '오늘 한눈에' 영역으로 바꾼다. 숫자·글자는 화면에 이미 있는 것만 옮긴다(새 데이터 없음).
  *  실제로 넣을 때는 UI.hero 부품을 만들고 서버 값은 그대로 쓴다. 글자 기호(←·●)도 여기서 지운다(아이콘으로 바뀜) */
-async function makeHero(page, bento) {
-  await page.evaluate((bento) => {
+async function makeHero(page, bento, nohero) {
+  await page.evaluate(([bento, nohero]) => {
     if (bento) document.documentElement.dataset.bento = '1';
     document.querySelectorAll('.back').forEach((b) => { b.textContent = b.textContent.replace(/^[←\s]+/, ''); });
     document.querySelectorAll('.pill').forEach((p) => { p.childNodes.forEach((n) => { if (n.nodeType === 3) n.textContent = n.textContent.replace(/^[\s•●▲✓…⊘⛔]+\s*/, ''); }); });
-    const home = document.getElementById('home'); if (!home) return;
+    const home = document.getElementById('home'); if (!home || nohero) return;   // --nohero: 글자 기호만 지우고 첫 카드는 그대로 둔다
     const card = home.querySelector('.home-head .card') || home.querySelector(':scope > div > .card'); if (!card) return;
     const text = (el) => (el ? el.textContent.trim() : '');
     const stamp = home.querySelector('.stamp');
@@ -81,10 +82,11 @@ async function makeHero(page, bento) {
     card.insertBefore(main, card.firstChild);
     if (!document.documentElement.dataset.bento) { while (main.lastChild) card.insertBefore(main.lastChild, main.nextSibling || null); main.remove(); [...card.children].filter((c) => /hero-(art|eyebrow|row|name|facts)|hero-cta/.test(c.className)).reverse().forEach((c) => card.insertBefore(c, card.firstChild)); const order = ['hero-art', 'hero-eyebrow', 'hero-row', 'hero-name', 'hero-facts', 'hero-cta']; [...card.children].filter((c) => order.some((o) => c.classList.contains(o))).sort((x, y) => order.findIndex((o) => x.classList.contains(o)) - order.findIndex((o) => y.classList.contains(o))).forEach((c, i, arr) => card.insertBefore(c, i === 0 ? card.firstChild : arr[i - 1].nextSibling)); }
     if (stamp) card.parentNode.insertBefore(stamp, card.nextSibling);   // 기준 시각은 hero 아래로
-  }, bento);
+  }, [bento, nohero]);
 }
 
-async function shootAll(browser, want, font150) {
+async function shootAll(browser, want, font150, nohero) {
+  const pre = nohero ? 'nh-' : '';
   const report = {};
   for (const id of IDS.filter((x) => x !== 'now')) {
     if (want.length && !want.includes(id)) continue;
@@ -98,7 +100,7 @@ async function shootAll(browser, want, font150) {
       if (font150) await s.page.addStyleTag({ content: 'html { font-size: 27px !important; }' });
       await s.settle();
       if (sc.act) await sc.act(s);
-      await s.settle(); await makeHero(s.page, id === 's');
+      await s.settle(); await makeHero(s.page, id === 's', nohero);
       await s.page.evaluate(() => document.fonts.ready); await s.page.waitForTimeout(500);
       const m = await measure(s.page, sc.dev === 'phone');
       m.fontKB = Math.round(stats.bytes / 1024); m.fontFiles = stats.files;
@@ -108,13 +110,25 @@ async function shootAll(browser, want, font150) {
         const h = await s.page.evaluate(() => document.documentElement.scrollHeight);
         if (!sc.fixed) await s.page.setViewportSize({ width: size.w, height: Math.min(Math.max(size.h, h), sc.dev === 'phone' ? 2400 : 1500) });
         await s.page.waitForTimeout(150);
-        await s.page.screenshot({ path: path.join(OUT, id + '-' + sc.id + '.png') });
+        await s.page.screenshot({ path: path.join(OUT, pre + id + '-' + sc.id + '.png') });
       }
       console.log(`${font150 ? '150% ' : ''}${id}-${sc.id} 넘침=${m.over} 48px미만=${m.small.length}${m.small.length ? ' [' + m.small.slice(0, 3).join(', ') + ']' : ''} 최저대비=${m.worst.r}${m.worst.r < 4.5 ? ' ' + m.worst.what : ''} 글꼴=${m.fontKB}KB/${m.fontFiles}개 ${m.fonts.join('+')}`);
       await s.close();
     }
   }
-  fs.writeFileSync(path.join(OUT, (font150 ? 'report150-' : 'report-') + (want.join('') || 'all') + '.json'), JSON.stringify(report, null, 1));
+  fs.writeFileSync(path.join(OUT, (nohero ? 'nh-' : '') + (font150 ? 'report150-' : 'report-') + (want.join('') || 'all') + '.json'), JSON.stringify(report, null, 1));
+}
+async function boardsNoHero(browser) {
+  const rel = (f) => path.relative(OUT1, path.join(OUT, f));
+  for (const sc of SCREENS) { const src = path.join(OUT1, 'now-' + sc.id + '.png'); if (fs.existsSync(src)) fs.copyFileSync(src, path.join(OUT, 'now-' + sc.id + '.png')); }
+  const ids = IDS.filter((x) => x !== 'now');
+  for (const id of ids) {
+    const t = THEMES[id];
+    await board(browser, rel(`v2-nohero-board-${id}-phone.png`), `${t.name} (hero 없음) — 휴대폰`, t.line.replace(/ ?여기에 1차본의 형광펜[^.]*\./, ' 형광펜은 처리할 건수에만.').replace(/머리줄과 hero를 감색 한 면으로 잇고 큰 숫자를 호박색으로 올립니다\([^)]*\)\./, '머리줄만 감색 면입니다.').replace(/, 홈은 벤토\(도시락 칸\) 배치/, ''), SCREENS.filter((s) => s.dev === 'phone').map((s) => ({ label: s.label, file: rel(`nh-${id}-${s.id}.png`) })), { width: 1720, cols: 4, cropH: 860, phone: true });
+    await board(browser, rel(`v2-nohero-board-${id}-laptop.png`), `${t.name} (hero 없음) — 노트북`, '', SCREENS.filter((s) => s.dev === 'laptop').map((s) => ({ label: s.label, file: rel(`nh-${id}-${s.id}.png`) })), { width: 2400, cols: 2, cropH: 720 });
+  }
+  for (const [sid, name] of [['p-home-admin', '관리자 홈'], ['p-home-hall', '학사교사 홈'], ['p-home-student', '학생 홈'], ['p-home-parent', '학부모 홈']])
+    await board(browser, rel(`v2-nohero-compare-${sid}.png`), `hero 없이 — ${name}`, '왼쪽부터 지금 · 가 · 나 · 다 · 라. 홈 맨 위 hero를 빼고 지금 화면 구조 그대로에 테마·글꼴·아이콘만 입혔습니다(이름·숫자는 가짜).', [{ label: '지금', file: rel(`now-${sid}.png`) }].concat(ids.map((id) => ({ label: THEMES[id].name, file: rel(`nh-${id}-${sid}.png`) }))), { width: 2140, cols: 5, cropH: 1400, phone: true });
 }
 async function boards(browser, want) {
   // board()는 out/concepts 를 읽는다 → 같은 함수를 쓰려고 '지금' 사진을 이쪽 폴더로 복사해 두고 OUT 기준 상대 경로로 넘긴다
@@ -133,11 +147,11 @@ async function boards(browser, want) {
   }
 }
 async function main() {
-  const args = process.argv.slice(2), font150 = args.includes('--font150'), only = args.includes('--boards');
+  const args = process.argv.slice(2), font150 = args.includes('--font150'), only = args.includes('--boards'), nohero = args.includes('--nohero');
   const want = args.filter((a) => !a.startsWith('--'));
   fs.mkdirSync(OUT, { recursive: true });
   if (!FONT_DIR) console.log('FONT_DIR가 없어 웹폰트 없이 찍습니다(기기 기본 글꼴).');
   const browser = await launchKo();
-  try { if (!only) await shootAll(browser, want, font150); if (!font150) await boards(browser, want); } finally { await browser.close(); }
+  try { if (!only) await shootAll(browser, want, font150, nohero); if (!font150) await (nohero ? boardsNoHero(browser) : boards(browser, want)); } finally { await browser.close(); }
 }
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
