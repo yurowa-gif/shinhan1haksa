@@ -135,7 +135,7 @@ test('D15 ②(반응형): Styles.html 에 중단점 두 곳(600·840)·홈 두 �
 
 test('D15 ③(화면 전수 점검): 줄 끝 열기 ›·탭 5개 이상 축소·작업 바 높이 따라가기·48px 보정이 코드에 있고, screens-audit.md 사진이 모두 있고 모두 쓰이며 고친 곳·하지 않은 것이 적혀 있다', () => {
   const styles = css.readFile('src/ui/Styles.html');
-  assert.ok(/\.btn\.secondary\.row-open \{[^}]*border: 0/.test(styles) && /\.btn\.secondary\.row-open::after \{ content: "›"/.test(styles), '줄 끝 열기 ›');
+  assert.ok(/\.btn\.secondary\.row-open \{[^}]*border: 0/.test(styles) && /\.btn\.secondary\.row-open::after \{ content: ""[^}]*--i-chevron-right/.test(styles), '줄 끝 열기(화살표 아이콘, 결정 88)');
   assert.ok(/\.segmented\.dense \.seg \{ font-size: \.9rem/.test(styles), '탭 다섯 개 이상 축소');
   assert.ok(/\.seg \{ flex: 1 1 0; min-width: var\(--tap\)/.test(styles) && /ul\.list li a \{ display: inline-flex; align-items: center; min-height: var\(--tap\)/.test(styles), '탭·목록 링크 48px');
   const comp = css.readFile('src/ui/Components.html');

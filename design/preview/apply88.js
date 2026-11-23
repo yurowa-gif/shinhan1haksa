@@ -1,6 +1,6 @@
 /**
  * D22 사진(결정 88 적용 전/후): main의 실제 화면을 가짜 서버에 띄워 휴대폰 360·노트북 1366으로 찍고, 전/후를 한 장에 나란히 묶는다.
- * 실행: [PRETENDARD_DIR=<npm 패키지 pretendard 폴더>] node design/preview/apply88.js <before|after|nofont>   → design/preview/out/apply88/<이름>-<화면>.png
+ * 실행: [APPLY_SET=icons] [PRETENDARD_DIR=<npm 패키지 pretendard 폴더>] node design/preview/apply88.js <before|after|nofont>   → design/preview/out/apply88/<이름>-<화면>.png
  *        node design/preview/apply88.js boards   → compare-*.png (before·after·nofont 사진이 있어야 한다)
  *   before = 적용 전 Styles.html로 찍은 것, after = 적용 후 + 글꼴 받음, nofont = 적용 후 + 글꼴 주소가 막힌 경우(PRETENDARD_DIR 없이 실행 → 기기 기본 글꼴)
  * 이름·숫자는 모두 가짜 데이터, 가짜 오늘 2027-03-26 15:20. 쓸 사진은 docs/design/apply88/ 로 복사한다.
@@ -12,7 +12,9 @@ const { launchKo } = require('./browser.js');
 const { seed } = require('./stage7-real.js');
 const { SCREENS, E, NOW, PHONE, LAPTOP, prep, measure, board } = require('./concepts.js');
 
-const OUT = path.join(__dirname, 'out', 'apply88'), REL = '../apply88/';
+const SET = process.env.APPLY_SET === 'icons' ? 'icons' : 'navy';   // navy = D22(가) 색·글꼴, icons = D22(나) 아이콘
+const OUT = path.join(__dirname, 'out', SET === 'icons' ? 'apply88-icons' : 'apply88'), REL = SET === 'icons' ? '../apply88-icons/' : '../apply88/';
+const CAP = SET === 'icons' ? ['적용 전(글자 기호 ✓ ▲ ⛔ ● ›)', '적용 후(Lucide 선 아이콘)'] : ['적용 전(결정 85 코발트·노란 띠)', '적용 후(결정 88 감색·살구·Pretendard)'];
 const tap = async (s, loc) => { await loc.first().click({ timeout: 4000 }).catch(() => {}); await s.settle(); await s.page.waitForTimeout(400); };
 const EXTRA = [
   { id: 'p-sheet', dev: 'phone', label: '출석부', email: E.att, query: 'page=sheet' },
@@ -51,7 +53,7 @@ async function boards() {
   const note = 'main의 실제 화면, 이름·숫자는 가짜. hero는 넣지 않았습니다.';
   try {
     const homes = [['p-home-admin', '관리자 홈'], ['p-home-hall', '학사교사 홈'], ['p-home-student', '학생 홈'], ['p-home-parent', '학부모 홈']];
-    await board(browser, REL + 'compare-phone-home.png', '적용 전 → 후 — 휴대폰 360px, 홈', '윗줄: 적용 전(결정 85 코발트·노란 띠). 아랫줄: 적용 후(결정 88 감색·살구·Pretendard). ' + note, pair(homes, 'before', 'after', '전', '후'), { width: 1720, cols: 4, cropH: 1100, phone: true });
+    await board(browser, REL + 'compare-phone-home.png', '적용 전 → 후 — 휴대폰 360px, 홈', '윗줄: ' + CAP[0] + '. 아랫줄: ' + CAP[1] + '. ' + note, pair(homes, 'before', 'after', '전', '후'), { width: 1720, cols: 4, cropH: 1100, phone: true });
     const work = [['p-inbox', '확인함'], ['p-requests', '특이사항 요청 처리'], ['p-sheet', '출석부'], ['p-confirm', '확인 창']];
     await board(browser, REL + 'compare-phone-work.png', '적용 전 → 후 — 휴대폰 360px, 업무 화면', '윗줄: 적용 전. 아랫줄: 적용 후. ' + note, pair(work, 'before', 'after', '전', '후'), { width: 1720, cols: 4, cropH: 900, phone: true });
     await board(browser, REL + 'compare-laptop.png', '적용 전 → 후 — 노트북 1366px', '왼쪽: 적용 전. 오른쪽: 적용 후. ' + note, side([['l-home-admin', '관리자 홈'], ['l-home-att', '출결 담당 홈'], ['l-results', '출결 결과 격자'], ['l-exceptions', '특이사항 목록 | 상세'], ['l-counsel', '상담일지 목록 | 상세']], 'before', 'after', '전', '후'), { width: 2400, cols: 2, cropH: 720 });
