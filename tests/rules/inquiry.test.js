@@ -55,13 +55,13 @@ function apply(rows, plan) {
 }
 
 test('inquiryMergePlan_: 새 기록은 진행 관심·기본 비공개, 같은 파일 두 번 = 0건(F16 완료 기준), 관심 표시만 바뀌면 그 칸만, 본문 다르면 충돌', () => {
-  const first = plain(ctx.inquiryMergePlan_([], parse(FILE), 's1', 'file-A'));
+  const first = plain(ctx.inquiryMergePlan_([], parse(FILE), 's1', 'file-A', 'T1'));
   assert.deepStrictEqual([first.toAppend.length, first.toUpdate, first.same, first.conflicts], [3, [], 0, []]);
-  assert.deepStrictEqual(first.toAppend[0], { student_id: 's1', source_id: 'rec-001', recorded_at: '2027-03-30T21:00:00', source: 'ChatGPT', standards: '[12물리01-02];[12정보02-01]',
+  assert.deepStrictEqual(first.toAppend[0], { term_id: 'T1', student_id: 's1', source_id: 'rec-001', recorded_at: '2027-03-30T21:00:00', source: 'ChatGPT', standards: '[12물리01-02];[12정보02-01]',
     subject: '물리학', title: '가짜 주제: 자습실 소음과 집중 시간', question: '가짜 질문: 소음이 줄면 집중 시간이 늘까?', liked: 'TRUE', progress: '관심', result_link: '', memo: '',
-    file_id: 'file-A', name_mismatch: 'FALSE', parent_public: 'FALSE', status: '유효' });
+    file_id: 'file-A', name_mismatch: 'FALSE', show_to_parent: 'FALSE', status: '유효' });
   let rows = apply([], first);
-  rows = rows.map((r) => r.source_id === 'rec-002' ? Object.assign({}, r, { progress: '진행 중', memo: '가짜 메모', parent_public: 'TRUE' }) : r);   // 학생이 덧붙임
+  rows = rows.map((r) => r.source_id === 'rec-002' ? Object.assign({}, r, { progress: '진행 중', memo: '가짜 메모', show_to_parent: 'TRUE' }) : r);   // 학생이 덧붙임
   const again = plain(ctx.inquiryMergePlan_(rows, parse(FILE), 's1', 'file-B'));
   assert.deepStrictEqual(again, { toAppend: [], toUpdate: [], same: 3, conflicts: [] }, '같은 파일 두 번 = 0건');
   const liked = plain(ctx.inquiryMergePlan_(rows, parse(edit((j) => { j.records[1].events = [{ type: 'like', at: '2027-04-01T00:00:00Z' }]; })), 's1', 'file-C'));

@@ -134,14 +134,15 @@ function inqBody_(r) {
 }
 
 /**
- * 기존 기록과 합치기. existing = inquiry_records 행, parsed = inquiryParse_ 결과(오류 없어야 함), studentId(로그인 계정의 학생), fileId(원본 파일 Drive id).
+ * 기존 기록과 합치기. existing = inquiry_records 행, parsed = inquiryParse_ 결과(오류 없어야 함), studentId(로그인 계정의 학생), fileId(원본 파일 Drive id),
+ * termId(올린 때의 운영 기간, 결정 97).
  * → {toAppend:[행], toUpdate:[{id, patch}], same:n, conflicts:[{sourceId, why}]}
  * - 그 학생의 살아 있는 행 중 같은 source_id: 본문이 같으면 관심 표시만 맞춘다(같으면 0건 — 같은 파일을 다시 올려도 중복 없음, F16 완료 기준).
  *   본문이 다르면 conflicts(덮어쓰지 않음). 학생이 덧붙인 진행 상태·링크·메모·공개 표시는 건드리지 않는다.
- * - 새 기록: 진행 '관심', 공개 'FALSE'(기본 비공개, 결정 15), name_mismatch(결정 93, 교사 화면 표시), file_id.
+ * - 새 기록: 진행 '관심', show_to_parent 'FALSE'(기본 비공개, 결정 15), name_mismatch(결정 93, 교사 화면 표시), file_id, term_id.
  * - 취소된 행(정리 대상으로 정리한 것 등)은 없는 것으로 본다.
  */
-function inquiryMergePlan_(existing, parsed, studentId, fileId) {
+function inquiryMergePlan_(existing, parsed, studentId, fileId, termId) {
   var p = parsed || {}, sid = ruleStr_(studentId);
   if (!sid) throw new Error('studentId가 비어 있습니다');
   if (!p.records || (p.errors && p.errors.length)) throw new Error('inquiryParse_ 오류가 있는 결과는 합치지 않습니다');
@@ -158,9 +159,9 @@ function inquiryMergePlan_(existing, parsed, studentId, fileId) {
       else out.same++;
       return;
     }
-    out.toAppend.push({ student_id: sid, source_id: rec.sourceId, recorded_at: rec.recordedAt, source: rec.source, standards: rec.standards.join(';'),
+    out.toAppend.push({ term_id: ruleStr_(termId), student_id: sid, source_id: rec.sourceId, recorded_at: rec.recordedAt, source: rec.source, standards: rec.standards.join(';'),
       subject: rec.subject, title: rec.title, question: rec.question, liked: liked, progress: '관심', result_link: '', memo: '',
-      file_id: ruleStr_(fileId), name_mismatch: p.nameMismatch ? 'TRUE' : 'FALSE', parent_public: 'FALSE', status: '유효' });
+      file_id: ruleStr_(fileId), name_mismatch: p.nameMismatch ? 'TRUE' : 'FALSE', show_to_parent: 'FALSE', status: '유효' });
   });
   return out;
 }
