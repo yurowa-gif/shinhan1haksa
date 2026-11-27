@@ -7,15 +7,15 @@
   .cal-day:last-child { border-bottom: 0; }
   .cal-day.off { color: var(--muted); }
   .cal-day.today { background: var(--accent-weak); }
-  .cal-tag { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .8rem; border: 1px solid var(--line); white-space: nowrap; }
-  .cal-tag.off { background: var(--warn-weak); color: var(--warn); border-color: var(--warn); }
-  .cal-tag.chg { background: var(--accent-weak); color: var(--accent); border-color: var(--accent); }
-  .cal-warn { background: var(--warn-weak); color: var(--warn); border-radius: 10px; padding: 8px 12px; margin: 8px 0; }
+  .cal-tag { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: var(--font-sm); font-weight: 700; background: var(--muted-weak); color: var(--muted-ink); white-space: nowrap; }   /* 공통 .pill과 같은 모양 */
+  .cal-tag.off { background: var(--warn-weak); color: var(--warn); }
+  .cal-tag.chg { background: var(--accent-weak); color: var(--accent-ink); }
+  .cal-warn { background: var(--warn-weak); color: var(--warn); border-radius: var(--radius-sm); padding: 8px 12px; margin: 8px 0; }
   .cal-ok { color: var(--ok); margin: 8px 0; }
   .cal-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
   .blk-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
-  .blk-row input { flex: 1; min-width: 0; min-height: 48px; padding: 8px 10px; font: inherit; border: 1px solid var(--line);
-    border-radius: 10px; background: var(--card); color: var(--text); }
+  .blk-row input { flex: 1; min-width: 0; min-height: var(--tap); padding: 8px 12px; font: inherit; border: 1px solid var(--field-line);
+    border-radius: var(--radius-sm); background: var(--card); color: var(--text); }
 </style>
 <script>
   /** 자습 일정·블록 화면(C4): 달력 목록 + 날짜 수정 + 요일 유형별 블록 편집. */

@@ -122,6 +122,43 @@ Apps Script는 같은 전역 이름을 경고 없이 덮는다. 새 전역 이�
 | guardian_links | name · phone | 보호자 이름·전화(개인 연락처, 결정 76) — 위와 같다. 감사 기록에는 값을 남기지 않는다 |
 | users | roles | `admin` `duty_manager` `attendance` `hall_teacher` `homeroom` `student` `parent` (쉼표로 여러 개) |
 
+## 6단계 (결정 89~101, S6-0 — 총괄이 검토하는 제안. 합의되면 규칙(R24~R26)·코딩(C49~C53)이 이 글자를 그대로 쓴다)
+
+상담·진로진학은 학사생만 대상이다. 새 탭은 모두 첫 열 `id`·끝 공통 4열을 따르고, 삭제하지 않는다(`status` `취소` + `cancel_reason`). `term_id` = 그 기록이 생긴 운영 기간(결정 97: 교사는 그 기간의 담당 기준). 글 칸은 `audit_log`에 글자 수만 남는다(`Db.gs AUDIT_TEXT_COLS`).
+
+| 탭 · 열 | 값 |
+| --- | --- |
+| terms · career_due | `yyyy-MM-dd` 또는 `''`(비면 진로 프로필 미제출 표시 없음, 결정 98) |
+| career_profiles · version | 학생마다 `1`부터 정수 글자. **취소된 행도 번호를 쓴다**(번호를 다시 쓰지 않음) |
+| career_profiles · hopes | JSON `[{"rank":1,"field":"…","job":"…"}]` (1~3순위, 순위 중복 없음) |
+| career_profiles · targets | JSON `[{"university":"…","unit":"…","track":"…"}]` (0개 이상) |
+| career_profiles · parent_fields | 학부모에게 공개한 항목을 `;`로: `hopes` · `targets` · `interests` · `strengths` · `concerns` (빈칸·모르는 값 = 모두 비공개, 결정 89). 학부모는 **가장 최근 유효 버전**의 공개분만 본다 |
+| career_profiles · status | `유효` · `취소` |
+| course_plans · state | `계획` · `확정`(= 담당교사가 확인함, `confirmed_by`·`confirmed_at`) |
+| course_plans · semester | `1` · `2` |
+| course_plans · show_to_parent | `TRUE` · `FALSE`(기본 `FALSE`) |
+| course_plans · status | `유효` · `취소`(과목 줄마다 취소 + 새 줄, 결정 99) |
+| inquiry_records · source | `ChatGPT` · `연결 예시` · `기본 추천`(탐구발견 파일의 출처 값 그대로) |
+| inquiry_records · standards | 성취기준 코드 2개를 `;`로(예 `[12가짜01-01];[12가짜01-02]`) |
+| inquiry_records · progress | `관심` · `진행 중` · `완료` |
+| inquiry_records · result_link | `http://` 또는 `https://`로 시작하는 주소 또는 `''` |
+| inquiry_records · liked · name_mismatch · show_to_parent | `TRUE` · `FALSE` (name_mismatch = 파일 속 이름이 계정과 다름, 결정 93) |
+| inquiry_records · file_id | 원본 JSON의 Drive 파일 id(비공유 폴더). **관리자 외 응답에 내보내지 않는다** |
+| inquiry_records · status | `유효` · `취소`(정리 대상 확인 뒤 원본 파일을 지우면 요약 행은 `취소`, 결정 100) |
+| feedback · target_kind | `진로 프로필` · `이수 계획` · `탐구 기록` (target_id = 그 탭의 행 id) |
+| feedback · status | `유효` · `취소` |
+| counsel_requests · status | `신청` · `확정` · `완료` · `반려` · `취소` (열린 신청 = `신청`·`확정`, 학생마다 1건까지, 결정 95) |
+| counsel_requests · topic | `생활` · `학습` · `진로` · `진학` · `기타` |
+| counsel_requests · wish_dates | 희망 날짜 1~3개를 `;`로(`yyyy-MM-dd`) |
+| counsel_requests · decided_date | 확정한 상담 날짜(`확정`·`완료`), 그 밖에는 `''` |
+| counsel_requests · cancel_reason | `반려` 사유(학생에게 보임, 결정 95)·`취소` 사유 |
+| counsel_requests · linked_note_id | `완료`일 때 연결한 `counsel_notes.id` |
+| counsel_notes · agreement_to_parent | `TRUE` · `FALSE`(건마다 학생이 켬, 기본 `FALSE`, 결정 90). `show_to_parent`(상담했다는 날짜·교사 표시)와 별개 |
+| counsel_notes · profile_version | 참고한 진로 프로필 버전(정수 글자) 또는 `''` |
+| counsel_notes · request_id | 연결한 `counsel_requests.id` 또는 `''` |
+
+**제안 — 아직 정하지 못한 값(총괄·선생님 확인):** (1) `settings counsel.types` 기본값은 `학업,생활,진로,건강,가정,기타`인데 PRD F17·7절의 유형은 `생활·학습·진로·진학·2OUT 학부모 면담·기타`다(`학업`↔`학습`, `진학`·`건강`·`가정` 차이). 상담 신청 `topic`은 PRD대로 두었다. 일지 유형 목록을 PRD에 맞출지 결정이 필요하다. (2) 공개 항목 이름(`hopes`…`concerns`)은 코드 안의 영문 이름이다 — 화면 이름은 C50이 정한다.
+
 ## settings 키(설정 스프레드시트 `settings` 탭)
 
 `key` 열의 이름과 `value` 형식. 앞뒤 공백은 무시한다. **값이 빈칸이거나 행이 없으면 '기본값'대로 동작한다.**

@@ -6,7 +6,7 @@ const ctx = loadGs(['src/rules/DateRules.gs', 'src/rules/AttendanceRules.gs', 's
 const TODAY = '2027-03-10';
 const req = (input, existing) => plain(ctx.counselRequestCheck_(Object.assign({ studentId: 's1', dates: ['2027-03-12'], topic: '진로', memo: '' }, input), TODAY, existing || []));
 
-test('counselRequestCheck_: 희망 날짜 1~3개(결정 95)·오늘 이후·중복 없음, 주제, 메모 길이, 열린 신청 1건', () => {
+test('counselRequestCheck_: 희망 날짜 1~3개(결정 95)·오늘 이후·중복 없음, 주제 고정 다섯 가지(결정 103), 메모 길이, 열린 신청 1건', () => {
   assert.deepStrictEqual(req({ dates: ['2027-03-15', '2027-03-10', '2027-03-12'] }), { errors: [],
     row: { student_id: 's1', wish_dates: '2027-03-10;2027-03-12;2027-03-15', topic: '진로', memo: '', status: '신청' } });
   const T = [
@@ -15,15 +15,14 @@ test('counselRequestCheck_: 희망 날짜 1~3개(결정 95)·오늘 이후·중�
     [{ dates: ['2027-03-09'] }, /^3월 9일\(화\)은 지난 날입니다/],
     [{ dates: ['2027-02-30'] }, /읽을 수 없는 날짜입니다\(2027-02-30\)/],
     [{ dates: ['2027-03-12', '2027-03-12'] }, /3월 12일\(금\)을 두 번 골랐습니다/],
-    [{ topic: '연애' }, /상담 주제를 골라 주세요\(학업·생활·진로·진학·건강·가정·기타\)/], [{ topic: '2OUT 학부모 면담' }, /상담 주제를/],
+    [{ topic: '연애' }, /상담 주제를 골라 주세요\(생활·학습·진로·진학·기타\)/], [{ topic: '2OUT 학부모 면담' }, /상담 주제를/], [{ topic: '학업' }, /상담 주제를/], [{ topic: '건강' }, /상담 주제를/],
     [{ memo: 'x'.repeat(501) }, /500자까지.*지금 501자/],
   ];
   T.forEach(([inp, re]) => { const r = req(inp); assert.strictEqual(r.row, null); assert.ok(r.errors.some((e) => re.test(e)), JSON.stringify(r.errors)); });
   ['신청', '확정'].forEach((st) => assert.match(req({}, [{ student_id: 's1', status: st }]).errors.join(), /처리되지 않은 상담 신청이 있습니다/, st));
   ['완료', '반려', '취소'].forEach((st) => assert.deepStrictEqual(req({}, [{ student_id: 's1', status: st }]).errors, [], st));
   assert.deepStrictEqual(req({}, [{ student_id: 's2', status: '신청' }]).errors, [], '다른 학생의 열린 신청은 상관없음');
-  assert.ok(plain(ctx.counselRequestCheck_({ studentId: 's1', dates: ['2027-03-12'], topic: '면담' }, TODAY, [], { topics: ['면담'] })).row);
-  assert.match(plain(ctx.counselRequestCheck_({ studentId: 's1', dates: ['2027-03-12'], topic: '2OUT 학부모 면담' }, TODAY, [], { topics: ['생활', '2OUT 학부모 면담'] })).errors[0], /\(생활\)/, '예약어는 신청 주제가 아니다');
+  ['생활', '학습', '진로', '진학', '기타'].forEach((topic) => assert.ok(req({ topic }).row, topic + ' (결정 103 고정 다섯 가지)'));
   assert.throws(() => ctx.counselRequestCheck_({ studentId: 's1' }, '2027-3-10', []), /today/);
   assert.throws(() => ctx.counselRequestCheck_({}, TODAY, []), /studentId/);
 });

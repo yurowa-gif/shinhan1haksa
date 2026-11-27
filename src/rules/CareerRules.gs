@@ -2,9 +2,9 @@
  * F15 진로 프로필·이수 계획 규칙. RULES 세션 소유(R25). 근거: stage6-rules-draft 3.1, 결정 14·15·89·92·98·99.
  * 순수 함수만 둔다. Stage6Rules.gs(S6_PROFILE_PUBLIC·s6True_)·StatusRules.gs(statusOn_·statusRowOn_)·DateRules.gs를 부른다.
  * 열 이름은 Stage6Rules.gs 머리말. 편제표·권장 과목은 아직 시트 모양 승인 전이라(결정 101) 행 배열을 인자로 받는다:
- *   편제(curriculum) 행: entry_year, grade, semester, choice_group, pick_n, course, status(취소 행은 쓰지 않음) — s6-0-design 8절 제안안 A
- *   권장 과목(recs) 행: data/course_recommendations/course_recommendations.csv 열 그대로 —
- *     base_year, university, unit, core_courses('a;b'), recommended_courses('a;b'), source_url, source_title, note
+ *   편제(curriculum) 행: 설정 시트 curriculum_courses(결정 102) — entry_year, grade, semester, choice_group, pick_n, course, status(취소 행은 쓰지 않음)
+ *   권장 과목(recs) 행: 설정 시트 course_recommendations(결정 102) = data/course_recommendations/course_recommendations.csv 열 + status —
+ *     base_year, university, unit, core_courses('a;b'), recommended_courses('a;b'), source_url, source_title, note, status(취소 행은 쓰지 않음)
  */
 
 var CAREER_TEXT_MAX = 1000;
@@ -252,7 +252,7 @@ function courseRecsFor_(recs, targets, opts) {
   (targets || []).forEach(function (t) {
     var uni = careerTxt_((t || {}).university), unit = norm((t || {}).unit);
     if (!uni || !unit) return;
-    var rows = (recs || []).filter(function (r) { return r && careerTxt_(r.university) === uni; });
+    var rows = (recs || []).filter(function (r) { return r && ruleStr_(r.status) !== '취소' && careerTxt_(r.university) === uni; });
     var year = o.baseYear ? ruleStr_(o.baseYear) : rows.reduce(function (m, r) { return ruleStr_(r.base_year) > m ? ruleStr_(r.base_year) : m; }, '');
     rows = rows.filter(function (r) { return ruleStr_(r.base_year) === year; });
     var exact = rows.filter(function (r) { return norm(r.unit) === unit; });

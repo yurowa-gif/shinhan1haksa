@@ -119,7 +119,8 @@ test('coursePlanDiff_·coursePlanConfirm_: 과목 줄마다 취소 + 새 줄(결
 test('courseRecsFor_: 대학 정확히·모집단위 정확히 → 없으면 포함 일치 후보, 최신 기준 연도만, 과목 이름 맞추기', () => {
   const R = (y, u, unit, core, rec) => ({ base_year: y, university: u, unit, core_courses: core, recommended_courses: rec, source_url: 'https://example.com/' + y, source_title: '가짜 안내 ' + y, note: '' });
   const recs = [R('2027', '가짜대', '컴퓨터공학과', '', '미적분'), R('2028', '가짜대', '컴퓨터공학과', '미적분Ⅱ', '기하;확률과 통계'),
-    R('2028', '가짜대', '전자공학과', '', '물리학'), R('2028', '가짜대', '인공지능학과(AI전공, 데이터전공)', '', '영어독해와 작문'), R('2028', '다른대', '컴퓨터공학과', '', 'x')];
+    R('2028', '가짜대', '전자공학과', '', '물리학'), R('2028', '가짜대', '인공지능학과(AI전공, 데이터전공)', '', '영어독해와 작문'), R('2028', '다른대', '컴퓨터공학과', '', 'x'),
+    Object.assign(R('2029', '가짜대', '컴퓨터공학과', '', '취소된 줄'), { status: '취소' })];   // 취소된 줄은 최신 연도로도 세지 않는다
   const exact = plain(ctx.courseRecsFor_(recs, [{ university: '가짜대', unit: '컴퓨터공학과' }]));
   assert.deepStrictEqual(exact.map((r) => [r.unit, r.match, r.baseYear, r.core, r.recommended]), [['컴퓨터공학과', 'exact', '2028', ['미적분Ⅱ'], ['기하', '확률과 통계']]]);
   const part = plain(ctx.courseRecsFor_(recs, [{ university: '가짜대', unit: '인공지능' }, { university: '가짜대', unit: '공학과' }], { nameMap: { '영어독해와 작문': '영어 독해와 작문' } }));

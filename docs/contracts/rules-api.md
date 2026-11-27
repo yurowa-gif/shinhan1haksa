@@ -187,7 +187,7 @@ function s6CanWrite_(viewer, action, ctx)      // ctx = {active} → {ok, reason
 function s6Timeline_(sources, studentId, opts) // → [{at, kind, title, detail, ref:{kind, id}}] 시간 내림차순, opts = {from, to}
 
 // src/rules/CounselRules.gs (R24, F17 상담 신청·상담일지 6단계 칸) — Stage6Rules를 부른다
-function counselRequestCheck_(input, today, existing, opts)   // input = {studentId, dates, topic, memo}, opts = {topics} → {row, errors}
+function counselRequestCheck_(input, today, existing)   // input = {studentId, dates, topic, memo} → {row, errors}
 function counselRequestNext_(request, action, actor, input, today)   // action 'confirm'|'reject'|'complete'|'cancel' → {patch, errors}
 function counselNoteCheck_(input, opts)        // 6단계 칸만 → {patch:{agreement, agreement_to_parent, profile_version, request_id}, errors, warnings}
 function counselView_(note, viewer, opts)      // → 판정표 칸만 담은 객체 또는 null
@@ -503,13 +503,13 @@ function courseRecsFor_(recs, targets, opts)   // opts = {baseYear, nameMap} →
   - `show_to_parent`가 FALSE인 상담은 합의 사항을 공개했어도 학부모에게 그 상담 자체가 보이지 않는다(총괄 승인).
 - **`s6CanWrite_`**: 학생 본인(진로 제출·공개, 이수 계획, 탐구 올리기·진행·공개, 상담 신청·취소, 합의 사항 공개)·담당교사(이수 계획 확정, 피드백, 상담일지)·담당교사와 관리자(상담 신청 처리). 담임은 쓰지 않는다. `ctx.active`(지금 학사생)가 아니면 누구도 새로 쓰거나 고치지 않는다(결정 97 — 보기는 그대로).
 - **`s6Timeline_`**: 취소 행을 빼고 시간 내림차순. 상담 줄은 '상담' + 합의 사항(내용·유형 없음), OUT은 '1OUT: 항목', 출결은 확정 특이사항만.
-- **`counselRequestCheck_`**: 희망 날짜 1~3개(오늘 포함 이후·중복 없음, 결정 95), 주제(상담일지 유형 `counsel.types`에서 '2OUT 학부모 면담'을 뺀 목록, 기본 학업·생활·진로·진학·건강·가정·기타 — 총괄 승인), 메모 500자, 처리되지 않은(신청·확정) 신청이 있으면 거부.
-- **`counselRequestNext_`**: 신청 → 확정(`decided_date` = 희망 날짜 중 하나, 총괄 승인: 다른 날이면 반려 + 사유) / 신청·확정 → 반려(`cancel_reason` 필수 200자, 학생에게 보임. 확정 뒤 상담을 못 한 경우도 반려 — 화면 버튼만 '상담 못 함') / 확정 → 완료(`linked_note_id`) / 신청·확정 → 취소(학생 본인, `cancel_reason` 선택). 완료·반려·취소는 끝.
-- **`counselNoteCheck_`**: 6단계 칸만(기본 칸은 `CounselLog.gs` `cnlValidate_`). 합의 사항 1000자. 합의 사항 학부모 공개는 학생만 켠다(`opts.byStudent`, 총괄 승인) — 교사 저장은 늘 FALSE. 참고 버전은 그 학생의 살아 있는 버전, 진로(옛 값 진학) 상담인데 비면 경고. 신청 연결은 '확정' 신청만.
+- **`counselRequestCheck_`**: 희망 날짜 1~3개(오늘 포함 이후·중복 없음, 결정 95), 주제는 생활·학습·진로·진학·기타 다섯 가지로 고정(결정 103, PRD F17 — 상담일지 유형 `counsel.types`와 묶지 않는다), 메모 500자, 처리되지 않은(신청·확정) 신청이 있으면 거부.
+- **`counselRequestNext_`**: 신청 → 확정(`decided_date` = 희망 날짜 중 하나, 결정 103: 다른 날이면 반려 + 사유) / 신청·확정 → 반려(`cancel_reason` 필수 200자, 학생에게 보임. 확정 뒤 상담을 못 한 경우도 반려 — 화면 버튼만 '상담 못 함') / 확정 → 완료(`linked_note_id`) / 신청·확정 → 취소(학생 본인, `cancel_reason` 선택). 완료·반려·취소는 끝.
+- **`counselNoteCheck_`**: 6단계 칸만(기본 칸은 `CounselLog.gs` `cnlValidate_`). 합의 사항 1000자. 합의 사항 학부모 공개는 학생만 켠다(`opts.byStudent`, 총괄 승인) — 교사 저장은 늘 FALSE. 참고 버전은 그 학생의 살아 있는 버전, 진로·진학 상담인데 비면 경고. 신청 연결은 '확정' 신청만.
 
 ## 동작 메모(R25, 2026-11-27) — 진로 프로필·이수 계획
 
-근거: stage6-rules-draft 3.1, 결정 14·15·89·92·98·99·101. 열 이름은 `Stage6Rules.gs` 머리말. 편제표·권장 과목은 시트 모양 승인 전(결정 101)이라 **행 배열을 인자로** 받는다: 편제 행 `entry_year, grade, semester, choice_group, pick_n, course, status`(s6-0-design 8절 제안안 A, 취소 행은 쓰지 않음), 권장 과목 행은 `data/course_recommendations/course_recommendations.csv` 열 그대로(`core_courses`·`recommended_courses`는 `;` 목록).
+근거: stage6-rules-draft 3.1, 결정 14·15·89·92·98·99·101. 열 이름은 `Stage6Rules.gs` 머리말. 편제표·권장 과목은 **행 배열을 인자로** 받는다(시트 읽기는 기능 쪽): 편제 행 = 설정 시트 `curriculum_courses`(결정 102) `entry_year, grade, semester, choice_group, pick_n, course, status`, 권장 과목 행 = `course_recommendations`(결정 102) `base_year, university, unit, core_courses, recommended_courses, source_url, source_title, note, status`(과목 여럿은 `;`). 두 탭 모두 `status` 취소 행은 쓰지 않는다.
 
 - `careerProfileCheck_`: 희망 1~3순위(1순위 필수, 중복 없음, 순위 순 저장), 목표 진학 0~6개(대학·학과 필수), 글 칸 1000자. 희망·목표는 JSON 글자 한 칸씩(초안 4절).
 - 버전(F15 덮어쓰지 않음): `careerNextVersion_`은 취소 행까지 세어 번호를 다시 쓰지 않는다. `careerLatest_`는 살아 있는 가장 큰 버전. 새 버전의 공개 항목은 `careerNextParentFields_`로 이어받는다(결정 89). 학부모에게는 최근 버전만 — `s6Visible_(…, {isLatest})`.

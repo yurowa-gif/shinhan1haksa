@@ -123,7 +123,7 @@
       var kids = [el('span', { class: 'slot-label', text: s.label }), el('span', { class: 'slot-who' }, [
         who,
         s.swapped ? UI.statusPill('confirmed', '교대') : null,
-        s.mine ? UI.statusPill('todo', '내 근무') : null,
+        s.mine ? UI.statusPill('mute', '내 근무') : null,
         s.slot === '예비' && s.name ? UI.statusPill('mute', '예비') : null
       ])];
       if (s.canSwap) {
