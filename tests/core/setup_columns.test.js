@@ -78,7 +78,7 @@ test('setup(옛 시트): status_changes(3행)·counsel_notes(2행)에 빠진 열
   const r = setupReport(env);
   env.strictLock = false;
   assert.strictEqual(lineOf(r, 'status_changes'), '[열 추가] status_changes: cancel_reason');
-  assert.strictEqual(lineOf(r, 'counsel_notes'), '[열 추가] counsel_notes: target, linked_violation_id, cancel_reason');
+  assert.strictEqual(lineOf(r, 'counsel_notes'), '[열 추가] counsel_notes: target, linked_violation_id, agreement, agreement_to_parent, profile_version, request_id, cancel_reason');
 
   for (const [kind, name, old, added] of [['db', 'status_changes', oldStatus, ['cancel_reason']],
     ['counsel', 'counsel_notes', oldCounsel, ['target', 'linked_violation_id', 'cancel_reason']]]) {
@@ -113,7 +113,7 @@ test('setup: 헤더 순서가 바뀌었거나 모르는 열·id·공통 열이 �
     ['db', 'status_changes', '모르는 열', OLD_STATUS.slice(0, 12).concat(['extra'], OLD_STATUS.slice(12))],
     ['db', 'status_changes', 'id 없음', OLD_STATUS.slice(1)],
     ['db', 'status_changes', '공통 열 빠짐', OLD_STATUS.slice(0, -1)],
-    ['counsel', 'counsel_notes', '모르는 열(agreement)', OLD_COUNSEL.slice(0, 6).concat(['agreement'], OLD_COUNSEL.slice(6))]
+    ['counsel', 'counsel_notes', '모르는 열(extra)', OLD_COUNSEL.slice(0, 6).concat(['extra'], OLD_COUNSEL.slice(6))]
   ];
   for (const [kind, name, label, header] of cases) {
     writeOld(env, kind, name, header, 2);

@@ -225,3 +225,15 @@ test('Styles.html: 글자 크기는 보조(.9rem) 이상, --font-xs는 --font-sm
   const small = [...css.matchAll(/font-size:\s*(\.\d+)rem/g)].filter((m) => parseFloat(m[1]) < 0.9);
   assert.deepStrictEqual(small.map((m) => m[0]), [], '0.9rem보다 작은 글자 크기');
 });
+
+test('아이콘 변수(결정 88): 화면 파일이 쓰는 var(--i-…)는 모두 :root에 있고, 한 규칙의 mask와 -webkit-mask는 같은 아이콘을 쓴다(이름이 틀리면 글자색 네모가 된다 — T11b)', () => {
+  const ui = listFiles('src/ui').filter((f) => f.endsWith('.html'));
+  const missing = [];
+  for (const f of ui) for (const m of css.readFile(f).matchAll(/var\((--i-[A-Za-z0-9-]+)\)/g)) if (tokens[m[1]] === undefined) missing.push(f + ' ' + m[1]);
+  assert.deepStrictEqual(missing, [], ':root에 없는 아이콘 변수');
+  const iconOf = (v) => (String(v || '').match(/var\((--i-[A-Za-z0-9-]+)\)/) || [])[1] || '';
+  const uneven = rules.filter((r) => iconOf(r.decls.mask) || iconOf(r.decls['-webkit-mask'])).filter((r) => iconOf(r.decls.mask) !== iconOf(r.decls['-webkit-mask']))
+    .map((r) => r.selectors.join(', ') + ' mask=' + iconOf(r.decls.mask) + ' -webkit-mask=' + iconOf(r.decls['-webkit-mask']));
+  assert.deepStrictEqual(uneven, [], 'mask와 -webkit-mask(Safari)가 다른 아이콘이거나 한쪽이 빠짐');
+  assert.ok(rules.filter((r) => iconOf(r.decls.mask)).length >= 15, '아이콘 규칙을 찾지 못함(검사가 헛돈다)');
+});

@@ -107,6 +107,42 @@ function permissions_() {
     'counsel.view': { roles: ['admin', 'hall_teacher', 'homeroom'], scope: 'student', noDuty: true },
     'counsel.save': { roles: ['hall_teacher'], scope: 'student', noDuty: true },
     'counsel.cancel': { roles: ['hall_teacher'] },   // 행 id만 받는 첫 줄(역할만), 범위는 락 안에서 counsel.save로 다시
+    // ── 6단계(결정 89~101, S6-0, 표는 docs/plan/s6-0-design.md). 대상은 학사생만. 열람 = 학사 담당교사·담임(자기 반)·관리자.
+    // 출결 담당·근무표 담당은 어느 키에도 넣지 않는다(출결 담당을 넣으면 canAccessStudentByFacts_가 학사생 전체를 허용한다). 근무일(isOnDuty) 범위도 쓰지 않는다(noDuty).
+    // 학생·학부모 신원은 portalWho_ 한 곳(결정 82). 키는 역할·범위만 막고, 보는 사람에 맞는 칸만 응답에 담는 것(s6Visible_)은 기능(C49~C53)의 몫이다.
+    // 퇴실·졸업 뒤(결정 97): 교사는 기록의 term_id 기간 담당 기준, 본인·학부모는 계속 보기, 쓰기는 막는다 — 기능 함수가 기록의 기간으로 판정한다.
+    // 진로 프로필(F15): 제출·공개는 학생 본인만. list = 미제출 목록·홈 배지(역할만, 범위는 함수가 계산)
+    'career.view': { roles: ['admin', 'hall_teacher', 'homeroom', 'student', 'parent'], scope: 'student', noDuty: true },
+    'career.submit': { roles: ['student'], scope: 'student', noDuty: true },
+    'career.publish': { roles: ['student'], scope: 'student', noDuty: true },
+    'career.list': { roles: ['admin', 'hall_teacher'] },
+    // 이수 계획(F15): 작성·바꾸기·공개는 학생, 확정(담당교사 확인 표시)은 학사 담당교사
+    'plan.view': { roles: ['admin', 'hall_teacher', 'homeroom', 'student', 'parent'], scope: 'student', noDuty: true },
+    'plan.edit': { roles: ['student'], scope: 'student', noDuty: true },
+    'plan.confirm': { roles: ['hall_teacher'], scope: 'student', noDuty: true },
+    'plan.publish': { roles: ['student'], scope: 'student', noDuty: true },
+    // 탐구 기록(F16): 올리기·진행 기록·공개는 학생 본인(교사가 대신 올리지 않는다). cleanup = 졸업·퇴실 1년 뒤 원본 파일 '정리 대상'(결정 100, 관리자만)
+    'inquiry.view': { roles: ['admin', 'hall_teacher', 'homeroom', 'student', 'parent'], scope: 'student', noDuty: true },
+    'inquiry.upload': { roles: ['student'], scope: 'student', noDuty: true },
+    'inquiry.progress': { roles: ['student'], scope: 'student', noDuty: true },
+    'inquiry.publish': { roles: ['student'], scope: 'student', noDuty: true },
+    'inquiry.cleanup': { roles: ['admin'] },
+    // 교사 피드백: 학부모에게는 보이지 않는다(결정 91). 쓰기는 학사 담당교사만, 관리자는 보기만. cancel은 행 id만 받는 첫 줄(역할만), 범위는 락 안에서 feedback.write로 다시
+    'feedback.view': { roles: ['admin', 'hall_teacher', 'homeroom', 'student'], scope: 'student', noDuty: true },
+    'feedback.write': { roles: ['hall_teacher'], scope: 'student', noDuty: true },
+    'feedback.cancel': { roles: ['hall_teacher'] },
+    // 상담 신청(F17, 결정 16·95·96): 신청은 학생만, 처리(확정·반려·완료)는 학사 담당교사. 학부모는 보지 않는다. list = 홈 배지(역할만)
+    // cancel은 행 id만 받는 첫 줄(역할만), 본인 신청인지는 락 안에서 다시 확인. 신청 메모 칸은 담임에게 내보내지 않는다(결정 96, 응답에서 거른다)
+    'counsel.request.create': { roles: ['student'], scope: 'student', noDuty: true },
+    'counsel.request.cancel': { roles: ['student'] },
+    'counsel.request.view': { roles: ['admin', 'hall_teacher', 'homeroom', 'student'], scope: 'student', noDuty: true },
+    'counsel.request.list': { roles: ['admin', 'hall_teacher'] },
+    'counsel.request.decide': { roles: ['hall_teacher'], scope: 'student', noDuty: true },
+    // 학생·학부모가 보는 상담 기록(결정 90·94): 날짜·교사(·학생이 공개한 합의 사항)만. 합의 사항 공개는 학생이 건마다(행 id → 본인 확인은 락 안에서)
+    'counsel.note.view': { roles: ['student', 'parent'], scope: 'student', noDuty: true },
+    'counsel.agreement.publish': { roles: ['student'] },
+    // 학생 타임라인(F17, 교사용): 프로필·계획·탐구·상담·OUT·출결 요약
+    'timeline.view': { roles: ['admin', 'hall_teacher', 'homeroom'], scope: 'student', noDuty: true },
     // 입퇴실·급식(F6·F7): list는 화면 열기·행 id 함수 첫 줄(역할만), 저장은 근무일 제외
     // 보기: 1학사 교사(학사 교사·출결 담당)는 학사생 전체, 담임은 자기 반(결정 45). 저장은 담당·관리자
     'status.list': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] },
