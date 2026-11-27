@@ -200,7 +200,7 @@ function careerNextParentFields_(profiles, studentId)   // 새 버전 공개 항
 function careerPublishPlan_(current, request)  // request = {fields:{항목:bool}} → {patch:{parent_fields}, added, removed, notice, errors}
 function careerMissing_(enrollments, changes, profiles, term, today, opts)   // term = {id, career_due}, opts = {graceDays} → [{studentId, since, lastSubmittedAt}]
 function coursePlanCheck_(curriculum, entryYear, selections, existing)       // → {rows, errors, warnings}
-function coursePlanDiff_(existing, studentId, rows)   // → {toAdd, toCancel:[id], same}
+function coursePlanDiff_(existing, studentId, rows, termId)   // → {toAdd, toCancel:[id], same}
 function coursePlanConfirm_(existing, studentId, ids, teacherEmail, now)     // → {patches:[{id, patch}], errors}
 function careerCourseName_(name, nameMap)      // 과목 이름 맞추기(course_name_map.csv)
 function courseRecsFor_(recs, targets, opts)   // opts = {baseYear, nameMap} → [{university, unit, target, match, core, recommended, baseYear, sourceTitle, sourceUrl, note}]
@@ -509,11 +509,11 @@ function courseRecsFor_(recs, targets, opts)   // opts = {baseYear, nameMap} →
 
 ## 동작 메모(R25, 2026-11-27) — 진로 프로필·이수 계획
 
-근거: stage6-rules-draft 3.1, 결정 14·15·89·92·98·99·101. 열 이름은 `Stage6Rules.gs` 머리말. 편제표·권장 과목은 시트 모양 승인 전(결정 101)이라 **행 배열을 인자로** 받는다: 편제 행 `entry_year, grade, semester, group_name, pick_n, course`, 권장 과목 행은 `data/course_recommendations/course_recommendations.csv` 열 그대로(`core_courses`·`recommended_courses`는 `;` 목록).
+근거: stage6-rules-draft 3.1, 결정 14·15·89·92·98·99·101. 열 이름은 `Stage6Rules.gs` 머리말. 편제표·권장 과목은 시트 모양 승인 전(결정 101)이라 **행 배열을 인자로** 받는다: 편제 행 `entry_year, grade, semester, choice_group, pick_n, course, status`(s6-0-design 8절 제안안 A, 취소 행은 쓰지 않음), 권장 과목 행은 `data/course_recommendations/course_recommendations.csv` 열 그대로(`core_courses`·`recommended_courses`는 `;` 목록).
 
 - `careerProfileCheck_`: 희망 1~3순위(1순위 필수, 중복 없음, 순위 순 저장), 목표 진학 0~6개(대학·학과 필수), 글 칸 1000자. 희망·목표는 JSON 글자 한 칸씩(초안 4절).
 - 버전(F15 덮어쓰지 않음): `careerNextVersion_`은 취소 행까지 세어 번호를 다시 쓰지 않는다. `careerLatest_`는 살아 있는 가장 큰 버전. 새 버전의 공개 항목은 `careerNextParentFields_`로 이어받는다(결정 89). 학부모에게는 최근 버전만 — `s6Visible_(…, {isLatest})`.
 - `careerPublishPlan_`: 적지 않은 항목은 그대로, 모르는 항목은 오류, 거둔 항목이 있으면 학생 안내 '학부모님이 이미 보신 내용은 되돌릴 수 없습니다.'(결정 92). 켜고 끈 기록은 서버가 audit_log.
-- `careerMissing_`(결정 98): 마감일(`term.career_due`)이 없거나 오늘이 마감 전이면 []. 대상 = 그 기간 등록생 중 오늘 학사 입실인 학생: 마감일에 입실이었으면 마감일부터, 마감 뒤 입실했으면 **입실일 + 14일**부터 센다. 제출 = 그 기간(`term_id`)의 살아 있는 버전. ASSUMPTION: 마감일에 입실이었다가 퇴실 뒤 다시 들어온 학생은 유예 없이 센다.
-- 이수 계획(결정 99): `coursePlanCheck_` — 편제에 없는 과목·택N 초과(F15)·같은 학년·학기 같은 과목 두 번은 오류. ASSUMPTION: 택N이 비거나 0인 묶음(공통·필수)은 개수를 보지 않는다. 확정 줄을 빼면 경고. `coursePlanDiff_` — 과목 줄마다: 같은 줄은 그대로(확정 유지), 새 과목은 새 '계획' 줄, 빠진 과목은 취소. 같은 계획을 다시 저장하면 0건. ASSUMPTION: 새 줄의 학부모 공개는 그 학생의 살아 있는 줄 중 하나라도 공개면 TRUE(계획 전체 단위로 이어받음). `coursePlanConfirm_` — 담당교사 확인 = '계획' 줄을 '확정' + `confirmed_by`·`confirmed_at`(이미 확정은 0건, 취소·다른 학생 줄은 오류).
+- `careerMissing_`(결정 98): 마감일(`term.career_due`)이 없거나 오늘이 마감 전이면 []. 대상 = 그 기간 등록생 중 오늘 학사 입실인 학생: 마감일에 입실이었으면 마감일부터, 마감 뒤 입실했으면 **입실일 + 14일**부터 센다. 제출 = 그 기간(`term_id`)의 살아 있는 버전. 마감일에 입실이었다가 퇴실 뒤 다시 들어온 학생은 유예 없이 센다(총괄 승인).
+- 이수 계획(결정 99): `coursePlanCheck_` — 편제에 없는 과목·택N 초과(F15)·같은 학년·학기 같은 과목 두 번은 오류. 택N이 비거나 0인 묶음(공통·필수 — S6-0 제안: 필수는 `choice_group` 빈칸·`pick_n` 0)은 개수를 보지 않는다(총괄 승인). 확정 줄을 빼면 경고. `course_plans`는 `state`(계획·확정)와 `status`(유효·취소)가 따로다(S6-0). `coursePlanDiff_` — 과목 줄마다: 같은 줄은 그대로(확정 유지), 새 과목은 새 줄(`state` 계획, `status` 유효, `term_id` = 쓴 때의 기간), 빠진 과목은 `status` 취소. 같은 계획을 다시 저장하면 0건. 새 줄의 `show_to_parent`는 그 학생의 살아 있는 줄 중 하나라도 공개면 TRUE(계획 전체 단위로 이어받음, 총괄 승인). `coursePlanConfirm_` — 담당교사 확인 = `state` 계획 → 확정 + `confirmed_by`·`confirmed_at`(이미 확정은 0건, 취소·다른 학생 줄은 오류).
 - `courseRecsFor_`: 대학 이름 정확히, 모집단위 정확히 → 없으면 서로 포함하는 것 모두(match 'partial', 판정하지 않고 후보로). 그 대학의 최신 기준 연도만(`opts.baseYear`로 고정). 과목 이름은 `course_name_map.csv`(`opts.nameMap`)로 맞춘다.
