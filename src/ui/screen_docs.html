@@ -7,7 +7,8 @@
   .doc-btns button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
   .doc-who { display: flex; justify-content: space-between; align-items: center; gap: 4px 8px; flex-wrap: wrap; }
   .doc-who > .doc-name { flex: 1 1 9em; min-width: 0; }
-  .doc-who > .doc-side { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+  .doc-who > .doc-side { display: flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0; max-width: 100%; }   /* 글자 150%에서 꼬리표가 줄을 바꿔 화면 밖으로 나가지 않게 */
+  .doc-who > .doc-side > .pill { min-width: 0; }
   .doc-sheet .doc-line + .doc-line { border-top: 1px solid var(--line); padding-top: 8px; }
 </style>
 <script>

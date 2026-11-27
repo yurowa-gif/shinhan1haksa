@@ -14,6 +14,7 @@ const REQUIRED_TOKENS = [
   '--ok-ink', '--ok-weak', '--caution-ink', '--caution-weak', '--muted-ink', '--muted-weak',
   '--code-hak-ink', '--code-hak-weak', '--code-ga-ink', '--code-ga-weak', '--code-byung-ink', '--code-byung-weak',
   '--out1-ink', '--out1-weak', '--out2', '--out2-ink',
+  '--field-line', '--on-accent', '--on-accent-muted', '--signal', '--signal-ink',
   '--tap', '--bar-h', '--gap', '--radius', '--radius-sm', '--font-base'
 ];
 
@@ -53,9 +54,14 @@ test('화면 파일이 쓰는 class 는 모두 Styles.html 이나 그 파일 안
   assert.deepStrictEqual(bad, []);
 });
 
-test('Styles.html 에 외부 주소(url(http…), @import, 웹폰트)가 없다', () => {
+test('Styles.html 의 CSS 안에 외부 주소(url(http…), @import, @font-face)가 없고, 바깥 주소는 글꼴 링크(cdn.jsdelivr.net, 결정 88)뿐이다', () => {
   assert.ok(!/url\(\s*['"]?https?:/i.test(stylesHtml));
   assert.ok(!/@import|@font-face/.test(stylesHtml));
+  const hosts = [...stylesHtml.matchAll(/(?:href|src)="(https?:\/\/[^"\/]+)/g)].map((m) => m[1]);
+  assert.deepStrictEqual([...new Set(hosts)], ['https://cdn.jsdelivr.net']);
+  // 아이콘(Lucide, ISC)은 바깥 요청 없이 data: 주소로 들어 있고, 출처·라이선스가 적혀 있다
+  assert.ok(/--i-check: url\("data:image\/svg\+xml,/.test(stylesHtml) && /Lucide Icons — ISC License/.test(stylesHtml));
+  assert.ok(require('fs').existsSync(require('path').join(__dirname, '..', '..', 'design', 'preview', 'concepts2', 'icons', 'LICENSE')), 'Lucide 라이선스 전문 파일');
 });
 
 test('Styles.html 에 가로 스크롤을 만드는 고정 너비(px 360 초과)가 없다', () => {
@@ -92,12 +98,12 @@ test('기본 글자·보조 글자·주 버튼·오류·안내 줄 대비가 4.5
   const cases = [
     ['본문', tokens['--text'], tokens['--bg']], ['본문(카드)', tokens['--text'], tokens['--card']],
     ['보조 글자', tokens['--muted'], tokens['--bg']], ['보조 글자(카드)', tokens['--muted'], tokens['--card']],
-    ['주 버튼', '#fff', tokens['--accent']], ['위험 버튼', '#fff', tokens['--warn']],
+    ['주 버튼', tokens['--on-accent'], tokens['--accent']], ['머리줄 작은 글씨', tokens['--on-accent-muted'], tokens['--accent']], ['위험 버튼', tokens['--out2-ink'], tokens['--warn']],
     ['오류', tokens['--warn'], tokens['--warn-weak']], ['링크', tokens['--accent'], tokens['--card']],
     ['안내(정보)', tokens['--accent-ink'], tokens['--accent-weak']],
     ['안내(경고)', tokens['--caution-ink'], tokens['--caution-weak']],
     ['안내(확인)', tokens['--ok-ink'], tokens['--ok-weak']],
-    ['알림 개수', '#fff', tokens['--warn']]
+    ['알림 개수', tokens['--on-accent'], tokens['--accent']], ['처리할 건수(살구)', tokens['--signal-ink'], tokens['--signal']]
   ];
   cases.forEach(([name, fg, bg]) => {
     const ratio = css.contrast(css.parseColor(fg), css.parseColor(bg));
@@ -105,14 +111,17 @@ test('기본 글자·보조 글자·주 버튼·오류·안내 줄 대비가 4.5
   });
 });
 
-test('색만으로 구분하지 않는다: 알약은 모양 하나(테두리 없음)이고, 확정·요청·취소·1OUT·퇴실 대상은 앞 글자가 서로 다르며, 학·가·병은 서로 다른 색 + 글자 자체가 다르다(결정 85)', () => {
+test('색만으로 구분하지 않는다: 알약은 모양 하나(테두리 없음)이고, 확정·요청·취소·1OUT·퇴실 대상·할 일은 앞 아이콘이 서로 다르며(결정 88), 학·가·병은 서로 다른 색 + 글자 자체가 다르다(결정 85)', () => {
   const shape = {};
   ['s-confirmed', 's-requested', 's-canceled', 'out-1', 'out-2', 'todo'].forEach((n) => {
-    const before = css.declsFor(rules, '.pill.' + n + '::before').content;
-    assert.ok(before, '.pill.' + n + '::before content 없음');
-    shape[n] = before;
+    const d = css.declsFor(rules, '.pill.' + n + '::before');
+    assert.ok(d.content, '.pill.' + n + '::before content 없음');
+    const icon = (String(d.mask || '').match(/var\((--i-[a-z-]+)\)/) || [])[1];
+    assert.ok(icon && tokens[icon], '.pill.' + n + '::before 아이콘(mask: var(--i-…))이 없거나 :root에 없다');
+    assert.ok(/currentColor/.test(d.background), '아이콘 색은 글자색을 따른다(대비는 글자와 같다)');
+    shape[n] = icon;
   });
-  assert.strictEqual(new Set(Object.values(shape)).size, 6, '앞 글자가 겹친다: ' + JSON.stringify(shape));
+  assert.strictEqual(new Set(Object.values(shape)).size, 6, '앞 아이콘이 겹친다: ' + JSON.stringify(shape));
   // 알약 모양은 하나: 기본 .pill 에 테두리 없음, 종류별로 점선·이중선 같은 테두리 모양을 다시 정하지 않는다
   assert.strictEqual(css.declsFor(rules, '.pill').border, '0', '알약은 테두리가 없다');
   PILLS.forEach((n) => {
@@ -125,23 +134,26 @@ test('색만으로 구분하지 않는다: 알약은 모양 하나(테두리 없
   assert.ok(css.declsFor(rules, '.pill.s-canceled')['text-decoration'].indexOf('line-through') >= 0, '취소는 취소선');
 });
 
-test('결정 85: 카드는 기본이 상자 없음, 상자는 .todo(노란 띠)·.key(코발트 띠)뿐이고, 줄 링크(.row-link)는 48px이며 할 일 카드의 첫 줄 링크만 주 버튼 모양이다', () => {
+test('결정 85 구조 + 결정 88 모양: 카드는 기본이 상자 없음, 상자는 .todo·.key뿐(흰 판 + 가는 테두리, 색 띠 없음)이고, 줄 링크(.row-link)는 48px이며 할 일 카드의 첫 줄 링크만 주 버튼 모양이다', () => {
   const card = css.declsFor(rules, '.card');
   assert.strictEqual(card.background, 'transparent');
   assert.strictEqual(card.border, '0');
-  assert.ok(css.declsFor(rules, '.card.todo')['border-left'].indexOf('--signal') > 0, '할 일 카드 노란 띠');
-  assert.ok(css.declsFor(rules, '.card.key')['border-left'].indexOf('--accent') > 0, '중요 카드 코발트 띠');
+  const box = css.declsFor(rules, '.card.todo');
+  assert.ok(/--card/.test(box.background) && /--line/.test(box['box-shadow']), '할 일·중요 카드는 흰 판 + 가는 테두리');
+  ['.card.todo', '.card.key'].forEach((sel) => assert.ok(!css.declsFor(rules, sel)['border-left'], sel + ' 에 색 띠가 다시 생겼다'));
   assert.ok(/--tap/.test(css.declsFor(rules, '.row-link')['min-height']), '줄 링크 48px');
-  assert.ok(css.declsFor(rules, '.row-link::after').content, '줄 링크 끝 ›');
+  assert.ok(/--i-chevron-right/.test(css.declsFor(rules, '.row-link::after').mask), '줄 링크 끝 화살표 아이콘');
   const first = rules.find((r) => r.selectors.some((x) => /^\.card\.todo > \.row-link:not\(/.test(x)));
   assert.ok(first && /--accent/.test(first.decls.background), '할 일 카드의 첫 줄 링크는 주 버튼 모양');
-  // 머리줄은 코발트 면 + 흰 글자(앱 이름이 한눈에), 학생·학부모 화면은 body.tone-soft 한 클래스로 흰 판
-  assert.ok(/--accent/.test(css.declsFor(rules, 'header.top').background));
-  assert.ok(css.declsFor(rules, 'body.tone-soft main').background === 'var(--card)', '학생·학부모 화면은 흰 판 하나');
-  // 강조 노랑 위의 글자 대비
+  // 머리줄은 감색 면 + 밝은 글자(색 면은 여기 한 곳), 학생·학부모 화면도 같은 안(결정 88: 흰 판을 따로 두지 않는다)
+  assert.ok(/--accent/.test(css.declsFor(rules, 'header.top').background) && /--on-accent/.test(css.declsFor(rules, 'header.top').color));
+  assert.ok(!css.declsFor(rules, 'body.tone-soft main').background, '학생·학부모 화면에 따로 흰 판을 두지 않는다');
+  // 살구색 위의 글자 대비
   const ratio = css.contrast(css.parseColor(tokens['--signal-ink']), css.parseColor(tokens['--signal']));
-  assert.ok(ratio >= 4.5, '노랑 위 글자 대비 ' + ratio.toFixed(2));
-  assert.ok(css.contrast(css.parseColor('#dbe5ff'), css.parseColor(tokens['--accent'])) >= 4.5, '머리줄 작은 글씨 대비');
+  assert.ok(ratio >= 4.5, '살구색 위 글자 대비 ' + ratio.toFixed(2));
+  // 입력칸 테두리는 흰 바탕과 3:1 이상(principles.md C6)
+  assert.ok(css.contrast(css.parseColor(tokens['--field-line']), css.parseColor(tokens['--card'])) >= 3, '입력칸 테두리 대비');
+  assert.ok(/--field-line/.test(css.declsFor(rules, '.field input').border), '입력칸 테두리는 --field-line');
 });
 
 test('안내 줄(.error, .notice.*)에도 앞 글자(모양)가 있다', () => {
