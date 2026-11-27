@@ -150,7 +150,7 @@
         if (!c) status.textContent = '출석';
         else {
           if (c[0]) status.appendChild(UI.statusPill('hak', c[0]));
-          if (c[1]) status.appendChild(UI.statusPill(c[2] ? 'todo' : 'confirmed', KIND_SHORT[c[1]] + (c[2] ? ' 미인정' : ' 인정')));
+          if (c[1]) status.appendChild(UI.statusPill(c[2] ? 'out1' : 'confirmed', KIND_SHORT[c[1]] + (c[2] ? ' 미인정' : ' 인정')));
         }
         var line = el('div', { class: 'res-rec', style: 'display:flex;justify-content:space-between;align-items:center;gap:8px' }, [
           el('div', {}, [el('div', { text: s.number + '번 ' + s.name }), status]),
