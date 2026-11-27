@@ -90,7 +90,8 @@ var SCREENS = {
   facilityday: { file: 'ui/screen_facility_day', title: '시설 일지 보기', view: 'facility.view' },
   counsel: { file: 'ui/screen_counsel', title: '상담일지', view: 'counsel.list' },
   timetable: { file: 'ui/screen_timetable', title: '시간표', view: 'timetable.screen' },
-  inbox: { file: 'ui/screen_inbox', title: '확인함', view: 'inbox.view' }
+  inbox: { file: 'ui/screen_inbox', title: '확인함', view: 'inbox.view' },
+  curriculum: { file: 'ui/screen_curriculum', title: '교육과정 올리기', view: 'curriculum.edit' }
 };
 
 /**

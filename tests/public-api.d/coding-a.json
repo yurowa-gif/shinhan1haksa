@@ -243,6 +243,14 @@
     "seedFakeStage6": {
       "use": "편집기",
       "guard": "assertOwnerRun_"
+    },
+    "previewCurriculum": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveCurriculum": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }
