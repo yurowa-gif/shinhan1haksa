@@ -38,13 +38,15 @@ var ROLE_PRIORITY = ['admin', 'attendance', 'hall_teacher', 'duty_manager', 'hom
  * 5단계(결정 80): events(월별 일정).
  * 7단계(결정 83): 기간별 facility_logs(시설 사용 일지, F10).
  * 4단계(결정 75·76): doc_types, programs, program_participants, 기간별 student_docs, students.phone, guardian_links.name·phone.
+ * 6단계(결정 101, S6-0): career_profiles, course_plans, inquiry_records, feedback, terms.career_due, 상담 파일의 counsel_requests와 counsel_notes 열 4개.
  */
 var SCHEMA = {
   db: {
     // ASSUMPTION: 한 사람이 여러 역할(예: 관리자 겸 학사 교사)을 가질 수 있어 roles는 쉼표 구분 목록으로 둔다.
     // homeroom_class는 담임 학급 "학년-반" 형식(예: 1-3).
     users: ['email', 'name', 'roles', 'homeroom_class', 'active', 'memo'],
-    terms: ['name', 'type', 'start_date', 'end_date', 'memo'],
+    // career_due: 진로 프로필 제출 마감일(결정 101·98, 비면 미제출 표시 없음). setup이 있는 시트에도 제자리에 끼운다
+    terms: ['name', 'type', 'start_date', 'end_date', 'career_due', 'memo'],
     students: ['student_no', 'name', 'gender', 'grade', 'class_no', 'number', 'track', 'email', 'phone', 'memo'],   // phone: 결정 76(개인 연락처, readAll_에서 빠진다)
     enrollments: ['term_id', 'student_id', 'teacher_email', 'veritas', 'commute_type', 'end_type', 'memo'],
     guardian_links: ['parent_email', 'student_id', 'relation', 'name', 'phone', 'memo'],   // name·phone: 결정 76(보호자 이름·전화, readAll_에서 빠진다)
@@ -93,12 +95,37 @@ var SCHEMA = {
 
     /* ───── 5단계(결정 80, F13) ───── */
     // 월별 일정(시험·행사·특강·휴업 …). 끝날이 비면 시작일 하루. status: 유효·취소(지우지 않는다), 취소 사유는 cancel_reason. 운영 안 하는 날은 day_schedules가 따로 정한다(두 번 입력하지 않는다)
-    events: ['start_date', 'end_date', 'title', 'kind', 'memo', 'status', 'cancel_reason']
+    events: ['start_date', 'end_date', 'title', 'kind', 'memo', 'status', 'cancel_reason'],
+
+    /* ───── 6단계(결정 101 승인, docs/plan/s6-0-design.md). 대상은 학사생만. term_id = 그 기록이 생긴 운영 기간(결정 97: 교사는 그 기간의 담당 기준) ───── */
+    // 진로 프로필(F15). 덮어쓰지 않고 버전으로 쌓는다(version = 학생마다 1부터, 취소 행도 번호를 쓴다). hopes = 희망 1~3순위 JSON
+    // [{rank, field, job}], targets = 목표 진학 JSON [{university, unit, track}]. parent_fields = 학부모에게 공개한 항목 이름을 ';'로(예 'hopes;targets', 빈 값 = 모두 비공개, 결정 89).
+    // 글 칸(hopes·targets·interests·strengths·concerns)은 audit_log에 글자 수만 남는다. status: 유효·취소(취소는 cancel_reason)
+    career_profiles: ['term_id', 'student_id', 'version', 'hopes', 'targets', 'interests', 'strengths', 'concerns', 'parent_fields',
+      'submitted_at', 'status', 'cancel_reason'],
+    // 선택과목 이수 계획(F15). 과목 줄마다 1행, 바꾸면 취소 + 새 줄(결정 99). state: 계획·확정(확정 = 담당교사가 확인, confirmed_by·confirmed_at).
+    // show_to_parent: TRUE·FALSE(기본 FALSE). entry_year = 입학년도, semester = '1'·'2', choice_group = 편제표의 선택군. status: 유효·취소
+    course_plans: ['term_id', 'student_id', 'entry_year', 'grade', 'semester', 'choice_group', 'course', 'state', 'confirmed_by', 'confirmed_at',
+      'show_to_parent', 'status', 'cancel_reason'],
+    // 탐구 기록 요약(F16, 탐구발견 파일에서 읽은 것). source_id = 원본 기록 id(학생마다 유일), standards = 성취기준 코드 2개를 ';'로, liked = 관심 표시 TRUE·FALSE,
+    // progress: 관심·진행 중·완료, result_link: http(s) 주소, file_id = 원본 JSON의 Drive 파일 id(비공유 폴더, 관리자 외에는 내보내지 않음), name_mismatch = 파일 속 이름이 계정과 다름(결정 93).
+    // show_to_parent: TRUE·FALSE(기본 FALSE). title·question·memo는 audit_log에 글자 수만. status: 유효·취소
+    inquiry_records: ['term_id', 'student_id', 'source_id', 'recorded_at', 'source', 'standards', 'subject', 'title', 'question', 'liked', 'progress',
+      'result_link', 'memo', 'file_id', 'name_mismatch', 'show_to_parent', 'status', 'cancel_reason'],
+    // 교사 피드백(F15·F16). target_kind: 진로 프로필·이수 계획·탐구 기록, target_id = 그 행 id. 학부모에게는 보이지 않는다(결정 91). content는 audit_log에 글자 수만. status: 유효·취소
+    feedback: ['term_id', 'student_id', 'target_kind', 'target_id', 'content', 'teacher_email', 'status', 'cancel_reason']
   },
   counsel: {
-    // target·linked_violation_id·cancel_reason은 2단계(결정 41). 6단계 열은 그때 setup이 제자리에 끼운다
+    // target·linked_violation_id·cancel_reason은 2단계(결정 41). agreement·agreement_to_parent·profile_version·request_id는 6단계(결정 101):
+    // setup이 이미 있는 시트에도 content 바로 뒤에 제자리에 끼운다(두 번 돌려도 같은 결과). agreement = 합의 사항·다음 할 일(학생에게 보임, 결정 94),
+    // agreement_to_parent = 학부모에게도 보일지(TRUE·FALSE, 학생이 건마다 켬, 기본 FALSE — 결정 90), profile_version = 참고한 진로 프로필 버전(진로·진학 유형), request_id = 연결한 상담 신청 id.
+    // show_to_parent는 지금까지처럼 "상담을 했다(날짜·교사)"를 학부모에게 보일지
     counsel_notes: ['student_id', 'date', 'teacher_email', 'type', 'target', 'linked_violation_id', 'content',
-      'show_to_parent', 'status', 'cancel_reason']
+      'agreement', 'agreement_to_parent', 'profile_version', 'request_id', 'show_to_parent', 'status', 'cancel_reason'],
+    // 상담 신청(F17, 결정 16·95·96). 신청은 학생만. wish_dates = 희망 날짜 1~3개를 ';'로, topic: 생활·학습·진로·진학·기타,
+    // memo(학생 메모)는 학사 담당교사·관리자만(담임은 날짜·주제·상태만, audit_log에는 글자 수만). status: 신청·확정·완료·반려·취소(취소·반려는 cancel_reason — 반려 사유는 학생에게 보임),
+    // decided_date = 확정한 상담 날짜, linked_note_id = 완료할 때 연결한 counsel_notes id. term_id = 신청한 때의 운영 기간
+    counsel_requests: ['term_id', 'student_id', 'requester_email', 'wish_dates', 'topic', 'memo', 'status', 'decided_date', 'linked_note_id', 'cancel_reason']
   },
   config: {
     settings: ['key', 'value', 'description']

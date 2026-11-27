@@ -44,7 +44,7 @@ test('1단계 새 탭 7개가 5절 열 그대로 있다(기존 탭 열은 그대
   for (const [tab, cols] of Object.entries(PLAN5)) {
     assert.deepStrictEqual(plain(ctx.SCHEMA.db[tab]), cols, tab);
   }
-  assert.deepStrictEqual(plain(ctx.SCHEMA.db.terms), ['name', 'type', 'start_date', 'end_date', 'memo']);
+  assert.deepStrictEqual(plain(ctx.SCHEMA.db.terms), ['name', 'type', 'start_date', 'end_date', 'career_due', 'memo']);   // career_due: 6단계(결정 101)
   assert.deepStrictEqual(plain(ctx.SCHEMA.db.enrollments),
     ['term_id', 'student_id', 'teacher_email', 'veritas', 'commute_type', 'end_type', 'memo']);
 });
@@ -117,8 +117,9 @@ test('2단계: 바뀐 탭의 전체 헤더가 5절 승인안 그대로(새 탭 3
     'db/violation_rules': full(['name', 'description', 'active', 'sort_order']),
     'db/violations_a1b2c3d4': full(['term_id', 'student_id', 'occurred_at', 'rule_id', 'rule_name', 'memo', 'detected_by', 'entered_by',
       'status', 'source', 'source_exception_id', 'cancel_reason']),
+    // agreement·agreement_to_parent·profile_version·request_id는 6단계(결정 101), content 바로 뒤
     'counsel/counsel_notes': full(['student_id', 'date', 'teacher_email', 'type', 'target', 'linked_violation_id', 'content',
-      'show_to_parent', 'status', 'cancel_reason']),
+      'agreement', 'agreement_to_parent', 'profile_version', 'request_id', 'show_to_parent', 'status', 'cancel_reason']),
     'db/status_changes': full(['student_id', 'item', 'value', 'requested_at', 'effective_date', 'effective_date_auto', 'reason',
       'doc_submitted', 'linked_change_id', 'source', 'status', 'memo', 'cancel_reason'])
   };
@@ -131,8 +132,9 @@ test('2단계: 바뀐 탭의 전체 헤더가 5절 승인안 그대로(새 탭 3
   assert.deepStrictEqual(Object.keys(ctx.SCHEMA_TERM_TABS), ['exceptions', 'violations', 'student_docs', 'facility_logs']);
   // 탭 목록: 2단계에 더한 것은 duty_slots·violation_rules뿐(duty_swaps·meal_counts·out_dismissals는 만들지 않는다). 그 뒤는 3단계 결정 64의 3개(stage3_tabs.test.js)
   assert.deepStrictEqual(Object.keys(ctx.SCHEMA.db), ['users', 'terms', 'students', 'enrollments', 'guardian_links', 'audit_log',
-    'status_changes', 'day_schedules', 'blocks', 'fixed_schedules', 'spaces', 'seats', 'seat_assignments', 'duty_slots', 'violation_rules', 'avoid_pairs', 'rooms', 'room_assignments', 'doc_types', 'programs', 'program_participants', 'events']);
-  assert.deepStrictEqual(Object.keys(ctx.SCHEMA.counsel), ['counsel_notes']);
+    'status_changes', 'day_schedules', 'blocks', 'fixed_schedules', 'spaces', 'seats', 'seat_assignments', 'duty_slots', 'violation_rules', 'avoid_pairs', 'rooms', 'room_assignments', 'doc_types', 'programs', 'program_participants', 'events',
+    'career_profiles', 'course_plans', 'inquiry_records', 'feedback']);
+  assert.deepStrictEqual(Object.keys(ctx.SCHEMA.counsel), ['counsel_notes', 'counsel_requests']);
 });
 
 test('2단계: 승인안 밖 기존 탭(0단계·설정) 열은 그대로', () => {
