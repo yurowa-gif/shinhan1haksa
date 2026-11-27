@@ -24,7 +24,7 @@
 아이콘(결정 88 (나))은 `mask`로 그린다. 그림이 빠지면 **글자색 네모**가 보이는데, 아홉 가지 판정은 이것을 잡지 못한다.
 - 확인한 방법: `Styles.html`의 `var(--i-chevron-right)`를 없는 변수 이름으로 바꾸고 `home:admin`을 돌렸다. 줄 끝 화살표가 회색 네모로 바뀌었는데도 9칸 모두 통과했다.
 - 실제 걱정인 '브라우저가 mask를 못 그리는 경우'(Safari·삼성 인터넷·카카오톡 인앱)는 Chromium 하나로는 다시 만들 수 없다. 그래서 사람이 본다: `docs/stage0-checklist.md` E2절 **C1·C2**.
-- 변수 이름을 틀린 것 같은 CSS 실수는 `::before`/`::after`의 계산된 `mask-image`가 `none`인지로 잡을 수 있다. 다만 판정을 하나 더 늘리는 일이라 이번에는 만들지 않았다.
+- 변수 이름 오타 같은 CSS 실수는 이제 `npm test`가 잡는다(T11b, `tests/design/styles.test.js` '아이콘 변수'). 화면 파일이 쓰는 `var(--i-…)`가 모두 `:root`에 있는지 본다. 한 규칙의 `mask`와 `-webkit-mask`(Safari·삼성 인터넷이 읽는 쪽)가 같은 아이콘인지도 본다. 기기 행렬에 판정을 늘리지 않고 이 정적 검사 하나로 했다. Chromium은 뒤에 적힌 `mask`로 그리므로 `-webkit-mask` 쪽 오타는 기기 행렬로는 보이지 않기 때문이다.
 
 ## 2. 결과 표
 | 화면 | android-360 | iphone-390 | iphone-375 | android-360-font150 | tablet-768 | laptop-1093 | laptop-1366 | laptop-1536 | desktop-1920 |
