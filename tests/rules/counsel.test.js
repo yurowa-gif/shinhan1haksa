@@ -8,14 +8,14 @@ const req = (input, existing) => plain(ctx.counselRequestCheck_(Object.assign({ 
 
 test('counselRequestCheck_: 희망 날짜 1~3개(결정 95)·오늘 이후·중복 없음, 주제, 메모 길이, 열린 신청 1건', () => {
   assert.deepStrictEqual(req({ dates: ['2027-03-15', '2027-03-10', '2027-03-12'] }), { errors: [],
-    row: { student_id: 's1', preferred_dates: '2027-03-10;2027-03-12;2027-03-15', topic: '진로', memo: '', status: '신청' } });
+    row: { student_id: 's1', wish_dates: '2027-03-10;2027-03-12;2027-03-15', topic: '진로', memo: '', status: '신청' } });
   const T = [
     [{ dates: [] }, /희망 날짜가 없습니다/],
     [{ dates: ['2027-03-11', '2027-03-12', '2027-03-13', '2027-03-14'] }, /3개까지 고를 수 있습니다\. 1개를 빼 주세요/],
     [{ dates: ['2027-03-09'] }, /^3월 9일\(화\)은 지난 날입니다/],
     [{ dates: ['2027-02-30'] }, /읽을 수 없는 날짜입니다\(2027-02-30\)/],
     [{ dates: ['2027-03-12', '2027-03-12'] }, /3월 12일\(금\)을 두 번 골랐습니다/],
-    [{ topic: '연애' }, /상담 주제를 골라 주세요\(학업·생활·진로·건강·가정·기타\)/],
+    [{ topic: '연애' }, /상담 주제를 골라 주세요\(학업·생활·진로·진학·건강·가정·기타\)/], [{ topic: '2OUT 학부모 면담' }, /상담 주제를/],
     [{ memo: 'x'.repeat(501) }, /500자까지.*지금 501자/],
   ];
   T.forEach(([inp, re]) => { const r = req(inp); assert.strictEqual(r.row, null); assert.ok(r.errors.some((e) => re.test(e)), JSON.stringify(r.errors)); });
@@ -23,11 +23,12 @@ test('counselRequestCheck_: 희망 날짜 1~3개(결정 95)·오늘 이후·중�
   ['완료', '반려', '취소'].forEach((st) => assert.deepStrictEqual(req({}, [{ student_id: 's1', status: st }]).errors, [], st));
   assert.deepStrictEqual(req({}, [{ student_id: 's2', status: '신청' }]).errors, [], '다른 학생의 열린 신청은 상관없음');
   assert.ok(plain(ctx.counselRequestCheck_({ studentId: 's1', dates: ['2027-03-12'], topic: '면담' }, TODAY, [], { topics: ['면담'] })).row);
+  assert.match(plain(ctx.counselRequestCheck_({ studentId: 's1', dates: ['2027-03-12'], topic: '2OUT 학부모 면담' }, TODAY, [], { topics: ['생활', '2OUT 학부모 면담'] })).errors[0], /\(생활\)/, '예약어는 신청 주제가 아니다');
   assert.throws(() => ctx.counselRequestCheck_({ studentId: 's1' }, '2027-3-10', []), /today/);
   assert.throws(() => ctx.counselRequestCheck_({}, TODAY, []), /studentId/);
 });
 
-const R = (status, extra) => Object.assign({ id: 'q1', student_id: 's1', preferred_dates: '2027-03-12;2027-03-15', status }, extra || {});
+const R = (status, extra) => Object.assign({ id: 'q1', student_id: 's1', wish_dates: '2027-03-12;2027-03-15', status }, extra || {});
 const STAFF = { role: 'assigned' }, ME = { role: 'student', isSelf: true };
 const next = (st, action, actor, input) => plain(ctx.counselRequestNext_(R(st), action, actor, input || {}, TODAY));
 
@@ -43,8 +44,8 @@ test('counselRequestNext_ 상태표: 지금 상태 × 행동(담당교사·관�
     if (!OK[st][a]) assert.strictEqual(r.patch, null);
   }));
   assert.deepStrictEqual(next('신청', 'confirm', STAFF, input).patch, { status: '확정', decided_date: '2027-03-12' });
-  assert.deepStrictEqual(next('확정', 'reject', { role: 'admin' }, { reason: ' 그날 \n 출장 ' }).patch, { status: '반려', reject_reason: '그날 출장' });
-  assert.deepStrictEqual(next('확정', 'complete', STAFF, input).patch, { status: '완료', note_id: 'n1' });
+  assert.deepStrictEqual(next('확정', 'reject', { role: 'admin' }, { reason: ' 그날 \n 출장 ' }).patch, { status: '반려', cancel_reason: '그날 출장' });
+  assert.deepStrictEqual(next('확정', 'complete', STAFF, input).patch, { status: '완료', linked_note_id: 'n1' });
   assert.deepStrictEqual(next('신청', 'cancel', ME, {}).patch, { status: '취소', cancel_reason: '' });
 });
 

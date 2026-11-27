@@ -3,14 +3,17 @@
  * RULES 세션 소유(R24). 근거: docs/plan/stage6-rules-draft.md 2절, 결정 11·15·89~97, CLAUDE.md 6.
  * 순수 함수만 둔다(Apps Script 서비스·현재 시각 읽기 금지). 시트 행을 그대로 받고 아무것도 쓰지 않는다.
  *
- * 열 이름(시트 행 키) — S6-0(Schema)과 맞춘다. ASSUMPTION: S6-0이 다른 이름을 고르면 이 표만 바꾼다.
- *   career_profiles: id, student_id, term_id, version, hopes, targets, interests, strengths, concerns, parent_fields, submitted_at, status
- *   course_plans:    id, student_id, entry_year, grade, semester, group_name, course, status(계획·확정·취소), parent_public, confirmed_by, confirmed_at
- *   inquiry_records: id, student_id, source_id, recorded_at, source, standards, subject, title, question, liked,
- *                    progress, result_link, memo, file_id, name_mismatch, parent_public, status
- *   feedback:        id, student_id, target_kind, target_id, content, teacher_email, status
- *   counsel_requests: id, student_id, requester_email, preferred_dates, topic, memo, status, decided_date, reject_reason, cancel_reason, note_id
- *   counsel_notes:   (2단계 열) + agreement, agreement_to_parent, profile_version, request_id
+ * 열 이름(시트 행 키) = S6-0 Schema(docs/plan/s6-0-design.md 2절, 시트 열이 기준):
+ *   career_profiles: id, term_id, student_id, version, hopes, targets, interests, strengths, concerns, parent_fields, submitted_at, status, cancel_reason
+ *   course_plans:    id, term_id, student_id, entry_year, grade, semester, choice_group, course, state(계획·확정), confirmed_by, confirmed_at,
+ *                    show_to_parent, status(유효·취소), cancel_reason
+ *   inquiry_records: id, term_id, student_id, source_id, recorded_at, source, standards, subject, title, question, liked,
+ *                    progress, result_link, memo, file_id, name_mismatch, show_to_parent, status, cancel_reason
+ *   feedback:        id, term_id, student_id, target_kind, target_id, content, teacher_email, status, cancel_reason
+ *   counsel_requests: id, term_id, student_id, requester_email, wish_dates, topic, memo, status(신청·확정·완료·반려·취소), decided_date,
+ *                    linked_note_id, cancel_reason(반려·취소 공용 — 반려 사유는 학생에게 보임)
+ *   counsel_notes:   student_id, date, teacher_email, type, target, linked_violation_id, content, agreement, agreement_to_parent,
+ *                    profile_version, request_id, show_to_parent, status, cancel_reason
  * 가상 칸 teacher_name: 서버가 teacher_email을 교사 이름으로 바꿔 넣는 칸(학생·학부모에게 이메일을 내보내지 않는다).
  */
 
@@ -23,13 +26,14 @@ var S6_PROFILE_PUBLIC = ['hopes', 'targets', 'interests', 'strengths', 'concerns
  */
 var S6_TABLE = {
   profile: {
-    cols: ['id', 'student_id', 'term_id', 'version', 'hopes', 'targets', 'interests', 'strengths', 'concerns', 'parent_fields', 'submitted_at', 'status'],
+    cols: ['id', 'term_id', 'student_id', 'version', 'hopes', 'targets', 'interests', 'strengths', 'concerns', 'parent_fields', 'submitted_at', 'status', 'cancel_reason'],
     admin: 'ALL', assigned: 'ALL', homeroom: 'ALL', student: 'ALL', parent: 'PUBLIC', none: []
   },
   plan: {
-    cols: ['id', 'student_id', 'entry_year', 'grade', 'semester', 'group_name', 'course', 'status', 'parent_public', 'confirmed_by', 'confirmed_at'],
+    cols: ['id', 'term_id', 'student_id', 'entry_year', 'grade', 'semester', 'choice_group', 'course', 'state', 'confirmed_by', 'confirmed_at',
+      'show_to_parent', 'status', 'cancel_reason'],
     admin: 'ALL', assigned: 'ALL', homeroom: 'ALL',
-    student: ['id', 'student_id', 'entry_year', 'grade', 'semester', 'group_name', 'course', 'status', 'parent_public', 'confirmed_at'],
+    student: ['id', 'term_id', 'student_id', 'entry_year', 'grade', 'semester', 'choice_group', 'course', 'state', 'confirmed_at', 'show_to_parent', 'status'],
     parent: 'PUBLIC', none: []
   },
   recs: {   // 권장 이수 과목(참고 자료) — 학생 행이 아니다
@@ -37,34 +41,34 @@ var S6_TABLE = {
     admin: 'ALL', assigned: 'ALL', homeroom: 'ALL', student: 'ALL', parent: [], none: []
   },
   inquiry: {
-    cols: ['id', 'student_id', 'source_id', 'recorded_at', 'source', 'standards', 'subject', 'title', 'question', 'liked',
-      'progress', 'result_link', 'memo', 'file_id', 'name_mismatch', 'parent_public', 'status'],
+    cols: ['id', 'term_id', 'student_id', 'source_id', 'recorded_at', 'source', 'standards', 'subject', 'title', 'question', 'liked',
+      'progress', 'result_link', 'memo', 'file_id', 'name_mismatch', 'show_to_parent', 'status', 'cancel_reason'],
     // 원본 파일 id는 관리자만(정리용, 결정 100). '이름 다름' 표시는 교사만(결정 93)
     admin: 'ALL',
-    assigned: ['id', 'student_id', 'source_id', 'recorded_at', 'source', 'standards', 'subject', 'title', 'question', 'liked',
-      'progress', 'result_link', 'memo', 'name_mismatch', 'parent_public', 'status'],
-    homeroom: ['id', 'student_id', 'source_id', 'recorded_at', 'source', 'standards', 'subject', 'title', 'question', 'liked',
-      'progress', 'result_link', 'memo', 'name_mismatch', 'parent_public', 'status'],
-    student: ['id', 'student_id', 'source_id', 'recorded_at', 'source', 'standards', 'subject', 'title', 'question', 'liked',
-      'progress', 'result_link', 'memo', 'parent_public', 'status'],
+    assigned: ['id', 'term_id', 'student_id', 'source_id', 'recorded_at', 'source', 'standards', 'subject', 'title', 'question', 'liked',
+      'progress', 'result_link', 'memo', 'name_mismatch', 'show_to_parent', 'status', 'cancel_reason'],
+    homeroom: ['id', 'term_id', 'student_id', 'source_id', 'recorded_at', 'source', 'standards', 'subject', 'title', 'question', 'liked',
+      'progress', 'result_link', 'memo', 'name_mismatch', 'show_to_parent', 'status', 'cancel_reason'],
+    student: ['id', 'term_id', 'student_id', 'source_id', 'recorded_at', 'source', 'standards', 'subject', 'title', 'question', 'liked',
+      'progress', 'result_link', 'memo', 'show_to_parent', 'status'],
     parent: 'PUBLIC', none: []
   },
   feedback: {   // 결정 91: 학부모에게 보이지 않는다
-    cols: ['id', 'student_id', 'target_kind', 'target_id', 'content', 'teacher_email', 'status'],
+    cols: ['id', 'term_id', 'student_id', 'target_kind', 'target_id', 'content', 'teacher_email', 'status', 'cancel_reason'],
     admin: 'ALL', assigned: 'ALL', homeroom: 'ALL',
-    student: ['id', 'student_id', 'target_kind', 'target_id', 'content', 'teacher_name', 'status'],
+    student: ['id', 'term_id', 'student_id', 'target_kind', 'target_id', 'content', 'teacher_name', 'status'],
     parent: [], none: []
   },
   request: {   // 결정 95·96: 반려 사유는 학생에게 보임, 담임은 날짜·주제·상태만(메모 없음), 학부모 —
-    cols: ['id', 'student_id', 'requester_email', 'preferred_dates', 'topic', 'memo', 'status', 'decided_date', 'reject_reason', 'cancel_reason', 'note_id'],
+    cols: ['id', 'term_id', 'student_id', 'requester_email', 'wish_dates', 'topic', 'memo', 'status', 'decided_date', 'linked_note_id', 'cancel_reason'],
     admin: 'ALL', assigned: 'ALL',
-    homeroom: ['id', 'student_id', 'preferred_dates', 'topic', 'status', 'decided_date'],
-    student: ['id', 'student_id', 'preferred_dates', 'topic', 'memo', 'status', 'decided_date', 'reject_reason', 'cancel_reason'],
+    homeroom: ['id', 'student_id', 'wish_dates', 'topic', 'status', 'decided_date'],
+    student: ['id', 'term_id', 'student_id', 'wish_dates', 'topic', 'memo', 'status', 'decided_date', 'cancel_reason'],
     parent: [], none: []
   },
   note: {   // 결정 94: 학생은 날짜·교사·합의 사항만. 학부모는 날짜·교사(show_to_parent) + 공개한 합의 사항(결정 90)
-    cols: ['id', 'student_id', 'date', 'teacher_email', 'type', 'target', 'linked_violation_id', 'content', 'show_to_parent',
-      'status', 'cancel_reason', 'agreement', 'agreement_to_parent', 'profile_version', 'request_id'],
+    cols: ['id', 'student_id', 'date', 'teacher_email', 'type', 'target', 'linked_violation_id', 'content', 'agreement', 'agreement_to_parent',
+      'profile_version', 'request_id', 'show_to_parent', 'status', 'cancel_reason'],
     admin: 'ALL', assigned: 'ALL', homeroom: 'ALL',
     student: ['id', 'date', 'teacher_name', 'agreement'],
     parent: 'PUBLIC', none: []
@@ -77,7 +81,7 @@ var S6_TABLE = {
 
 /** 학부모 공개분으로 보이는 칸(그 항목이 공개일 때). profile은 공개 항목 자체. */
 var S6_PARENT_SHOW = {
-  plan: ['grade', 'semester', 'group_name', 'course', 'status'],
+  plan: ['grade', 'semester', 'choice_group', 'course', 'state'],
   inquiry: ['recorded_at', 'source', 'standards', 'subject', 'title', 'question', 'progress', 'result_link', 'memo']
 };
 
@@ -91,7 +95,8 @@ function s6True_(v) {
  * kind 'profile'|'plan'|'recs'|'inquiry'|'feedback'|'request'|'note'|'timeline', row = 그 기록 행,
  * opts = {isLatest}(학부모 + profile: 가장 최근 제출 버전일 때만 — 결정 89).
  * → 보여 줄 칸 이름 배열([]이면 못 봄). 서버는 이 배열의 칸만 응답에 담는다.
- * - role은 서버가 정한다: 'assigned' = 그 기록이 생긴 운영 기간의 담당교사(결정 97), 'homeroom' = 자기 반 담임. 그 밖의 교사는 'none'.
+ * - role은 서버가 정한다: 'assigned' = 그 기록의 term_id 운영 기간에 그 학생의 담당교사였던 사람(결정 97 — 권한 키는 '지금' 담당을 보므로
+ *   지난 기록은 기능 함수가 기록의 term_id로 다시 판정해 넘긴다), 'homeroom' = 자기 반 담임. 그 밖의 교사는 'none'.
  * - student는 isSelf, parent는 isChild가 아니면 [].
  * - 학생·학부모는 취소된 기록을 보지 않는다(단 학생 본인의 상담 신청은 취소·반려도 본다 — 사유 확인).
  * - 모르는 role·kind는 [] (기본 못 봄).
@@ -119,7 +124,7 @@ function s6Visible_(viewer, kind, row, opts) {
 /**
  * 학부모 공개 표시를 읽어 학부모에게 보일 칸 이름 배열. 표시가 비었거나 모르는 값이면 [](기본 비공개, 결정 15).
  * - profile: parent_fields = 공개 항목 이름 ';' 목록(예 'hopes;targets') 중 S6_PROFILE_PUBLIC에 있는 것만, 그 순서로.
- * - plan·inquiry: parent_public이 TRUE면 S6_PARENT_SHOW의 칸.
+ * - plan·inquiry: 그 줄의 show_to_parent가 TRUE면 S6_PARENT_SHOW의 칸.
  * - note: agreement_to_parent가 TRUE이고 합의 사항이 있으면 ['agreement'](결정 90, 건마다·기본 비공개).
  * 교사 피드백은 어느 항목을 공개해도 따라가지 않는다(결정 91 — feedback은 판정표에서 학부모 []).
  */
@@ -130,7 +135,7 @@ function s6ParentFields_(row, kind) {
     ruleStr_(r.parent_fields).split(/[;,\s]+/).forEach(function (f) { if (f) picked[f] = true; });
     return S6_PROFILE_PUBLIC.filter(function (f) { return picked[f]; });
   }
-  if (k === 'plan' || k === 'inquiry') return s6True_(r.parent_public) ? S6_PARENT_SHOW[k].slice() : [];
+  if (k === 'plan' || k === 'inquiry') return s6True_(r.show_to_parent) ? S6_PARENT_SHOW[k].slice() : [];
   if (k === 'note') return s6True_(r.agreement_to_parent) && ruleStr_(r.agreement) ? ['agreement'] : [];
   return [];
 }
@@ -187,7 +192,7 @@ function s6Timeline_(sources, studentId, opts) {
   mine(s.profiles).forEach(function (r) { push(r.submitted_at, 'profile', '진로 프로필 ' + ruleStr_(r.version) + '번째 제출', '', r.id); });
   mine(s.plans).forEach(function (r) {
     push(r.confirmed_at || r.created_at, 'plan', '이수 계획: ' + ruleStr_(r.grade) + '학년 ' + ruleStr_(r.semester) + '학기 ' + ruleStr_(r.course),
-      ruleStr_(r.status), r.id);
+      ruleStr_(r.state), r.id);
   });
   mine(s.inquiries).forEach(function (r) { push(r.recorded_at, 'inquiry', '탐구: ' + ruleStr_(r.title), ruleStr_(r.progress), r.id); });
   mine(s.notes).forEach(function (r) { push(r.date, 'note', '상담', ruleStr_(r.agreement), r.id); });
