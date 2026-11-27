@@ -21,6 +21,18 @@ function build(screens) {
     '<script>' + (screens || SCREENS_2()) + '</script></body></html>';
 }
 
+/** 글꼴 링크(jsDelivr의 Pretendard, 결정 88): PRETENDARD_DIR이 있으면 그 파일을, 없으면 빈 CSS(기기 기본 글꼴)를 준다. 바깥 통신은 하지 않는다 */
+async function routeFont(page) {
+  const BASE = 'https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/', DIR = process.env.PRETENDARD_DIR || '';
+  await page.route('https://cdn.jsdelivr.net/**', (route) => {
+    const url = route.request().url().split('?')[0];
+    const rel = url.indexOf(BASE) === 0 ? url.slice(BASE.length).replace('.min.css', '.css') : '';
+    const file = DIR && rel ? path.join(DIR, 'dist', 'web', 'variable', rel) : '';
+    const type = /\.css$/.test(url) ? 'text/css' : 'font/woff2';
+    route.fulfill({ status: 200, contentType: type, headers: { 'access-control-allow-origin': '*' }, body: file && fs.existsSync(file) ? fs.readFileSync(file) : '' });
+  });
+}
+
 async function main(OUT = OUT2, screens) {
   fs.mkdirSync(OUT, { recursive: true });
   const file = path.join(OUT, 'index.html');
@@ -37,9 +49,10 @@ async function main(OUT = OUT2, screens) {
       const page = await browser.newPage({ viewport: { width: size.w, height: size.h }, deviceScaleFactor: 1, locale: 'ko-KR' });
       const errors = [];
       page.on('pageerror', (e) => errors.push(e.message));
+      await routeFont(page);
       await page.goto('file://' + file + '#' + s.id);
       await page.waitForSelector('body[data-ready="1"]');
-      await page.waitForTimeout(60);
+      await page.evaluate(() => document.fonts.ready); await page.waitForTimeout(120);
       const info = await page.evaluate(() => {
         const vis = (e) => e.offsetParent !== null || getComputedStyle(e).position === 'fixed';
         const small = Array.from(document.querySelectorAll('.btn,.chip,.seg,.tab,.picker-item,.duty-day,.back,select,input:not([type=checkbox]),.check,textarea'))
