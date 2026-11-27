@@ -75,7 +75,7 @@
           result.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: '퇴실시키지 않고 건너뛰는 학생 ' + last.skipped.length + '명(이유는 아래 목록)' }));
         }
         result.appendChild(el('div', { class: 'muted', style: 'margin:8px 0 4px', text: '퇴실시키지 않을 학생은 체크를 풀어 주세요. 체크한 ' + last.count + '명이 퇴실합니다.' }));
-        var list = el('div', { style: 'max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px 8px' });
+        var list = el('div', { style: 'max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius-sm);padding:4px 8px' });
         last.list.forEach(function (l) {
           var cb = el('input', { type: 'checkbox', style: 'flex:0 0 auto;width:22px;height:22px' });
           cb.checked = !l.excluded && !l.skipped;

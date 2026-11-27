@@ -7,7 +7,7 @@
   .cal-head { text-align: center; font-size: .8rem; color: var(--muted); padding: 4px 0; }
   .cal-cell { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px; min-height: 52px; padding: 4px 0;
     border: 1px solid var(--line); border-radius: 0; margin: 0 -1px -1px 0; background: var(--card); color: var(--text); font: inherit; cursor: pointer; }
-  .cal-cell.off { background: #eceff3; color: var(--muted); }
+  .cal-cell.off { background: var(--muted-weak); color: var(--muted); }
   .cal-cell.today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
   .cal-cell.sel { box-shadow: inset 0 -4px 0 var(--accent); }   /* 고른 날 = 아래 굵은 줄(배경색은 일정 있는 날 .has가 쓴다) */
   .cal-cell.today.sel { box-shadow: inset 0 0 0 1px var(--accent), inset 0 -4px 0 var(--accent); }
@@ -82,7 +82,7 @@
 
     function eventRow(e, withCancel) {
       var row = el('div', { class: 'ev-row' }, [
-        el('div', { style: 'display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap' }, [el('b', { text: e.title }), UI.statusPill('todo', e.kind)]),
+        el('div', { style: 'display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap' }, [el('b', { text: e.title }), UI.statusPill('mute', e.kind)]),
         el('div', { class: 'muted', text: range(e) + (e.days > 1 ? ' (' + e.days + '일)' : '') }),
         e.memo ? el('div', { text: e.memo }) : null
       ]);
