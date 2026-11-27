@@ -10,20 +10,22 @@ var COUNSEL_REQ_MEMO_MAX = 500;
 var COUNSEL_REQ_REASON_MAX = 200;
 var COUNSEL_AGREEMENT_MAX = 1000;
 var COUNSEL_REQ_OPEN = ['신청', '확정'];   // 처리되지 않은 신청(결정 95: 1건만)
+var COUNSEL_DEFAULT_TOPICS = ['학업', '생활', '진로', '진학', '건강', '가정', '기타'];   // settings counsel.types 기본값(총괄: '진학' 추가)
 
 /**
  * 학생 상담 신청 검사. input = {studentId, dates:['yyyy-MM-dd'…], topic, memo}, today 'yyyy-MM-dd',
  * existing = counsel_requests 행(그 학생 것이 아니어도 된다), opts = {topics}(기본 상담일지 유형 목록).
- * → {row:{student_id, preferred_dates('a;b;c' 정렬), topic, memo, status:'신청'}, errors:[]}
+ * → {row:{student_id, wish_dates('a;b;c' 정렬), topic, memo, status:'신청'}, errors:[]}
  * - 희망 날짜 1~3개(결정 95), 날짜 형식, 오늘 이후(오늘 포함), 중복 없음.
- * - 주제는 opts.topics 중 하나. ASSUMPTION: 상담 신청 주제 목록 = 상담일지 유형(settings counsel.types, 기본 학업·생활·진로·건강·가정·기타).
+ * - 주제는 opts.topics('2OUT 학부모 면담'은 빼고 쓴다) 중 하나. 주제 목록 = 상담일지 유형(settings counsel.types, 총괄 승인 — 기본값에 '진학'을 더함).
+ * requester_email·term_id는 서버가 채운다.
  * - 메모는 500자까지(빈칸 허용).
  * - 처리되지 않은(신청·확정) 신청이 이미 있으면 오류 — 취소한 뒤 다시 낸다(결정 95).
  * requester_email은 서버가 로그인 계정으로 채운다(결정 16: 신청은 학생만).
  */
 function counselRequestCheck_(input, today, existing, opts) {
   var i = input || {}, errors = [], sid = ruleStr_(i.studentId);
-  var topics = ((opts || {}).topics || ['학업', '생활', '진로', '건강', '가정', '기타']).map(ruleStr_);
+  var topics = ((opts || {}).topics || COUNSEL_DEFAULT_TOPICS).map(ruleStr_).filter(function (t) { return t && t !== '2OUT 학부모 면담'; });
   if (!ymdIsValid_(ruleStr_(today))) throw new Error('today는 yyyy-MM-dd여야 합니다: ' + today);
   if (!sid) throw new Error('studentId가 비어 있습니다');
   var dates = (Array.isArray(i.dates) ? i.dates : []).map(ruleStr_).filter(Boolean);
@@ -43,7 +45,7 @@ function counselRequestCheck_(input, today, existing, opts) {
   var open = (existing || []).some(function (r) { return r && ruleStr_(r.student_id) === sid && COUNSEL_REQ_OPEN.indexOf(ruleStr_(r.status)) >= 0; });
   if (open) errors.push('아직 처리되지 않은 상담 신청이 있습니다. 그 신청을 취소한 뒤 다시 내 주세요.');
   var sorted = Object.keys(seen).filter(ymdIsValid_).sort();
-  return { row: errors.length ? null : { student_id: sid, preferred_dates: sorted.join(';'), topic: topic, memo: memo, status: '신청' }, errors: errors };
+  return { row: errors.length ? null : { student_id: sid, wish_dates: sorted.join(';'), topic: topic, memo: memo, status: '신청' }, errors: errors };
 }
 
 /**
@@ -51,9 +53,10 @@ function counselRequestCheck_(input, today, existing, opts) {
  * input = {date, reason, noteId}, today 'yyyy-MM-dd'(confirm에서 지난 날 거르기).
  * → {patch, errors}
  *   confirm  (담당교사·관리자) 신청 → 확정: input.date는 희망 날짜 중 하나, 오늘 이후. patch {status:'확정', decided_date}
- *            ASSUMPTION: 희망 날짜 밖의 날은 고르지 않는다(맞는 날이 없으면 사유를 적어 반려하고 학생이 다시 신청).
- *   reject   (담당교사·관리자) 신청·확정 → 반려: 사유 필수(학생에게 보임, 결정 95). patch {status:'반려', reject_reason}
- *   complete (담당교사·관리자) 확정 → 완료: input.noteId(상담일지 id) 필수. patch {status:'완료', note_id}
+ *            희망 날짜 밖의 날은 고르지 않는다(총괄 승인: 맞는 날이 없으면 반려 + 사유 '다른 날짜로 다시 신청').
+ *   reject   (담당교사·관리자) 신청·확정 → 반려: 사유 필수(학생에게 보임, 결정 95). patch {status:'반려', cancel_reason}
+ *            확정 뒤 상담을 못 한 경우도 반려 + 사유(화면 버튼 이름만 '상담 못 함', 총괄).
+ *   complete (담당교사·관리자) 확정 → 완료: input.noteId(상담일지 id) 필수. patch {status:'완료', linked_note_id}
  *   cancel   (학생 본인) 신청·확정 → 취소: 사유 선택. patch {status:'취소', cancel_reason}
  * 완료·반려·취소에서는 다른 상태로 가지 않는다. 담임·다른 교사는 처리하지 못한다.
  */
@@ -69,7 +72,7 @@ function counselRequestNext_(request, action, actor, input, today) {
     case 'confirm':
       if (!staff) return fail('담당 선생님만 상담 날짜를 정할 수 있습니다.');
       if ((why = from(['신청'], '날짜를 정할'))) return fail(why);
-      var d = ruleStr_(i.date), wish = ruleStr_(r.preferred_dates).split(';').filter(Boolean);
+      var d = ruleStr_(i.date), wish = ruleStr_(r.wish_dates).split(';').filter(Boolean);
       if (wish.indexOf(d) < 0) return fail('학생이 고른 희망 날짜 중 하나를 골라 주세요. 맞는 날이 없으면 사유를 적어 반려해 주세요.');
       if (ymdIsValid_(ruleStr_(today)) && d < today) return fail(ymdKo_(d, today) + '은 지난 날입니다. 다른 희망 날짜를 고르거나 반려해 주세요.');
       return { patch: { status: '확정', decided_date: d }, errors: [] };
@@ -78,12 +81,12 @@ function counselRequestNext_(request, action, actor, input, today) {
       if ((why = from(['신청', '확정'], '반려할'))) return fail(why);
       if (!reason) return fail('반려 사유가 비어 있습니다. 학생에게 보일 사유를 적어 주세요.');
       if (reason.length > COUNSEL_REQ_REASON_MAX) return fail('반려 사유는 ' + COUNSEL_REQ_REASON_MAX + '자까지 적을 수 있습니다.');
-      return { patch: { status: '반려', reject_reason: reason }, errors: [] };
+      return { patch: { status: '반려', cancel_reason: reason }, errors: [] };
     case 'complete':
       if (!staff) return fail('담당 선생님만 상담을 마칠 수 있습니다.');
       if ((why = from(['확정'], '완료로 바꿀'))) return fail(why);
       if (!ruleStr_(i.noteId)) return fail('이 신청과 이을 상담일지가 없습니다. 상담일지를 먼저 저장해 주세요.');
-      return { patch: { status: '완료', note_id: ruleStr_(i.noteId) }, errors: [] };
+      return { patch: { status: '완료', linked_note_id: ruleStr_(i.noteId) }, errors: [] };
     case 'cancel':
       if (role !== 'student' || !a.isSelf) return fail('상담 신청은 신청한 학생만 취소할 수 있습니다. 반려하려면 [반려]를 눌러 주세요.');
       if ((why = from(['신청', '확정'], '취소할'))) return fail(why);

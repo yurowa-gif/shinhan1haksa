@@ -200,7 +200,7 @@ function careerNextParentFields_(profiles, studentId)   // 새 버전 공개 항
 function careerPublishPlan_(current, request)  // request = {fields:{항목:bool}} → {patch:{parent_fields}, added, removed, notice, errors}
 function careerMissing_(enrollments, changes, profiles, term, today, opts)   // term = {id, career_due}, opts = {graceDays} → [{studentId, since, lastSubmittedAt}]
 function coursePlanCheck_(curriculum, entryYear, selections, existing)       // → {rows, errors, warnings}
-function coursePlanDiff_(existing, studentId, rows)   // → {toAdd, toCancel:[id], same}
+function coursePlanDiff_(existing, studentId, rows, termId)   // → {toAdd, toCancel:[id], same}
 function coursePlanConfirm_(existing, studentId, ids, teacherEmail, now)     // → {patches:[{id, patch}], errors}
 function careerCourseName_(name, nameMap)      // 과목 이름 맞추기(course_name_map.csv)
 function courseRecsFor_(recs, targets, opts)   // opts = {baseYear, nameMap} → [{university, unit, target, match, core, recommended, baseYear, sourceTitle, sourceUrl, note}]
@@ -499,30 +499,30 @@ function inquiryCleanupTargets_(records, changes, today, opts)    // opts = {yea
 
 근거: `docs/plan/stage6-rules-draft.md` 2절(판정표)·3.3·3.4, 결정 89~97·101. 학생·학부모 신원은 `portalWho_()`(결정 82)가 정하고, 서버가 `viewer`를 만들어 넘긴다.
 
-- **열 이름**: `Stage6Rules.gs` 머리말에 적었다(`career_profiles`·`course_plans`·`inquiry_records`·`feedback`·`counsel_requests`, `counsel_notes` 새 열). S6-0(Schema)이 다른 이름을 고르면 그 표만 맞춘다(ASSUMPTION).
+- **열 이름** = S6-0 Schema(`docs/plan/s6-0-design.md` 2절, 시트 열이 기준). `Stage6Rules.gs` 머리말에 옮겼다. 이수 계획·탐구의 학부모 공개는 줄마다 `show_to_parent`, 진로 프로필은 `parent_fields`, 합의 사항은 `agreement_to_parent`. 이수 계획은 `state`(계획·확정)와 `status`(유효·취소)가 따로다. 상담 신청은 `wish_dates`·`linked_note_id`, 반려·취소 사유는 `cancel_reason` 한 칸.
 - **`s6Visible_`**: 판정표를 상수 `S6_TABLE`로 둔다. 서버는 돌려받은 칸만 응답에 담는다(`s6Pick_`). 확정한 칸:
   - 피드백은 학부모 —(결정 91), 학생 상담은 날짜·교사·합의 사항만(유형·내용 없음, 결정 94), 담임의 상담 신청은 날짜·주제·상태만(메모 없음, 결정 96), 반려 사유는 학생에게 보임(결정 95).
-  - 학부모 진로 프로필은 `opts.isLatest`(가장 최근 제출 버전)일 때 공개 항목만(결정 89). 이수 계획·탐구는 행의 `parent_public`이 TRUE일 때 정해진 칸만. 상담은 `show_to_parent`가 TRUE일 때 날짜·교사 + `agreement_to_parent`가 TRUE인 합의 사항(결정 90).
+  - 학부모 진로 프로필은 `opts.isLatest`(가장 최근 제출 버전)일 때 공개 항목만(결정 89). 이수 계획·탐구는 그 줄의 `show_to_parent`가 TRUE일 때 정해진 칸만. 상담은 `show_to_parent`가 TRUE일 때 날짜·교사 + `agreement_to_parent`가 TRUE인 합의 사항(결정 90).
   - 탐구 원본 파일 id(`file_id`)는 관리자만(결정 100), '이름 다름'(`name_mismatch`)은 교사만(결정 93).
   - 학생·학부모는 취소된 기록을 보지 않는다(학생 본인 상담 신청만 예외 — 취소·반려 사유 확인). 공개를 거두면 다음 응답부터 바로 사라진다(결정 92, 흔적 없음 — 켜고 끈 기록은 서버가 audit_log에).
-  - `role`은 서버가 정한다: `assigned` = **그 기록이 생긴 운영 기간**의 담당교사(결정 97), `homeroom` = 자기 반 담임, 그 밖의 교사는 `none`. 학생 `isSelf`·학부모 `isChild`가 아니면 [].
+  - `role`은 서버가 정한다: `assigned` = **그 기록의 `term_id` 운영 기간**에 그 학생의 담당교사였던 사람(결정 97 — 권한 키는 '지금' 담당을 보므로, 지난 기록은 기능 함수가 기록의 `term_id`로 다시 판정해 넘긴다), `homeroom` = 자기 반 담임, 그 밖의 교사는 `none`. 학생 `isSelf`·학부모 `isChild`가 아니면 [].
   - 가상 칸 `teacher_name`: 학생에게는 `teacher_email` 대신 이 칸을 준다(서버가 이름으로 채움).
-  - ASSUMPTION: `show_to_parent`가 FALSE인 상담은 합의 사항을 공개했어도 학부모에게 그 상담 자체가 보이지 않는다.
+  - `show_to_parent`가 FALSE인 상담은 합의 사항을 공개했어도 학부모에게 그 상담 자체가 보이지 않는다(총괄 승인).
 - **`s6CanWrite_`**: 학생 본인(진로 제출·공개, 이수 계획, 탐구 올리기·진행·공개, 상담 신청·취소, 합의 사항 공개)·담당교사(이수 계획 확정, 피드백, 상담일지)·담당교사와 관리자(상담 신청 처리). 담임은 쓰지 않는다. `ctx.active`(지금 학사생)가 아니면 누구도 새로 쓰거나 고치지 않는다(결정 97 — 보기는 그대로).
 - **`s6Timeline_`**: 취소 행을 빼고 시간 내림차순. 상담 줄은 '상담' + 합의 사항(내용·유형 없음), OUT은 '1OUT: 항목', 출결은 확정 특이사항만.
-- **`counselRequestCheck_`**: 희망 날짜 1~3개(오늘 포함 이후·중복 없음, 결정 95), 주제(ASSUMPTION: 상담일지 유형 목록 `counsel.types`), 메모 500자, 처리되지 않은(신청·확정) 신청이 있으면 거부.
-- **`counselRequestNext_`**: 신청 → 확정(희망 날짜 중 하나, ASSUMPTION: 밖의 날은 고르지 않고 반려) / 신청·확정 → 반려(사유 필수 200자) / 확정 → 완료(상담일지 id) / 신청·확정 → 취소(학생 본인). 완료·반려·취소는 끝.
-- **`counselNoteCheck_`**: 6단계 칸만(기본 칸은 `CounselLog.gs` `cnlValidate_`). 합의 사항 1000자. ASSUMPTION: 합의 사항 학부모 공개는 학생만 켠다(`opts.byStudent`) — 교사 저장은 늘 FALSE. 참고 버전은 그 학생의 살아 있는 버전, 진로(옛 값 진학) 상담인데 비면 경고. 신청 연결은 '확정' 신청만.
+- **`counselRequestCheck_`**: 희망 날짜 1~3개(오늘 포함 이후·중복 없음, 결정 95), 주제(상담일지 유형 `counsel.types`에서 '2OUT 학부모 면담'을 뺀 목록, 기본 학업·생활·진로·진학·건강·가정·기타 — 총괄 승인), 메모 500자, 처리되지 않은(신청·확정) 신청이 있으면 거부.
+- **`counselRequestNext_`**: 신청 → 확정(`decided_date` = 희망 날짜 중 하나, 총괄 승인: 다른 날이면 반려 + 사유) / 신청·확정 → 반려(`cancel_reason` 필수 200자, 학생에게 보임. 확정 뒤 상담을 못 한 경우도 반려 — 화면 버튼만 '상담 못 함') / 확정 → 완료(`linked_note_id`) / 신청·확정 → 취소(학생 본인, `cancel_reason` 선택). 완료·반려·취소는 끝.
+- **`counselNoteCheck_`**: 6단계 칸만(기본 칸은 `CounselLog.gs` `cnlValidate_`). 합의 사항 1000자. 합의 사항 학부모 공개는 학생만 켠다(`opts.byStudent`, 총괄 승인) — 교사 저장은 늘 FALSE. 참고 버전은 그 학생의 살아 있는 버전, 진로(옛 값 진학) 상담인데 비면 경고. 신청 연결은 '확정' 신청만.
 
 ## 동작 메모(R25, 2026-11-27) — 진로 프로필·이수 계획
 
-근거: stage6-rules-draft 3.1, 결정 14·15·89·92·98·99·101. 열 이름은 `Stage6Rules.gs` 머리말. 편제표·권장 과목은 시트 모양 승인 전(결정 101)이라 **행 배열을 인자로** 받는다: 편제 행 `entry_year, grade, semester, group_name, pick_n, course`, 권장 과목 행은 `data/course_recommendations/course_recommendations.csv` 열 그대로(`core_courses`·`recommended_courses`는 `;` 목록).
+근거: stage6-rules-draft 3.1, 결정 14·15·89·92·98·99·101. 열 이름은 `Stage6Rules.gs` 머리말. 편제표·권장 과목은 시트 모양 승인 전(결정 101)이라 **행 배열을 인자로** 받는다: 편제 행 `entry_year, grade, semester, choice_group, pick_n, course, status`(s6-0-design 8절 제안안 A, 취소 행은 쓰지 않음), 권장 과목 행은 `data/course_recommendations/course_recommendations.csv` 열 그대로(`core_courses`·`recommended_courses`는 `;` 목록).
 
 - `careerProfileCheck_`: 희망 1~3순위(1순위 필수, 중복 없음, 순위 순 저장), 목표 진학 0~6개(대학·학과 필수), 글 칸 1000자. 희망·목표는 JSON 글자 한 칸씩(초안 4절).
 - 버전(F15 덮어쓰지 않음): `careerNextVersion_`은 취소 행까지 세어 번호를 다시 쓰지 않는다. `careerLatest_`는 살아 있는 가장 큰 버전. 새 버전의 공개 항목은 `careerNextParentFields_`로 이어받는다(결정 89). 학부모에게는 최근 버전만 — `s6Visible_(…, {isLatest})`.
 - `careerPublishPlan_`: 적지 않은 항목은 그대로, 모르는 항목은 오류, 거둔 항목이 있으면 학생 안내 '학부모님이 이미 보신 내용은 되돌릴 수 없습니다.'(결정 92). 켜고 끈 기록은 서버가 audit_log.
-- `careerMissing_`(결정 98): 마감일(`term.career_due`)이 없거나 오늘이 마감 전이면 []. 대상 = 그 기간 등록생 중 오늘 학사 입실인 학생: 마감일에 입실이었으면 마감일부터, 마감 뒤 입실했으면 **입실일 + 14일**부터 센다. 제출 = 그 기간(`term_id`)의 살아 있는 버전. ASSUMPTION: 마감일에 입실이었다가 퇴실 뒤 다시 들어온 학생은 유예 없이 센다.
-- 이수 계획(결정 99): `coursePlanCheck_` — 편제에 없는 과목·택N 초과(F15)·같은 학년·학기 같은 과목 두 번은 오류. ASSUMPTION: 택N이 비거나 0인 묶음(공통·필수)은 개수를 보지 않는다. 확정 줄을 빼면 경고. `coursePlanDiff_` — 과목 줄마다: 같은 줄은 그대로(확정 유지), 새 과목은 새 '계획' 줄, 빠진 과목은 취소. 같은 계획을 다시 저장하면 0건. ASSUMPTION: 새 줄의 학부모 공개는 그 학생의 살아 있는 줄 중 하나라도 공개면 TRUE(계획 전체 단위로 이어받음). `coursePlanConfirm_` — 담당교사 확인 = '계획' 줄을 '확정' + `confirmed_by`·`confirmed_at`(이미 확정은 0건, 취소·다른 학생 줄은 오류).
+- `careerMissing_`(결정 98): 마감일(`term.career_due`)이 없거나 오늘이 마감 전이면 []. 대상 = 그 기간 등록생 중 오늘 학사 입실인 학생: 마감일에 입실이었으면 마감일부터, 마감 뒤 입실했으면 **입실일 + 14일**부터 센다. 제출 = 그 기간(`term_id`)의 살아 있는 버전. 마감일에 입실이었다가 퇴실 뒤 다시 들어온 학생은 유예 없이 센다(총괄 승인).
+- 이수 계획(결정 99): `coursePlanCheck_` — 편제에 없는 과목·택N 초과(F15)·같은 학년·학기 같은 과목 두 번은 오류. 택N이 비거나 0인 묶음(공통·필수 — S6-0 제안: 필수는 `choice_group` 빈칸·`pick_n` 0)은 개수를 보지 않는다(총괄 승인). 확정 줄을 빼면 경고. `course_plans`는 `state`(계획·확정)와 `status`(유효·취소)가 따로다(S6-0). `coursePlanDiff_` — 과목 줄마다: 같은 줄은 그대로(확정 유지), 새 과목은 새 줄(`state` 계획, `status` 유효, `term_id` = 쓴 때의 기간), 빠진 과목은 `status` 취소. 같은 계획을 다시 저장하면 0건. 새 줄의 `show_to_parent`는 그 학생의 살아 있는 줄 중 하나라도 공개면 TRUE(계획 전체 단위로 이어받음, 총괄 승인). `coursePlanConfirm_` — 담당교사 확인 = `state` 계획 → 확정 + `confirmed_by`·`confirmed_at`(이미 확정은 0건, 취소·다른 학생 줄은 오류).
 - `courseRecsFor_`: 대학 이름 정확히, 모집단위 정확히 → 없으면 서로 포함하는 것 모두(match 'partial', 판정하지 않고 후보로). 그 대학의 최신 기준 연도만(`opts.baseYear`로 고정). 과목 이름은 `course_name_map.csv`(`opts.nameMap`)로 맞춘다.
 
 ## 동작 메모(R26, 2026-11-27) — 탐구 기록(신한고 탐구발견)

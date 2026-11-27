@@ -2,7 +2,7 @@
  * F15 진로 프로필·이수 계획 규칙. RULES 세션 소유(R25). 근거: stage6-rules-draft 3.1, 결정 14·15·89·92·98·99.
  * 순수 함수만 둔다. Stage6Rules.gs(S6_PROFILE_PUBLIC·s6True_)·StatusRules.gs(statusOn_·statusRowOn_)·DateRules.gs를 부른다.
  * 열 이름은 Stage6Rules.gs 머리말. 편제표·권장 과목은 아직 시트 모양 승인 전이라(결정 101) 행 배열을 인자로 받는다:
- *   편제(curriculum) 행: entry_year, grade, semester, group_name, pick_n, course
+ *   편제(curriculum) 행: entry_year, grade, semester, choice_group, pick_n, course, status(취소 행은 쓰지 않음) — s6-0-design 8절 제안안 A
  *   권장 과목(recs) 행: data/course_recommendations/course_recommendations.csv 열 그대로 —
  *     base_year, university, unit, core_courses('a;b'), recommended_courses('a;b'), source_url, source_title, note
  */
@@ -137,12 +137,12 @@ function careerMissing_(enrollments, changes, profiles, term, today, opts) {
 }
 
 /** 편제 한 줄의 열쇠: 학년|학기|선택군 */
-function careerSlotKey_(r) { return [ruleStr_(r.grade), ruleStr_(r.semester), ruleStr_(r.group_name)].join('|'); }
+function careerSlotKey_(r) { return [ruleStr_(r.grade), ruleStr_(r.semester), ruleStr_(r.choice_group)].join('|'); }
 
 /**
  * 이수 계획 검사(학생이 고른 과목 전체). curriculum = 편제 행, entryYear = 그 학생 입학년도,
- * selections = [{grade, semester, group_name, course}], existing = 그 학생의 course_plans 행(같은 과목이 이미 확정인지 경고용).
- * → {rows:[{entry_year, grade, semester, group_name, course}], errors, warnings}
+ * selections = [{grade, semester, choice_group, course}], existing = 그 학생의 course_plans 행(같은 과목이 이미 확정인지 경고용).
+ * → {rows:[{entry_year, grade, semester, choice_group, course}], errors, warnings}
  * - 편제(그 입학년도·학년·학기·선택군)에 없는 과목은 오류.
  * - 선택군마다 고른 수 > 택N(pick_n)이면 오류(F15 '택N 초과는 막는다'). 택N이 비거나 0이면 그 선택군은 개수를 보지 않는다(ASSUMPTION: 공통·필수 과목 묶음).
  * - 같은 학년·학기에 같은 과목 두 번은 오류.
@@ -151,7 +151,7 @@ function careerSlotKey_(r) { return [ruleStr_(r.grade), ruleStr_(r.semester), ru
 function coursePlanCheck_(curriculum, entryYear, selections, existing) {
   var ey = ruleStr_(entryYear), errors = [], warnings = [], cur = {}, picked = {}, seenCourse = {}, rows = [];
   (curriculum || []).forEach(function (c) {
-    if (!c || ruleStr_(c.entry_year) !== ey) return;
+    if (!c || ruleStr_(c.entry_year) !== ey || ruleStr_(c.status) === '취소') return;
     var k = careerSlotKey_(c), slot = cur[k] = cur[k] || { pickN: 0, courses: {} };
     var n = Number(ruleStr_(c.pick_n));
     if (n > slot.pickN) slot.pickN = n;
@@ -161,13 +161,13 @@ function coursePlanCheck_(curriculum, entryYear, selections, existing) {
   (selections || []).forEach(function (s) {
     s = s || {};
     var k = careerSlotKey_(s), course = careerTxt_(s.course), slot = cur[k];
-    var where = ruleStr_(s.grade) + '학년 ' + ruleStr_(s.semester) + '학기 ' + ruleStr_(s.group_name);
+    var where = ruleStr_(s.grade) + '학년 ' + ruleStr_(s.semester) + '학기 ' + ruleStr_(s.choice_group);
     if (!slot || !slot.courses[course]) { if (Object.keys(cur).length) errors.push(where + '에 ' + course + ' 과목이 없습니다. 편제에 있는 과목을 골라 주세요.'); return; }
     var ck = ruleStr_(s.grade) + '|' + ruleStr_(s.semester) + '|' + course;
     if (seenCourse[ck]) { errors.push(ruleStr_(s.grade) + '학년 ' + ruleStr_(s.semester) + '학기에 ' + course + ' 과목을 두 번 골랐습니다. 한 번만 골라 주세요.'); return; }
     seenCourse[ck] = true;
     picked[k] = (picked[k] || 0) + 1;
-    rows.push({ entry_year: ey, grade: ruleStr_(s.grade), semester: ruleStr_(s.semester), group_name: ruleStr_(s.group_name), course: course });
+    rows.push({ entry_year: ey, grade: ruleStr_(s.grade), semester: ruleStr_(s.semester), choice_group: ruleStr_(s.choice_group), course: course });
   });
   Object.keys(picked).sort().forEach(function (k) {
     var n = cur[k].pickN, p = k.split('|');
@@ -176,7 +176,7 @@ function coursePlanCheck_(curriculum, entryYear, selections, existing) {
   var keep = {};
   rows.forEach(function (r) { keep[careerSlotKey_(r) + '|' + r.course] = true; });
   (existing || []).forEach(function (e) {
-    if (e && ruleStr_(e.status) === '확정' && !keep[careerSlotKey_(e) + '|' + careerTxt_(e.course)]) {
+    if (e && ruleStr_(e.status) !== '취소' && ruleStr_(e.state) === '확정' && !keep[careerSlotKey_(e) + '|' + careerTxt_(e.course)]) {
       warnings.push('담당 선생님이 확인한 ' + ruleStr_(e.grade) + '학년 ' + ruleStr_(e.semester) + '학기 ' + careerTxt_(e.course) + ' 과목을 뺍니다. 바꾼 계획은 다시 확인을 받아야 합니다.');
     }
   });
@@ -184,18 +184,18 @@ function coursePlanCheck_(curriculum, entryYear, selections, existing) {
 }
 
 /**
- * 이수 계획 저장 계획(줄마다 취소 + 새 줄, 결정 99). existing = course_plans 행, studentId, rows = coursePlanCheck_().rows.
- * → {toAdd:[{student_id, entry_year, grade, semester, group_name, course, status:'계획', parent_public}], toCancel:[id], same:n}
- * - 같은 학년·학기·선택군·과목의 살아 있는 줄이 있으면 그대로(확정이면 확정 유지).
- * - 새로 고른 과목은 새 줄(상태 계획), 빠진 과목의 줄은 취소. 덮어쓰거나 지우지 않는다.
+ * 이수 계획 저장 계획(줄마다 취소 + 새 줄, 결정 99). existing = course_plans 행, studentId, rows = coursePlanCheck_().rows, termId(쓴 때의 운영 기간, 결정 97).
+ * → {toAdd:[{term_id, student_id, entry_year, grade, semester, choice_group, course, state:'계획', show_to_parent, status:'유효'}], toCancel:[id], same:n}
+ * - 같은 학년·학기·선택군·과목의 살아 있는(status 유효) 줄이 있으면 그대로(state 확정이면 확정 유지).
+ * - 새로 고른 과목은 새 줄(state 계획), 빠진 과목의 줄은 취소(status 취소). 덮어쓰거나 지우지 않는다.
  * - 새 줄의 학부모 공개는 그 학생의 살아 있는 줄 중 하나라도 공개면 'TRUE'(ASSUMPTION: 이수 계획 공개는 계획 전체 단위로 이어받는다).
  */
-function coursePlanDiff_(existing, studentId, rows) {
+function coursePlanDiff_(existing, studentId, rows, termId) {
   var sid = ruleStr_(studentId), live = (existing || []).filter(function (e) { return e && ruleStr_(e.student_id) === sid && ruleStr_(e.status) !== '취소'; });
   var key = function (r) { return careerSlotKey_(r) + '|' + careerTxt_(r.course); };
   var want = {}, have = {}, out = { toAdd: [], toCancel: [], same: 0 };
   (rows || []).forEach(function (r) { want[key(r)] = r; });
-  var pub = live.some(function (e) { return s6True_(e.parent_public); }) ? 'TRUE' : 'FALSE';
+  var pub = live.some(function (e) { return s6True_(e.show_to_parent); }) ? 'TRUE' : 'FALSE';
   live.forEach(function (e) {
     var k = key(e);
     if (want[k] && !have[k]) { have[k] = true; out.same++; } else out.toCancel.push(ruleStr_(e.id));
@@ -203,15 +203,15 @@ function coursePlanDiff_(existing, studentId, rows) {
   Object.keys(want).forEach(function (k) {
     if (have[k]) return;
     var r = want[k];
-    out.toAdd.push({ student_id: sid, entry_year: ruleStr_(r.entry_year), grade: ruleStr_(r.grade), semester: ruleStr_(r.semester),
-      group_name: ruleStr_(r.group_name), course: careerTxt_(r.course), status: '계획', parent_public: pub });
+    out.toAdd.push({ term_id: ruleStr_(termId), student_id: sid, entry_year: ruleStr_(r.entry_year), grade: ruleStr_(r.grade), semester: ruleStr_(r.semester),
+      choice_group: ruleStr_(r.choice_group), course: careerTxt_(r.course), state: '계획', show_to_parent: pub, status: '유효' });
   });
   return out;
 }
 
 /**
  * 담당교사 확인(확정 표시, 결정 99). existing, studentId, ids(확인할 줄 id, 비우면 그 학생의 '계획' 줄 전부), teacherEmail, now.
- * → {patches:[{id, patch:{status:'확정', confirmed_by, confirmed_at}}], errors}. 취소된 줄·다른 학생 줄·이미 확정은 건너뛴다(이미 확정은 0건).
+ * → {patches:[{id, patch:{state:'확정', confirmed_by, confirmed_at}}], errors}. 취소된 줄·다른 학생 줄·이미 확정은 건너뛴다(이미 확정은 0건).
  */
 function coursePlanConfirm_(existing, studentId, ids, teacherEmail, now) {
   var sid = ruleStr_(studentId), want = (ids || []).map(ruleStr_), at = ruleIso_(now);
@@ -226,8 +226,8 @@ function coursePlanConfirm_(existing, studentId, ids, teacherEmail, now) {
   });
   if (errors.length) return { patches: [], errors: errors };
   var patches = mine.filter(function (e) {
-    return ruleStr_(e.status) === '계획' && (!want.length || want.indexOf(ruleStr_(e.id)) >= 0);
-  }).map(function (e) { return { id: ruleStr_(e.id), patch: { status: '확정', confirmed_by: ruleStr_(teacherEmail).toLowerCase(), confirmed_at: at } }; });
+    return ruleStr_(e.status) !== '취소' && ruleStr_(e.state) === '계획' && (!want.length || want.indexOf(ruleStr_(e.id)) >= 0);
+  }).map(function (e) { return { id: ruleStr_(e.id), patch: { state: '확정', confirmed_by: ruleStr_(teacherEmail).toLowerCase(), confirmed_at: at } }; });
   return { patches: patches, errors: [] };
 }
 
