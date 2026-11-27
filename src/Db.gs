@@ -57,6 +57,26 @@ function cellToString_(v) {
  */
 var SENSITIVE_COLS = { students: ['phone'], guardian_links: ['name', 'phone'] };
 
+/**
+ * 글 칸(결정 42, 6단계 결정 101): audit_log에는 이 열의 내용 대신 글자 수만 남는다 — 상담·진로·탐구·피드백 글이 운영 DB의 감사 기록으로 복사되지 않게.
+ * 바깥 키는 파일 종류(kind), 안쪽은 탭 → 열. 상담일지 파일(counsel)은 탭마다 따로 적지 않은 탭도 content·agreement를 가린다(옛 동작 그대로).
+ */
+var AUDIT_TEXT_COLS = {
+  db: {
+    career_profiles: ['hopes', 'targets', 'interests', 'strengths', 'concerns'],
+    inquiry_records: ['title', 'question', 'memo'],
+    feedback: ['content']
+  },
+  counsel: { counsel_notes: ['content', 'agreement'], counsel_requests: ['memo'] }
+};
+
+function auditTextCols_(sheetName, kind) {
+  var by = AUDIT_TEXT_COLS[kind || 'db'];
+  if (!by) return [];
+  if (Object.prototype.hasOwnProperty.call(by, sheetName)) return by[sheetName];
+  return (kind || 'db') === 'counsel' ? ['content', 'agreement'] : [];
+}
+
 function sensitiveCols_(sheetName, kind) {
   return (kind || 'db') === 'db' && Object.prototype.hasOwnProperty.call(SENSITIVE_COLS, sheetName) ? SENSITIVE_COLS[sheetName] : [];
 }
@@ -223,14 +243,15 @@ function updateRecord_(sheetName, id, patch, actorEmail, kind) {
 
 /**
  * audit_log 기록. 락 안에서 부른다(appendRecord_가 바깥 락을 그대로 쓴다).
- * 상담일지(kind 'counsel')의 content·agreement는 글자 수만 남긴다 — 상담 내용이 운영 DB로 복사되지 않게(CLAUDE.md 6).
+ * 상담일지(kind 'counsel')의 content·agreement와 6단계 글 칸(AUDIT_TEXT_COLS)은 글자 수만 남긴다 — 상담 내용이 운영 DB로 복사되지 않게(CLAUDE.md 6).
  * JSON.stringify의 replacer라 행 객체와 bulk_update의 {id: {열: 값}} 모양 모두 가려진다.
  * 그래서 옛 상담 글은 어디에도 남지 않는다: 상담 content·agreement는 제자리에서 고치지 말고 '취소' + 새 행으로 바로잡는다(결정 42).
  */
 function writeAudit_(sheetName, rowId, action, before, after, actorEmail, kind, detail) {
   var hidden = sensitiveCols_(sheetName, kind);   // 개인 연락처 열은 값을 남기지 않는다(결정 76) — 바뀌었다는 표시만
-  var mask = kind === 'counsel' ? function (k, v) {
-    return (k === 'content' || k === 'agreement') && v ? '(내용 생략, ' + String(v).length + '자)' : v;
+  var text = auditTextCols_(sheetName, kind);     // 글 칸은 글자 수만(결정 42)
+  var mask = text.length ? function (k, v) {
+    return text.indexOf(k) >= 0 && v ? '(내용 생략, ' + String(v).length + '자)' : v;
   } : hidden.length ? function (k, v) {
     return hidden.indexOf(k) >= 0 && v ? '(연락처 생략)' : v;
   } : null;
