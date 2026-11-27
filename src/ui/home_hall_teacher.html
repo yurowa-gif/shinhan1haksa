@@ -166,7 +166,7 @@
       if (!e || e.error) return;
       var md = function (ymd) { return (+ymd.slice(5, 7)) + '월 ' + (+ymd.slice(8, 10)) + '일'; };
       var lines = [];
-      e.today.forEach(function (x) { lines.push(el('div', {}, [UI.statusPill('todo', '오늘'), ' ' + x.title + ' (' + x.kind + ')'])); });
+      e.today.forEach(function (x) { lines.push(el('div', {}, [UI.statusPill('mute', '오늘'), ' ' + x.title + ' (' + x.kind + ')'])); });
       e.next.forEach(function (x) { lines.push(el('div', { class: 'muted' }, [md(x.start) + ' ' + x.title + ' (' + x.kind + ')'])); });
       if (!lines.length) lines.push(el('div', { class: 'muted', text: '오늘과 앞으로 2주 안에 등록된 일정이 없습니다.' }));
       root.appendChild(el('div', { class: 'card' }, [el('h2', { text: '월별 일정' })].concat(lines, [

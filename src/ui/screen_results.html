@@ -5,7 +5,7 @@
   .res-wrap { overflow: auto; max-height: 70vh; max-height: 70dvh; border: 1px solid var(--line); border-radius: var(--radius-sm); }   /* 상자 높이를 제한해 머리 행·이름 열·합계 행이 고정되게(G8) */
   .res-table { border-collapse: collapse; width: 100%; }
   .res-table th, .res-table td { border: 1px solid var(--line); padding: 0; text-align: center; font-size: .85rem; }
-  .res-table th { background: var(--muted-weak); padding: 6px 4px; min-width: 52px; font-weight: 600; }
+  .res-table th { background: var(--muted-weak); padding: 6px 4px; min-width: 52px; font-weight: 700; }
   .res-table thead th { position: sticky; top: 0; z-index: 2; }
   .res-table thead th.name { z-index: 3; }
   .res-table tr.total th, .res-table tr.total td { position: sticky; bottom: 0; z-index: 2; box-shadow: 0 -1px 0 var(--line); }
@@ -150,7 +150,7 @@
         if (!c) status.textContent = '출석';
         else {
           if (c[0]) status.appendChild(UI.statusPill('hak', c[0]));
-          if (c[1]) status.appendChild(UI.statusPill(c[2] ? 'todo' : 'confirmed', KIND_SHORT[c[1]] + (c[2] ? ' 미인정' : ' 인정')));
+          if (c[1]) status.appendChild(UI.statusPill(c[2] ? 'out1' : 'confirmed', KIND_SHORT[c[1]] + (c[2] ? ' 미인정' : ' 인정')));
         }
         var line = el('div', { class: 'res-rec', style: 'display:flex;justify-content:space-between;align-items:center;gap:8px' }, [
           el('div', {}, [el('div', { text: s.number + '번 ' + s.name }), status]),

@@ -23,7 +23,7 @@
     function studentMulti(students, onchange) {
       var picked = {}, grade = 0, cls = '', dormOnly = false;
       var q = el('input', { type: 'text', placeholder: '이름·학번으로 찾기', 'aria-label': '학생 찾기' });
-      var count = el('div', { class: 'muted', style: 'margin:4px 0' }), list = el('div', { style: 'max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px 8px' });
+      var count = el('div', { class: 'muted', style: 'margin:4px 0' }), list = el('div', { style: 'max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius-sm);padding:4px 8px' });
       var bulk = el('div'), note = el('div', { class: 'muted', style: 'margin:6px 0;word-break:keep-all' });
       function names() { return Object.keys(picked); }
       var grades = []; students.forEach(function (s) { if (grades.indexOf(s.grade) < 0) grades.push(s.grade); }); grades.sort();
