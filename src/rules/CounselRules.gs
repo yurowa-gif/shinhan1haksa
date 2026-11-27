@@ -10,22 +10,21 @@ var COUNSEL_REQ_MEMO_MAX = 500;
 var COUNSEL_REQ_REASON_MAX = 200;
 var COUNSEL_AGREEMENT_MAX = 1000;
 var COUNSEL_REQ_OPEN = ['신청', '확정'];   // 처리되지 않은 신청(결정 95: 1건만)
-var COUNSEL_DEFAULT_TOPICS = ['학업', '생활', '진로', '진학', '건강', '가정', '기타'];   // settings counsel.types 기본값(총괄: '진학' 추가)
+var COUNSEL_REQ_TOPICS = ['생활', '학습', '진로', '진학', '기타'];   // 상담 신청 주제 고정(결정 103, PRD F17 — counsel.types와 묶지 않음)
 
 /**
  * 학생 상담 신청 검사. input = {studentId, dates:['yyyy-MM-dd'…], topic, memo}, today 'yyyy-MM-dd',
- * existing = counsel_requests 행(그 학생 것이 아니어도 된다), opts = {topics}(기본 상담일지 유형 목록).
+ * existing = counsel_requests 행(그 학생 것이 아니어도 된다).
  * → {row:{student_id, wish_dates('a;b;c' 정렬), topic, memo, status:'신청'}, errors:[]}
  * - 희망 날짜 1~3개(결정 95), 날짜 형식, 오늘 이후(오늘 포함), 중복 없음.
- * - 주제는 opts.topics('2OUT 학부모 면담'은 빼고 쓴다) 중 하나. 주제 목록 = 상담일지 유형(settings counsel.types, 총괄 승인 — 기본값에 '진학'을 더함).
- * requester_email·term_id는 서버가 채운다.
+ * - 주제는 생활·학습·진로·진학·기타 중 하나(결정 103 고정 — 상담일지 유형 settings counsel.types와 묶지 않는다).
  * - 메모는 500자까지(빈칸 허용).
  * - 처리되지 않은(신청·확정) 신청이 이미 있으면 오류 — 취소한 뒤 다시 낸다(결정 95).
- * requester_email은 서버가 로그인 계정으로 채운다(결정 16: 신청은 학생만).
+ * requester_email·term_id는 서버가 채운다(결정 16: 신청은 학생만, 로그인 계정).
  */
-function counselRequestCheck_(input, today, existing, opts) {
+function counselRequestCheck_(input, today, existing) {
   var i = input || {}, errors = [], sid = ruleStr_(i.studentId);
-  var topics = ((opts || {}).topics || COUNSEL_DEFAULT_TOPICS).map(ruleStr_).filter(function (t) { return t && t !== '2OUT 학부모 면담'; });
+  var topics = COUNSEL_REQ_TOPICS;
   if (!ymdIsValid_(ruleStr_(today))) throw new Error('today는 yyyy-MM-dd여야 합니다: ' + today);
   if (!sid) throw new Error('studentId가 비어 있습니다');
   var dates = (Array.isArray(i.dates) ? i.dates : []).map(ruleStr_).filter(Boolean);
@@ -53,7 +52,7 @@ function counselRequestCheck_(input, today, existing, opts) {
  * input = {date, reason, noteId}, today 'yyyy-MM-dd'(confirm에서 지난 날 거르기).
  * → {patch, errors}
  *   confirm  (담당교사·관리자) 신청 → 확정: input.date는 희망 날짜 중 하나, 오늘 이후. patch {status:'확정', decided_date}
- *            희망 날짜 밖의 날은 고르지 않는다(총괄 승인: 맞는 날이 없으면 반려 + 사유 '다른 날짜로 다시 신청').
+ *            희망 날짜 밖의 날은 고르지 않는다(결정 103: 맞는 날이 없으면 반려 + 사유 '다른 날짜로 다시 신청').
  *   reject   (담당교사·관리자) 신청·확정 → 반려: 사유 필수(학생에게 보임, 결정 95). patch {status:'반려', cancel_reason}
  *            확정 뒤 상담을 못 한 경우도 반려 + 사유(화면 버튼 이름만 '상담 못 함', 총괄).
  *   complete (담당교사·관리자) 확정 → 완료: input.noteId(상담일지 id) 필수. patch {status:'완료', linked_note_id}
@@ -102,7 +101,7 @@ function counselRequestNext_(request, action, actor, input, today) {
  * → {patch:{agreement, agreement_to_parent('TRUE'|'FALSE'), profile_version, request_id}, errors, warnings}
  * - 합의 사항 1000자까지. 학부모 공개는 기본 FALSE(결정 90), 합의 사항이 비면 늘 FALSE.
  *   ASSUMPTION: 합의 사항의 학부모 공개는 학생이 켠다(결정 90 '학생이 켜야') — 교사 저장에서 TRUE가 와도 FALSE로 둔다(opts.byStudent일 때만 받음).
- * - 참고한 프로필 버전: 있으면 그 학생의 살아 있는 버전이어야 한다. 유형이 '진로'(또는 옛 값 '진학')인데 비면 경고.
+ * - 참고한 프로필 버전: 있으면 그 학생의 살아 있는 버전이어야 한다. 유형이 '진로'·'진학'인데 비면 경고.
  * - 신청 연결: requestId가 있으면 그 신청이 '확정'이어야 한다(완료 처리는 counselRequestNext_ complete).
  */
 function counselNoteCheck_(input, opts) {

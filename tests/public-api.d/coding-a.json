@@ -239,6 +239,10 @@
     "getInbox": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "seedFakeStage6": {
+      "use": "편집기",
+      "guard": "assertOwnerRun_"
     }
   }
 }

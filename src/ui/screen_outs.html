@@ -317,7 +317,7 @@
       var ul = el('ul', { class: 'list', style: 'margin-top:8px' });
       rules.forEach(function (x) {
         var li = el('li', { class: 'out-item' }, [
-          el('div', { class: 'out-line' }, [el('b', { class: 'out-who', text: x.name }), x.isAuto ? UI.statusPill('mute', '자동') : null, x.instant ? UI.statusPill('todo', '즉시 퇴실') : null, x.active ? null : UI.statusPill('canceled', '꺼짐')]),
+          el('div', { class: 'out-line' }, [el('b', { class: 'out-who', text: x.name }), x.isAuto ? UI.statusPill('mute', '자동') : null, x.instant ? UI.statusPill('mute', '즉시 퇴실') : null, x.active ? null : UI.statusPill('canceled', '꺼짐')]),
           x.description ? el('div', { class: 'muted', text: x.description }) : null
         ]);
         var row = el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-top:8px' });
