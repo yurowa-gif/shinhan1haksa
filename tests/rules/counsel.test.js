@@ -82,7 +82,7 @@ test('counselView_: 학생은 날짜·교사·합의 사항(유형·내용 없�
   const note = { id: 'n1', student_id: 's1', date: '2027-03-10', teacher_email: 'teacher@example.com', type: '진로', target: '학생', content: '가짜 상담 내용',
     show_to_parent: 'TRUE', status: '유효', agreement: '탐구 주제 정하기', agreement_to_parent: 'FALSE', profile_version: '1', request_id: 'q1' };
   const tn = { teacherName: '가짜선생' };
-  assert.deepStrictEqual(plain(ctx.counselView_(note, { role: 'student', isSelf: true }, tn)), { id: 'n1', date: '2027-03-10', teacher_name: '가짜선생', agreement: '탐구 주제 정하기' });
+  assert.deepStrictEqual(plain(ctx.counselView_(note, { role: 'student', isSelf: true }, tn)), { id: 'n1', date: '2027-03-10', teacher_name: '가짜선생', agreement: '탐구 주제 정하기', agreement_to_parent: 'FALSE' });
   assert.deepStrictEqual(plain(ctx.counselView_(note, { role: 'parent', isChild: true }, tn)), { id: 'n1', date: '2027-03-10', teacher_name: '가짜선생' });
   assert.deepStrictEqual(plain(ctx.counselView_(Object.assign({}, note, { agreement_to_parent: 'TRUE' }), { role: 'parent', isChild: true }, tn)),
     { id: 'n1', date: '2027-03-10', teacher_name: '가짜선생', agreement: '탐구 주제 정하기' });

@@ -12,24 +12,24 @@ const ALL = {
   plan: 'id term_id student_id entry_year grade semester choice_group course state confirmed_by confirmed_at show_to_parent status cancel_reason',
   recs: 'university unit core recommended baseYear sourceTitle sourceUrl note',
   inquiry: 'id term_id student_id source_id recorded_at source standards subject title question liked progress result_link memo file_id name_mismatch show_to_parent status cancel_reason',
-  feedback: 'id term_id student_id target_kind target_id content teacher_email status cancel_reason',
-  request: 'id term_id student_id requester_email wish_dates topic memo status decided_date linked_note_id cancel_reason',
+  feedback: 'id term_id student_id target_kind target_id content teacher_email status cancel_reason created_at',
+  request: 'id term_id student_id requester_email wish_dates topic memo status decided_date linked_note_id cancel_reason created_at',
   note: 'id student_id date teacher_email type target linked_violation_id content agreement agreement_to_parent profile_version request_id show_to_parent status cancel_reason',
   timeline: 'at kind title detail ref'
 };
 const INQ_STAFF = 'id term_id student_id source_id recorded_at source standards subject title question liked progress result_link memo name_mismatch show_to_parent status cancel_reason';
 const EXPECT = {
-  profile: { admin: ALL.profile, assigned: ALL.profile, homeroom: ALL.profile, student: ALL.profile, parent: 'hopes targets interests strengths concerns', none: '' },
+  profile: { admin: ALL.profile, assigned: ALL.profile, homeroom: ALL.profile, student: ALL.profile, parent: 'hopes targets interests strengths concerns submitted_at', none: '' },
   plan: { admin: ALL.plan, assigned: ALL.plan, homeroom: ALL.plan, student: 'id term_id student_id entry_year grade semester choice_group course state confirmed_at show_to_parent status',
     parent: 'grade semester choice_group course state', none: '' },
   recs: { admin: ALL.recs, assigned: ALL.recs, homeroom: ALL.recs, student: ALL.recs, parent: '', none: '' },
   inquiry: { admin: ALL.inquiry, assigned: INQ_STAFF, homeroom: INQ_STAFF,
     student: 'id term_id student_id source_id recorded_at source standards subject title question liked progress result_link memo show_to_parent status',
     parent: 'recorded_at source standards subject title question progress result_link memo', none: '' },
-  feedback: { admin: ALL.feedback, assigned: ALL.feedback, homeroom: ALL.feedback, student: 'id term_id student_id target_kind target_id content teacher_name status', parent: '', none: '' },
-  request: { admin: ALL.request, assigned: ALL.request, homeroom: 'id student_id wish_dates topic status decided_date',
-    student: 'id term_id student_id wish_dates topic memo status decided_date cancel_reason', parent: '', none: '' },
-  note: { admin: ALL.note, assigned: ALL.note, homeroom: ALL.note, student: 'id date teacher_name agreement', parent: 'id date teacher_name agreement', none: '' },
+  feedback: { admin: ALL.feedback, assigned: ALL.feedback, homeroom: ALL.feedback, student: 'id term_id student_id target_kind target_id content teacher_name status created_at', parent: '', none: '' },
+  request: { admin: ALL.request, assigned: ALL.request, homeroom: 'id student_id wish_dates topic status decided_date created_at',
+    student: 'id term_id student_id wish_dates topic memo status decided_date cancel_reason created_at', parent: '', none: '' },
+  note: { admin: ALL.note, assigned: ALL.note, homeroom: ALL.note, student: 'id date teacher_name agreement agreement_to_parent', parent: 'id date teacher_name agreement', none: '' },
   timeline: { admin: ALL.timeline, assigned: ALL.timeline, homeroom: ALL.timeline, student: '', parent: '', none: '' }
 };
 const ROW_ON = { status: '유효', parent_fields: 'hopes;targets;interests;strengths;concerns', show_to_parent: 'TRUE', agreement_to_parent: 'TRUE', agreement: '다음 주까지 탐구 주제 정하기' };
@@ -42,11 +42,11 @@ test('판정표: 역할 6 × 기록 종류 8 — 돌려주는 칸 목록이 표�
 
 // 금지 칸: 학생·학부모·담임에게 절대 나가면 안 되는 칸(결정 91·94·96·100, CLAUDE.md 6)
 const FORBID = {
-  student: { note: ['content', 'type', 'target', 'teacher_email', 'linked_violation_id', 'profile_version', 'show_to_parent', 'agreement_to_parent', 'request_id', 'cancel_reason'],
+  student: { note: ['content', 'type', 'target', 'teacher_email', 'linked_violation_id', 'profile_version', 'show_to_parent', 'request_id', 'cancel_reason'],
     inquiry: ['file_id', 'name_mismatch', 'cancel_reason'], feedback: ['teacher_email', 'cancel_reason'], request: ['requester_email', 'linked_note_id'], timeline: ['at', 'kind', 'title', 'detail', 'ref'], plan: ['confirmed_by', 'cancel_reason'] },
-  parent: { note: ['content', 'type', 'target', 'teacher_email', 'linked_violation_id', 'profile_version', 'request_id', 'cancel_reason'],
-    inquiry: ['file_id', 'name_mismatch', 'liked', 'source_id', 'show_to_parent', 'student_id', 'cancel_reason'], feedback: ['content'], request: ['memo', 'topic', 'wish_dates', 'status', 'cancel_reason'],
-    profile: ['version', 'submitted_at', 'parent_fields', 'student_id', 'term_id', 'cancel_reason'], plan: ['show_to_parent', 'confirmed_by', 'student_id', 'cancel_reason'], recs: ['university'], timeline: ['title'] },
+  parent: { note: ['content', 'type', 'target', 'teacher_email', 'linked_violation_id', 'profile_version', 'request_id', 'cancel_reason', 'agreement_to_parent', 'show_to_parent'],
+    inquiry: ['file_id', 'name_mismatch', 'liked', 'source_id', 'show_to_parent', 'student_id', 'cancel_reason'], feedback: ['content', 'created_at'], request: ['created_at', 'memo', 'topic', 'wish_dates', 'status', 'cancel_reason'],
+    profile: ['version', 'parent_fields', 'student_id', 'term_id', 'cancel_reason'], plan: ['show_to_parent', 'confirmed_by', 'student_id', 'cancel_reason'], recs: ['university'], timeline: ['title'] },
   homeroom: { request: ['memo', 'requester_email', 'cancel_reason', 'linked_note_id'], inquiry: ['file_id'] },
   assigned: { inquiry: ['file_id'] }
 };
@@ -79,6 +79,8 @@ test('본인·자녀가 아님, 취소된 기록, 지난 버전, show_to_parent 
   assert.ok(ctx.s6Visible_(V('admin'), 'note', cancelled).includes('content'), '교사는 취소된 기록도 본다');
   assert.deepStrictEqual(plain(ctx.s6Visible_(V('parent'), 'profile', ROW_ON, { isLatest: false })), [], '지난 버전은 학부모에게 안 보임(결정 89)');
   assert.deepStrictEqual(plain(ctx.s6Visible_(V('parent'), 'profile', ROW_ON)), []);
+  assert.deepStrictEqual(plain(ctx.s6Visible_(V('parent'), 'profile', Object.assign({}, ROW_ON, { parent_fields: 'targets' }), { isLatest: true })), ['targets', 'submitted_at'], '공개 항목 + 낸 날');
+  assert.deepStrictEqual(plain(ctx.s6Visible_(V('parent'), 'profile', Object.assign({}, ROW_ON, { parent_fields: '' }), { isLatest: true })), [], '공개 항목이 없으면 낸 날도 없음');
   assert.deepStrictEqual(plain(ctx.s6Visible_(V('parent'), 'note', Object.assign({}, ROW_ON, { show_to_parent: 'FALSE' }))), [], '(가정) 상담 여부를 숨긴 건은 합의 사항도');
   assert.deepStrictEqual(plain(ctx.s6Visible_(V('parent'), 'note', Object.assign({}, ROW_ON, { agreement_to_parent: 'FALSE' }))), ['id', 'date', 'teacher_name'], '합의 사항 비공개면 날짜·교사만');
   assert.deepStrictEqual(plain(ctx.s6Visible_(V('parent'), 'note', Object.assign({}, ROW_ON, { agreement: '' }))), ['id', 'date', 'teacher_name'], '빈 합의 사항은 공개 표시가 켜져도 없음');

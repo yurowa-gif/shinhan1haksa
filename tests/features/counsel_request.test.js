@@ -119,7 +119,7 @@ test('보는 사람별 칸: 학생은 메모·반려 사유(본인), 담당교�
   // 담임: 그 반 학생이어야 한다 — 담임 계정의 반을 그 학생 반으로 바꿔 둔다
   x.env.asOwner((c) => { const u = c.readAll_('users').find((q) => q.email === HOMEROOM); c.updateRecord_('users', u.id, { homeroom_class: x.me.grade + '-' + x.me.class_no }, ADMIN); });
   const h = call(x, HOMEROOM, 'getCounselRequestsOfStudent', x.me.id);
-  assert.deepStrictEqual(Object.keys(h.requests[0]).sort(), ['decided_date', 'id', 'status', 'student_id', 'topic', 'wishDates']);
+  assert.deepStrictEqual(Object.keys(h.requests[0]).sort(), ['created_at', 'decided_date', 'id', 'status', 'student_id', 'topic', 'wishDates']);
   assert.ok(!textOf(h).includes(MEMO) && !textOf(h).includes(WHY) && !textOf(h).includes('@'), '담임 응답에 메모·사유·이메일 없음');
   assert.ok(!('memo' in h.requests[0]), '메모 칸 자체가 없다');
 });
