@@ -178,6 +178,19 @@ function ttTransition_(rows, studentId, month, action, ctx)
         // → {ok, reason, add:[fixed_schedules 행(id 없음)], update:[{id, set}], cancel:[id], warnings, returned:{by, reason}|null}
 function ttCopyPrevious_(rows, studentId, month) // [지난달 시간표 그대로 가져오기] → {entries(제출 초안), fromMonth:'yyyy-MM'|''}
 function ttMissing_(rows, studentIds, month)    // → 그 달 살아 있는 행이 없거나 반려인 학생 id
+
+// src/rules/Stage6Rules.gs (R24, 6단계 공개 판정표 — 결정 89~97) — DateRules·AttendanceRules(attTypeBase_)를 부른다
+function s6Visible_(viewer, kind, row, opts)   // viewer = {role:'admin'|'assigned'|'homeroom'|'student'|'parent'|'none', isSelf, isChild}, opts = {isLatest} → 보여 줄 칸 이름 배열
+function s6ParentFields_(row, kind)            // → 학부모 공개 칸 배열(기본 [])
+function s6Pick_(row, fields, opts)            // → 그 칸만 담은 객체(가상 칸 teacher_name = opts.teacherName) 또는 null
+function s6CanWrite_(viewer, action, ctx)      // ctx = {active} → {ok, reason}
+function s6Timeline_(sources, studentId, opts) // → [{at, kind, title, detail, ref:{kind, id}}] 시간 내림차순, opts = {from, to}
+
+// src/rules/CounselRules.gs (R24, F17 상담 신청·상담일지 6단계 칸) — Stage6Rules를 부른다
+function counselRequestCheck_(input, today, existing)   // input = {studentId, dates, topic, memo} → {row, errors}
+function counselRequestNext_(request, action, actor, input, today)   // action 'confirm'|'reject'|'complete'|'cancel' → {patch, errors}
+function counselNoteCheck_(input, opts)        // 6단계 칸만 → {patch:{agreement, agreement_to_parent, profile_version, request_id}, errors, warnings}
+function counselView_(note, viewer, opts)      // → 판정표 칸만 담은 객체 또는 null
 ```
 
 ## 동작 메모(R1, 2026-11-06)
@@ -461,3 +474,22 @@ function ttMissing_(rows, studentIds, month)    // → 그 달 살아 있는 행
 - **예외: 근무(DutyRules) 경고는 앞머리에 'yyyy-MM-dd'를 그대로 둔다** — `Duty.gs`가 앞 10글자로 날짜를 읽고 `dtyWarnText_`로 바꿔 보인다.
 - 글자로 맞추는 곳: MoveRules는 MealRules의 '덮는 기록' 경고를 `mealCoverWarnHead_`(한 곳)로 찾는다. 기능 쪽 `Duty.gs`(운영 안 하는 날 근무 경고)·`Roster.gs`(기록과 명단이 다른 경고)·`Meals.gs`(' 학생의 ')·`Rooms.gs`·`SeatDraft.gs`(학생·좌석 id를 이름으로 바꿈)가 문구 조각을 쓴다 — 이 PR에서 Duty.gs·Roster.gs의 찾는 글자를 새 문구에 맞췄다.
 - ScheduleRules의 "방학 블록이 모두 잘못돼 학기 블록을 씀" 경고는 경고 글자 대신 경고 수로 판정한다(같은 동작).
+
+## 동작 메모(R24, 2026-11-27) — 6단계 공개 판정표·상담
+
+근거: `docs/plan/stage6-rules-draft.md` 2절(판정표)·3.3·3.4, 결정 89~97·101. 학생·학부모 신원은 `portalWho_()`(결정 82)가 정하고, 서버가 `viewer`를 만들어 넘긴다.
+
+- **열 이름** = S6-0 Schema(`docs/plan/s6-0-design.md` 2절, 시트 열이 기준). `Stage6Rules.gs` 머리말에 옮겼다. 이수 계획·탐구의 학부모 공개는 줄마다 `show_to_parent`, 진로 프로필은 `parent_fields`, 합의 사항은 `agreement_to_parent`. 이수 계획은 `state`(계획·확정)와 `status`(유효·취소)가 따로다. 상담 신청은 `wish_dates`·`linked_note_id`, 반려·취소 사유는 `cancel_reason` 한 칸.
+- **`s6Visible_`**: 판정표를 상수 `S6_TABLE`로 둔다. 서버는 돌려받은 칸만 응답에 담는다(`s6Pick_`). 확정한 칸:
+  - 피드백은 학부모 —(결정 91), 학생 상담은 날짜·교사·합의 사항만(유형·내용 없음, 결정 94), 담임의 상담 신청은 날짜·주제·상태만(메모 없음, 결정 96), 반려 사유는 학생에게 보임(결정 95).
+  - 학부모 진로 프로필은 `opts.isLatest`(가장 최근 제출 버전)일 때 공개 항목만(결정 89). 이수 계획·탐구는 그 줄의 `show_to_parent`가 TRUE일 때 정해진 칸만. 상담은 `show_to_parent`가 TRUE일 때 날짜·교사 + `agreement_to_parent`가 TRUE인 합의 사항(결정 90).
+  - 탐구 원본 파일 id(`file_id`)는 관리자만(결정 100), '이름 다름'(`name_mismatch`)은 교사만(결정 93).
+  - 학생·학부모는 취소된 기록을 보지 않는다(학생 본인 상담 신청만 예외 — 취소·반려 사유 확인). 공개를 거두면 다음 응답부터 바로 사라진다(결정 92, 흔적 없음 — 켜고 끈 기록은 서버가 audit_log에).
+  - `role`은 서버가 정한다: `assigned` = **그 기록의 `term_id` 운영 기간**에 그 학생의 담당교사였던 사람(결정 97 — 권한 키는 '지금' 담당을 보므로, 지난 기록은 기능 함수가 기록의 `term_id`로 다시 판정해 넘긴다), `homeroom` = 자기 반 담임, 그 밖의 교사는 `none`. 학생 `isSelf`·학부모 `isChild`가 아니면 [].
+  - 가상 칸 `teacher_name`: 학생에게는 `teacher_email` 대신 이 칸을 준다(서버가 이름으로 채움).
+  - `show_to_parent`가 FALSE인 상담은 합의 사항을 공개했어도 학부모에게 그 상담 자체가 보이지 않는다(총괄 승인).
+- **`s6CanWrite_`**: 학생 본인(진로 제출·공개, 이수 계획, 탐구 올리기·진행·공개, 상담 신청·취소, 합의 사항 공개)·담당교사(이수 계획 확정, 피드백, 상담일지)·담당교사와 관리자(상담 신청 처리). 담임은 쓰지 않는다. `ctx.active`(지금 학사생)가 아니면 누구도 새로 쓰거나 고치지 않는다(결정 97 — 보기는 그대로).
+- **`s6Timeline_`**: 취소 행을 빼고 시간 내림차순. 상담 줄은 '상담' + 합의 사항(내용·유형 없음), OUT은 '1OUT: 항목', 출결은 확정 특이사항만.
+- **`counselRequestCheck_`**: 희망 날짜 1~3개(오늘 포함 이후·중복 없음, 결정 95), 주제는 생활·학습·진로·진학·기타 다섯 가지로 고정(결정 103, PRD F17 — 상담일지 유형 `counsel.types`와 묶지 않는다), 메모 500자, 처리되지 않은(신청·확정) 신청이 있으면 거부.
+- **`counselRequestNext_`**: 신청 → 확정(`decided_date` = 희망 날짜 중 하나, 결정 103: 다른 날이면 반려 + 사유) / 신청·확정 → 반려(`cancel_reason` 필수 200자, 학생에게 보임. 확정 뒤 상담을 못 한 경우도 반려 — 화면 버튼만 '상담 못 함') / 확정 → 완료(`linked_note_id`) / 신청·확정 → 취소(학생 본인, `cancel_reason` 선택). 완료·반려·취소는 끝.
+- **`counselNoteCheck_`**: 6단계 칸만(기본 칸은 `CounselLog.gs` `cnlValidate_`). 합의 사항 1000자. 합의 사항 학부모 공개는 학생만 켠다(`opts.byStudent`, 총괄 승인) — 교사 저장은 늘 FALSE. 참고 버전은 그 학생의 살아 있는 버전, 진로·진학 상담인데 비면 경고. 신청 연결은 '확정' 신청만.
