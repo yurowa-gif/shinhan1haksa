@@ -57,6 +57,7 @@ function screenList(app) {
     const can = order.filter((r) => app.env.as(ACC.admin, (c) => c.screenResolve_(page, rolesOf(ACC[r])).ok));
     if (!can.length) continue;
     if (page === 'timetable') can.filter((r) => ['student', 'parent', 'hall_teacher'].includes(r)).forEach((r) => list.push({ id: page + ':' + r, email: ACC[r], query: 'page=' + page + '&role=' + r }));
+    else if (page === 'plan') can.filter((r) => ['student', 'parent', 'hall_teacher'].includes(r)).forEach((r) => list.push({ id: page + ':' + r, email: ACC[r], query: 'page=' + page + '&role=' + r }));
     else if (page === 'career') can.filter((r) => ['student', 'parent', 'hall_teacher'].includes(r)).forEach((r) => list.push({ id: page + ':' + r, email: ACC[r], query: 'page=' + page + '&role=' + r }));
     else if (page === 'facilityday') list.push({ id: page, email: ACC.hall_teacher, query: 'page=' + page });   // 오늘 근무교사(seed)
     else list.push({ id: page, email: ACC[can[0]], query: 'page=' + page });
@@ -77,6 +78,7 @@ function deniedLinks(app, email, hrefs) {
 /** 가짜 데이터 보충: 오늘 근무교사 = 시험교사, 학생 시설 일지 한 건(그날 일지에 줄이 보이게) */
 function seed(env) {
   env.asOwner((c) => { if (typeof c.seedFakeStage6 === 'function') c.seedFakeStage6(); });   // 6단계 가짜 진로 프로필·피드백(C50 화면에 내용이 보이게)
+  require('./plan-fixture.js')(env);   // C51: 편제표·권장 과목·이수 계획
   env.asOwner((c) => c.appendRecord_('duty_slots', { date: TODAY, slot: '21:30조', end_time: '21:30', original_email: ACC.hall_teacher, actual_email: ACC.hall_teacher, swapped_at: '', swapped_by: '', status: '유효', memo: '가짜 T8' }, ACC.admin));
 }
 
