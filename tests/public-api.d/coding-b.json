@@ -184,6 +184,34 @@
       "use": "화면",
       "guard": "requirePermission_"
     },
+    "getInquiryStudent": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "previewInquiryFile": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "uploadInquiryFile": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveInquiryProgress": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "setInquiryShare": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getInquiryCleanup": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "cleanupInquiryFiles": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
     "getCounselNotes": {
       "use": "화면",
       "guard": "requirePermission_"

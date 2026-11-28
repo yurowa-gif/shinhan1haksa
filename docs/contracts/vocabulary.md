@@ -207,6 +207,7 @@ Apps Script는 같은 전역 이름을 경고 없이 덮는다. 새 전역 이�
 | `MAIL_ENABLED` | `true`일 때만 메일 | Notify.gs·AutoOuts.gs·Outs.gs | 예 |
 | `DIAG_ENABLED` | `true`일 때만 진단 화면(`diagPing`) | Code.gs·Setup.gs(처음 setup 때 `true`) — 시범 운영 전 `false`(pilot-guide 1절) | 예 |
 | `BACKUP_FOLDER_ID` | Drive 폴더 ID(비밀) | Backup.gs | 아니오 |
+| `INQUIRY_FOLDER_ID` | Drive 폴더 ID(비밀) — 탐구 원본 파일을 두는 비공유 폴더 '신한1학사_탐구원본'(처음 올릴 때 만들어 저장, 공유되어 있으면 올리지 않는다) | Inquiry.gs(C52) | 아니오 |
 | `BACKUP_RUNNING` | 시작 시각(ms) — 겹친 실행 막기, 30분 뒤 저절로 풀림 | Backup.gs | 아니오 |
 | `TEST_STUDENT_EMAIL` · `TEST_PARENT_EMAIL` · `TEST_TEACHER_EMAIL` · `TEST_HOMEROOM_EMAIL` | 시험 계정(비밀, 개발용) | src/dev FakeData.gs·FakeStage2.gs | 아니오 |
 | `SPIKE_TEMPLATE_ID` | 인쇄 시험 템플릿 ID(개발용) | src/dev PrintSpike.gs | 아니오 |

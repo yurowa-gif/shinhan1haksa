@@ -91,6 +91,9 @@ var SCREENS = {
   counsel: { file: 'ui/screen_counsel', title: '상담일지', view: 'counsel.list' },
   // 6단계 F17 상담 신청(C49-A): 학생이 신청·내 신청 목록(counselreq), 담당교사·관리자가 신청 처리(requests)
   counselreq: { file: 'ui/screen_counselreq', title: '내 상담 신청', view: 'counsel.request.create' },
+  // 6단계 F16 탐구 기록(C52): 학생이 내 탐구 기록·파일 올리기(inquiry), 관리자가 원본 파일 정리(inquirycleanup)
+  inquiry: { file: 'ui/screen_inquiry', title: '내 탐구 기록', view: 'inquiry.upload' },
+  inquirycleanup: { file: 'ui/screen_inquirycleanup', title: '탐구 원본 정리', view: 'inquiry.cleanup' },
   requests: { file: 'ui/screen_requests', title: '상담 신청 처리', view: 'counsel.request.list' },
   mynotes: { file: 'ui/screen_mynotes', title: '내 상담 기록', view: 'counsel.agreement.publish' },   // 학생만(합의 사항 공개를 고르는 사람)
   timetable: { file: 'ui/screen_timetable', title: '시간표', view: 'timetable.screen' },
@@ -179,7 +182,7 @@ function getHomeData(role) {
   // 2단계 교사 홈 카드(각 기능 파일의 훅). 보고 있는 홈 역할이 그 보기 키를 가질 때만 부른다(출결 담당·근무표 담당자 홈에 OUT·급식 없음, 학생·학부모 홈에는 없음).
   // 훅 하나가 실패해도 홈 전체는 열린다(setup 전 탭 없음 등). ms = 훅마다 걸린 시간 — 확인 ③에서 재고, PRD §9 3초를 넘으면 카드별 호출로 바꾼다
   var perms = permissions_();
-  [['duty', dtyHomeInfo_, 'duty.view'], ['out', vioHomeInfo_, 'out.view'], ['food', foodHomeInfo_, 'status.list'], ['docs', docHomeInfo_, 'doc.view'], ['events', evtHomeInfo_, 'event.view'], ['counsel', cnlHomeInfo_, 'counsel.list'], ['counselreq', crqHomeInfo_, 'counsel.request.list'], ['facility', facHomeInfo_, 'facility.view'], ['timetable', ttcHomeInfo_, 'timetable.list'], ['career', carHomeInfo_, 'career.list']].forEach(function (h) {
+  [['duty', dtyHomeInfo_, 'duty.view'], ['out', vioHomeInfo_, 'out.view'], ['food', foodHomeInfo_, 'status.list'], ['docs', docHomeInfo_, 'doc.view'], ['events', evtHomeInfo_, 'event.view'], ['counsel', cnlHomeInfo_, 'counsel.list'], ['counselreq', crqHomeInfo_, 'counsel.request.list'], ['facility', facHomeInfo_, 'facility.view'], ['timetable', ttcHomeInfo_, 'timetable.list'], ['career', carHomeInfo_, 'career.list'], ['inquiry', iqfHomeInfo_, 'inquiry.cleanup']].forEach(function (h) {
     if (!hasAnyAllowedRole_([role], perms[h[2]].roles)) return;
     var t0 = Date.now();
     try {

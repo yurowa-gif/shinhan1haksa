@@ -1,0 +1,167 @@
+<style>
+  .iq-card { margin-bottom: 12px; word-break: keep-all; }
+  .iq-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+  .iq-tags .pill { white-space: nowrap; }
+  .iq-title { font-weight: 700; margin: 2px 0; }
+  .iq-q { margin: 2px 0 6px; }
+  .iq-meta { color: var(--muted-ink); font-size: var(--font-sm, .85rem); }
+  .iq-prog { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 0 4px; flex-wrap: wrap; }
+  .iq-form { margin-top: 8px; }
+  .iq-titles { margin: 8px 0 0; padding-left: 1.2em; }
+  .iq-pick input[type=file] { display: none; }
+  .iq-check { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; min-height: 44px; }
+  .iq-check input { width: 22px; height: 22px; }
+</style>
+<script>
+  /**
+   * 내 탐구 기록(C52, F16 학생). docs/design/stage6/screens.md 4절. 학생 본인만 올리고(서버가 portalWho_로 판정), 신원은 로그인 계정 — 파일 속 이름은 경고에만 쓴다(결정 93).
+   * 목록 | 올리기(파일 고르기 → 미리 보기 → 올리기). 진행 기록은 카드 안에서 펼치고, "부모님께 보이기"는 체크하는 순간 저장된다(기록마다·기본 꺼짐, 결정 92: 끌 때 확인 시트).
+   * 학사에서 나간 뒤(canWrite=false)에는 보기만 한다 — 올리기 바·진행 적기·보이기 칸을 그리지 않는다(결정 97).
+   */
+  function renderScreen(root) {
+    var U = UI.util, MAX = 12 * 1024 * 1024;
+    var titleEl = document.querySelector('header.top h1');
+    function setTitle(t) { if (titleEl) titleEl.textContent = t; }
+    var state = { view: 'list', data: null, open: '', file: null, preview: null, confirmed: false, busy: false, bar: null, error: '' };
+    var body = el('div');
+    root.appendChild(body);
+    function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
+    function removeBar() { if (state.bar) { state.bar.remove(); state.bar = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); } }
+    function setBar(buttons) { removeBar(); state.bar = UI.actionBar(buttons, { mount: true }); }
+    function msg(res) { return (res && res.errors && res.errors[0] && res.errors[0].message) || '처리하지 못했습니다.'; }
+
+    function load() {
+      call('getInquiryStudent', '').then(function (d) { state.data = d; draw(); })
+        .catch(function (err) { removeBar(); clear(body); showError(body, err); });
+    }
+    load();
+
+    function draw() { clear(body); removeBar(); if (state.view === 'pick') drawPick(); else drawList(); }
+    function goList() { state.view = 'list'; state.file = null; state.preview = null; state.confirmed = false; state.error = ''; setTitle('내 탐구 기록'); draw(); window.scrollTo(0, 0); }
+    function goPick() { state.view = 'pick'; state.file = null; state.preview = null; state.confirmed = false; state.error = ''; setTitle('기록 파일 올리기'); draw(); window.scrollTo(0, 0); }
+
+    /* ───────── 목록 ───────── */
+    function sourceTag(r) { return UI.statusPill('mute', 'AI 제안' + (r.source ? ' · ' + r.source : '')); }
+    function progPill(p) { return UI.statusPill(p === '완료' ? 'confirmed' : p === '진행 중' ? 'requested' : 'mute', p); }
+
+    function drawList() {
+      var d = state.data;
+      body.appendChild(el('div', { class: 'notice info', text: '탐구발견 앱에서 받은 주제는 AI가 제안한 것입니다. 선생님과 이야기해 보고 진행해 주세요.' }));
+      if (!d.canWrite && d.rows.length) body.appendChild(el('div', { class: 'notice warn', text: '학사를 나간 뒤에는 고칠 수 없습니다. 기록은 계속 볼 수 있습니다.' }));
+      if (!d.rows.length) {
+        body.appendChild(el('div', { class: 'card' }, [UI.emptyState('아직 올린 탐구 기록이 없습니다. 탐구발견 앱에서 [기록 파일 받기]로 받은 파일을 올려 주세요.')]));
+      }
+      d.rows.forEach(function (r) { body.appendChild(card(r, d.canWrite)); });
+      if (d.canWrite) setBar([{ text: '기록 파일 올리기', kind: 'primary', onclick: function () { goPick(); } }]);
+    }
+
+    function card(r, canWrite) {
+      var tags = [sourceTag(r)];
+      if (/^(true|y|yes|1|예)$/i.test(String(r.liked))) tags.push(UI.statusPill('mute', '관심 표시'));
+      var meta = [r.subject, (r.standardsList || []).length ? '성취기준 ' + r.standardsList.length + '개' : '', r.recordedKo].filter(Boolean).join(' · ');
+      var box = el('div', { class: 'card iq-card' }, [
+        el('div', { class: 'iq-tags' }, tags),
+        el('div', { class: 'iq-title', text: r.title }),
+        r.question ? el('div', { class: 'iq-q', text: r.question }) : null,
+        meta ? el('div', { class: 'iq-meta', text: meta }) : null
+      ]);
+      var prog = el('div', { class: 'iq-prog' }, [progPill(r.progress)]);
+      var form = el('div', { class: 'iq-form' });
+      if (canWrite) {
+        prog.appendChild(el('button', { type: 'button', class: 'btn secondary row-btn', text: state.open === r.id ? '접기' : '진행 적기', 'aria-expanded': state.open === r.id ? 'true' : 'false',
+          onclick: function () { state.open = state.open === r.id ? '' : r.id; draw(); } }));
+      }
+      box.appendChild(prog);
+      if (r.result_link) box.appendChild(el('div', { class: 'iq-meta' }, [el('a', { href: r.result_link, target: '_blank', rel: 'noopener noreferrer', text: '결과물 보기' })]));
+      if (r.memo) box.appendChild(el('div', { class: 'iq-meta', style: 'white-space:pre-wrap', text: r.memo }));
+      if (canWrite && state.open === r.id) { form = progressForm(r); box.appendChild(form); }
+      if (canWrite) {
+        var on = /^(true|y|yes|1|예)$/i.test(String(r.show_to_parent));
+        box.appendChild(UI.shareCheck({ label: '이 기록을 부모님께 보이기', on: on, confirmOff: true, itemName: '탐구 기록 "' + r.title + '"',
+          onchange: function (next, done) {
+            call('setInquiryShare', r.id, next).then(function (res) {
+              if (!res.ok) { done(false); UI.toast(msg(res), { kind: 'warn', ms: 5000 }); if (res.stale) load(); return; }
+              r.show_to_parent = next ? 'TRUE' : 'FALSE'; done(true); UI.toast(next ? '부모님께 보입니다.' : '부모님께 보이지 않습니다.');
+            }).catch(function (err) { done(false); fail(err); });
+          } }));
+      }
+      return box;
+    }
+
+    function progressForm(r) {
+      var seg = UI.segmented({ label: '진행 상태', value: r.progress, options: state.data.progressOptions.map(function (p) { return { value: p, label: p }; }), onchange: function () {} });
+      var link = el('input', { type: 'url', inputmode: 'url', value: r.result_link || '', maxlength: '500', placeholder: 'https://' });
+      var memo = el('textarea', { rows: '3', maxlength: '500' }); memo.value = r.memo || '';
+      var lf = UI.field('결과물 링크 (선택)', link, { hint: 'http:// 또는 https:// 로 시작하는 주소만 됩니다.' });
+      var mf = UI.field('메모 (선택)', memo, { hint: '500자까지' });
+      var save = el('button', { type: 'button', class: 'btn', text: '저장', onclick: function () {
+        lf.setError(''); mf.setError('');
+        if (state.busy) return; state.busy = true; save.disabled = true;
+        call('saveInquiryProgress', r.id, { progress: seg.getValue(), resultLink: link.value.trim(), memo: memo.value.trim() }).then(function (res) {
+          state.busy = false; save.disabled = false;
+          if (!res.ok) { var m = msg(res); if (/주소/.test(m)) lf.setError(m); else if (/메모/.test(m)) mf.setError(m); else UI.toast(m, { kind: 'warn', ms: 5000 }); if (res.stale) load(); return; }
+          UI.toast('저장했습니다.'); state.open = ''; load();
+        }).catch(function (err) { state.busy = false; save.disabled = false; fail(err); });
+      } });
+      return el('div', { class: 'iq-form' }, [seg, lf, mf, save]);
+    }
+
+    /* ───────── 올리기 ───────── */
+    function drawPick() {
+      var fileInput = el('input', { type: 'file', accept: '.json,application/json', onchange: function () { if (fileInput.files && fileInput.files[0]) readFile(fileInput.files[0]); } });
+      var pickBtn = el('button', { type: 'button', class: 'btn secondary', text: state.file ? '다른 파일 고르기' : '파일 고르기', onclick: function () { fileInput.click(); } });
+      var kids = [el('h2', { text: '1. 파일 고르기' }),
+        el('div', { class: 'muted', text: '탐구발견 앱의 [기록 파일 받기]로 받은 파일(.json)을 골라 주세요. 12MB까지 됩니다.' }),
+        state.file ? el('div', { style: 'margin:8px 0', text: state.file }) : null,
+        el('div', { class: 'iq-pick', style: 'margin-top:8px' }, [fileInput, pickBtn])];
+      body.appendChild(el('div', { class: 'card' }, kids));
+      if (state.error) body.appendChild(el('div', { class: 'notice error', role: 'alert', text: state.error }));
+      var p = state.preview, canUp = false, count = 0;
+      if (p) {
+        count = p.newCount; canUp = count > 0 && (!p.nameMismatch || state.confirmed) && !state.busy;
+        var tags = el('div', { class: 'iq-tags' }, [UI.statusPill(p.newCount ? 'confirmed' : 'mute', '새 기록 ' + p.newCount + '건'), UI.statusPill('mute', '이미 있는 기록 ' + p.sameCount + '건')]);
+        var prev = [el('h2', { text: '2. 미리 보기' }), tags,
+          el('div', { class: 'muted', text: p.newCount ? '이미 있는 기록은 다시 저장하지 않습니다. 내가 적은 진행 상태·메모는 그대로입니다.' : '이 파일의 기록은 이미 모두 올라와 있습니다. 올릴 것이 없습니다.' })];
+        if (p.newTitles.length) prev.push(el('ul', { class: 'iq-titles' }, p.newTitles.map(function (t) { return el('li', { text: t }); })));
+        body.appendChild(el('div', { class: 'card' }, prev));
+        if (p.nameMismatch) {
+          var cb = el('input', { type: 'checkbox', id: 'iq-ok', onchange: function () { state.confirmed = cb.checked; drawBar(); } }); cb.checked = state.confirmed;
+          body.appendChild(el('div', { class: 'notice warn' }, [
+            el('div', { text: '파일 속 이름(' + p.fileName + ')이 내 이름(' + p.accountName + ')과 다릅니다. 내 기록이 맞나요?' }),
+            el('label', { class: 'iq-check', for: 'iq-ok' }, [cb, el('span', { text: '내 기록이 맞습니다' })]),
+            el('div', { class: 'muted', text: '맞다고 표시하면 담당 선생님 화면에 "이름 다름"이 함께 나옵니다. 어느 쪽이든 기록은 로그인한 내 계정에 저장됩니다.' })]));
+        }
+      }
+      function drawBar() {
+        var ok = p && p.newCount > 0 && (!p.nameMismatch || state.confirmed) && !state.busy;
+        setBar([{ text: '목록으로', kind: 'secondary', onclick: function () { goList(); } }, { text: (p && p.newCount ? p.newCount + '건 ' : '') + '올리기', kind: 'primary', disabled: !ok, onclick: doUpload }]);
+      }
+      drawBar();
+    }
+
+    function readFile(f) {
+      state.file = f.name; state.preview = null; state.confirmed = false; state.error = '';
+      if (f.size > MAX) { state.error = '파일이 12MB보다 큽니다. 탐구발견에서 기록을 나눠 받아 올려 주세요.'; draw(); return; }
+      var rd = new FileReader();
+      rd.onerror = function () { state.error = '파일을 읽지 못했습니다. 다시 골라 주세요.'; draw(); };
+      rd.onload = function () {
+        state.text = String(rd.result || '');
+        call('previewInquiryFile', state.text).then(function (res) {
+          if (!res.ok) { state.error = msg(res); state.text = ''; } else state.preview = res;
+          draw();
+        }).catch(function (err) { fail(err); draw(); });
+      };
+      rd.readAsText(f, 'UTF-8');
+    }
+
+    function doUpload() {
+      if (state.busy || !state.preview) return;
+      state.busy = true; draw();
+      call('uploadInquiryFile', state.text, state.confirmed).then(function (res) {
+        state.busy = false;
+        if (!res.ok) { state.error = msg(res); draw(); return; }
+        UI.toast(res.added + '건을 올렸습니다.'); state.text = ''; goList(); load();
+      }).catch(function (err) { state.busy = false; fail(err); draw(); });
+    }
+  }
+</script>

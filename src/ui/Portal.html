@@ -115,6 +115,17 @@
         });
         if (cn.length) cnKids.push(note('상담 내용은 학교에서만 봅니다. 자세한 이야기는 담당 선생님께 직접 물어봐 주세요.'));
         root.appendChild(card('상담', cnKids, 'side'));
+        var iq = p.inquiry || [];   // 자녀가 "부모님께 보이기"를 켠 기록만 온다(서버 규칙) — 없으면 카드 자체를 그리지 않는다
+        if (iq.length) {
+          var iqKids = [];
+          iq.forEach(function (r) {
+            iqKids.push(el('div', { class: 'pt-fb' }, [UI.statusPill('mute', 'AI 제안'), ' ', UI.statusPill(r.progress === '완료' ? 'confirmed' : r.progress === '진행 중' ? 'requested' : 'mute', r.progress),
+              el('b', { text: r.title, style: 'display:block;margin-top:4px' }), r.question ? el('span', { text: r.question }) : null,
+              r.result_link ? el('a', { href: r.result_link, target: '_blank', rel: 'noopener noreferrer', style: 'display:block', text: '결과물 보기' }) : null]));
+          });
+          iqKids.push(note('탐구 주제는 AI가 제안한 것으로, 자녀가 골라 진행하고 있습니다.'));
+          root.appendChild(card('탐구 기록', iqKids, 'side'));
+        }
       }
 
       var up = p.upcoming || [];
