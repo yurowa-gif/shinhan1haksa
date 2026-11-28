@@ -71,9 +71,9 @@
             kids.push(el('a', { class: 'btn secondary', style: 'margin-top:8px', href: ((document.querySelector('a.back') || {}).href || '') + '?page=mynotes', text: '상담 기록 보기' }));
           }
           else if (r.status === '반려') {
-            kids.push(el('div', { class: 'muted', text: wishText(r) }));
+            kids.push(el('div', { class: 'muted', text: r.created_at ? dayKo(String(r.created_at).slice(0, 10)) + '에 신청' : wishText(r) }));
             if (r.cancel_reason) kids.push(el('div', { class: 'cr-fb' }, [el('b', { text: '선생님 말씀' }), el('span', { text: r.cancel_reason })]));
-          } else kids.push(el('div', { class: 'muted', text: wishText(r) + ' · 내가 취소했습니다.' }));
+          } else kids.push(el('div', { class: 'muted', text: (r.created_at ? dayKo(String(r.created_at).slice(0, 10)) + '에 신청' : wishText(r)) + ' · 내가 취소했습니다.' }));
           pc.appendChild(el('div', { class: 'cr-req' }, kids));
         });
         body.appendChild(pc);

@@ -142,7 +142,7 @@ test('내 상담 기록(학생): 날짜·교사 이름·합의 사항뿐 — 내
   const mine = call(x, STUDENT, 'getMyCounselNotes', '');
   assert.strictEqual(mine.viewer, 'student');
   assert.strictEqual(mine.notes.length, 2, '취소된 상담은 학생에게도 없다');
-  mine.notes.forEach((n) => assert.deepStrictEqual(Object.keys(n).sort(), ['agreement', 'date', 'dateKo', 'id', 'teacher_name']));
+  mine.notes.forEach((n) => assert.deepStrictEqual(Object.keys(n).sort(), ['agreement', 'agreement_to_parent', 'date', 'dateKo', 'id', 'teacher_name']));   // 학생 본인이 켠 '부모님께 보이기' 상태까지(R24b)
   const t = textOf(mine);
   for (const bad of [MARK, '건강', '대상', 'teacher_email', '@']) assert.ok(!t.includes(bad), '학생 응답에 있으면 안 되는 글: ' + bad);
   assert.ok(mine.notes.some((n) => n.agreement.includes(AGR)));
@@ -162,7 +162,10 @@ test('합의 사항 공개(결정 90·92): 학생이 켜야 학부모에게 보�
   assert.deepStrictEqual(parentSees().notes.map((n) => [n.id, 'agreement' in n]), [[a.id, false], [b.id, false]], '처음에는 날짜·교사만(기본 비공개)');
   assert.deepStrictEqual(Object.keys(parentSees().notes[0]).sort(), ['date', 'dateKo', 'id', 'teacher_name']);
   const a0 = x.env.rows('audit_log').length;
+  const mineNow = () => call(x, STUDENT, 'getMyCounselNotes', '').notes.find((n) => n.id === a.id).agreement_to_parent;
+  assert.strictEqual(String(mineNow()).toUpperCase(), 'FALSE', '학생 화면의 체크 칸은 처음에 꺼짐');
   assert.deepStrictEqual(call(x, STUDENT, 'setAgreementShare', a.id, true), { ok: true, on: true });
+  assert.strictEqual(String(mineNow()).toUpperCase(), 'TRUE', '켜면 학생 응답의 공개 상태가 켜짐(체크 칸이 실제 응답으로 그려진다)');
   const shown = parentSees().notes.find((n) => n.id === a.id);
   assert.ok(shown.agreement.includes(AGR), '켜면 학부모에게 합의 사항이 보인다');
   assert.ok(!textOf(parentSees()).includes(MARK) && !textOf(parentSees()).includes('@'), '학부모 응답에 상담 내용·이메일 없음');
@@ -170,6 +173,7 @@ test('합의 사항 공개(결정 90·92): 학생이 켜야 학부모에게 보�
   assert.ok(log.some((l) => l.action === 'update' && /agreement_to_parent/.test(JSON.stringify(l))), '켠 것이 audit_log에 남는다');
   assert.ok(!log.some((l) => JSON.stringify(l).includes(AGR)), 'audit에 합의 사항 글 없음');
   assert.deepStrictEqual(call(x, STUDENT, 'setAgreementShare', a.id, false), { ok: true, on: false });
+  assert.strictEqual(String(mineNow()).toUpperCase(), 'FALSE', '끄면 꺼짐으로 돌아간다');
   assert.ok(!('agreement' in parentSees().notes.find((n) => n.id === a.id)), '끄면 바로 사라진다(흔적 없음)');
   // 거부
   x.env.expectDenied(PARENT, 'counsel.agreement.publish', 'setAgreementShare', a.id, true);

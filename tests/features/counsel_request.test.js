@@ -204,3 +204,15 @@ test('교사 목록 순서: 처리할 것(신청 → 확정)은 가장 이른 �
   const order = call(x, x.teacher, 'getCounselRequestList').requests.map((r) => r.id);
   assert.deepStrictEqual(order, [early, late.id, mid], '신청은 이른 희망 날짜순(3/12 → 3/25), 확정은 그 뒤');
 });
+
+test('신청한 날(created_at): 학생·담당교사·관리자·담임 응답에 날짜가 오고(시각 포함 ISO), 학부모·다른 교사에게는 응답 자체가 없다', () => {
+  const x = makeEnv();
+  submit(x);
+  const day = (v) => String(v).slice(0, 10);
+  const s = call(x, STUDENT, 'getCounselRequestsOfStudent', x.me.id).requests[0];
+  assert.strictEqual(day(s.created_at), TODAY, '학생 응답');
+  assert.strictEqual(day(call(x, x.teacher, 'getCounselRequestList').requests[0].created_at), TODAY, '담당교사 목록');
+  assert.strictEqual(day(call(x, ADMIN, 'getCounselRequestsOfStudent', x.me.id).requests[0].created_at), TODAY, '관리자');
+  x.env.expectDenied(PARENT, 'counsel.request.view', 'getCounselRequestsOfStudent', x.me.id);
+  x.env.expectDenied(T2, 'counsel.request.view', 'getCounselRequestsOfStudent', x.me.id);
+});

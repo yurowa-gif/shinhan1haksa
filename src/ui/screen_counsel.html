@@ -214,7 +214,11 @@
           call('saveCounselNote', input()).then(function (r) { done(r, r.duplicate ? '이미 같은 기록이 있습니다.' : '저장했습니다.'); }).catch(function (e) { send.disabled = false; showError(status, e); });
         }
         if (!agrLen()) { save(); return; }   // 합의 사항이 비면 시트 없이 저장한다
-        UI.confirmSheet({ title: '저장하기', lead: '합의 사항 ' + agrLen() + '자가 학생에게 보입니다.', lines: ['저장한 뒤에는 고칠 수 없고, 고치려면 취소하고 다시 써야 합니다.'], confirmText: '저장하기', cancelText: '돌아가기', onconfirm: save });
+        // 글자 수만 말하지 않고 쓴 글을 그대로(길면 앞의 세 줄 + …) 보여 준다 — 잘못 적은 것을 그 자리에서 알아채게
+        var lines = agrArea.value.trim().split(/\r?\n/).filter(function (x) { return x.trim(); });
+        var shown = lines.slice(0, 3).map(function (x) { return x.length > 60 ? x.slice(0, 60) + '…' : x; });
+        if (lines.length > 3) shown.push('…');
+        UI.confirmSheet({ title: '저장하기', lead: '합의 사항 ' + agrLen() + '자가 학생에게 보입니다.', lines: shown, message: '저장한 뒤에는 고칠 수 없고, 고치려면 취소하고 다시 써야 합니다.', confirmText: '저장하기', cancelText: '돌아가기', onconfirm: save });
       }
       bar = UI.actionBar([{ text: '닫기', kind: 'secondary', onclick: function () { editing = null; tab = 'list'; draw(); } },
         { text: editing ? '고쳐서 저장' : '상담일지 저장', disabled: !area.value.trim(), onclick: submit }], { mount: true });

@@ -164,3 +164,13 @@ test('C49-B 검토 반영: 두 글 칸 꼬리표(교사만 봄·학생에게 보
   const r = ui('screen_counselreq.html');
   assert.ok(/page=mynotes', text: '상담 기록 보기'/.test(r), '완료 줄 [상담 기록 보기]');
 });
+
+test('C49-B(R24b 뒤): 저장 전 확인 시트가 합의 사항 글을 그대로(앞 세 줄 + …) 보여 주고, 신청한 날이 요청 처리·내 신청에 그려지고, 학생 체크 칸은 응답의 공개 상태로 그린다', () => {
+  const ui = (f) => fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'ui', f), 'utf8');
+  const c = ui('screen_counsel.html');
+  assert.ok(/lines\.slice\(0, 3\)/.test(c) && /shown\.push\('…'\)/.test(c) && /lines: shown/.test(c), '확인 시트에 합의 사항 글(길면 앞 세 줄 + …)');
+  assert.ok(/field\('신청한 날'/.test(ui('screen_requests.html')), '요청 처리 화면 신청한 날');
+  assert.ok(/에 신청'/.test(ui('screen_counselreq.html')), '내 상담 신청 지난 신청 줄');
+  const m = ui('screen_mynotes.html');
+  assert.ok(/n\.agreement_to_parent === undefined/.test(m) && /\(true\|y\|yes\|1\|예\)/.test(m), '체크 칸은 응답의 공개 상태(TRUE·FALSE)로');
+});
