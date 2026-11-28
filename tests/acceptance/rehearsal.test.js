@@ -173,7 +173,7 @@ function rehearse(n) {
   // 4e) 상담일지(F12, C32): 담당교사가 7/1 학사생의 40%에 상담 1건씩, 그중 1건은 고치기(취소 + 새 행). 월별 일정(F13, C34): 관리자 2건(하나는 7/30~8/2 달 경계)
   const cnIds = students.map((s) => s.id).filter((id) => on(id, '학사', '2027-07-01') === '입실').slice(0, Math.round(n * 0.4));
   const teacherOf = (sid) => env.rows('enrollments').find((e) => e.term_id === term.id && e.student_id === sid).teacher_email;
-  const notes = cnIds.map((sid, i) => ({ sid, r: ok(call(teacherOf(sid), 'saveCounselNote', { studentId: sid, date: '2027-07-01', type: ['생활', '학업', '진로'][i % 3], target: '학생', content: '가짜 상담 내용 [R-' + i + ']' }), '상담 저장') }));
+  const notes = cnIds.map((sid, i) => ({ sid, r: ok(call(teacherOf(sid), 'saveCounselNote', { studentId: sid, date: '2027-07-01', type: ['생활', '학습', '진로'][i % 3], target: '학생', content: '가짜 상담 내용 [R-' + i + ']' }), '상담 저장') }));
   ok(call(teacherOf(notes[0].sid), 'reviseCounselNote', notes[0].r.id, { studentId: notes[0].sid, date: '2027-07-01', type: '생활', target: '학부모', content: '가짜 상담 내용(고침)' }, '가짜: 대상 착오'), '상담 고치기');
   const cnList = call(ADMIN, 'getCounselNotes', notes[0].sid);
   const cnLive = env.rows('counsel_notes', 'counsel').filter((r) => r.status !== '취소' && r.type !== '2OUT 학부모 면담').length;   // D의 2OUT 면담은 따로

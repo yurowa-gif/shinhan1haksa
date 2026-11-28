@@ -176,6 +176,14 @@
       "use": "화면",
       "guard": "requirePermission_"
     },
+    "getMyCounselNotes": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "setAgreementShare": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
     "getCounselNotes": {
       "use": "화면",
       "guard": "requirePermission_"

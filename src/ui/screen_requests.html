@@ -104,7 +104,7 @@
       if (!r.canDecide) return [];
       return [el('h3', { text: '상담을 마쳤으면' }),
         el('div', { class: 'rq-acts' }, [
-          el('a', { class: 'btn', href: appHref('page=counsel&student=' + encodeURIComponent(r.student.id)), text: '상담일지 쓰기' }),
+          el('a', { class: 'btn', href: appHref('page=counsel&student=' + encodeURIComponent(r.student.id) + '&request=' + encodeURIComponent(r.id)), text: '상담일지 쓰기' }),
           el('button', { type: 'button', class: 'btn secondary', text: '상담 못 함', onclick: function () { askReject(r, '상담 못 함', '사유는 학생에게 그대로 보입니다. 상담을 못 한 신청은 "반려"로 남고, 학생이 새로 신청할 수 있습니다.', '상담 못 함으로 처리했습니다.'); } })]),
         el('div', { class: 'muted', text: '일지를 저장하면 신청이 "완료"가 되고 일지와 이어집니다.' })];
     }

@@ -5,6 +5,8 @@
   .pt-v { flex: 1 1 auto; min-width: 0; }
   .pt-pills { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .pt-note { margin: 8px 0; word-break: keep-all; }
+  .pt-fb { margin: 4px 0 12px; padding: 10px 12px; background: var(--muted-weak); border-radius: var(--radius-sm); white-space: pre-wrap; word-break: keep-all; }
+  .pt-fb b { display: block; margin-bottom: 2px; }
   .pt-nav { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
   .pt-nav .btn, .pt-card .btn { flex: 0 0 auto; white-space: nowrap; }
 </style>
@@ -107,7 +109,10 @@
         root.appendChild(card('급식과 기숙사', meal, 'side'));
         var cn = p.counsel || [], cnKids = [];
         if (!cn.length) cnKids.push(el('div', { class: 'pt-note', text: '아직 상담 기록이 없습니다.' }));
-        cn.slice(0, 5).forEach(function (c) { cnKids.push(el('div', { class: 'pt-note', text: c.dateKo + (c.teacher ? ' ' + c.teacher + ' 선생님과' : '') + ' 상담이 있었습니다.' })); });
+        cn.slice(0, 5).forEach(function (c) {
+          cnKids.push(el('div', { class: 'pt-note', text: c.dateKo + (c.teacher ? ' ' + c.teacher + ' 선생님과' : '') + ' 상담이 있었습니다.' }));
+          if (c.agreement) cnKids.push(el('div', { class: 'pt-fb' }, [el('b', { text: '합의 사항·다음 할 일' }), el('span', { text: c.agreement })]));   // 자녀가 "부모님께 보이기"를 켠 것만 온다(서버 규칙)
+        });
         cnKids.push(note('상담 내용은 학교에서만 봅니다. 자세한 이야기는 담당 선생님께 직접 물어봐 주세요.'));
         root.appendChild(card('상담', cnKids, 'side'));
       }
