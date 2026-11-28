@@ -90,7 +90,7 @@ var SCREENS = {
   facilityday: { file: 'ui/screen_facility_day', title: '시설 일지 보기', view: 'facility.view' },
   counsel: { file: 'ui/screen_counsel', title: '상담일지', view: 'counsel.list' },
   // 6단계 F17 상담 신청(C49-A): 학생이 신청·내 신청 목록(counselreq), 담당교사·관리자가 신청 처리(requests)
-  counselreq: { file: 'ui/screen_counselreq', title: '상담 신청', view: 'counsel.request.create' },
+  counselreq: { file: 'ui/screen_counselreq', title: '내 상담 신청', view: 'counsel.request.create' },
   requests: { file: 'ui/screen_requests', title: '상담 신청 처리', view: 'counsel.request.list' },
   timetable: { file: 'ui/screen_timetable', title: '시간표', view: 'timetable.screen' },
   inbox: { file: 'ui/screen_inbox', title: '확인함', view: 'inbox.view' }

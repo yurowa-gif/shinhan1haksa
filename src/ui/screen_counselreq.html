@@ -14,6 +14,8 @@
    */
   function renderScreen(root) {
     var U = UI.util;
+    var titleEl = document.querySelector('header.top h1');   // 화면 틀의 제목: 목록 = 내 상담 신청, 입력 = 상담 신청(시안)
+    function setTitle(t) { if (titleEl) titleEl.textContent = t; }
     var state = { view: window.SCREEN_TAB === 'form' ? 'form' : 'list', data: null, dates: ['', '', ''], topic: '', memo: '', busy: false, bar: null, errors: [] };
     var body = el('div');
     root.appendChild(body);
@@ -28,7 +30,7 @@
     }
     load();
 
-    function draw() { clear(body); removeBar(); if (state.view === 'form') drawForm(); else drawList(); }
+    function draw() { clear(body); removeBar(); setTitle(state.view === 'form' ? '상담 신청' : '내 상담 신청'); if (state.view === 'form') drawForm(); else drawList(); }
 
     /* ───────── 내 신청 목록 ───────── */
     function pill(r) {
@@ -38,8 +40,8 @@
     function wishText(r) { return '희망 날짜: ' + r.wishDates.map(dayKo).join(' · '); }
     function drawList() {
       var d = state.data, open = d.requests.filter(function (r) { return r.status === '신청' || r.status === '확정'; }), past = d.requests.filter(function (r) { return r.status !== '신청' && r.status !== '확정'; });
-      if (d.whyNot) body.appendChild(el('div', { class: 'notice info', text: d.whyNot }));
       var fixed = open.filter(function (r) { return r.status === '확정'; })[0];
+      if (d.whyNot && !fixed) body.appendChild(el('div', { class: 'notice info', text: d.whyNot }));   // 날짜가 정해졌으면 아래 한 칸이 이유를 말한다
       if (fixed) {
         body.appendChild(el('div', { class: UI.cardClass('key') }, [
           el('h2', { text: dayKo(fixed.decided_date) + '에 상담합니다' }),
@@ -73,7 +75,7 @@
         });
         body.appendChild(pc);
       }
-      state.bar = UI.actionBar([{ text: '+ 새 상담 신청', kind: 'secondary', disabled: !d.canRequest, onclick: function () { state.view = 'form'; state.errors = []; draw(); } }], { mount: true });
+      state.bar = UI.actionBar([{ text: '+ 새 상담 신청', kind: d.canRequest ? 'primary' : 'secondary', disabled: !d.canRequest, onclick: function () { state.view = 'form'; state.errors = []; draw(); } }], { mount: true });
     }
     function askCancel(r) {
       UI.confirmSheet({ title: '신청 취소', lead: r.topic + ' 상담' + (r.status === '확정' ? ' · ' + dayKo(r.decided_date) : ''),
@@ -95,15 +97,20 @@
         return;
       }
       body.appendChild(el('div', { class: 'notice info', text: '이야기하고 싶은 날과 주제를 알려 주세요. 선생님이 날짜를 정하면 이 화면에서 알려 드립니다.' }));
-      if (state.errors.length) {
-        body.appendChild(el('div', { class: 'notice warn' }, [el('b', { text: '고칠 곳이 ' + state.errors.length + '군데 있습니다.' })].concat(state.errors.map(function (m) { return el('div', { text: m }); }))));
+      var errBox = el('div', { class: 'error', role: 'alert' });
+      if (state.errors.length) {   // 맨 위 상자(오류색) + 틀린 칸마다 안내. 칸을 못 찾는 서버 오류는 상자 안에 그대로 적는다
+        errBox.appendChild(el('b', { text: '고칠 곳이 ' + state.errors.length + '군데 있습니다. 빨간 칸을 확인해 주세요.' }));
+        state.errors.filter(function (e) { return !e.field; }).forEach(function (e) { errBox.appendChild(el('div', { text: e.message })); });
+        body.appendChild(errBox);
       }
+      function errOf(field) { var e = state.errors.filter(function (x) { return x.field === field; })[0]; return e ? e.message : ''; }
       body.appendChild(el('div', { class: 'card' }, [el('h2', { text: '만날 선생님' }), el('b', { text: teacherText(d) }), el('div', { class: 'muted', text: '담당 선생님께 신청합니다.' })]));
 
       var dateCard = el('div', { class: 'card' }, [el('h2', { text: '만나고 싶은 날' }), el('div', { class: 'muted', text: '1개 이상, 3개까지 고를 수 있습니다. 오늘 이후 날짜만 됩니다.' })]);
       var dateFs = [0, 1, 2].map(function (i) {
         var f = UI.dateField({ label: '희망 날짜 ' + (i + 1) + (i ? ' (선택)' : ''), value: state.dates[i], min: d.today, name: 'date' + i, onchange: function (v) { state.dates[i] = v; } });
         dateCard.appendChild(f);
+        if (errOf('date' + i)) f.setError(errOf('date' + i));
         return f;
       });
       body.appendChild(dateCard);
@@ -119,23 +126,41 @@
       }
       drawChips();
       topicCard.appendChild(chips);
+      if (errOf('topic')) topicCard.appendChild(el('div', { class: 'error', text: errOf('topic') }));
       body.appendChild(topicCard);
 
       var memoIn = el('textarea', { maxlength: '500', rows: '4' }); memoIn.value = state.memo; memoIn.addEventListener('input', function () { state.memo = memoIn.value; });
-      body.appendChild(el('div', { class: 'card' }, [UI.field('하고 싶은 말 (선택)', memoIn, { name: 'memo', hint: '담당 선생님만 읽습니다. 짧게 적어도 됩니다.' })]));
+      var memoF = UI.field('하고 싶은 말 (선택)', memoIn, { name: 'memo', hint: '담당 선생님만 읽습니다. 짧게 적어도 됩니다.' });
+      if (errOf('memo')) memoF.setError(errOf('memo'));
+      body.appendChild(el('div', { class: 'card' }, [memoF]));
 
       function picked() { return state.dates.filter(function (x) { return x; }); }
+      function check() {   // 확인 시트를 열기 전에 화면에서 먼저 거른다(서버 검사 counselRequestCheck_가 기준이고 그대로 다시 한다)
+        var errs = [], seen = {};
+        if (!picked().length) errs.push({ field: 'date0', message: '희망 날짜를 하나 이상 골라 주세요.' });
+        state.dates.forEach(function (v, i) {
+          if (!v) return;
+          if (v < d.today) errs.push({ field: 'date' + i, message: '오늘(' + dayKo(d.today) + ') 이후 날짜를 골라 주세요.' });
+          else if (seen[v]) errs.push({ field: 'date' + i, message: '같은 날짜를 두 번 고를 수 없습니다. 다른 날로 고쳐 주세요.' });
+          seen[v] = true;
+        });
+        if (!state.topic) errs.push({ field: 'topic', message: '주제를 하나 골라 주세요.' });
+        if (state.memo.length > 500) errs.push({ field: 'memo', message: '글이 너무 깁니다. 500자 안으로 줄여 주세요.' });
+        return errs;
+      }
       function send() {
         if (state.busy) return; state.busy = true;
         call('submitCounselRequest', { dates: picked(), topic: state.topic, memo: state.memo }).then(function (r) {
           state.busy = false;
-          if (!r.ok) { state.errors = r.errors.map(function (e) { return e.message; }); draw(); window.scrollTo(0, 0); return; }
+          if (!r.ok) { state.errors = r.errors.map(function (e) { return { field: e.field || '', message: e.message }; }); draw(); window.scrollTo(0, 0); return; }
           UI.toast('신청했습니다.');
           state.view = 'list'; state.dates = ['', '', '']; state.topic = ''; state.memo = ''; state.errors = []; load();
         }).catch(function (err) { state.busy = false; fail(err); });
       }
       state.bar = UI.actionBar([
         { text: '신청하기', kind: 'primary', onclick: function () {
+          state.errors = check();
+          if (state.errors.length) { draw(); window.scrollTo(0, 0); return; }
           var lines = ['희망 날짜: ' + (picked().map(dayKo).join(' · ') || '(없음)')];
           if (state.memo.trim()) lines.push('하고 싶은 말: ' + state.memo.trim());
           UI.confirmSheet({ title: '신청하기', lead: (state.topic ? state.topic + ' 상담' : '주제를 고르지 않았습니다') + ' · ' + teacherText(d), lines: lines, confirmText: '신청하기', onconfirm: send });
