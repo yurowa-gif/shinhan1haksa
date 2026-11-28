@@ -130,3 +130,59 @@ test('courseRecsFor_: 대학 정확히·모집단위 정확히 → 없으면 포
   assert.deepStrictEqual(plain(ctx.courseRecsFor_(recs, [{ university: '없는대', unit: '컴퓨터공학과' }, { university: '가짜대' }, null])), []);
   assert.strictEqual(plain(ctx.courseRecsFor_(recs, [{ university: '가짜대', unit: '컴퓨터공학과' }, { university: '가짜대', unit: ' 컴퓨터 공학과 ' }])).length, 1, '같은 행은 한 번');
 });
+
+test('careerDroppedPicks_: 새 편제에서 빠진 과목을 고른 학생(디자인2 제안) — 그 해 표만 보고, 취소 줄은 빼고', () => {
+  const plan = (id, sid, ey, g, course, extra) => Object.assign({ id, student_id: sid, entry_year: ey, grade: '2', semester: '1', choice_group: g, course, state: '계획', status: '유효' }, extra || {});
+  const plans = [plan('p1', 's1', '2026', '일반선택A', '물리학'), plan('p2', 's2', '2026', '일반선택A', '생명과학'), plan('p3', 's3', '2026', '진로선택', '기하', { state: '확정' }),
+    plan('p4', 's4', '2026', '일반선택A', '생명과학', { status: '취소' }), plan('p5', 's5', '2027', '일반선택A', '물리학'), plan('p6', 's1', '2026', '진로선택', '미적분Ⅱ')];
+  const next = [['일반선택A', '물리학'], ['일반선택A', '화학'], ['진로선택', '미적분Ⅱ']].map(([g, c]) => ({ entry_year: '2026', grade: '2', semester: '1', choice_group: g, pick_n: 2, course: c, status: '유효' }))
+    .concat([{ entry_year: '2026', grade: '2', semester: '1', choice_group: '진로선택', pick_n: 1, course: '기하', status: '취소' }]);
+  assert.deepStrictEqual(plain(ctx.careerDroppedPicks_(plans, next)), [
+    { studentId: 's3', planId: 'p3', entryYear: '2026', grade: '2', semester: '1', choiceGroup: '진로선택', course: '기하' },
+    { studentId: 's2', planId: 'p2', entryYear: '2026', grade: '2', semester: '1', choiceGroup: '일반선택A', course: '생명과학' }]);
+  assert.deepStrictEqual(plain(ctx.careerDroppedPicks_(plans, [])), [], '표가 없으면 아무 해도 보지 않는다');
+});
+
+test('coursePlanPendingCount_: 담당 학생 중 확인을 기다리는 계획 줄이 있는 학생 수(디자인2 제안)', () => {
+  const plans = [{ student_id: 's1', state: '계획', status: '유효' }, { student_id: 's1', state: '계획', status: '유효' }, { student_id: 's2', state: '확정', status: '유효' },
+    { student_id: 's3', state: '계획', status: '취소' }, { student_id: 's4', state: '계획', status: '유효' }, { student_id: 's9', state: '계획', status: '유효' }];
+  assert.deepStrictEqual(plain(ctx.coursePlanPendingCount_(plans, ['s4', 's1', 's2', 's3', 's1', ''])), { count: 2, studentIds: ['s4', 's1'] });
+  assert.deepStrictEqual(plain(ctx.coursePlanPendingCount_(plans, [])), { count: 0, studentIds: [] });
+});
+
+test('curriculumSavePlan_: 같은 줄은 그대로·바뀌거나 빠진 줄은 취소·새 줄 추가, 같은 표 두 번 = 0건, 다른 해는 그대로(결정 102)', () => {
+  const C = (id, ey, g, n, c, extra) => Object.assign({ id, entry_year: ey, grade: '2', semester: '1', choice_group: g, pick_n: n, course: c, status: '유효' }, extra || {});
+  const existing = [C('c1', '2026', 'A', 2, '물리학'), C('c2', '2026', 'A', 2, '화학'), C('c3', '2026', 'A', 2, '생명과학'), C('c4', '2025', 'A', 2, '물리학'),
+    C('c5', '2026', 'A', 2, '지구과학', { status: '취소' })];
+  const upload = [{ entry_year: '2026', grade: 2, semester: 1, choice_group: 'A', pick_n: '2', course: ' 물리학 ' }, { entry_year: '2026', grade: 2, semester: 1, choice_group: 'A', pick_n: 3, course: '화학' },
+    { entry_year: '2026', grade: 2, semester: 1, choice_group: '', pick_n: '', course: '문학' }];
+  const p = plain(ctx.curriculumSavePlan_('curriculum', existing, upload));
+  assert.deepStrictEqual([p.errors, p.keys, p.same, p.toCancel], [[], ['2026'], 1, ['c2', 'c3']], '화학은 택N이 바뀜, 생명과학은 빠짐, 2025는 그대로');
+  assert.deepStrictEqual(p.toAdd, [{ entry_year: '2026', grade: '2', semester: '1', choice_group: 'A', pick_n: '3', course: '화학', status: '유효' },
+    { entry_year: '2026', grade: '2', semester: '1', choice_group: '', pick_n: '0', course: '문학', status: '유효' }]);
+  const saved = existing.map((e) => p.toCancel.includes(e.id) ? Object.assign({}, e, { status: '취소' }) : e).concat(p.toAdd.map((r, i) => Object.assign({ id: 'n' + i }, r)));
+  assert.deepStrictEqual(plain(ctx.curriculumSavePlan_('curriculum', saved, upload)), { toAdd: [], toCancel: [], same: 3, errors: [], keys: ['2026'] }, '같은 표 두 번 = 0건');
+  const twin = saved.concat([Object.assign({}, saved.find((e) => e.id === 'c1'), { id: 'c1b' })]);
+  assert.deepStrictEqual(plain(ctx.curriculumSavePlan_('curriculum', twin, upload)).toCancel, ['c1b'], '같은 줄이 둘이면 하나만 남긴다');
+  const T = [
+    [[{ entry_year: '26', grade: 2, semester: 1, course: 'x' }], /입학년도는 숫자 4자리여야 합니다\(지금 26\)/],
+    [[{ entry_year: '2026', grade: 4, semester: 1, course: 'x' }], /학년은 1~3/], [[{ entry_year: '2026', grade: 2, semester: 3, course: 'x' }], /학기는 1 또는 2/],
+    [[{ entry_year: '2026', grade: 2, semester: 1, course: '' }], /과목 이름이 비어 있습니다/], [[{ entry_year: '2026', grade: 2, semester: 1, course: 'x', pick_n: -1 }], /택N은 0 이상의 정수/],
+    [[{ entry_year: '2026', grade: 2, semester: 1, course: 'x' }, { entry_year: '2026', grade: 2, semester: 1, course: ' x ', pick_n: 1 }], /2번째 줄: 1번째 줄과 같은 과목입니다/],
+    [[], /올린 표에 줄이 없습니다/],
+  ];
+  T.forEach(([rows, re], i) => { const r = plain(ctx.curriculumSavePlan_('curriculum', existing, rows)); assert.deepStrictEqual([r.toAdd, r.toCancel], [[], []], i); assert.ok(r.errors.some((e) => re.test(e)), i + ' ' + r.errors); });
+  assert.throws(() => ctx.curriculumSavePlan_('courses', [], []), /kind/);
+});
+
+test('curriculumSavePlan_ 권장 과목: 기준 연도별, 과목 목록은 조각마다 다듬어 견준다, 대학·모집단위 중복 오류', () => {
+  const R = (id, y, u, unit, rec, extra) => Object.assign({ id, base_year: y, university: u, unit, core_courses: '', recommended_courses: rec, source_url: 'https://example.com', source_title: '가짜 안내', note: '', status: '유효' }, extra || {});
+  const existing = [R('r1', '2028', '가짜대', '컴퓨터공학과', '미적분Ⅱ;기하'), R('r2', '2028', '가짜대', '전자공학과', '물리학'), R('r3', '2027', '가짜대', '컴퓨터공학과', '미적분')];
+  const upload = [R(undefined, '2028', '가짜대', '컴퓨터공학과', ' 미적분Ⅱ ; 기하 ;'), R(undefined, '2028', '가짜대', '인공지능학과', '확률과 통계')];
+  const p = plain(ctx.curriculumSavePlan_('recs', existing, upload));
+  assert.deepStrictEqual([p.errors, p.keys, p.same, p.toCancel, p.toAdd.map((r) => r.unit)], [[], ['2028'], 1, ['r2'], ['인공지능학과']]);
+  assert.strictEqual(p.toAdd[0].status, '유효');
+  assert.match(plain(ctx.curriculumSavePlan_('recs', [], [R('', '2028', '가짜대', 'a', ''), R('', '2028', '가짜대', 'a', 'x')])).errors[0], /1번째 줄과 같은 대학·모집단위입니다/);
+  assert.match(plain(ctx.curriculumSavePlan_('recs', [], [R('', '28', '가짜대', 'a', '')])).errors[0], /기준 연도는 숫자 4자리/);
+  assert.match(plain(ctx.curriculumSavePlan_('recs', [], [R('', '2028', '', 'a', '')])).errors[0], /대학과 모집단위를 모두/);
+});
