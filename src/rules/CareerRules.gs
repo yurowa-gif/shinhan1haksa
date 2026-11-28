@@ -188,14 +188,14 @@ function coursePlanCheck_(curriculum, entryYear, selections, existing) {
  * → {toAdd:[{term_id, student_id, entry_year, grade, semester, choice_group, course, state:'계획', show_to_parent, status:'유효'}], toCancel:[id], same:n}
  * - 같은 학년·학기·선택군·과목의 살아 있는(status 유효) 줄이 있으면 그대로(state 확정이면 확정 유지).
  * - 새로 고른 과목은 새 줄(state 계획), 빠진 과목의 줄은 취소(status 취소). 덮어쓰거나 지우지 않는다.
- * - 새 줄의 학부모 공개는 그 학생의 살아 있는 줄 중 하나라도 공개면 'TRUE'(ASSUMPTION: 이수 계획 공개는 계획 전체 단위로 이어받는다).
+ * - 새 줄의 학부모 공개는 늘 'FALSE'(총괄 확정 — 학생이 과목마다 고른다, 기본 비공개). 그대로 둔 줄은 건드리지 않으니 켠 상태가 남는다.
+ *   과목을 바꿔 생긴 줄도 다른 과목이라 꺼진 채로 시작한다. 결정 89의 '이어받기'는 진로 프로필 버전 사이의 항목 공개에만 해당한다.
  */
 function coursePlanDiff_(existing, studentId, rows, termId) {
   var sid = ruleStr_(studentId), live = (existing || []).filter(function (e) { return e && ruleStr_(e.student_id) === sid && ruleStr_(e.status) !== '취소'; });
   var key = function (r) { return careerSlotKey_(r) + '|' + careerTxt_(r.course); };
   var want = {}, have = {}, out = { toAdd: [], toCancel: [], same: 0 };
   (rows || []).forEach(function (r) { want[key(r)] = r; });
-  var pub = live.some(function (e) { return s6True_(e.show_to_parent); }) ? 'TRUE' : 'FALSE';
   live.forEach(function (e) {
     var k = key(e);
     if (want[k] && !have[k]) { have[k] = true; out.same++; } else out.toCancel.push(ruleStr_(e.id));
@@ -204,7 +204,7 @@ function coursePlanDiff_(existing, studentId, rows, termId) {
     if (have[k]) return;
     var r = want[k];
     out.toAdd.push({ term_id: ruleStr_(termId), student_id: sid, entry_year: ruleStr_(r.entry_year), grade: ruleStr_(r.grade), semester: ruleStr_(r.semester),
-      choice_group: ruleStr_(r.choice_group), course: careerTxt_(r.course), state: '계획', show_to_parent: pub, status: '유효' });
+      choice_group: ruleStr_(r.choice_group), course: careerTxt_(r.course), state: '계획', show_to_parent: 'FALSE', status: '유효' });
   });
   return out;
 }
