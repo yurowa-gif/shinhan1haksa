@@ -67,6 +67,9 @@
       el('div', { class: 'muted', id: 'home-duty' }),
       UI.rowLink({ href: d.appUrl + '?page=inbox', text: '확인함 — 내가 처리할 것 모아 보기' })
     ]));
+    if (d.career && d.career.missing > 0) {   // 오늘 처리할 것(결정 98): 담당 학생 중 진로 프로필 미제출
+      root.appendChild(UI.todoList({ title: '오늘 처리할 것', items: [{ label: '진로 프로필 미제출', count: d.career.missing, hint: d.career.dueKo ? '마감 ' + d.career.dueKo + ' 지남' : '', href: d.appUrl + '?page=career&role=hall_teacher' }] }));
+    }
     root.appendChild(whosOutCard_(d));   // 오늘 빠지는 학생(D17 ⑨): 감독 중 출석부와 대조하기 쉽게 시간대 순 한 줄 목록
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '내가 보낸 특이사항 요청' }),
@@ -107,6 +110,11 @@
         UI.rowLink({ href: d.appUrl + '?page=timetable&role=hall_teacher', text: '시간표 열기' })
       ]));
     }
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '진로 프로필' }),
+      el('div', { class: 'muted', style: 'word-break:keep-all', text: '담당 학생이 낸 진로 프로필을 보고 피드백을 남깁니다.' }),
+      UI.rowLink({ href: d.appUrl + '?page=career&role=hall_teacher', text: '진로 프로필 열기' })
+    ]));
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '출석부' }),
       el('div', { class: 'muted', text: '날짜를 고르면 그날 출석부를 미리 보고 PDF로 받습니다.' }),

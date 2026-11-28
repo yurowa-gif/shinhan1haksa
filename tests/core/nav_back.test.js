@@ -85,5 +85,5 @@ test('google.script.history가 없는 곳(편집기·시험)에서는 아무 일
 test('화면 파일 연결: 포털·학부모 홈·상담일지·시간표(교사)가 Nav.bind·Nav.go를 쓴다, 시트는 Components를 고치지 않고 Client에서 감싼다', () => {
   const ui = (f) => fs.readFileSync(path.join(__dirname, '../../src/ui', f + '.html'), 'utf8');
   for (const f of ['Portal', 'home_student', 'home_parent', 'screen_counsel', 'screen_timetable']) assert.ok(/Nav\.(bind|go|back)\(/.test(ui(f)), f);
-  assert.ok(!/Nav\b/.test(ui('Components')), 'Components(디자인 소유)는 그대로');
+  assert.ok(!/\bNav\b/.test(ui('Components')), 'Components(디자인 소유)는 그대로');
 });

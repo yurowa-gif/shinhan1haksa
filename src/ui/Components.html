@@ -365,6 +365,54 @@ var UI = {};
     return box;
   };
 
+  /**
+   * UI.shareCheck({label:'부모님께 보이기', on, disabled, itemName, confirmOff, onchange(next, done)}) — "부모님께 보이기" 체크 한 줄 + 지금 상태 꼬리표(결정 89·92).
+   * 끄는 순간 confirmOff면 확인 시트(제목 "보이기 끄기", 항목 이름, "이미 보신 내용은 되돌릴 수 없습니다.")를 띄운다.
+   * onchange(next, done): 저장이 끝나면 done(true)로 새 상태를 굳히고, 실패하면 done(false)로 되돌린다. 반환 노드: setOn(v), isOn()
+   */
+  UI.shareCheck = function (opts) {
+    opts = opts || {};
+    var on = !!opts.on;
+    var input = el('input', { type: 'checkbox' });
+    input.checked = on; input.disabled = !!opts.disabled;
+    var tag = el('span');
+    var row = el('label', { class: 'check share-check' }, [input, el('span', { class: 'share-label', text: opts.label || '부모님께 보이기' }), tag]);
+    function draw() {
+      input.checked = on;
+      var t = on ? UI.statusPill('confirmed', '지금 보이는 중') : UI.statusPill('mute', '나만 보는 중');
+      tag.replaceWith ? tag.replaceWith(t) : null;
+      tag = t;
+    }
+    function apply(next) {
+      var before = on;
+      on = next; draw();
+      if (opts.onchange) opts.onchange(next, function (ok) { if (!ok) { on = before; draw(); } });
+    }
+    input.addEventListener('change', function () {
+      var next = input.checked;
+      if (!next && opts.confirmOff) {
+        input.checked = true;   // 확인하기 전에는 그대로
+        UI.confirmSheet({ title: '보이기 끄기', lead: opts.itemName || '', lines: ['끄면 부모님 화면에서 바로 사라집니다.', '이미 보신 내용은 되돌릴 수 없습니다.'], message: '부모님께 보이기를 끌까요?',
+          confirmText: '보이기 끄기', onconfirm: function () { apply(false); } });
+        return;
+      }
+      apply(next);
+    });
+    draw();
+    row.setOn = function (v) { on = !!v; draw(); };
+    row.isOn = function () { return on; };
+    return row;
+  };
+
+  /** UI.versionNav({index, total, label, sub, onchange(index)}) — ‹ n번째 기록 · 낸 날 › (index는 0부터, 첫·끝에서 해당 화살표가 꺼진다) */
+  UI.versionNav = function (opts) {
+    var i = opts.index, n = opts.total;
+    var prev = el('button', { type: 'button', class: 'btn secondary', 'aria-label': '이전 기록', text: '‹', onclick: function () { opts.onchange(i - 1); } });
+    var next = el('button', { type: 'button', class: 'btn secondary', 'aria-label': '다음 기록', text: '›', onclick: function () { opts.onchange(i + 1); } });
+    prev.disabled = i <= 0; next.disabled = i >= n - 1;
+    return el('div', { class: 'version-nav' }, [prev, el('div', { class: 'version-nav-mid' }, [el('b', { text: opts.label }), opts.sub ? el('div', { class: 'muted', text: opts.sub }) : null]), next]);
+  };
+
   /** UI.dateField({label, value, min, max, shortcuts:[{label:'오늘', value:'2027-03-03'}], onchange(value)}) → getValue·setValue·setError */
   UI.dateField = function (opts) {
     opts = opts || {};

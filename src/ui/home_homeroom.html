@@ -4,7 +4,8 @@
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '상담일지' }),
       el('div', { class: 'muted', style: 'word-break:keep-all', text: '우리 반 학생의 상담 기록을 읽습니다(쓰기는 담당교사).' }),
-      UI.rowLink({ href: d.appUrl + '?page=counsel', text: '상담일지 열기' })
+      UI.rowLink({ href: d.appUrl + '?page=counsel', text: '상담일지 열기' }),
+      UI.rowLink({ href: d.appUrl + '?page=career&role=homeroom', text: '우리 반 진로 프로필 보기' })
     ]));
     if (!d.out || d.out.error) return;
     root.appendChild(el('div', { class: UI.cardClass(d.out.out1 || d.out.out2 ? 'key' : '') }, [

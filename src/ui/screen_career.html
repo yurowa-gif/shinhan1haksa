@@ -1,0 +1,267 @@
+<style>
+  .car-sub { color: var(--muted-ink); font-size: var(--font-sm); }
+  .car-hope { padding: 2px 0; word-break: keep-all; }
+  .car-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .car-slot { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+  .car-slot:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+  .car-text { width: 100%; min-height: 96px; }
+  .car-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); width: 100%; text-align: left; word-break: keep-all; min-height: var(--tap); background: none; border-left: 0; border-right: 0; border-top: 0; color: inherit; font: inherit; }
+  .car-row:last-child { border-bottom: 0; }
+  .car-row .car-main { flex: 1 1 auto; min-width: 0; }
+  .car-row .car-name { font-weight: 700; display: block; }
+  .car-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+  .car-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+</style>
+<script>
+  /**
+   * 진로 프로필 화면(C50, F15, 시안 D24 docs/design/stage6/screens.md 1·5·6절). ?role=student|parent|hall_teacher|homeroom|admin 으로 열린다.
+   * 학생: 내기·보기·'부모님께 보이기' / 학부모: 자녀가 공개한 항목만 / 담당교사·담임·관리자: 목록·버전 넘기기·피드백.
+   * 권한·공개 범위·마감·학사생 여부는 모두 서버(Career.gs)가 정한다. 이 파일은 서버가 준 칸만 그린다.
+   */
+  var CAR_ITEMS = [['hopes', '진로 희망'], ['targets', '목표 진학'], ['interests', '관심 분야'], ['strengths', '강점'], ['concerns', '고민']];
+  var CAR_TRACKS = ['학생부교과', '학생부종합', '논술', '정시', '아직 모름'];
+
+  function renderScreen(root) {
+    var role = (window.SCREEN_PARAMS || {}).role || '';
+    var box = el('div');
+    root.appendChild(box);
+    box.appendChild(el('div', { class: 'loading', text: '불러오는 중입니다…' }));
+    call('getCareerContext', role).then(function (ctx) {
+      clear(box);
+      if (!ctx.ok) { box.appendChild(el('div', { class: 'error', text: ctx.reason })); return; }
+      if (ctx.mode === 'student') careerStudent(box, ctx);
+      else if (ctx.mode === 'parent') careerParent(box, ctx);
+      else careerStaff(box, ctx);
+    }).catch(function (err) { clear(box); showError(box, err); });
+  }
+
+  function carKo(iso) { var d = String(iso || '').slice(0, 10); return UI.util.ymdParse(d) ? UI.util.formatDateKo(d) : ''; }
+  function carHopeText(h) { return [h.field, h.job].filter(Boolean).join(' · '); }
+  function carTargetText(t) { return [t.university, t.unit].filter(Boolean).join(' ') + (t.track ? ' · ' + t.track : ''); }
+
+  /** 항목 카드 5장(읽기). cur = 서버가 준 한 버전(보는 사람이 볼 수 있는 칸만 있다). opts.share = {on(field), onchange(field, next, done), itemOk}, opts.parentTag = true(교사 화면 꼬리표) */
+  function carCards(cur, opts) {
+    opts = opts || {};
+    return CAR_ITEMS.filter(function (it) { return it[0] in cur; }).map(function (it) {
+      var f = it[0], card = el('div', { class: 'card' }, [el('h2', { text: it[1] })]);
+      if (f === 'hopes') {
+        (cur.hopes || []).forEach(function (h) { card.appendChild(el('div', { class: 'car-hope' }, [el('div', { class: 'car-sub', text: h.rank + '순위' }), el('div', { text: carHopeText(h) })])); });
+        if (!(cur.hopes || []).length) card.appendChild(el('div', { class: 'muted', text: '적지 않았습니다.' }));
+      } else if (f === 'targets') {
+        (cur.targets || []).forEach(function (t, i) { card.appendChild(el('div', { class: 'car-hope' }, [el('div', { class: 'car-sub', text: '목표 ' + (i + 1) }), el('div', { text: carTargetText(t) })])); });
+        if (!(cur.targets || []).length) card.appendChild(el('div', { class: 'muted', text: '적지 않았습니다.' }));
+      } else {
+        card.appendChild(el('div', { style: 'white-space:pre-wrap;word-break:keep-all', text: cur[f] || '적지 않았습니다.' }));
+      }
+      if (opts.share) {
+        card.appendChild(UI.shareCheck({ on: (cur.parentFields || []).indexOf(f) >= 0, itemName: it[1], confirmOff: true,
+          onchange: function (next, done) { opts.share.onchange(f, next, done); } }));
+      } else if (opts.parentTag && (cur.parentFields || []).indexOf(f) >= 0) {
+        card.appendChild(el('div', { class: 'car-tags' }, [UI.statusPill('mute', '학부모에게 보임')]));
+      }
+      return card;
+    });
+  }
+
+  function carFeedbackCard(list, opts) {
+    opts = opts || {};
+    var card = el('div', { class: 'card' }, [el('h2', { text: opts.title || '선생님 말씀' })]);
+    list.forEach(function (f) {
+      var fb = el('div', { class: 'fb' }, [el('b', { text: f.teacherName + (opts.teacher ? '' : ' 선생님') + ' · ' + carKo(f.at) + (opts.teacher ? ' · ' + f.version + '번째 기록에' : '') }), el('span', { text: f.content })]);
+      card.appendChild(fb);
+      if (opts.oncancel && f.mine) card.appendChild(el('button', { type: 'button', class: 'btn secondary', text: '취소 처리', onclick: function () { opts.oncancel(f); } }));
+    });
+    return card;
+  }
+
+  /* ───────────── 학생 ───────────── */
+  function careerStudent(box, ctx) {
+    var sid = ctx.student.id, bar = null;
+    function dropBar() { if (bar && bar.parentNode) bar.parentNode.removeChild(bar); bar = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); }
+    function load(version) {
+      dropBar(); clear(box); box.appendChild(el('div', { class: 'loading', text: '불러오는 중입니다…' }));
+      call('getCareerStudent', sid, version || 0).then(function (r) { clear(box); view(r); }).catch(function (err) { clear(box); showError(box, err); });
+    }
+    function dueCard() {
+      if (!ctx.due) return null;
+      return el('div', { class: 'card' }, [el('h2', { text: '이번 학기 제출 마감: ' + ctx.due.ko }), el('div', { class: 'muted', text: '마감 뒤에도 생각이 바뀌면 언제든 다시 낼 수 있습니다.' })]);
+    }
+    function view(r) {
+      if (!r.current) {   // 아직 안 냄
+        var c = el('div', { class: UI.cardClass('todo') }, [el('h2', { text: '진로 프로필을 내 주세요' }),
+          el('div', { class: 'muted', style: 'word-break:keep-all', text: ctx.due && ctx.due.passed ? '마감(' + ctx.due.ko + ')이 지났습니다. 지금 내도 됩니다.' : '희망하는 진로와 목표 진학을 적어 내면 담당 선생님과 상담할 때 참고합니다.' })]);
+        if (r.canWrite) c.appendChild(UI.rowLink({ text: '진로 프로필 쓰기', onclick: function () { form(null); } }));
+        else c.appendChild(el('div', { class: 'muted', text: '학사를 나간 뒤에는 새로 낼 수 없습니다.' }));
+        box.appendChild(c);
+        return;
+      }
+      var cur = r.current, idx = r.versions.map(function (v) { return v.version; }).indexOf(cur.version);
+      if (!r.canWrite) box.appendChild(el('div', { class: 'notice info', text: '학사를 나간 뒤에는 고칠 수 없습니다. 기록은 계속 볼 수 있습니다.' }));
+      box.appendChild(UI.versionNav({ index: idx, total: r.versions.length, label: cur.version + '번째 기록' + (r.isLatest ? ' (가장 최근)' : ''), sub: carKo(cur.submittedAt) + '에 냄',
+        onchange: function (i) { load(r.versions[i].version); } }));
+      carCards(cur, r.isLatest && r.canWrite ? { share: { onchange: function (f, next, done) {
+        var fields = {}; fields[f] = next;
+        call('setCareerPublish', cur.id, fields).then(function (res) {
+          if (!res.ok) { UI.toast(res.errors[0], { kind: 'warn', ms: 6000 }); done(false); return; }
+          UI.toast(next ? '부모님께 보입니다.' : '부모님께 보이지 않습니다.', { kind: 'ok' }); done(true);
+        }).catch(function (err) { done(false); UI.toast(err && err.message || '저장하지 못했습니다.', { kind: 'warn' }); });
+      } } } : {}).forEach(function (c) { box.appendChild(c); });
+      if (r.feedback.length) {
+        box.appendChild(carFeedbackCard(r.feedback));
+        box.appendChild(el('div', { class: 'muted', style: 'word-break:keep-all', text: '선생님 말씀은 나와 선생님만 봅니다. 부모님께는 보이지 않습니다.' }));
+      }
+      if (r.canWrite) bar = UI.actionBar([{ text: '고쳐서 다시 내기', kind: 'primary', onclick: function () { form(r); } }], { mount: true });
+    }
+
+    function form(r) {
+      dropBar(); clear(box);
+      var prev = r && r.current && r.isLatest ? r.current : (r && r.current ? null : null);
+      // 지난번(가장 최근) 내용을 불러온다. 보고 있던 버전이 옛 것이면 서버가 준 가장 최근 것이 아니므로 다시 받는다
+      if (r && r.current && !r.isLatest) { call('getCareerStudent', sid, 0).then(function (x) { form(x); }); return; }
+      var top = el('div'), errBox = el('div');
+      box.appendChild(top);
+      if (prev) top.appendChild(el('div', { class: 'notice info', style: 'word-break:keep-all', text: '지난번에 낸 내용을 불러왔습니다. 바뀐 곳만 고쳐서 내면 새 기록으로 쌓이고, 지난 기록은 그대로 남습니다.' }));
+      var dc = dueCard(); if (dc) box.appendChild(dc);
+      box.appendChild(errBox);
+      var hopeIn = [1, 2, 3].map(function (n) {
+        var h = prev ? (prev.hopes || []).filter(function (x) { return x.rank === n; })[0] || {} : {};
+        return { n: n, field: el('input', { type: 'text', maxlength: '40', value: h.field || '' }), job: el('input', { type: 'text', maxlength: '40', value: h.job || '' }) };
+      });
+      var targetsBox = el('div'), targetIn = [];
+      function addTarget(t) {
+        t = t || {};
+        var row = { university: el('input', { type: 'text', maxlength: '40', value: t.university || '' }), unit: el('input', { type: 'text', maxlength: '40', value: t.unit || '' }), track: el('select', {}, [el('option', { value: '', text: '고르세요' })].concat(CAR_TRACKS.map(function (x) { return el('option', { value: x, text: x }); }))) };
+        row.track.value = t.track || '';
+        targetIn.push(row);
+        var n = targetIn.length;
+        targetsBox.appendChild(el('div', { class: 'car-slot' }, [el('b', { text: '목표 ' + n }), UI.field('대학', row.university), UI.field('학과', row.unit), UI.field('전형', row.track)]));
+      }
+      (prev && prev.targets && prev.targets.length ? prev.targets : []).forEach(addTarget);
+      var share = {}, textIn = {};
+      function shareRow(f, name) { var s = UI.shareCheck({ on: !!(prev && (prev.parentFields || []).indexOf(f) >= 0), itemName: name }); share[f] = s; return s; }
+      var c1 = el('div', { class: 'card' }, [el('h2', { text: '진로 희망' }), el('div', { class: 'muted', text: '1순위는 꼭 적어 주세요. 2·3순위는 있으면 적습니다.' })]);
+      hopeIn.forEach(function (h) {
+        c1.appendChild(el('div', { class: 'car-slot' }, [el('b', { text: h.n + '순위' + (h.n === 1 ? '' : ' (선택)') }), el('div', { class: 'car-grid2' }, [UI.field('분야', h.field), UI.field('직업', h.job)])]));
+      });
+      c1.appendChild(shareRow('hopes', '진로 희망'));
+      box.appendChild(c1);
+      var c2 = el('div', { class: 'card' }, [el('h2', { text: '목표 진학' }), el('div', { class: 'muted', text: '가고 싶은 대학·학과가 있으면 적어 주세요. 없으면 비워 둬도 됩니다.' }), targetsBox,
+        el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:8px', text: '+ 목표 추가', onclick: function () { if (targetIn.length >= 6) { UI.toast('목표 진학은 6개까지 적을 수 있습니다.', { kind: 'warn' }); return; } addTarget(); } }), shareRow('targets', '목표 진학')]);
+      if (!targetIn.length) addTarget();
+      box.appendChild(c2);
+      [['interests', '관심 분야', '요즘 관심 있는 것', '과목·활동·책 무엇이든 좋습니다.'], ['strengths', '강점', '내가 잘하는 것', ''], ['concerns', '고민', '걱정되거나 도움이 필요한 것', '담당 선생님이 상담 전에 읽습니다.']].forEach(function (x) {
+        var ta = el('textarea', { class: 'car-text', maxlength: '1000' }); ta.value = prev ? prev[x[0]] || '' : ''; textIn[x[0]] = ta;
+        box.appendChild(el('div', { class: 'card' }, [el('h2', { text: x[1] }), UI.field(x[2], ta, { hint: x[3] || undefined }), shareRow(x[0], x[1])]));
+      });
+      box.appendChild(el('div', { class: 'muted', style: 'word-break:keep-all', text: '부모님께는 가장 최근에 낸 기록에서 "보이기"를 켠 항목만 보입니다. 선생님 말씀(피드백)은 부모님께 보이지 않습니다.' }));
+
+      function gather() {
+        var fields = {};
+        CAR_ITEMS.forEach(function (it) { fields[it[0]] = share[it[0]].isOn(); });
+        return { hopes: hopeIn.map(function (h) { return { rank: h.n, field: h.field.value, job: h.job.value }; }),
+          targets: targetIn.map(function (t) { return { university: t.university.value, unit: t.unit.value, track: t.track.value }; }),
+          interests: textIn.interests.value, strengths: textIn.strengths.value, concerns: textIn.concerns.value, fields: fields };
+      }
+      function showErrors(list) {
+        clear(errBox);
+        errBox.appendChild(el('div', { class: 'card' }, [el('h2', { text: '고칠 곳이 ' + list.length + '군데 있습니다' })].concat(list.map(function (m) { return el('div', { class: 'error', text: m }); }))));
+        errBox.scrollIntoView && errBox.scrollIntoView({ block: 'start' });
+      }
+      var submit = UI.actionBar([{ text: '제출하기', kind: 'primary', onclick: function () {
+        var input = gather(), on = CAR_ITEMS.filter(function (it) { return input.fields[it[0]]; }).map(function (it) { return it[1]; }), off = CAR_ITEMS.filter(function (it) { return !input.fields[it[0]]; }).map(function (it) { return it[1]; });
+        var nextNo = (r && r.versions ? r.versions[r.versions.length - 1].version : 0) + 1;
+        UI.confirmSheet({ title: '제출하기', lead: nextNo + '번째 기록으로 쌓입니다',
+          lines: ['부모님께 보이는 항목: ' + (on.join(', ') || '없음'), '나만 보는 항목: ' + (off.join(', ') || '없음'), '담당 선생님과 담임 선생님은 모든 항목을 봅니다.'], message: '이대로 제출할까요?', confirmText: '제출하기',
+          onconfirm: function () {
+            call('submitCareerProfile', input).then(function (res) {
+              if (!res.ok) { showErrors(res.errors); return; }
+              UI.toast('제출했습니다.', { kind: 'ok' }); load(0);
+            }).catch(function (err) { showError(errBox, err); });
+          } });
+      } }].concat(r && r.current ? [{ text: '돌아가기', kind: 'secondary', onclick: function () { load(0); } }] : []), { mount: true });
+      bar = submit;
+    }
+    load(0);
+  }
+
+  /* ───────────── 학부모 ───────────── */
+  function careerParent(box, ctx) {
+    if (!ctx.children.length) { box.appendChild(el('div', { class: 'card' }, [el('h2', { text: '연결된 자녀가 없습니다' }), el('div', { class: 'muted', text: '담당 선생님께 알려 주세요.' })])); return; }
+    var body = el('div');
+    function show(child) {
+      clear(body); body.appendChild(el('div', { class: 'loading', text: '불러오는 중입니다…' }));
+      call('getCareerStudent', child.id, 0).then(function (r) {
+        clear(body);
+        body.appendChild(el('div', { class: 'notice info', style: 'word-break:keep-all', text: '자녀가 학부모님께 보여 주기로 한 내용입니다. 자녀가 고쳐 내면 가장 최근 내용으로 바뀝니다.' }));
+        if (r.none) {   // 안 냄·공개 안 함·껐음 모두 같은 문구(결정 92)
+          body.appendChild(el('div', { class: 'card' }, [el('h2', { text: '진로' }), el('div', { text: '지금은 보여 드릴 진로 기록이 없습니다.' }),
+            el('div', { class: 'muted', style: 'word-break:keep-all', text: '자녀가 학부모님께 보여 주기로 한 기록이 생기면 여기에 나옵니다.' })]));
+          return;
+        }
+        carCards(r.current, {}).forEach(function (c) { body.appendChild(c); });
+        body.appendChild(el('div', { class: 'muted', text: carKo(r.current.submittedAt) + '에 낸 내용' }));
+      }).catch(function (err) { clear(body); showError(body, err); });
+    }
+    if (ctx.children.length > 1) box.appendChild(UI.segmented({ label: '자녀', value: ctx.children[0].id, options: ctx.children.map(function (c) { return { value: c.id, label: c.name }; }),
+      onchange: function (v) { show(ctx.children.filter(function (c) { return c.id === v; })[0]); } }));
+    box.appendChild(body);
+    show(ctx.children[0]);
+  }
+
+  /* ───────────── 담당교사·담임·관리자 ───────────── */
+  function careerStaff(box, ctx) {
+    var want = (window.SCREEN_PARAMS || {}).student || '';
+    var tab = ctx.missing ? 'missing' : 'all';
+    function list() {
+      clear(box);
+      if (!ctx.total) { box.appendChild(el('div', { class: 'card' }, [UI.emptyState(ctx.role === 'homeroom' ? '우리 반 학사생이 없습니다.' : '이번 운영 기간에 담당하는 학생이 없습니다.')])); return; }
+      box.appendChild(UI.segmented({ label: '보기', value: tab, options: [{ value: 'missing', label: '미제출 ' + ctx.missing }, { value: 'all', label: '전체 ' + ctx.total }], onchange: function (v) { tab = v; list(); } }));
+      var card = el('div', { class: 'card' });
+      var rows = ctx.list.filter(function (s) { return tab === 'all' || s.state === '미제출'; });
+      if (!rows.length) card.appendChild(UI.emptyState('진로 프로필을 내지 않은 학생이 없습니다.'));
+      rows.forEach(function (s) {
+        var pill = s.state === '미제출' ? UI.statusPill('todo', '미제출') : s.state === '유예' ? UI.statusPill('mute', '유예 중') : UI.statusPill('confirmed', '제출');
+        card.appendChild(el('button', { type: 'button', class: 'car-row', onclick: function () { detail(s.id, 0); } }, [
+          el('span', { class: 'car-main' }, [el('span', { class: 'car-name', text: s.label }), el('span', { class: 'muted', text: s.line })]), pill]));
+      });
+      box.appendChild(card);
+    }
+    function detail(sid, version) {
+      clear(box); box.appendChild(el('div', { class: 'loading', text: '불러오는 중입니다…' }));
+      call('getCareerStudent', sid, version).then(function (r) { clear(box); drawDetail(r, sid); }).catch(function (err) { clear(box); showError(box, err); });
+    }
+    function drawDetail(r, sid) {
+      var head = el('div', { class: 'card' }, [el('h2', { text: r.student.name }), el('div', { class: 'muted', text: r.student.label + (r.student.teacherName ? ' · 담당 ' + r.student.teacherName : '') }),
+        el('div', { class: 'car-tools', style: 'margin-top:8px' }, [el('button', { type: 'button', class: 'btn secondary', text: '학생 바꾸기', onclick: list })])]);
+      box.appendChild(head);
+      if (!r.current) {
+        box.appendChild(el('div', { class: 'card' }, [el('div', { text: '아직 진로 프로필을 내지 않았습니다.' + (r.due && r.due.passed ? ' 마감(' + r.due.ko + ')이 지났습니다.' : '') }),
+          el('div', { class: 'muted', style: 'word-break:keep-all', text: '학생이 자기 화면에서 직접 냅니다. 선생님이 대신 낼 수 없습니다.' })]));
+        return;
+      }
+      var cur = r.current, idx = r.versions.map(function (v) { return v.version; }).indexOf(cur.version);
+      box.appendChild(UI.versionNav({ index: idx, total: r.total, label: cur.version + '번째 기록' + (r.isLatest ? ' (가장 최근)' : ''), sub: carKo(cur.submittedAt) + '에 냄 · 전체 ' + r.total + '개', onchange: function (i) { detail(sid, r.versions[i].version); } }));
+      carCards(cur, { parentTag: true }).forEach(function (c) { box.appendChild(c); });
+      var fbCard = carFeedbackCard(r.feedback, { title: '피드백', teacher: true, oncancel: r.canFeedback ? function (f) {
+        UI.confirmWithReason({ title: '피드백 취소 처리', message: '취소해도 기록은 지워지지 않고 "취소"로 남습니다. 학생 화면에서는 사라집니다.', reasonLabel: '취소 사유', confirmText: '취소 처리',
+          onconfirm: function (reason) { call('cancelCareerFeedback', f.id, reason).then(function (x) { if (!x.ok) { UI.toast(x.errors[0], { kind: 'warn' }); return; } UI.toast('취소 처리했습니다.', { kind: 'ok' }); detail(sid, cur.version); }).catch(function (e) { UI.toast(e.message, { kind: 'warn' }); }); } });
+      } : null });
+      box.appendChild(fbCard);
+      if (r.canFeedback) {
+        var ta = el('textarea', { class: 'car-text', maxlength: '1000' }), fld = UI.field('피드백 쓰기', ta, { hint: '학생에게 보입니다. 학부모에게는 보이지 않습니다. 학생이 보면 안 되는 내용은 상담일지에 써 주세요.' });
+        var btn = el('button', { type: 'button', class: 'btn secondary', text: '피드백 남기기' });
+        btn.addEventListener('click', function () {
+          if (!ta.value.trim()) { fld.setError('피드백 내용을 적어 주세요.'); return; }
+          fld.setError(''); btn.disabled = true;
+          call('addCareerFeedback', sid, cur.id, ta.value).then(function (x) {
+            btn.disabled = false;
+            if (!x.ok) { fld.setError(x.errors[0]); return; }
+            UI.toast('피드백을 남겼습니다.', { kind: 'ok' }); detail(sid, cur.version);
+          }).catch(function (e) { btn.disabled = false; showError(fbCard, e); });
+        });
+        fbCard.appendChild(fld); fbCard.appendChild(btn);
+      }
+    }
+    if (want) detail(want, 0); else list();
+  }
+</script>
