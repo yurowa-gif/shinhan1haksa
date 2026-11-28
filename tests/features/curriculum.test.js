@@ -209,3 +209,23 @@ test('이름 경고: 이유 한 줄 + 띄어쓰기만 다른 이름은 표준 �
   const r = env.call(OWNER, 'previewCurriculum', 'recommendations', head + '\n2099,가짜대,가짜학과,물리학;화학,생명과학,https://example.com,출처,');
   assert.deepStrictEqual(plain(r.lists.add), ['가짜대 · 가짜학과 · 핵심: 물리학, 화학 · 권장: 생명과학']);
 });
+
+test('빠지는 과목을 이미 고른 학생 n명 경고(careerDropWarnings_) — 저장해도 학생의 이수 계획 줄은 그대로, 계산은 규칙 함수(curriculumSavePlan_)', () => {
+  const env = newEnv();
+  const p0 = env.call(OWNER, 'previewCurriculum', 'curriculum', CUR);
+  assert.ok(!p0.warnings.some((w) => /이미 고른 학생/.test(w)), '이수 계획 탭이 비어 있어도 동작');
+  env.call(OWNER, 'saveCurriculum', 'curriculum', CUR, { kind: 'curriculum', counts: p0.counts });
+  const [a, b] = env.rows('students');
+  const term = env.rows('terms')[0];
+  [a, b].forEach((s) => env.asOwner((c) => c.appendRecord_('course_plans', { term_id: term.id, student_id: s.id, entry_year: '2099', grade: '2', semester: '1', choice_group: '선택군A', course: '대수',
+    state: '계획', confirmed_by: '', confirmed_at: '', show_to_parent: 'FALSE', status: '유효', cancel_reason: '' }, OWNER)));
+  const without = CUR.split('\n').filter((l) => !/대수/.test(l)).join('\n');
+  const p = env.call(OWNER, 'previewCurriculum', 'curriculum', without);
+  assert.deepStrictEqual(plain(p.counts), { add: 0, changed: 0, remove: 1, same: 4, rows: 4 });
+  assert.ok(p.warnings.some((w) => /빠지는 과목 "대수"/.test(w) && /이미 고른 학생이 2명/.test(w) && /교육과정에서 빠진 과목/.test(w)));
+  const plans = env.rows('course_plans').length;
+  env.call(OWNER, 'saveCurriculum', 'curriculum', without, { kind: 'curriculum', counts: p.counts });
+  assert.strictEqual(env.rows('course_plans').length, plans);
+  assert.ok(env.rows('course_plans').every((r) => r.status === '유효'), '이수 계획 줄은 건드리지 않는다');
+  assert.ok(!/function curPlan_\b/.test(require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'src', 'features', 'Curriculum.gs'), 'utf8')), '같은 계산이 두 곳에 없다');
+});

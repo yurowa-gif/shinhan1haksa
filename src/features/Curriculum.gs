@@ -9,7 +9,7 @@
  *  - 한 번에 한 입학년도(편제표)·기준 연도(권장 과목)만 올린다(screens.md 11절). 저장은 그 해의 유효 줄을 새 글과 맞춘다(총괄 확정):
  *    같은 줄은 그대로, 같은 자리(편제표: 학년·학기·선택군·과목 / 권장: 대학·모집단위)인데 내용이 바뀐 줄은 옛 줄 '취소' + 새 줄, 빠진 줄은 '취소', 새 줄은 추가(삭제 없음).
  *    락 안에서 다시 계산해 미리 볼 때와 개수가 다르면 거부한다(stale). audit_log에는 일괄 1줄(추가 id 목록)·취소 줄의 바뀐 칸이 남는다.
- *  - curPlan_은 R25(CareerRules, #312)가 순수 규칙 함수를 넣으면 그 함수로 바꾼다(자리표시: 같은 결과를 내는 계산).
+ *  - 기존 줄과 견주는 계산은 규칙 함수 curriculumSavePlan_(R25b)가 한다(curPrepare_). 빠지는 과목을 이미 고른 학생 수 경고는 careerDropWarnings_.
  *  - 읽기(곧 만들 이수 계획 화면)는 curriculumRows_·recommendationRows_ 내부 함수.
  * ASSUMPTION: 편제표 같은 선택군의 pick_n은 줄마다 같아야 한다(다르면 오류). 선택군이 비면(필수 과목) pick_n은 비우거나 0.
  * 권장 과목에 대학·모집단위가 같은 줄이 여럿이면 뒤의 줄만 쓴다(경고, screens.md 11절). 출처 주소는 꼭 있어야 한다.
@@ -44,7 +44,6 @@ function curStdCheck_(name) {
   return { ok: false, suggest: hit || '' };
 }
 
-function curSig_(def, rec) { return def.cols.map(function (c) { return String(rec[c] === undefined || rec[c] === null ? '' : rec[c]); }).join('\u0001'); }
 
 /** 순수: 열 이름 줄 검사 → {index:{열이름: 칸 번호}, errors} */
 function curHeader_(def, row) {
@@ -195,39 +194,24 @@ function curParse_(kind, text) {
 
 function curIsLive_(r) { return String(r.status || '유효').trim() !== '취소'; }
 
-/** 같은 '자리'(편제표: 학년·학기·선택군·과목, 권장: 대학·모집단위). 자리는 같은데 내용이 다르면 '바뀌는 줄' */
-function curPlace_(kind, r) {
-  return kind === 'curriculum' ? [r.grade, r.semester, r.choice_group || '', r.course].join('\u0001') : [r.university, r.unit].join('\u0001');
-}
-
 /**
- * 순수: 붙여넣은 글과 지금 시트(그 종류 탭의 모든 행)를 비교한다. 올린 글의 입학년도(기준 연도) 하나의 유효 줄만 맞춘다.
- * → {ok, errors, warnings, year, add:[rec], changed:[{before: 시트 행, after: rec}], remove:[시트 행], same, counts:{add, changed, remove, same, rows}}
- * 저장은 add + changed.after를 새로 쓰고 changed.before + remove를 '취소'로 바꾼다.
+ * 붙여넣은 글 → 저장 계획. 열 이름·표준 과목 이름·택N 맞춤 같은 붙여넣기 검사는 curParse_(여기), 기존 줄과 견주는 계산(같은 줄·바뀌는 줄·빠지는 줄·새 줄)은
+ * 규칙 함수 curriculumSavePlan_(R25b, src/rules/CareerRules.gs)가 한다 — 같은 계산을 여기서 다시 하지 않는다.
+ * → curriculumSavePlan_ 결과({ok, errors, warnings, keys, add, changed, removed, same, toAppend, toCancel, counts})에 year(올린 해)와 drops(빠지는 과목을 이미 고른 학생)를 더한 것.
+ * 오류는 {line, column, message} 모양으로 통일한다.
  */
-function curPlan_(kind, text, existing) {
-  var def = curKind_(kind);
+function curPrepare_(kind, text, existing, plans) {
   var p = curParse_(kind, text);
-  var empty = { add: [], changed: [], remove: [], same: 0, counts: { add: 0, changed: 0, remove: 0, same: 0, rows: 0 } };
-  if (p.errors.length) return Object.assign({ ok: false, errors: p.errors, warnings: p.warnings, year: '' }, empty);
-  var year = String(p.recs[0].rec[def.scope]);
-  var pool = (existing || []).filter(function (r) { return curIsLive_(r) && String(r[def.scope]) === year; });
-  var bySig = {}, byPlace = {};
-  pool.forEach(function (r) { (bySig[curSig_(def, r)] = bySig[curSig_(def, r)] || []).push(r); });
-  var used = {};
-  var add = [], changed = [], same = 0, rest = [];
-  p.recs.forEach(function (x) {
-    var b = bySig[curSig_(def, x.rec)];
-    if (b && b.length) { used[b.pop().id] = true; same++; } else rest.push(x.rec);
+  if (p.errors.length) return { ok: false, errors: p.errors, warnings: p.warnings, year: '', add: [], changed: [], removed: [], same: 0, toAppend: [], toCancel: [], drops: [], counts: { add: 0, changed: 0, remove: 0, same: 0, rows: 0 } };
+  var plan = curriculumSavePlan_(kind, existing, p.recs.map(function (x) { return x.rec; }));
+  plan.errors = plan.errors.map(function (m) { return { line: 0, column: '', message: m }; });
+  plan.warnings = p.warnings.concat(plan.warnings);
+  plan.year = plan.keys[0] || '';
+  plan.drops = kind === 'curriculum' && plan.ok ? careerDropWarnings_(plan.removed, plans || []) : [];
+  plan.drops.forEach(function (d) {
+    plan.warnings.push('빠지는 과목 "' + d.course + '"(' + d.grade + '학년 ' + d.semester + '학기)을 이미 고른 학생이 ' + d.students + '명 있습니다. 저장해도 학생의 이수 계획 줄은 그대로 남고, 학생 화면에 "교육과정에서 빠진 과목"으로 표시됩니다.');
   });
-  pool.filter(function (r) { return !used[r.id]; }).forEach(function (r) { (byPlace[curPlace_(kind, r)] = byPlace[curPlace_(kind, r)] || []).push(r); });
-  rest.forEach(function (rec) {
-    var b = byPlace[curPlace_(kind, rec)];
-    if (b && b.length) { var old = b.shift(); used[old.id] = true; changed.push({ before: old, after: rec }); } else add.push(rec);
-  });
-  var remove = pool.filter(function (r) { return !used[r.id]; });
-  return { ok: true, errors: [], warnings: p.warnings, year: year, add: add, changed: changed, remove: remove, same: same,
-    counts: { add: add.length, changed: changed.length, remove: remove.length, same: same, rows: p.recs.length } };
+  return plan;
 }
 
 /** 줄 한 개를 사람이 읽는 글로(한 번에 한 해만 올리므로 해는 뺀다): '2학년 1학기 · 선택군 A(택2) · 화법과 언어' / '연세대 · 문과대학 전 모집단위 · 핵심: … · 권장: …' */
@@ -237,13 +221,16 @@ function curLabel_(kind, r) {
     : r.university + ' · ' + r.unit + ' · 핵심: ' + (String(r.core_courses).split(';').join(', ') || '없음') + ' · 권장: ' + (String(r.recommended_courses).split(';').join(', ') || '없음');
 }
 
+/** 이수 계획 줄(빠지는 과목을 고른 학생 수). 탭이 아직 비어 있어도 동작한다 */
+function curPlansOf_() { return readAll_('course_plans'); }
+
 function curPreviewView_(kind, plan) {
   if (!plan.ok) return { ok: false, kind: kind, errors: plan.errors.slice(0, 50), errorCount: plan.errors.length, warnings: plan.warnings, counts: plan.counts };
   var cut = function (a) { return a.slice(0, CUR_LIST_MAX); };
-  return { ok: true, kind: kind, year: plan.year, counts: plan.counts, warnings: plan.warnings, nothingToDo: !plan.add.length && !plan.changed.length && !plan.remove.length,
+  return { ok: true, kind: kind, year: plan.year, counts: plan.counts, warnings: plan.warnings, nothingToDo: !plan.toAppend.length && !plan.toCancel.length,
     lists: { add: cut(plan.add).map(function (r) { return curLabel_(kind, r); }),
       changed: cut(plan.changed).map(function (c) { return curLabel_(kind, c.after) + (kind === 'curriculum' ? ' (택' + c.before.pick_n + ' → 택' + c.after.pick_n + ')' : ''); }),
-      remove: cut(plan.remove).map(function (r) { return curLabel_(kind, r); }) } };
+      remove: cut(plan.removed).map(function (r) { return curLabel_(kind, r); }) } };
 }
 
 function curCountsEqual_(a, b) {
@@ -257,7 +244,7 @@ function previewCurriculum(kind, text) {
   requirePermission_('curriculum.edit');
   var def = curKind_(kind);
   invalidate_('config', def.tab);
-  return curPreviewView_(String(kind), curPlan_(String(kind), text, readAll_(def.tab, 'config')));
+  return curPreviewView_(String(kind), curPrepare_(String(kind), text, readAll_(def.tab, 'config'), curPlansOf_()));
 }
 
 /**
@@ -269,16 +256,14 @@ function saveCurriculum(kind, text, expect) {
   var def = curKind_(kind);
   return withLock_(function () {
     invalidate_('config', def.tab);
-    var plan = curPlan_(String(kind), text, readAll_(def.tab, 'config'));
+    var plan = curPrepare_(String(kind), text, readAll_(def.tab, 'config'), curPlansOf_());
     if (!plan.ok) return curPreviewView_(String(kind), plan);
     if (!expect || expect.kind !== String(kind) || !curCountsEqual_(plan.counts, expect.counts)) {
       return { ok: false, stale: true, errors: [{ line: 0, column: '', message: '미리 보기 이후 입력이나 올려 둔 ' + def.label + '이 바뀌었습니다. [미리 보기]를 다시 눌러 결과를 보고 저장해 주세요.' }] };
     }
-    if (!plan.add.length && !plan.changed.length && !plan.remove.length) return { ok: true, nothingToDo: true, counts: plan.counts };
-    var fresh = plan.add.concat(plan.changed.map(function (c) { return c.after; }));
-    var cancel = plan.changed.map(function (c) { return c.before; }).concat(plan.remove);
-    bulkAppend_(def.tab, fresh.map(function (r) { return Object.assign({}, r, { status: '유효' }); }), user.email, 'config');
-    bulkUpdateRecords_(def.tab, cancel.map(function (r) { return { id: r.id, patch: { status: '취소' } }; }), user.email, 'config');
+    if (!plan.toAppend.length && !plan.toCancel.length) return { ok: true, nothingToDo: true, counts: plan.counts };
+    bulkAppend_(def.tab, plan.toAppend, user.email, 'config');
+    bulkUpdateRecords_(def.tab, plan.toCancel.map(function (c) { return { id: c.id, patch: { status: '취소' } }; }), user.email, 'config');
     return { ok: true, counts: plan.counts };
   });
 }
