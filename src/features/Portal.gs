@@ -136,12 +136,19 @@ function ptlUpcoming_(today, n) {
 
 /** 학부모에게 보이는 상담 여부: 날짜·교사 이름만(내용·유형·대상 없음), show_to_parent가 참인 살아 있는 상담. */
 function ptlCounsel_(studentId) {
-  var names = {};
+  var names = {}, viewer = { role: 'parent', isSelf: false, isChild: true };   // 학부모만 부른다(getPortalStudent의 !own). 보일 칸은 규칙 counselView_가 정한다(결정 90·103 ⑦)
   readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = String(u.name || ''); });
-  return readAll_('counsel_notes', 'counsel').filter(function (n) {
-    return ruleStr_(n.student_id) === studentId && ruleRowLive_(n) && String(n.show_to_parent).toUpperCase() !== 'FALSE' && ymdIsValid_(String(n.date));
-  }).sort(function (a, b) { return String(a.date) < String(b.date) ? 1 : -1; })
-    .map(function (n) { return { date: String(n.date), dateKo: foodDateKo_(n.date), teacher: names[normalizeEmail_(n.teacher_email)] || '' }; });
+  var out = [];
+  readAll_('counsel_notes', 'counsel').filter(function (n) { return ruleStr_(n.student_id) === studentId && ymdIsValid_(String(n.date)); })
+    .sort(function (a, b) { return String(a.date) < String(b.date) ? 1 : -1; })
+    .forEach(function (n) {
+      var v = counselView_(n, viewer, { teacherName: names[normalizeEmail_(n.teacher_email)] || '' });
+      if (!v) return;
+      var o = { date: String(v.date), dateKo: foodDateKo_(v.date), teacher: v.teacher_name };
+      if (v.agreement) o.agreement = v.agreement;   // 학생이 '부모님께 보이기'를 켠 합의 사항만(없으면 이 칸이 없다)
+      out.push(o);
+    });
+  return out;
 }
 
 /** 그 달 월별 일정(제목·종류·기간)과 날짜별 운영 여부. 일정 메모·자습 일정 메모는 보내지 않는다. */

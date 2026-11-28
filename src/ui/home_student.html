@@ -22,19 +22,22 @@
       if (todo) root.insertBefore(crCard, body); else root.appendChild(crCard);
     }
     // 상담 신청 카드(C49-A, F17): 신청·내 신청은 ?page=counselreq
+    var formLink = UI.rowLink({ href: d.appUrl + '?page=counselreq&tab=form', text: '상담 신청하기' });
     var cqLine = el('div', { style: 'margin:8px 0;word-break:keep-all' });   // 신청 상태 한 줄(신청 화면을 다시 열지 않아도 알 수 있게). 서버가 보는 사람에 맞게 준 칸만 쓴다
     var cqCard = el('div', { class: 'card' }, [
       el('h2', { text: '상담' }),
       cqLine,
       el('div', { class: 'muted', style: 'word-break:keep-all', text: '담당 선생님과 이야기하고 싶으면 날짜와 주제를 알려 주세요.' }),
-      UI.rowLink({ href: d.appUrl + '?page=counselreq&tab=form', text: '상담 신청하기' }),
-      UI.rowLink({ href: d.appUrl + '?page=counselreq', text: '내 상담 신청 보기' })
+      formLink,
+      UI.rowLink({ href: d.appUrl + '?page=counselreq', text: '내 상담 신청 보기' }),
+      UI.rowLink({ href: d.appUrl + '?page=mynotes', text: '내 상담 기록 보기' })
     ]);
     root.appendChild(cqCard);
     call('getCounselRequestsOfStudent', '').then(function (r) {
       var cur = (r.requests || [])[0];   // 가장 최근 신청(새 신청이 위)
       if (!cur) return;
       var day = function (ymd) { return UI.util.formatDateKo(ymd, false); };
+      if (cur.status === '신청' || cur.status === '확정') { if (formLink.parentNode) formLink.parentNode.removeChild(formLink); }   // 진행 중인 신청이 있으면 새로 신청할 수 없으니 링크를 뺀다(결정 95)
       if (cur.status === '신청') cqLine.appendChild(el('span', {}, [UI.statusPill('requested', '신청 중'), ' ' + cur.topic + ' 상담 — 선생님이 날짜를 정하면 알려 드립니다.']));
       else if (cur.status === '확정') { cqLine.appendChild(el('b', { text: day(cur.decided_date) + '에 상담합니다.' })); cqCard.className = UI.cardClass('key'); }
       else if (cur.status === '반려') cqLine.appendChild(el('span', {}, [UI.statusPill('canceled', '반려'), ' ' + cur.topic + ' 상담 신청이 반려되었습니다. 사유는 내 상담 신청에서 볼 수 있습니다.']));

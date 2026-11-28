@@ -66,11 +66,14 @@
         var pc = el('div', { class: 'card' }, [el('h2', { text: '지난 신청' })]);
         past.forEach(function (r) {
           var kids = [el('div', { class: 'cr-line' }, [el('b', { text: r.topic + ' 상담' }), pill(r)])];
-          if (r.status === '완료') kids.push(el('div', { class: 'muted', text: '상담한 날: ' + dayKo(r.decided_date) + ' · ' + teacherText(d) }));
+          if (r.status === '완료') {
+            kids.push(el('div', { class: 'muted', text: '상담한 날: ' + dayKo(r.decided_date) + ' · ' + teacherText(d) }));
+            kids.push(el('a', { class: 'btn secondary', style: 'margin-top:8px', href: ((document.querySelector('a.back') || {}).href || '') + '?page=mynotes', text: '상담 기록 보기' }));
+          }
           else if (r.status === '반려') {
-            kids.push(el('div', { class: 'muted', text: wishText(r) }));
+            kids.push(el('div', { class: 'muted', text: r.created_at ? dayKo(String(r.created_at).slice(0, 10)) + '에 신청' : wishText(r) }));
             if (r.cancel_reason) kids.push(el('div', { class: 'cr-fb' }, [el('b', { text: '선생님 말씀' }), el('span', { text: r.cancel_reason })]));
-          } else kids.push(el('div', { class: 'muted', text: wishText(r) + ' · 내가 취소했습니다.' }));
+          } else kids.push(el('div', { class: 'muted', text: (r.created_at ? dayKo(String(r.created_at).slice(0, 10)) + '에 신청' : wishText(r)) + ' · 내가 취소했습니다.' }));
           pc.appendChild(el('div', { class: 'cr-req' }, kids));
         });
         body.appendChild(pc);
@@ -140,7 +143,7 @@
         if (!picked().length) errs.push({ field: 'date0', message: '희망 날짜를 하나 이상 골라 주세요.' });
         state.dates.forEach(function (v, i) {
           if (!v) return;
-          if (v < d.today) errs.push({ field: 'date' + i, message: '오늘(' + dayKo(d.today) + ') 이후 날짜를 골라 주세요.' });
+          if (v < d.today) errs.push({ field: 'date' + i, message: '오늘 ' + dayKo(d.today) + '부터 고를 수 있습니다.' });
           else if (seen[v]) errs.push({ field: 'date' + i, message: '같은 날짜를 두 번 고를 수 없습니다. 다른 날로 고쳐 주세요.' });
           seen[v] = true;
         });

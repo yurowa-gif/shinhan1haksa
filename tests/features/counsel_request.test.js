@@ -189,3 +189,30 @@ test('감사·메일: 신청 글(메모)은 audit_log에 글자 수만 남고, �
   assert.strictEqual(JSON.stringify(sent[0].to), JSON.stringify([x.teacher]));
   assert.ok(!sent[0].body.includes(MEMO) && !sent[0].body.includes(x.me.name), '메일 본문에 메모·학생 이름 없음: ' + sent[0].body);
 });
+
+test('교사 목록 순서: 처리할 것(신청 → 확정)은 가장 이른 희망·확정 날짜 순, 지난 신청은 새 것이 위', () => {
+  const x = makeEnv();
+  const teacherStudents = x.env.rows('enrollments').filter((e) => e.term_id === x.term.id && e.teacher_email === x.teacher).map((e) => e.student_id);
+  const mates = x.env.rows('students').filter((s) => teacherStudents.includes(s.id) && s.id !== x.me.id && s.email).slice(0, 2);
+  if (mates.length < 2) return;   // 가짜 시드에 같은 담당의 로그인 학생이 둘 미만이면 건너뜀(순서 규칙은 아래 고정 입력으로도 본다)
+  const submitAs = (m, dates, topic) => { x.env.asOwner((c) => c.addUser(m.email, '가짜' + m.name, 'student')); const r = call(x, m.email, 'submitCounselRequest', { dates: dates, topic: topic, memo: '' }); assert.strictEqual(r.ok, true, JSON.stringify(r)); return r.id; };
+  const late = submit(x, { dates: ['2027-03-25'] });         // 가장 늦은 희망 날짜, 먼저 신청
+  const early = submitAs(mates[0], ['2027-03-12', '2027-03-30'], '학습');
+  const mid = submitAs(mates[1], ['2027-03-18'], '생활');
+  const fixed = call(x, x.teacher, 'decideCounselRequest', { studentId: mates[1].id, requestId: mid, action: 'confirm', date: '2027-03-18' });
+  assert.strictEqual(fixed.ok, true);
+  const order = call(x, x.teacher, 'getCounselRequestList').requests.map((r) => r.id);
+  assert.deepStrictEqual(order, [early, late.id, mid], '신청은 이른 희망 날짜순(3/12 → 3/25), 확정은 그 뒤');
+});
+
+test('신청한 날(created_at): 학생·담당교사·관리자·담임 응답에 날짜가 오고(시각 포함 ISO), 학부모·다른 교사에게는 응답 자체가 없다', () => {
+  const x = makeEnv();
+  submit(x);
+  const day = (v) => String(v).slice(0, 10);
+  const s = call(x, STUDENT, 'getCounselRequestsOfStudent', x.me.id).requests[0];
+  assert.strictEqual(day(s.created_at), TODAY, '학생 응답');
+  assert.strictEqual(day(call(x, x.teacher, 'getCounselRequestList').requests[0].created_at), TODAY, '담당교사 목록');
+  assert.strictEqual(day(call(x, ADMIN, 'getCounselRequestsOfStudent', x.me.id).requests[0].created_at), TODAY, '관리자');
+  x.env.expectDenied(PARENT, 'counsel.request.view', 'getCounselRequestsOfStudent', x.me.id);
+  x.env.expectDenied(T2, 'counsel.request.view', 'getCounselRequestsOfStudent', x.me.id);
+});

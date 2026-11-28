@@ -73,6 +73,7 @@
       var kids = [el('h2', { text: who(r) + ' · ' + r.topic + ' 상담' }),
         el('div', { class: 'rq-line' }, [pill(r), el('button', { type: 'button', class: 'btn secondary row-btn ld-narrow', text: '목록으로', onclick: function () { Nav.back(toList); } })])];
       kids = kids.concat(field('주제', r.topic), field('희망 날짜', r.wishDates.map(dayKo).join(' · ')));
+      if (r.created_at) kids = kids.concat(field('신청한 날', dayKo(String(r.created_at).slice(0, 10))));
       if (r.decided_date) kids = kids.concat(field(r.status === '완료' ? '상담한 날' : r.status === '확정' ? '상담하는 날' : '정한 날', dayKo(r.decided_date)));
       if (r.memo !== undefined) kids = kids.concat(field('학생 메모', r.memo || '(적지 않았습니다)'));
       if (r.status === '반려' && r.cancel_reason) kids = kids.concat(field('반려 사유(학생에게 보임)', r.cancel_reason));
@@ -104,7 +105,7 @@
       if (!r.canDecide) return [];
       return [el('h3', { text: '상담을 마쳤으면' }),
         el('div', { class: 'rq-acts' }, [
-          el('a', { class: 'btn', href: appHref('page=counsel&student=' + encodeURIComponent(r.student.id)), text: '상담일지 쓰기' }),
+          el('a', { class: 'btn', href: appHref('page=counsel&student=' + encodeURIComponent(r.student.id) + '&request=' + encodeURIComponent(r.id)), text: '상담일지 쓰기' }),
           el('button', { type: 'button', class: 'btn secondary', text: '상담 못 함', onclick: function () { askReject(r, '상담 못 함', '사유는 학생에게 그대로 보입니다. 상담을 못 한 신청은 "반려"로 남고, 학생이 새로 신청할 수 있습니다.', '상담 못 함으로 처리했습니다.'); } })]),
         el('div', { class: 'muted', text: '일지를 저장하면 신청이 "완료"가 되고 일지와 이어집니다.' })];
     }
