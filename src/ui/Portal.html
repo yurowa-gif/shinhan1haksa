@@ -121,7 +121,7 @@
           iq.forEach(function (r) {
             iqKids.push(el('div', { class: 'pt-fb' }, [UI.statusPill('mute', 'AI 제안'), ' ', UI.statusPill(r.progress === '완료' ? 'confirmed' : r.progress === '진행 중' ? 'requested' : 'mute', r.progress),
               el('b', { text: r.title, style: 'display:block;margin-top:4px' }), r.question ? el('span', { text: r.question }) : null,
-              r.result_link ? el('a', { href: r.result_link, target: '_blank', rel: 'noopener noreferrer', style: 'display:block', text: '결과물 보기' }) : null]));
+              r.result_link ? el('a', { href: r.result_link, target: '_blank', rel: 'noopener noreferrer', style: 'display:flex;align-items:center;min-height:48px', text: '결과물 보기 (새 창)' }) : null]));
           });
           iqKids.push(note('탐구 주제는 AI가 제안한 것으로, 자녀가 골라 진행하고 있습니다.'));
           root.appendChild(card('탐구 기록', iqKids, 'side'));

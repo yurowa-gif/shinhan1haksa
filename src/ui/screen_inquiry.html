@@ -6,6 +6,7 @@
   .iq-q { margin: 2px 0 6px; }
   .iq-meta { color: var(--muted-ink); font-size: var(--font-sm, .85rem); }
   .iq-prog { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 0 4px; flex-wrap: wrap; }
+  .iq-link { display: flex; align-items: center; min-height: 48px; }   /* 누르는 칸 48px */
   .iq-form { margin-top: 8px; }
   .iq-titles { margin: 8px 0 0; padding-left: 1.2em; }
   .iq-pick input[type=file] { display: none; }
@@ -72,7 +73,7 @@
           onclick: function () { state.open = state.open === r.id ? '' : r.id; draw(); } }));
       }
       box.appendChild(prog);
-      if (r.result_link) box.appendChild(el('div', { class: 'iq-meta' }, [el('a', { href: r.result_link, target: '_blank', rel: 'noopener noreferrer', text: '결과물 보기' })]));
+      if (r.result_link) box.appendChild(el('a', { class: 'iq-link', href: r.result_link, target: '_blank', rel: 'noopener noreferrer', text: '결과물 보기 (새 창)' }));
       if (r.memo) box.appendChild(el('div', { class: 'iq-meta', style: 'white-space:pre-wrap', text: r.memo }));
       if (canWrite && state.open === r.id) { form = progressForm(r); box.appendChild(form); }
       if (canWrite) {
