@@ -137,15 +137,16 @@ test('목록: 담당교사는 자기 담당 학생의 신청만(처리할 것이
   assert.deepStrictEqual([info.open, info.fixed, info.earliest], [1, 0, '2027-03-12']);
 });
 
-test('결정 97: 지난 기간 신청은 그 기간 담당이었던 교사만 \'assigned\'로 본다(지금 담당이어도 그 기간 담당이 아니면 담임·none)', () => {
+test('결정 97·104: 지난 기간 신청은 그 기간 담당이었던 교사와 지금 담당교사가 \'assigned\'로 본다(전 담당은 자기 기간만)', () => {
   const x = makeEnv();
   const student = x.env.rows('students').find((s) => s.id === x.me.id);
   const enrollments = [{ term_id: 'T-OLD', student_id: x.me.id, teacher_email: T2 }, { term_id: x.term.id, student_id: x.me.id, teacher_email: x.teacher }];
   const roleOf = (who, termId) => plain(x.env.as(who, (c) => c.crqViewer_(c.getCurrentUser_(), student, termId, enrollments))).role;
   assert.strictEqual(roleOf(x.teacher, x.term.id), 'assigned');
-  assert.strictEqual(roleOf(x.teacher, 'T-OLD'), 'none', '지금 담당이어도 지난 기간 담당이 아니면 못 본다');
+  assert.strictEqual(roleOf(x.teacher, 'T-OLD'), 'assigned', '지금 담당은 지난 기간 기록도 본다(결정 104)');
   assert.strictEqual(roleOf(T2, 'T-OLD'), 'assigned');
-  assert.strictEqual(roleOf(T2, x.term.id), 'none');
+  assert.strictEqual(roleOf(T2, x.term.id), 'none', '전 담당은 자기가 담당하지 않은 기간 기록을 못 본다');
+  assert.strictEqual(roleOf(T2, 'T-OTHER'), 'none');
   assert.strictEqual(roleOf(ADMIN, 'T-OLD'), 'admin');
   assert.strictEqual(roleOf(STUDENT, 'T-OLD'), 'student');
 });
@@ -190,6 +191,29 @@ test('감사·메일: 신청 글(메모)은 audit_log에 글자 수만 남고, �
   assert.ok(!sent[0].body.includes(MEMO) && !sent[0].body.includes(x.me.name), '메일 본문에 메모·학생 이름 없음: ' + sent[0].body);
 });
 
+test('결정 104: 전 담당교사는 보기 키(pastAssigned)를 통과해 자기 기간 신청만 보고, 처리는 못 한다 · 지금 담당은 지난 기간 신청도 본다', () => {
+  const x = makeEnv();
+  submit(x);
+  const oldId = x.rows()[0].id;
+  call(x, STUDENT, 'cancelCounselRequest', oldId, '');
+  submit(x, { memo: MEMO + ' 이번 기간' });
+  const nowId = x.rows().find((r) => r.id !== oldId).id;
+  // 첫 신청을 지난 기간(T-OLD, 담당 T2)의 것으로 옮긴다
+  x.env.asOwner((c) => {
+    c.updateRecord_('counsel_requests', oldId, { term_id: 'T-OLD' }, ADMIN, 'counsel');
+    c.appendRecord_('enrollments', { term_id: 'T-OLD', student_id: x.me.id, teacher_email: T2 }, ADMIN);
+  });
+  const otherT = x.enr(x.stranger.id).teacher_email;   // 다른 학생의 담당(이 학생은 한 번도 담당한 적 없음)
+  x.env.expectDenied(otherT, 'counsel.request.view', 'getCounselRequestsOfStudent', x.me.id);
+  const past = call(x, T2, 'getCounselRequestsOfStudent', x.me.id);
+  assert.deepStrictEqual(past.requests.map((r) => r.id), [oldId], '전 담당은 자기 기간 신청만');
+  assert.strictEqual(past.canDecide, false);
+  x.env.expectDenied(T2, 'counsel.request.decide', 'decideCounselRequest', { studentId: x.me.id, requestId: nowId, action: 'reject', reason: WHY });
+  const cur = call(x, x.teacher, 'getCounselRequestsOfStudent', x.me.id);
+  assert.deepStrictEqual(cur.requests.map((r) => r.id).sort(), [oldId, nowId].sort(), '지금 담당은 지난 기간 신청도 본다');
+  assert.ok(cur.requests.find((r) => r.id === oldId).memo.includes(MEMO));
+});
+
 test('교사 목록 순서: 처리할 것(신청 → 확정)은 가장 이른 희망·확정 날짜 순, 지난 신청은 새 것이 위', () => {
   const x = makeEnv();
   const teacherStudents = x.env.rows('enrollments').filter((e) => e.term_id === x.term.id && e.teacher_email === x.teacher).map((e) => e.student_id);
@@ -215,4 +239,25 @@ test('신청한 날(created_at): 학생·담당교사·관리자·담임 응답�
   assert.strictEqual(day(call(x, ADMIN, 'getCounselRequestsOfStudent', x.me.id).requests[0].created_at), TODAY, '관리자');
   x.env.expectDenied(PARENT, 'counsel.request.view', 'getCounselRequestsOfStudent', x.me.id);
   x.env.expectDenied(T2, 'counsel.request.view', 'getCounselRequestsOfStudent', x.me.id);
+});
+
+test('관리자이면서 학사 교사(소유자 선생님)는 지금 담당 학생의 신청을 확정·반려할 수 있고, 담당이 아닌 학생의 신청은 관리자여도 보기만 한다', () => {
+  const x = makeEnv();
+  // 이 학생의 담당교사 계정에 관리자 역할을 더한다(실제 운영의 소유자 선생님과 같은 모양)
+  x.env.asOwner((c) => { const u = c.readAll_('users').find((q) => q.email === x.teacher); c.updateRecord_('users', u.id, { roles: 'admin,hall_teacher' }, ADMIN); });
+  const id = submit(x).id;
+  const v = call(x, x.teacher, 'getCounselRequestsOfStudent', x.me.id);
+  assert.strictEqual(v.role, 'assigned', '담당이면 관리자보다 담당이 먼저');
+  assert.strictEqual(v.canDecide, true);
+  const r = call(x, x.teacher, 'decideCounselRequest', { studentId: x.me.id, requestId: id, action: 'confirm', date: '2027-03-12' });
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.strictEqual(x.rows().find((q) => q.id === id).status, '확정');
+  assert.strictEqual(call(x, x.teacher, 'decideCounselRequest', { studentId: x.me.id, requestId: id, action: 'reject', reason: WHY }).ok, true, '확정 뒤 반려(상담 못 함)');
+  // 담당이 아닌 학생: 관리자라 보기는 되지만 처리는 못 한다
+  const strangerTeacher = x.enr(x.stranger.id).teacher_email;
+  const sv = call(x, x.teacher, 'getCounselRequestsOfStudent', x.stranger.id);
+  assert.strictEqual(sv.role, 'admin');
+  assert.strictEqual(sv.canDecide, false);
+  assert.notStrictEqual(strangerTeacher, x.teacher);
+  x.env.expectDenied(x.teacher, 'counsel.request.decide', 'decideCounselRequest', { studentId: x.stranger.id, requestId: id, action: 'reject', reason: WHY });
 });
