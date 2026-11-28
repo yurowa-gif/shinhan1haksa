@@ -146,3 +146,22 @@ PRD 13절의 열린 질문은 지금 "0단계 진단 결과"뿐이고, 아래는
 2. ~~위 Q1~Q12 선생님 답 → `docs/decisions.md`.~~ 끝(결정 89~100).
 3. ~~4절 시트 구조 승인~~ 끝(결정 101) → Schema 작업(S6-0).
 4. 규칙 PR 셋(Career·Inquiry·Counsel + 공통 판정) — 각 PR에 판정표 시험(역할 6 × 기록 종류, 응답에 금지 칸이 없는지)과 탐구발견 시험 파일(가짜 학생) 왕복 시험.
+
+## 7. 지난 기간 담당교사의 열람(결정 97) — 권한 판정 넓히기 제안(R, 2026-11-28, C53 전)
+
+**문제.** 6단계 보기 키(`career.view`·`plan.view`·`inquiry.view`·`feedback.view`·`counsel.request.view`·`timeline.view`, 상담일지 `counsel.view`)는 `canAccessStudentByFacts_`의 `facts.isAssigned`(=**지금 기간** `enrollments`에서 담당)로 학사 교사를 통과시킨다. 그래서 결정 97("교사는 그 기록이 생긴 기간의 담당이었던 사람만")의 대상인 **지난 기간 담당교사는 첫 줄에서 막힌다**. 칸·행은 이미 기능 쪽이 기록의 `term_id`로 다시 판정하므로(`CounselRequest.gs` `crqViewer_`), 막히는 곳은 키 하나뿐이다.
+
+**제안(코드는 C53 또는 총괄이 정한 PR에서).**
+1. **키는 "어느 기간이든 그 학생의 담당이었던 교사"까지 통과시킨다.** `studentFacts_`에 `wasAssigned`(모든 기간의 `enrollments` 중 그 학생 줄의 `teacher_email`이 본인)를 더한다. 키 설정에 `pastAssigned: true` 표시를 새로 두고, 위 **보기 키에만** 켠다. `canAccessStudentByFacts_`의 학사 교사 줄은 `facts.isAssigned || (pastAssigned && facts.wasAssigned) || …`가 된다. 쓰기 키(`plan.confirm`·`feedback.write`·`counsel.request.decide`·상담일지 쓰기)는 그대로 지금 담당만 쓴다. 결정 97의 "학사생이 아니면 쓰지 않는다"는 `s6CanWrite_`의 `active`가 따로 막는다.
+2. **칸·행은 기록마다 거른다(지금처럼 s6Visible_).** 기능은 행마다 그 기록의 기간 담당 여부로 `viewer.role`을 정한다(`assigned` 또는 그 밖이면 `none` → `s6Visible_` = [] → 응답에서 빠짐). 지금 `crqViewer_`가 상담 신청에서 하는 일을 기능마다 다시 짜지 않도록, 순수 도우미 하나를 규칙 쪽(`Stage6Rules.gs`)에 두기를 제안한다. 이름 예: `s6RoleForRow_(enrollments, email, studentId, termId, base)`. `base`는 학생 본인·관리자·담임 판정 결과이고, 우선순위는 지금 `crqViewer_`와 같다.
+   - **`term_id`가 없는 기록:** 상담일지(`counsel_notes`)에는 `term_id` 열이 없다. 그 행의 `date`가 속한 기간(`termOnDate_`)으로 정하자고 제안한다. 타임라인은 줄마다 원래 기록의 기간을 따른다.
+3. **시험:** 권한 표 시험에 다음 두 줄을 더한다.
+   - 지난 기간 담당은 보기 키를 통과하고 쓰기 키에서는 막힌다.
+   - 한 번도 담당이 아니었던 학사 교사는 보기 키에서도 막힌다.
+
+   기능 시험에는 다음을 더한다.
+   - 지난 기간 담당은 그 기간 기록만 보고, 다른 기간 기록은 응답에 없다.
+
+**총괄 확인이 필요한 점(규칙을 임의로 정하지 않음).**
+- **지금 담당교사가 앞 기간 기록을 보는가.** 결정 97을 글자 그대로 따르면, 기간이 바뀌어 담당이 바뀐 학생의 **새 담당은 앞 기간(다른 교사 담당) 진로·상담 기록을 못 본다**. 결정 97은 퇴실·졸업 학생에 대한 답이었으니, 재학 중 담당이 바뀐 경우는 선생님께 여쭙기를 제안한다. 지금 담당은 그 학생의 모든 기간을 보게 하면 2번 도우미에 한 줄만 더하면 된다.
+- **담임:** `facts.inHomeroom`은 "같은 반 + 이번 기간 등록"이라, 학생이 퇴실하면 담임은 그 학생 기록을 못 본다. 결정 97은 "그때 담당"만 말하므로 지금은 그대로 둔다(담임은 지난 기간 기록을 보지 않음). 바꿀지는 선생님 확인이 필요하다.
