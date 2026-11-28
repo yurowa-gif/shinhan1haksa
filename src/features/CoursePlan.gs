@@ -26,19 +26,6 @@ function cpSchoolYear_(term) {
 
 function cpEntryYear_(student, term) { return String(cpSchoolYear_(term) - Number(student.grade) + 1); }
 
-/**
- * 한 기록(기간 termId)에 대한 보는 사람의 role. carViewer_(기록의 기간 담당) + 결정 104: **지금 담당**이어도 담당이다.
- * (R27 s6RoleForRow_가 main에 들어오면 이 도우미를 그것으로 바꾼다.)
- */
-function cpViewer_(user, d, sid, termId) {
-  var v = carViewer_(user, d, sid, termId), now = getCurrentTerm_();
-  if (v.role !== 'assigned' && now && now.id !== termId) {
-    var v2 = carViewer_(user, d, sid, now.id);
-    if (v2.role === 'assigned') return v2;
-  }
-  return v;
-}
-
 function cpLivePlans_(d, sid) {
   return d.plans.filter(function (p) { return p.student_id === sid && ruleStr_(p.status) !== '취소'; });
 }
@@ -129,13 +116,13 @@ function getCoursePlanStudent(studentId) {
   if (!st) throw new Error('학생을 찾을 수 없습니다.');
   var entry = cpEntryYear_(st, term), active = carActive_(d, sid, today);
   var head = { id: st.id, name: st.name, title: st.grade + '. ' + st.name, label: carStudentLabel_(st), entryYear: entry };
-  var base = cpViewer_(user, d, sid, term ? term.id : '');
+  var base = carViewer_(user, d, sid, term ? term.id : '');
   var cur = curriculumRows_(entry), dropped = {};
   careerDroppedPicks_(cpLivePlans_(d, sid), curriculumRows_()).forEach(function (x) { dropped[x.planId] = true; });
   var pickN = {};
   cur.forEach(function (c) { pickN[careerSlotKey_(c)] = Number(ruleStr_(c.pick_n)) || 0; });
   var rows = cpLivePlans_(d, sid).map(function (p) {
-    var v = cpViewer_(user, d, sid, p.term_id), fields = s6Visible_(v, 'plan', p);
+    var v = carViewer_(user, d, sid, p.term_id), fields = s6Visible_(v, 'plan', p);
     var out = s6Pick_(p, fields);
     if (!out) return null;
     if (v.role !== 'parent') { out.dropped = !!dropped[p.id]; out.pickN = pickN[careerSlotKey_(p)] || 0; }
@@ -170,7 +157,7 @@ function cpFeedback_(d, user, sid) {
   return readAll_('feedback').filter(function (f) { return f.student_id === sid && f.target_kind === '이수 계획' && ruleStr_(f.status) !== '취소'; })
     .sort(function (a, b) { return String(a.created_at) < String(b.created_at) ? 1 : -1; })
     .map(function (f) {
-      var p = s6Pick_(f, s6Visible_(cpViewer_(user, d, sid, f.term_id), 'feedback', f), { teacherName: carUserName_(d, f.teacher_email) });
+      var p = s6Pick_(f, s6Visible_(carViewer_(user, d, sid, f.term_id), 'feedback', f), { teacherName: carUserName_(d, f.teacher_email) });
       if (!p) return null;
       var out = { id: f.id };
       if ('content' in p) out.content = p.content;
@@ -233,7 +220,7 @@ function confirmCoursePlan(studentId, ids) {
   var user = requirePermission_('plan.confirm', { studentId: studentId });
   return withLock_(function () {
     var d = cpLoad_(), sid = String(studentId), term = getCurrentTerm_();
-    var w = s6CanWrite_(cpViewer_(user, d, sid, term ? term.id : ''), 'plan.confirm', { active: carActive_(d, sid, today_()) });
+    var w = s6CanWrite_(carViewer_(user, d, sid, term ? term.id : ''), 'plan.confirm', { active: carActive_(d, sid, today_()) });
     if (!w.ok) return cpFail_(w.reason);
     var res = coursePlanConfirm_(cpLivePlans_(d, sid), sid, Array.isArray(ids) ? ids : [], user.email, nowIso_());
     if (res.errors.length) return cpFail_(res.errors);
@@ -253,7 +240,7 @@ function addPlanFeedback(studentId, content) {
     var live = cpLivePlans_(d, sid);
     if (!live.length) return cpFail_('아직 고른 과목이 없어 피드백을 남길 수 없습니다.');
     var target = live[live.length - 1];
-    var w = s6CanWrite_(cpViewer_(user, d, sid, target.term_id), 'feedback.write', { active: carActive_(d, sid, today_()) });
+    var w = s6CanWrite_(carViewer_(user, d, sid, target.term_id), 'feedback.write', { active: carActive_(d, sid, today_()) });
     if (!w.ok) return cpFail_(w.reason);
     appendRecord_('feedback', { term_id: term ? term.id : target.term_id, student_id: sid, target_kind: '이수 계획', target_id: target.id, content: text, teacher_email: user.email, status: '유효', cancel_reason: '' }, user.email);
     return { ok: true };
