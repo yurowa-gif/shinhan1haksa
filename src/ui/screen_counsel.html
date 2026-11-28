@@ -1,6 +1,8 @@
 <style>
   .cn-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); word-break: keep-all; }
   .cn-row .row-btn { flex: 0 0 auto; white-space: nowrap; }
+  .cn-prof { margin: 8px 0 0; word-break: keep-all; }
+  .cn-prof > div { margin: 2px 0; }
   .cn-agree { margin: 8px 0; padding: 10px 12px; background: var(--muted-weak); border-radius: var(--radius-sm); white-space: pre-wrap; }
   .cn-agree b { display: block; }
   .cn-note { padding: 12px 0; border-bottom: 1px solid var(--line); word-break: keep-all; }
@@ -146,7 +148,28 @@
         clear(node);
         items.forEach(function (t) { node.appendChild(el('button', { type: 'button', class: t === get() ? 'chip on' : 'chip', text: t, onclick: function () { set(t); drawChips(node, items, get, set); } })); });
       }
-      var profBox = el('div');
+      var profBox = el('div'), profCache = {};
+      function profLine(label, text) { return el('div', {}, [el('span', { class: 'muted', text: label + ' ' }), el('span', { text: text })]); }
+      function loadSum(node) {   // 버전을 고르면 그 버전의 진로 희망·목표 진학 두 줄 + 프로필 화면 링크(상담하면서 옆에 띄워 둔다)
+        clear(node);
+        var v = profVer;
+        if (!v) return;
+        function paint(cur) {
+          if (v !== profVer) return;   // 그사이 다른 버전을 골랐다
+          clear(node);
+          var hopes = (cur.hopes || []).map(function (h) { return h.rank + '순위 ' + [h.field, h.job].filter(Boolean).join(' · '); }).join(' / ');
+          var targets = (cur.targets || []).map(function (t) { return [t.university, t.unit].filter(Boolean).join(' ') + (t.track ? ' · ' + t.track : ''); }).join(' / ');
+          node.appendChild(profLine('진로 희망', hopes || '적지 않았습니다.'));
+          node.appendChild(profLine('목표 진학', targets || '적지 않았습니다.'));
+          node.appendChild(UI.rowLink({ href: ((document.querySelector('a.back') || {}).href || '') + '?page=career&student=' + encodeURIComponent(data.student.id), text: '진로 프로필 열기' }));
+        }
+        if (profCache[v]) { paint(profCache[v]); return; }
+        node.appendChild(el('div', { class: 'muted', text: '불러오는 중…' }));
+        call('getCareerStudent', data.student.id, Number(v)).then(function (r) {
+          if (!r || !r.ok || !r.current) { if (v === profVer) clear(node); return; }   // 못 불러오면 요약만 빠진다(버전 고르기는 그대로)
+          profCache[v] = r.current; paint(r.current);
+        }).catch(function () { if (v === profVer) clear(node); });
+      }
       var profVer = seed.profileVersion ? String(seed.profileVersion) : '';
       function drawProf() {   // 참고한 진로 프로필: 유형이 진로·진학일 때만. 기본 = 가장 최근 버전, '참고하지 않음'도 고를 수 있다
         clear(profBox);
@@ -157,8 +180,11 @@
           var sel = el('select', {}, [el('option', { value: '', text: '참고하지 않음' })].concat(data.profiles.map(function (p) { return el('option', { value: String(p.version), text: p.version + '번째 기록 · ' + UI.util.formatDateKo(p.submittedAt, false) + (p === data.profiles[0] ? ' (가장 최근)' : '') }); })));
           if (profVer === '' && !editing) profVer = String(data.profiles[0].version);
           sel.value = profVer;
-          sel.addEventListener('change', function () { profVer = sel.value; });
+          var sum = el('div', { class: 'cn-prof' });   // 고른 버전의 진로 희망·목표 진학 요약(두 줄) + [진로 프로필 열기]. 서버는 기존 getCareerStudent(진로 프로필 화면과 같은 함수)를 그대로 부른다
+          sel.addEventListener('change', function () { profVer = sel.value; loadSum(sum); });
           box.appendChild(UI.field('상담하면서 본 버전', sel, { name: 'profileVersion', hint: '고르면 이 상담이 그 버전을 보고 한 것으로 기록됩니다.' }));
+          box.appendChild(sum);
+          loadSum(sum);
         }
         profBox.appendChild(box);
       }
