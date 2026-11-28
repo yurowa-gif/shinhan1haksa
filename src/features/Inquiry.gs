@@ -274,7 +274,9 @@ function cleanupInquiryFiles(studentIds) {
     var deleted = 0, failed = 0, patches = [];
     files.forEach(function (fid) {
       var gone = false;
-      try { DriveApp.getFileById(fid).setTrashed(true); gone = true; } catch (e) { if (String(e && e.message).indexOf('찾을 수 없') >= 0) gone = true; }   // 이미 없는 파일은 지운 것으로 본다
+      var file = null;
+      try { file = DriveApp.getFileById(fid); } catch (e) { gone = true; }   // 열 수 없는(이미 없는) 파일은 지운 것으로 본다 — 오류 문구는 계정 언어마다 달라 문구에 기대지 않는다
+      if (file) { try { file.setTrashed(true); gone = true; } catch (e2) { /* 휴지통으로 못 보냄 = 실패, 다시 정리 대상으로 남는다 */ } }
       if (!gone) { failed++; return; }
       deleted++;
       byFile[fid].forEach(function (id) { patches.push({ id: id, patch: { status: '취소', cancel_reason: '원본 파일 정리', file_id: '' } }); });

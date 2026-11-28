@@ -230,10 +230,10 @@ test('원본 정리: 선택하지 않은 학생·대상이 아닌 학생(복학)
   const none = call(x, ADMIN, 'cleanupInquiryFiles', [x.stranger.id]);
   assert.deepStrictEqual([none.deleted, none.total], [0, 0]);
   assert.strictEqual(x.env.drive.files[fileId].trashed, false);
-  // 지우기 실패(공급자 오류) → 대상으로 남는다
+  // 휴지통으로 보내지 못하면(setTrashed 오류) 실패 → 행은 그대로, 대상으로 남는다
   const failed = plain(x.env.as(ADMIN, (c) => {
     const real = c.DriveApp.getFileById;
-    c.DriveApp = Object.assign({}, c.DriveApp, { getFileById: () => { throw new Error('Drive 일시 오류'); } });
+    c.DriveApp = Object.assign({}, c.DriveApp, { getFileById: (id) => { const f = real(id); return Object.assign({}, f, { setTrashed: () => { throw new Error('Drive temporary error'); } }); } });
     const r = c.cleanupInquiryFiles([x.me.id]);
     c.DriveApp.getFileById = real;
     return r;
@@ -260,4 +260,21 @@ test('원본 폴더: 처음 올릴 때 비공유 폴더를 만들어 INQUIRY_FOL
   y.env.asOwner((c) => c.PropertiesService.getScriptProperties().setProperty('INQUIRY_FOLDER_ID', open.getId()));
   assert.throws(() => upload(y, FILE, true), /공유되어/);
   assert.strictEqual(y.rows().length, 0, '공유된 폴더면 아무것도 쓰지 않는다');
+});
+
+test('원본 정리: 파일을 열 수 없으면(getFileById 오류 — 문구가 영어여도) 이미 없는 것으로 보고 지운 것으로 센다, 행은 취소로 남는다', () => {
+  const x = makeEnv('2028-03-10T20:00:00');
+  upload(x, FILE, true);
+  const fileId = x.rows()[0].file_id;
+  x.env.asOwner((c) => c.appendRecord_('status_changes', { student_id: x.me.id, item: '학사', value: '퇴실', effective_date: '2027-03-09', effective_date_auto: '2027-03-09', requested_at: '2027-03-09T09:00:00',
+    reason: '', doc_submitted: '', linked_change_id: '', source: 'F6', status: '유효', memo: '', cancel_reason: '' }, ADMIN));
+  const gone = plain(x.env.as(ADMIN, (c) => {
+    const real = c.DriveApp.getFileById;
+    c.DriveApp = Object.assign({}, c.DriveApp, { getFileById: () => { throw new Error('File not found: ' + fileId); } });
+    const r = c.cleanupInquiryFiles([x.me.id]);
+    c.DriveApp.getFileById = real;
+    return r;
+  }));
+  assert.deepStrictEqual([gone.deleted, gone.failed], [1, 0], '영어 오류여도 이미 없음 = 지운 것');
+  assert.ok(x.rows().every((q) => q.status === '취소' && q.file_id === ''));
 });
