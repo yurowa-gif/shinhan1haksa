@@ -184,6 +184,7 @@ function s6Visible_(viewer, kind, row, opts)   // viewer = {role:'admin'|'assign
 function s6ParentFields_(row, kind)            // → 학부모 공개 칸 배열(기본 [])
 function s6Pick_(row, fields, opts)            // → 그 칸만 담은 객체(가상 칸 teacher_name = opts.teacherName) 또는 null
 function s6CanWrite_(viewer, action, ctx)      // ctx = {active} → {ok, reason}
+function s6RoleForRow_(enrollments, email, studentId, termId, base)   // base = {role, isSelf, isChild, hallTeacher, nowTermId} → 기록 한 건의 viewer(결정 97·104)
 function s6Timeline_(sources, studentId, opts) // → [{at, kind, title, detail, ref:{kind, id}}] 시간 내림차순, opts = {from, to}
 
 // src/rules/CounselRules.gs (R24, F17 상담 신청·상담일지 6단계 칸) — Stage6Rules를 부른다
@@ -515,6 +516,7 @@ function inquiryCleanupTargets_(records, changes, today, opts)    // opts = {yea
   - 학생 상담 결과에 `agreement_to_parent`(학생 본인이 켠 '부모님께 보이기' 상태, 결정 90 — '내 상담 기록' 토글). 학부모에게는 이 칸을 내보내지 않는다(공개된 합의 사항 글만).
   - `created_at`(공통 열): 상담 신청(신청한 날)과 피드백(쓴 날)에만 판정표에 넣었다(R24b, C49-A). 관리자·담당교사·담임·학생 본인은 보고 학부모는 —. 다른 기록은 날짜 칸이 따로 있다(`submitted_at`·`recorded_at`·`date`·`confirmed_at`).
   - `show_to_parent`가 FALSE인 상담은 합의 사항을 공개했어도 학부모에게 그 상담 자체가 보이지 않는다(총괄 승인).
+- **`s6RoleForRow_`**(R27, 결정 97·104): 기록 한 건을 보는 자격. 학생·학부모·관리자(`base.role`)는 그대로, 학사 교사(`base.hallTeacher`)는 **그 기록의 기간(`termId`)에 그 학생의 담당이었거나 지금(`base.nowTermId`) 담당이면** `assigned`, 아니면 `base.role`이 담임이면 담임, 그 밖은 `none`(→ `s6Visible_` = []). 이메일은 대소문자·앞뒤 공백을 무시한다. 상담일지는 `term_id` 열이 없으니 부르는 쪽이 `date`가 속한 기간(`termOnDate_`)을 넘긴다. 짝인 권한 키 표시 `pastAssigned`(Auth.gs, 6단계 보기 키 6개 — `career`·`plan`·`inquiry`·`feedback`·`counsel.request`·`timeline`의 `.view`)는 지난 기간 담당이었던 교사(`facts.wasAssigned`)도 첫 줄을 통과시키므로, **이 키를 쓰는 기능은 반드시 기록마다 이 함수 + `s6Visible_`로 거른다.** 쓰기 자격이 아니다(쓰기 키는 지금 담당만, `s6CanWrite_`가 학사 입실을 따로 본다).
 - **`s6CanWrite_`**: 학생 본인(진로 제출·공개, 이수 계획, 탐구 올리기·진행·공개, 상담 신청·취소, 합의 사항 공개)·담당교사(이수 계획 확정, 피드백, 상담일지)·담당교사와 관리자(상담 신청 처리). 담임은 쓰지 않는다. `ctx.active`(지금 학사생)가 아니면 누구도 새로 쓰거나 고치지 않는다(결정 97 — 보기는 그대로).
 - **`s6Timeline_`**: 취소 행을 빼고 시간 내림차순. 상담 줄은 '상담' + 합의 사항(내용·유형 없음), OUT은 '1OUT: 항목', 출결은 확정 특이사항만.
 - **`counselRequestCheck_`**: 희망 날짜 1~3개(오늘 포함 이후·중복 없음, 결정 95), 주제는 생활·학습·진로·진학·기타 다섯 가지로 고정(결정 103, PRD F17 — 상담일지 유형 `counsel.types`와 묶지 않는다), 메모 500자, 처리되지 않은(신청·확정) 신청이 있으면 거부.

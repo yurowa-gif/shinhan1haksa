@@ -33,15 +33,16 @@ function crqTeacherOf_(enrollments, termId, studentId) {
 }
 
 /**
- * 이 접속자가 그 학생의 그 기간(termId) 신청을 어떤 자격으로 보나 → s6Visible_의 viewer.
- * 학생 본인 > 관리자 > 그 기간 담당교사('assigned', 결정 97) > 자기 반 담임 > none. 학부모는 신청을 보지 못한다(none).
+ * 이 접속자가 그 학생의 그 기간(termId) 신청을 어떤 자격으로 보나 → s6Visible_의 viewer(규칙 s6RoleForRow_).
+ * 학생 본인 > 관리자 > 담당교사('assigned' = 그 신청의 기간 담당 또는 지금 담당, 결정 97·104) > 자기 반 담임 > none. 학부모는 신청을 보지 못한다(none).
  */
 function crqViewer_(user, student, termId, enrollments) {
-  if (portalWho_().ownStudentIds.indexOf(student.id) >= 0 && hasRole_(user, 'student')) return { role: 'student', isSelf: true, isChild: false };
-  if (hasRole_(user, 'admin')) return { role: 'admin', isSelf: false, isChild: false };
-  if (hasRole_(user, 'hall_teacher') && crqTeacherOf_(enrollments, termId, student.id) === user.email) return { role: 'assigned', isSelf: false, isChild: false };
-  if (hasRole_(user, 'homeroom') && sameClass_(user.homeroomClass, student.grade, student.class_no)) return { role: 'homeroom', isSelf: false, isChild: false };
-  return { role: 'none', isSelf: false, isChild: false };
+  var self = portalWho_().ownStudentIds.indexOf(student.id) >= 0 && hasRole_(user, 'student');
+  var now = getCurrentTerm_();
+  var base = { role: self ? 'student' : hasRole_(user, 'admin') ? 'admin' :
+      hasRole_(user, 'homeroom') && sameClass_(user.homeroomClass, student.grade, student.class_no) ? 'homeroom' : 'none',
+    isSelf: self, isChild: false, hallTeacher: hasRole_(user, 'hall_teacher'), nowTermId: now ? now.id : '' };
+  return s6RoleForRow_(enrollments, user.email, student.id, termId, base);
 }
 
 /** 한 신청을 보는 사람에 맞게 줄인다(s6Visible_이 돌려준 칸만) + 희망 날짜 배열. 못 보면 null */
@@ -219,7 +220,7 @@ function cancelCounselRequest(requestId, reason) {
 
 /**
  * 담당교사가 신청을 처리한다. input = {studentId, requestId, action:'confirm'|'reject', date, reason}.
- * counsel.request.decide(scope student·담당교사만)를 studentId로 판정하고, 락 안에서 그 신청이 그 학생 것인지·그 신청의 기간에 내가 담당이었는지·그 학생이 지금 학사생인지 다시 본다.
+ * counsel.request.decide(scope student·지금 담당교사만)를 studentId로 판정하고, 락 안에서 그 신청이 그 학생 것인지·내가 그 신청을 'assigned'로 보는지(결정 104)·그 학생이 지금 학사생인지 다시 본다.
  * confirm = 학생이 고른 희망 날짜 중 하나로 확정, reject = 사유(학생에게 보임)와 함께 반려(확정 뒤 '상담 못 함'도 같다).
  * 완료는 여기서 하지 않는다 — 상담일지를 저장할 때 일지와 이어서 한다(C49-B).
  * → {ok:true, status} | {ok:false, stale?, errors}. 학생에게 메일(락 밖, 날짜·사유 없음).

@@ -147,21 +147,17 @@ PRD 13절의 열린 질문은 지금 "0단계 진단 결과"뿐이고, 아래는
 3. ~~4절 시트 구조 승인~~ 끝(결정 101) → Schema 작업(S6-0).
 4. 규칙 PR 셋(Career·Inquiry·Counsel + 공통 판정) — 각 PR에 판정표 시험(역할 6 × 기록 종류, 응답에 금지 칸이 없는지)과 탐구발견 시험 파일(가짜 학생) 왕복 시험.
 
-## 7. 지난 기간 담당교사의 열람(결정 97) — 권한 판정 넓히기 제안(R, 2026-11-28, C53 전)
+## 7. 지난 기간 담당교사의 열람(결정 97·104) — R27에서 구현(2026-11-28)
 
-**문제.** 6단계 보기 키(`career.view`·`plan.view`·`inquiry.view`·`feedback.view`·`counsel.request.view`·`timeline.view`, 상담일지 `counsel.view`)는 `canAccessStudentByFacts_`의 `facts.isAssigned`(=**지금 기간** `enrollments`에서 담당)로 학사 교사를 통과시킨다. 그래서 결정 97("교사는 그 기록이 생긴 기간의 담당이었던 사람만")의 대상인 **지난 기간 담당교사는 첫 줄에서 막힌다**. 칸·행은 이미 기능 쪽이 기록의 `term_id`로 다시 판정하므로(`CounselRequest.gs` `crqViewer_`), 막히는 곳은 키 하나뿐이다.
+**문제였던 것.** 6단계 보기 키는 `facts.isAssigned`(지금 기간 담당)로만 학사 교사를 통과시켜, 결정 97의 대상인 **지난 기간 담당교사가 첫 줄에서 막혔다**.
 
-**제안(코드는 C53 또는 총괄이 정한 PR에서).**
-1. **키는 "어느 기간이든 그 학생의 담당이었던 교사"까지 통과시킨다.** `studentFacts_`에 `wasAssigned`(모든 기간의 `enrollments` 중 그 학생 줄의 `teacher_email`이 본인)를 더한다. 키 설정에 `pastAssigned: true` 표시를 새로 두고, 위 **보기 키에만** 켠다. `canAccessStudentByFacts_`의 학사 교사 줄은 `facts.isAssigned || (pastAssigned && facts.wasAssigned) || …`가 된다. 쓰기 키(`plan.confirm`·`feedback.write`·`counsel.request.decide`·상담일지 쓰기)는 그대로 지금 담당만 쓴다. 결정 97의 "학사생이 아니면 쓰지 않는다"는 `s6CanWrite_`의 `active`가 따로 막는다.
-2. **칸·행은 기록마다 거른다(지금처럼 s6Visible_).** 기능은 행마다 그 기록의 기간 담당 여부로 `viewer.role`을 정한다(`assigned` 또는 그 밖이면 `none` → `s6Visible_` = [] → 응답에서 빠짐). 지금 `crqViewer_`가 상담 신청에서 하는 일을 기능마다 다시 짜지 않도록, 순수 도우미 하나를 규칙 쪽(`Stage6Rules.gs`)에 두기를 제안한다. 이름 예: `s6RoleForRow_(enrollments, email, studentId, termId, base)`. `base`는 학생 본인·관리자·담임 판정 결과이고, 우선순위는 지금 `crqViewer_`와 같다.
-   - **`term_id`가 없는 기록:** 상담일지(`counsel_notes`)에는 `term_id` 열이 없다. 그 행의 `date`가 속한 기간(`termOnDate_`)으로 정하자고 제안한다. 타임라인은 줄마다 원래 기록의 기간을 따른다.
-3. **시험:** 권한 표 시험에 다음 두 줄을 더한다.
-   - 지난 기간 담당은 보기 키를 통과하고 쓰기 키에서는 막힌다.
-   - 한 번도 담당이 아니었던 학사 교사는 보기 키에서도 막힌다.
+**결정 104(선생님 답).** 교사가 기록 한 건을 'assigned'로 보는 조건 = ① 그 기록의 운영 기간에 그 학생의 담당이었다, 또는 ② 지금 그 학생의 담당이다. 쓰기는 지금 담당만. 담임은 지금처럼 자기 반 + 이번 기간 등록 학생만(총괄 판단).
 
-   기능 시험에는 다음을 더한다.
-   - 지난 기간 담당은 그 기간 기록만 보고, 다른 기간 기록은 응답에 없다.
-
-**총괄 확인이 필요한 점(규칙을 임의로 정하지 않음).**
-- **지금 담당교사가 앞 기간 기록을 보는가.** 결정 97을 글자 그대로 따르면, 기간이 바뀌어 담당이 바뀐 학생의 **새 담당은 앞 기간(다른 교사 담당) 진로·상담 기록을 못 본다**. 결정 97은 퇴실·졸업 학생에 대한 답이었으니, 재학 중 담당이 바뀐 경우는 선생님께 여쭙기를 제안한다. 지금 담당은 그 학생의 모든 기간을 보게 하면 2번 도우미에 한 줄만 더하면 된다.
-- **담임:** `facts.inHomeroom`은 "같은 반 + 이번 기간 등록"이라, 학생이 퇴실하면 담임은 그 학생 기록을 못 본다. 결정 97은 "그때 담당"만 말하므로 지금은 그대로 둔다(담임은 지난 기간 기록을 보지 않음). 바꿀지는 선생님 확인이 필요하다.
+**구현(R27).**
+1. **권한 키:** `studentFacts_`에 `wasAssigned`(어느 기간이든 그 학생의 담당이었던 적)를 더했다. 키 표시 `pastAssigned: true`는 6단계 보기 키 6개(`career.view`·`plan.view`·`inquiry.view`·`feedback.view`·`counsel.request.view`·`timeline.view`)에만 둔다. `canAccessStudentByFacts_(…, wide, pastAssigned)`의 학사 교사 줄은 `isAssigned || (pastAssigned && wasAssigned) || …`가 된다. 쓰기 키는 그대로 지금 담당만이다.
+   - **2단계 `counsel.view`(상담일지)에는 아직 넣지 않았다.** 지금 main의 `getCounselNotes`(CounselLog.gs)는 그 학생의 상담일지를 기간 구분 없이 모두 돌려준다. 이 키를 넓히면 전 담당이 그 뒤 기간의 상담 내용까지 보게 된다. CounselLog가 기록마다 `s6RoleForRow_`로 거르게 바뀌는 PR(#327 뒤)에서 함께 켠다. `cnlCanView_`도 그때 `!!rule.pastAssigned`를 넘긴다.
+2. **기록마다 거르기:** 규칙 `s6RoleForRow_(enrollments, email, studentId, termId, base)`(Stage6Rules.gs)가 기록 한 건의 viewer를 정한다(①·②). 상담일지는 `date`가 속한 기간(`termOnDate_`)을 부르는 쪽이 넘긴다. `CounselRequest.gs`의 `crqViewer_`는 이 함수를 부른다. Career.gs(#324)·CounselMine/CounselLog(#327)는 병합 뒤 각 작성자가 이 함수로 바꾼다.
+3. **시험:**
+   - 권한 표: `pastAssigned` 키 목록, 지난 기간 담당은 표시 있는 키만 통과, 다른 역할은 넓어지지 않음.
+   - 규칙: 지금 담당 → 지난 기간 기록, 전 담당 → 자기 기간만, 둘 다 아닌 교사, 퇴실한 학생의 전 담당.
+   - 기능(상담 신청): 전 담당은 자기 기간 신청만 보고 처리 못 함, 지금 담당은 지난 기간 신청도 본다.
