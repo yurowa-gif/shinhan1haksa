@@ -199,37 +199,145 @@ function s6CanWrite_(viewer, action, ctx) {
   return { ok: true, reason: '' };
 }
 
+/** 타임라인 보기 칩(D: t-timeline) → 줄 kind 묶음. 화면은 이 순서로 칩을 그린다. */
+var S6_TIMELINE_CHIPS = [
+  { key: 'all', label: '전체', kinds: [] },
+  { key: 'career', label: '진로', kinds: ['profile', 'plan'] },
+  { key: 'inquiry', label: '탐구', kinds: ['upload', 'inquiry'] },
+  { key: 'counsel', label: '상담', kinds: ['request', 'note'] },
+  { key: 'out', label: 'OUT', kinds: ['out'] },
+  { key: 'attendance', label: '출결', kinds: ['attendance'] }
+];
+var S6_TIMELINE_EMPTY = { all: '아직 기록이 없습니다.', allHelp: '진로 프로필을 내거나 상담·탐구 기록이 생기면 여기에 날짜순으로 나옵니다.', chip: '이 종류의 기록이 없습니다.' };
+
+/** 날짜(yyyy-MM-dd)가 속한 운영 기간 id(terms 행의 start_date~end_date, 양 끝 포함). 없으면 ''. */
+function s6TermOf_(terms, ymd) {
+  var d = ruleStr_(ymd).slice(0, 10);
+  var t = (terms || []).filter(function (x) { return x && ruleStr_(x.start_date) <= d && d <= ruleStr_(x.end_date); })[0];
+  return t ? ruleStr_(t.id) : '';
+}
+
 /**
- * 학생 타임라인(교사용, F17) → [{at, kind, title, detail, ref:{kind, id}}] 시간 내림차순(같으면 kind·id 순).
- * sources = {profiles, plans, inquiries, notes, violations, exceptions}(그 학생 것이 아니어도 된다 — studentId로 거른다),
- * opts = {from, to}('yyyy-MM-dd', 선택 — 양 끝 포함).
- * - 취소된 행은 뺀다. 상담은 날짜·합의 사항만(내용·유형 없음 — 보는 교사가 'ALL'이어도 타임라인 줄에는 넣지 않는다).
- * - OUT은 '1OUT: 항목 이름', 출결은 확정 특이사항만 '특이사항: 유형'.
- * 보는 사람 거르기는 부르는 쪽이 s6Visible_(viewer, 'timeline')로 먼저 한다.
+ * 학생 타임라인(교사용, F17, 시안 t-timeline, 결정 96·97·104) → {groups, chips, empty}.
+ * sources = {profiles, plans, inquiries, feedback, requests, notes, violations, attendance}(그 학생 것이 아니어도 된다 — studentId로 거른다).
+ *   attendance = [{termId, month('yyyy-MM', 이번 기간 달마다) 또는 ''(기간 전체 — 지난 기간), totals}] — totals는 attResultTotals_ 결과(기능이 낸다).
+ * ctx = {terms, enrollments, base, email, names:{email: 이름}}
+ *   base = s6RoleForRow_의 base(학생 본인·학부모가 아닌 교사 화면: role 'admin'|'homeroom'|'none', hallTeacher, nowTermId).
+ *   관리자이면서 학사 교사인 사람은 role에 관리자를 넣지 말고 adminToo: true를 준다(담당 기간은 담당, 그 밖은 관리자 — crqViewer_와 같은 순서).
+ * groups = [{termId, termName, teacherEmail(그 기간 담당), teacherName, now(이번 기간), role(그 기간을 보는 자격), items:[{at, kind, title, detail, tags, ref}]}]
+ *   최근 기간(시작일이 늦은 것)이 위, 기간 안에서 최근 줄이 위. 보는 사람이 못 보는 기간은 묶음째 뺀다:
+ *   기간마다 s6RoleForRow_(그 기간) → s6Visible_(viewer, 'timeline')가 비면 뺀다. 담임은 이번 기간만(결정 104 총괄 가정).
+ *   묶음은 그 학생이 등록된 기간 + 줄이 있는 기간이다(줄이 없는 기간도 묶음은 남는다 — 화면은 empty.all을 그린다).
+ * 줄(kind): profile 'n번째 기록을 냄' / plan 'g학년 s학기 · n과목을 고름'·'… n과목 확정'(같은 시각에 저장한 줄 묶음, 아래 줄 = 과목 이름) /
+ *   request '주제 상담 신청'(희망 날짜·상태, 메모는 넣지 않는다 — 결정 96) / note '교사 · 유형 상담'('합의: …', 내용은 넣지 않는다) /
+ *   upload '기록 파일 올림 · 새 기록 n건'(같은 file_id 묶음, 이름이 달랐으면 꼬리표 '이름 다름' — 결정 93) /
+ *   inquiry 탐구 제목(진행이 '관심'이 아닌 기록만, 진행 상태·피드백 n건) / out '1OUT · 항목' / attendance 'n월 출결 요약'·'기간 이름 출결 요약'.
+ * 취소된 행은 뺀다(상담 신청은 학생이 취소한 것도 뺀다). 진로 프로필 피드백 수는 줄에 싣지 않는다(시안: 아래 줄 없음).
  */
-function s6Timeline_(sources, studentId, opts) {
-  var s = sources || {}, sid = ruleStr_(studentId), o = opts || {}, out = [];
-  var mine = function (rows) {
-    return (rows || []).filter(function (r) { return r && ruleStr_(r.student_id) === sid && ruleStr_(r.status) !== '취소'; });
-  };
-  var push = function (at, kind, title, detail, id) {
+function s6TimelineView_(sources, studentId, ctx) {
+  var s = sources || {}, c = ctx || {}, sid = ruleStr_(studentId), base = c.base || {}, names = c.names || {};
+  var live = function (rows) { return (rows || []).filter(function (r) { return r && ruleStr_(r.student_id) === sid && ruleStr_(r.status) !== '취소'; }); };
+  var nameOf = function (e) { var k = ruleStr_(e).toLowerCase(); return ruleStr_(names[k] || names[ruleStr_(e)]) || '(등록 안 된 교사)'; };
+  var termById = {};
+  (c.terms || []).forEach(function (t) { if (t) termById[ruleStr_(t.id)] = t; });
+  var lines = [];
+  var add = function (termId, at, kind, title, detail, id, tags) {
     var a = ruleIso_(at);
     if (!a) return;
-    var d = a.slice(0, 10);
-    if ((o.from && d < o.from) || (o.to && d > o.to)) return;
-    out.push({ at: a, kind: kind, title: title, detail: detail || '', ref: { kind: kind, id: ruleStr_(id) } });
+    var t = ruleStr_(termId) || s6TermOf_(c.terms, a);
+    lines.push({ termId: t, item: { at: a, kind: kind, title: title, detail: detail || '', tags: tags || [], ref: { kind: kind, id: ruleStr_(id) } } });
   };
-  mine(s.profiles).forEach(function (r) { push(r.submitted_at, 'profile', '진로 프로필 ' + ruleStr_(r.version) + '번째 제출', '', r.id); });
-  mine(s.plans).forEach(function (r) {
-    push(r.confirmed_at || r.created_at, 'plan', '이수 계획: ' + ruleStr_(r.grade) + '학년 ' + ruleStr_(r.semester) + '학기 ' + ruleStr_(r.course),
-      ruleStr_(r.state), r.id);
+  live(s.profiles).forEach(function (r) { add(r.term_id, r.submitted_at, 'profile', ruleStr_(r.version) + '번째 기록을 냄', '', r.id); });
+  // 이수 계획: 같은 시각에 저장한(고른) 줄 묶음, 같은 시각에 확정한 줄 묶음
+  var planGroups = {};
+  var planKey = function (r, act, at) { return [ruleStr_(r.term_id), ruleStr_(r.grade), ruleStr_(r.semester), act, ruleIso_(at)].join('|'); };
+  live(s.plans).forEach(function (r) {
+    [['pick', r.created_at], ['confirm', ruleStr_(r.state) === '확정' ? r.confirmed_at : '']].forEach(function (p) {
+      if (!ruleIso_(p[1])) return;
+      var k = planKey(r, p[0], p[1]);
+      (planGroups[k] = planGroups[k] || { r: r, act: p[0], at: p[1], courses: [], ids: [] }).courses.push(ruleStr_(r.course));
+      planGroups[k].ids.push(ruleStr_(r.id));
+    });
   });
-  mine(s.inquiries).forEach(function (r) { push(r.recorded_at, 'inquiry', '탐구: ' + ruleStr_(r.title), ruleStr_(r.progress), r.id); });
-  mine(s.notes).forEach(function (r) { push(r.date, 'note', '상담', ruleStr_(r.agreement), r.id); });
-  mine(s.violations).forEach(function (r) { push(r.occurred_at || r.created_at, 'out', '1OUT: ' + ruleStr_(r.rule_name), '', r.id); });
-  (s.exceptions || []).filter(function (r) { return r && ruleStr_(r.student_id) === sid && ruleStr_(r.status) === '확정'; })
-    .forEach(function (r) { push(r.date, 'exception', '특이사항: ' + attTypeBase_(r.type), '', r.id); });
-  return out.sort(function (a, b) {
-    return a.at !== b.at ? (a.at > b.at ? -1 : 1) : a.kind !== b.kind ? (a.kind < b.kind ? -1 : 1) : (a.ref.id < b.ref.id ? -1 : a.ref.id > b.ref.id ? 1 : 0);
+  Object.keys(planGroups).forEach(function (k) {
+    var g = planGroups[k], head = ruleStr_(g.r.grade) + '학년 ' + ruleStr_(g.r.semester) + '학기 · ' + g.courses.length + '과목';
+    add(g.r.term_id, g.at, 'plan', head + (g.act === 'pick' ? '을 고름' : ' 확정'), g.courses.join(', '), g.ids.sort()[0]);
   });
+  live(s.requests).forEach(function (r) {
+    var wish = ruleStr_(r.wish_dates).split(';').filter(Boolean).map(function (d) { return ymdKo_(d); }).join('·');
+    add(r.term_id, r.created_at, 'request', ruleStr_(r.topic) + ' 상담 신청', (wish ? '희망 ' + wish + ' · ' : '') + ruleStr_(r.status), r.id);
+  });
+  live(s.notes).forEach(function (r) {
+    var type = ruleStr_(r.type), agr = ruleStr_(r.agreement);
+    add('', r.date, 'note', nameOf(r.teacher_email) + ' · ' + (type ? type + ' ' : '') + '상담', agr ? '합의: ' + agr : '', r.id);
+  });
+  var fbCount = {};
+  live(s.feedback).forEach(function (f) { var k = ruleStr_(f.target_id); fbCount[k] = (fbCount[k] || 0) + 1; });
+  var uploads = {};
+  live(s.inquiries).forEach(function (r) {
+    var f = ruleStr_(r.file_id);
+    if (f) {
+      var u = uploads[f] = uploads[f] || { termId: r.term_id, at: '', n: 0, mismatch: false, id: '' };   // file_id 값은 줄에 싣지 않는다(관리자만 보는 칸) — ref는 묶음의 첫 기록 id
+      u.n++;
+      if (!u.id || ruleStr_(r.id) < u.id) u.id = ruleStr_(r.id);
+      if (ruleIso_(r.created_at) > u.at) u.at = ruleIso_(r.created_at);
+      u.mismatch = u.mismatch || s6True_(r.name_mismatch);
+    }
+    var prog = ruleStr_(r.progress);
+    // ASSUMPTION: 진행을 바꾼 시각 칸이 없어 updated_at을 쓴다. '관심'(올린 그대로)인 기록은 올림 줄에만 센다
+    if (prog && prog !== '관심') {
+      var n = fbCount[ruleStr_(r.id)] || 0;
+      add(r.term_id, r.updated_at || r.created_at, 'inquiry', ruleStr_(r.title) || '(제목 없음)', prog + (n ? ' · 피드백 ' + n + '건' : ''), r.id);
+    }
+  });
+  Object.keys(uploads).forEach(function (f) {
+    var u = uploads[f];
+    add(u.termId, u.at, 'upload', '기록 파일 올림 · 새 기록 ' + u.n + '건', '', u.id, u.mismatch ? ['이름 다름'] : []);
+  });
+  live(s.violations).forEach(function (r) { add(r.term_id, r.occurred_at || r.created_at, 'out', '1OUT · ' + ruleStr_(r.rule_name), '', r.id); });
+  (s.attendance || []).forEach(function (a) {
+    if (!a) return;
+    var t = termById[ruleStr_(a.termId)] || {}, m = ruleStr_(a.month), tot = a.totals || {};
+    var at = m ? m + '-' + ('0' + ymdDaysInMonth_(Number(m.slice(0, 4)), Number(m.slice(5, 7)))).slice(-2) : ruleStr_(t.end_date);
+    add(a.termId, at, 'attendance', (m ? ymKo_(m) : ruleStr_(t.name)) + ' 출결 요약', s6AttendanceText_(tot), ruleStr_(a.termId) + (m ? ':' + m : ''));
+  });
+  // 기간 묶음: 그 학생이 등록된 기간 + 줄이 있는 기간
+  var teacherOf = {}, termIds = [];
+  (c.enrollments || []).forEach(function (e) {
+    if (!e || ruleStr_(e.student_id) !== sid) return;
+    var t = ruleStr_(e.term_id);
+    teacherOf[t] = ruleStr_(e.teacher_email).toLowerCase();
+    if (termIds.indexOf(t) < 0) termIds.push(t);
+  });
+  lines.forEach(function (l) { if (l.termId && termIds.indexOf(l.termId) < 0) termIds.push(l.termId); });
+  var nowId = ruleStr_(base.nowTermId), groups = [];
+  termIds.forEach(function (t) {
+    var v = s6RoleForRow_(c.enrollments, c.email, sid, t, base);
+    if (v.role !== 'assigned' && base.adminToo) v = { role: 'admin', isSelf: false, isChild: false };
+    if (v.role === 'homeroom' && t !== nowId) return;   // 담임은 이번 기간만(결정 104 총괄 가정)
+    if (!s6Visible_(v, 'timeline', {}).length) return;
+    var items = lines.filter(function (l) { return l.termId === t; }).map(function (l) { return l.item; }).sort(function (a, b) {
+      return a.at !== b.at ? (a.at > b.at ? -1 : 1) : a.kind !== b.kind ? (a.kind < b.kind ? -1 : 1) : (a.ref.id < b.ref.id ? -1 : a.ref.id > b.ref.id ? 1 : 0);
+    });
+    var term = termById[t] || {};
+    groups.push({ termId: t, termName: ruleStr_(term.name) || t, start: ruleStr_(term.start_date), teacherEmail: teacherOf[t] || '',
+      teacherName: teacherOf[t] ? nameOf(teacherOf[t]) : '', now: t === nowId, role: v.role, items: items });
+  });
+  groups.sort(function (a, b) { return a.start !== b.start ? (a.start > b.start ? -1 : 1) : (a.termId < b.termId ? -1 : 1); });
+  groups.forEach(function (g) { delete g.start; });
+  return { groups: groups, chips: S6_TIMELINE_CHIPS.map(function (x) { return { key: x.key, label: x.label, kinds: x.kinds.slice() }; }), empty: Object.assign({}, S6_TIMELINE_EMPTY) };
+}
+
+/**
+ * 출결 요약 줄 글(attResultTotals_ 결과) → '출석 n일 · 지각 n · 조퇴 n · 결석 n'(+ '학원 n일 · 가정 n일').
+ * 출석 = 운영한 날 − 결석한 날. 지각·조퇴·결석은 인정·미인정을 합친 날 수.
+ * 학원·가정 = 고정 일정 '학'·'가'가 하루에 한 번이라도 든 날 수(totals.학습량.missedDays, 총괄 확정). missedDays가 없는 옛 묶음이면 싣지 않는다.
+ */
+function s6AttendanceText_(totals) {
+  var t = totals || {}, n = function (k) { var x = t[k] || {}; return (Number(x['인정']) || 0) + (Number(x['미인정']) || 0); };
+  var st = t['학습량'] || {}, absent = n('결석');
+  var parts = ['출석 ' + Math.max(0, (Number(st.days) || 0) - absent) + '일', '지각 ' + n('지각'), '조퇴 ' + n('조퇴'), '결석 ' + absent];
+  var md = st.missedDays;
+  if (md) parts.push('학원 ' + (Number(md['학']) || 0) + '일', '가정 ' + (Number(md['가']) || 0) + '일');
+  return parts.join(' · ');
 }
