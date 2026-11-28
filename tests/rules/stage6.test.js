@@ -12,8 +12,8 @@ const ALL = {
   plan: 'id term_id student_id entry_year grade semester choice_group course state confirmed_by confirmed_at show_to_parent status cancel_reason',
   recs: 'university unit core recommended baseYear sourceTitle sourceUrl note',
   inquiry: 'id term_id student_id source_id recorded_at source standards subject title question liked progress result_link memo file_id name_mismatch show_to_parent status cancel_reason',
-  feedback: 'id term_id student_id target_kind target_id content teacher_email status cancel_reason',
-  request: 'id term_id student_id requester_email wish_dates topic memo status decided_date linked_note_id cancel_reason',
+  feedback: 'id term_id student_id target_kind target_id content teacher_email status cancel_reason created_at',
+  request: 'id term_id student_id requester_email wish_dates topic memo status decided_date linked_note_id cancel_reason created_at',
   note: 'id student_id date teacher_email type target linked_violation_id content agreement agreement_to_parent profile_version request_id show_to_parent status cancel_reason',
   timeline: 'at kind title detail ref'
 };
@@ -26,9 +26,9 @@ const EXPECT = {
   inquiry: { admin: ALL.inquiry, assigned: INQ_STAFF, homeroom: INQ_STAFF,
     student: 'id term_id student_id source_id recorded_at source standards subject title question liked progress result_link memo show_to_parent status',
     parent: 'recorded_at source standards subject title question progress result_link memo', none: '' },
-  feedback: { admin: ALL.feedback, assigned: ALL.feedback, homeroom: ALL.feedback, student: 'id term_id student_id target_kind target_id content teacher_name status', parent: '', none: '' },
-  request: { admin: ALL.request, assigned: ALL.request, homeroom: 'id student_id wish_dates topic status decided_date',
-    student: 'id term_id student_id wish_dates topic memo status decided_date cancel_reason', parent: '', none: '' },
+  feedback: { admin: ALL.feedback, assigned: ALL.feedback, homeroom: ALL.feedback, student: 'id term_id student_id target_kind target_id content teacher_name status created_at', parent: '', none: '' },
+  request: { admin: ALL.request, assigned: ALL.request, homeroom: 'id student_id wish_dates topic status decided_date created_at',
+    student: 'id term_id student_id wish_dates topic memo status decided_date cancel_reason created_at', parent: '', none: '' },
   note: { admin: ALL.note, assigned: ALL.note, homeroom: ALL.note, student: 'id date teacher_name agreement', parent: 'id date teacher_name agreement', none: '' },
   timeline: { admin: ALL.timeline, assigned: ALL.timeline, homeroom: ALL.timeline, student: '', parent: '', none: '' }
 };
@@ -45,7 +45,7 @@ const FORBID = {
   student: { note: ['content', 'type', 'target', 'teacher_email', 'linked_violation_id', 'profile_version', 'show_to_parent', 'agreement_to_parent', 'request_id', 'cancel_reason'],
     inquiry: ['file_id', 'name_mismatch', 'cancel_reason'], feedback: ['teacher_email', 'cancel_reason'], request: ['requester_email', 'linked_note_id'], timeline: ['at', 'kind', 'title', 'detail', 'ref'], plan: ['confirmed_by', 'cancel_reason'] },
   parent: { note: ['content', 'type', 'target', 'teacher_email', 'linked_violation_id', 'profile_version', 'request_id', 'cancel_reason'],
-    inquiry: ['file_id', 'name_mismatch', 'liked', 'source_id', 'show_to_parent', 'student_id', 'cancel_reason'], feedback: ['content'], request: ['memo', 'topic', 'wish_dates', 'status', 'cancel_reason'],
+    inquiry: ['file_id', 'name_mismatch', 'liked', 'source_id', 'show_to_parent', 'student_id', 'cancel_reason'], feedback: ['content', 'created_at'], request: ['created_at', 'memo', 'topic', 'wish_dates', 'status', 'cancel_reason'],
     profile: ['version', 'submitted_at', 'parent_fields', 'student_id', 'term_id', 'cancel_reason'], plan: ['show_to_parent', 'confirmed_by', 'student_id', 'cancel_reason'], recs: ['university'], timeline: ['title'] },
   homeroom: { request: ['memo', 'requester_email', 'cancel_reason', 'linked_note_id'], inquiry: ['file_id'] },
   assigned: { inquiry: ['file_id'] }
