@@ -30,7 +30,7 @@
       clear(box);
       if (!ctx.ok) { box.appendChild(el('div', { class: 'error', text: ctx.reason })); return; }
       if (ctx.mode === 'student') planStudent(box, ctx);
-      else if (ctx.mode === 'parent') planParent(box, ctx);
+      else if (ctx.mode === 'parent') planParent(box);
       else planStaff(box, ctx);
     }).catch(function (err) { clear(box); showError(box, err); });
   }
@@ -93,7 +93,7 @@
         var rows = rowsOf(r, o.grade, o.semester), card = el('div', { class: 'card' }, [el('h2', { text: o.grade + '학년 ' + o.semester + '학기' })]);
         if (!rows.length) {
           card.appendChild(el('div', { class: 'muted', text: '아직 고른 과목이 없습니다.' }));
-          if (r.canWrite) card.appendChild(el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:8px', text: '과목 고르기', onclick: function () { Nav.go('edit'); edit(r); } }));
+          if (r.canWrite) card.appendChild(el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:8px', text: '과목 고르기', onclick: function () { Nav.go('edit'); edit(r, o.grade + '|' + o.semester); } }));
         }
         rows.forEach(function (p) {
           var tags = [plStatePill(p.state)];
@@ -118,16 +118,38 @@
       if (r.canWrite) bar = UI.actionBar([{ text: '과목 고르기', kind: 'primary', onclick: function () { Nav.go('edit'); edit(r); } }], { mount: true });
     }
 
-    function edit(r) {
+    function edit(r, startKey) {
       dropBar(); clear(box);
-      var errBox = el('div'), chosen = {}, groups = [];
-      box.appendChild(el('div', { class: 'notice info', style: 'word-break:keep-all', text: '선택군마다 정해진 수까지 고를 수 있습니다. 덜 고른 채로 저장해도 됩니다(나중에 이어서).' }));
-      box.appendChild(errBox);
-      r.semesters.forEach(function (s) { s.rows.forEach(function (p) { if (!p.dropped) chosen[[p.grade, p.semester, p.choice_group, p.course].join('|')] = true; }); });
-      r.options.forEach(function (o) {
+      var errBox = el('div'), tabs = el('nav', { class: 'tabs wrap', 'aria-label': '학기 고르기' }), semBox = el('div'), chosen = {}, orig = {}, cur = '';
+      var semKey = function (o) { return o.grade + '|' + o.semester; };
+      var keyOf = function (g, s2, grp, c) { return [g, s2, grp, c].join('|'); };
+      r.semesters.forEach(function (s2) { s2.rows.forEach(function (p) { if (!p.dropped) { chosen[keyOf(p.grade, p.semester, p.choice_group, p.course)] = true; orig[keyOf(p.grade, p.semester, p.choice_group, p.course)] = true; } }); });
+      box.appendChild(el('div', { class: 'notice info', style: 'word-break:keep-all', text: '선택군마다 정해진 수까지 고를 수 있습니다. 덜 고른 채로 저장해도 됩니다(나중에 이어서). 학기를 바꿔도 고른 것은 그대로이고, 저장은 한 번에 모두 됩니다.' }));
+      box.appendChild(tabs); box.appendChild(errBox); box.appendChild(semBox);
+      // 학기마다 바꾼 것이 있는지(저장 전 표시): 처음 저장된 선택과 지금 선택이 다른 학기
+      function changedIn(o) {
+        var pre = o.grade + '|' + o.semester + '|';
+        var keys = {}; Object.keys(chosen).concat(Object.keys(orig)).forEach(function (k) { if (k.indexOf(pre) === 0) keys[k] = true; });
+        return Object.keys(keys).some(function (k) { return !!chosen[k] !== !!orig[k]; });
+      }
+      function dirty() { return r.options.some(changedIn); }
+      function drawTabs() {
+        clear(tabs);
+        r.options.forEach(function (o) {
+          var k = semKey(o), ch = changedIn(o);
+          var b = el('button', { class: 'tab' + (k === cur ? ' on' : ''), type: 'button', 'aria-label': o.grade + '학년 ' + o.semester + '학기' + (ch ? ' (바꾼 것 있음)' : ''), text: o.grade + '학년 ' + o.semester + '학기' + (ch ? ' ●' : '') });
+          b.addEventListener('click', function () { cur = k; drawTabs(); drawSem(); });
+          tabs.appendChild(b);
+        });
+      }
+      function drawSem() {
+        clear(semBox);
+        var o = r.options.filter(function (x) { return semKey(x) === cur; })[0];
+        if (!o) return;
         var semCard = el('div', { class: 'card' }, [el('h2', { text: o.grade + '학년 ' + o.semester + '학기' })]);
         if (o.required.length) semCard.appendChild(el('div', { class: 'muted', style: 'word-break:keep-all', text: '꼭 듣는 과목: ' + o.required.join(', ') }));
-        box.appendChild(semCard);
+        if (!o.groups.length) semCard.appendChild(el('div', { class: 'muted', text: '이 학기에는 고를 과목이 없습니다.' }));
+        semBox.appendChild(semCard);
         o.groups.forEach(function (g) {
           var count = el('span'), full = el('div', { class: 'muted', style: 'word-break:keep-all;display:none' }), inputs = [];
           var card = el('div', { class: 'card' }, [el('div', { class: 'pl-top' }, [el('h2', { text: plGroup(g.choiceGroup) + (g.pickN ? ' · ' + g.pickN + '과목 고르기' : '') }), count])]);
@@ -141,9 +163,9 @@
             if (lock) full.textContent = g.pickN + '과목을 모두 골랐습니다. 바꾸려면 고른 과목 하나를 먼저 빼 주세요.';
           }
           g.courses.forEach(function (c, i) {
-            var input = el('input', { type: 'checkbox' });
-            input.checked = !!chosen[[o.grade, o.semester, g.choiceGroup, c].join('|')];
-            input.addEventListener('change', refresh);
+            var k = keyOf(o.grade, o.semester, g.choiceGroup, c), input = el('input', { type: 'checkbox' });
+            input.checked = !!chosen[k];
+            input.addEventListener('change', function () { if (input.checked) chosen[k] = true; else delete chosen[k]; refresh(); drawTabs(); });
             var kids = [input, el('span', { class: 'pl-label', text: c })];
             if (g.tags[i]) kids.push(UI.statusPill('mute', g.tags[i]));
             var label = el('label', { class: 'pl-pick' }, kids);
@@ -151,17 +173,21 @@
             card.appendChild(label);
           });
           card.appendChild(full);
-          box.appendChild(card);
-          groups.push({ grade: o.grade, semester: o.semester, group: g.choiceGroup, inputs: inputs });
+          semBox.appendChild(card);
           refresh();
         });
-      });
+      }
+      cur = startKey && r.options.some(function (o) { return semKey(o) === startKey; }) ? startKey : (r.options[0] ? semKey(r.options[0]) : '');
+      drawTabs(); drawSem();
       function gather() {
         var out = [];
-        groups.forEach(function (g) { g.inputs.forEach(function (x) { if (x.input.checked) out.push({ grade: g.grade, semester: g.semester, choice_group: g.group, course: x.course }); }); });
+        r.options.forEach(function (o) { o.groups.forEach(function (g) { g.courses.forEach(function (c) { if (chosen[keyOf(o.grade, o.semester, g.choiceGroup, c)]) out.push({ grade: o.grade, semester: o.semester, choice_group: g.choiceGroup, course: c }); }); }); });
         return out;
       }
-      function leave() { Nav.back(function () { load(); }); }
+      function leave() {
+        if (!dirty()) { Nav.back(function () { load(); }); return; }
+        UI.confirmSheet({ title: '돌아가기', message: '저장하지 않은 바뀐 곳이 있습니다. 돌아가면 사라집니다.', confirmText: '돌아가기', cancelText: '계속 고르기', danger: true, onconfirm: function () { Nav.back(function () { load(); }); } });
+      }
       bar = UI.actionBar([{ text: '저장', kind: 'primary', onclick: function () {
         clear(errBox);
         call('saveCoursePlan', gather()).then(function (res) {
@@ -179,29 +205,10 @@
   }
 
   /* ───────────── 학부모 ───────────── */
-  function planParent(box, ctx) {
-    if (!ctx.children.length) { box.appendChild(el('div', { class: 'card' }, [el('h2', { text: '연결된 자녀가 없습니다' }), el('div', { class: 'muted', text: '담당 선생님께 알려 주세요.' })])); return; }
-    var body = el('div');
-    function show(child) {
-      clear(body); body.appendChild(el('div', { class: 'loading', text: '불러오는 중입니다…' }));
-      call('getCoursePlanStudent', child.id).then(function (r) {
-        clear(body);
-        if (!r.semesters.length) {
-          body.appendChild(el('div', { class: 'card' }, [el('h2', { text: '이수 계획' }), el('div', { text: '지금은 보여 드릴 이수 계획이 없습니다.' }), el('div', { class: 'muted', style: 'word-break:keep-all', text: '자녀가 학부모님께 보여 주기로 한 기록이 생기면 여기에 나옵니다.' })]));
-          return;
-        }
-        body.appendChild(el('div', { class: 'notice info', style: 'word-break:keep-all', text: '"확정"은 담당 선생님이 확인한 과목입니다.' }));
-        r.semesters.forEach(function (s) {
-          var card = el('div', { class: 'card' }, [el('h2', { text: s.grade + '학년 ' + s.semester + '학기' })]);
-          s.rows.forEach(function (p) { card.appendChild(el('div', { class: 'pl-row' }, [el('div', { class: 'pl-top' }, [el('span', { class: 'pl-name', text: p.course }), plStatePill(p.state)]), el('div', { class: 'muted', text: plGroup(p.choice_group) })])); });
-          body.appendChild(card);
-        });
-      }).catch(function (err) { clear(body); showError(body, err); });
-    }
-    if (ctx.children.length > 1) box.appendChild(UI.segmented({ label: '자녀', value: ctx.children[0].id, options: ctx.children.map(function (c) { return { value: c.id, label: c.name }; }),
-      onchange: function (v) { show(ctx.children.filter(function (c) { return c.id === v; })[0]); } }));
-    box.appendChild(body);
-    show(ctx.children[0]);
+  /** 학부모는 이수 계획을 '진로' 화면의 카드로 본다(시안 p-plan: 진로와 상담 화면 한 곳). 이 주소로 열면 그곳으로 안내한다 */
+  function planParent(box) {
+    box.appendChild(el('div', { class: 'card' }, [el('h2', { text: '이수 계획' }), el('div', { class: 'muted', style: 'word-break:keep-all', text: '자녀가 학부모님께 보여 주기로 한 이수 계획은 "진로" 화면에서 볼 수 있습니다.' }),
+      UI.rowLink({ href: (document.querySelector('a.back') || { href: '' }).href + '?page=career&role=parent', text: '진로 화면 열기' })]));
   }
 
   /* ───────────── 담당교사·담임·관리자 ───────────── */
@@ -259,12 +266,17 @@
             checks.push({ input: input, id: p.id, course: p.course, sem: s.grade + '학년 ' + s.semester + '학기' });
             kids.push(el('label', { class: 'pl-pick', style: 'border-bottom:0' }, [input, el('span', { class: 'pl-label pl-name', text: p.course })]));
           } else kids.push(el('div', { class: 'pl-name', text: p.course }));
-          kids.push(el('div', { class: 'muted', text: plGroup(p.choice_group) + (p.pickN ? ' · ' + p.pickN + '과목 중' : '') }));
+          kids.push(el('div', { class: 'muted', text: plGroup(p.choice_group) + (p.pickN ? ' (' + p.pickN + '과목 고르기)' : '') }));
           kids.push(el('div', { class: 'pl-tags' }, tags));
           card.appendChild(el('div', { class: 'pl-row' }, kids));
         });
         body.appendChild(card);
       });
+      if (r.canConfirm && checks.length >= 3) {
+        var allBtn = el('button', { type: 'button', class: 'btn secondary', text: '계획 ' + checks.length + '과목 모두 고르기' });
+        allBtn.addEventListener('click', function () { checks.forEach(function (c) { c.input.checked = true; }); refresh(); });
+        body.appendChild(el('div', { class: 'pl-tools' }, [allBtn]));
+      }
       if (r.canConfirm && r.semesters.length) {
         confirmBtn.addEventListener('click', function () {
           var sel = selected(); if (!sel.length) return;

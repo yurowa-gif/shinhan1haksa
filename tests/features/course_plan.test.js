@@ -171,6 +171,6 @@ test('목록·홈: 확인할 학생이 위, 학사 교사 홈에만 plan.pending
   env.call(T1, 'confirmCoursePlan', sid, []);
   assert.strictEqual(env.call(T1, 'getHomeData', 'hall_teacher').plan.pending, 0);
   assert.strictEqual(env.call(T1, 'getCoursePlanContext', 'hall_teacher').list.find((s) => s.id === sid).state, '확정');
-  assert.strictEqual(env.call(PA, 'getCoursePlanContext', 'parent').children.length > 0, true);
+  assert.deepStrictEqual(plain(env.call(PA, 'getCoursePlanContext', 'parent')), { ok: true, mode: 'parent' }, '학부모는 진로 화면의 카드로 본다');
   env.expectDenied('test.parent@example.com', 'plan.view', 'getCoursePlanStudent', env.rows('students').find((s) => !env.rows('guardian_links').some((g) => g.parent_email === PA && g.student_id === s.id)).id);
 });

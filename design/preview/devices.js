@@ -57,7 +57,7 @@ function screenList(app) {
     const can = order.filter((r) => app.env.as(ACC.admin, (c) => c.screenResolve_(page, rolesOf(ACC[r])).ok));
     if (!can.length) continue;
     if (page === 'timetable') can.filter((r) => ['student', 'parent', 'hall_teacher'].includes(r)).forEach((r) => list.push({ id: page + ':' + r, email: ACC[r], query: 'page=' + page + '&role=' + r }));
-    else if (page === 'plan') can.filter((r) => ['student', 'parent', 'hall_teacher'].includes(r)).forEach((r) => list.push({ id: page + ':' + r, email: ACC[r], query: 'page=' + page + '&role=' + r }));
+    else if (page === 'plan') can.filter((r) => ['student', 'hall_teacher'].includes(r)).forEach((r) => list.push({ id: page + ':' + r, email: ACC[r], query: 'page=' + page + '&role=' + r }));
     else if (page === 'career') can.filter((r) => ['student', 'parent', 'hall_teacher'].includes(r)).forEach((r) => list.push({ id: page + ':' + r, email: ACC[r], query: 'page=' + page + '&role=' + r }));
     else if (page === 'facilityday') list.push({ id: page, email: ACC.hall_teacher, query: 'page=' + page });   // 오늘 근무교사(seed)
     else list.push({ id: page, email: ACC[can[0]], query: 'page=' + page });

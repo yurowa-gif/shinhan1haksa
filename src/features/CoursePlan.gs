@@ -69,7 +69,7 @@ function cpOptions_(cur) {
 
 /**
  * 화면 시작값. role = 'student'|'parent'|'hall_teacher'|'homeroom'|'admin'(없으면 가진 역할 중 첫 번째).
- * 학생 → {mode:'student', student, active, ready(우리 학년 교육과정이 올라와 있나)} / 학부모 → {mode:'parent', children} /
+ * 학생 → {mode:'student', student, active, ready(우리 학년 교육과정이 올라와 있나)} / 학부모 → {mode:'parent'}(화면은 진로 화면으로 안내) /
  * 교사·관리자 → {mode:'staff', role, total, pending(확인할 학생 수), list:[{id, label, picked, pending, state:'확인'|'확정'|'안 고름', line}]}
  */
 function getCoursePlanContext(role) {
@@ -81,10 +81,7 @@ function getCoursePlanContext(role) {
     return { ok: true, mode: 'student', student: { id: me.id, name: me.name, label: carStudentLabel_(me) }, active: carActive_(d, sid, today),
       ready: curriculumRows_(cpEntryYear_(me, term)).length > 0 };
   }
-  if (r === 'parent') {
-    return { ok: true, mode: 'parent', children: d.students.filter(function (s) { return portalWho_().childIds.indexOf(s.id) >= 0; })
-      .map(function (s) { return { id: s.id, name: s.name, label: s.grade + '학년 ' + s.class_no + '반' }; }) };
-  }
+  if (r === 'parent') return { ok: true, mode: 'parent' };   // 학부모는 이수 계획을 '진로' 화면의 카드로 본다(getCoursePlanStudent)
   if (CAR_STAFF_ROLES.indexOf(r) < 0) return { ok: false, reason: '이 화면은 볼 수 있는 역할이 아닙니다.' };
   if (!term) return { ok: true, mode: 'staff', role: r, total: 0, pending: 0, list: [] };
   var enrolled = d.enrollments.filter(function (e) { return e.term_id === term.id; });
