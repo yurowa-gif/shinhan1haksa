@@ -136,3 +136,27 @@ test('s6Timeline_: 그 학생 것만·취소 빼고·시간 내림차순, 상담
   assert.deepStrictEqual(plain(ctx.s6Timeline_(src, 's1', { from: '2027-03-06', to: '2027-03-09' })).map((x) => x.ref.id), ['e1', 'v1', 'c1']);
   assert.deepStrictEqual(plain(ctx.s6Timeline_({}, 's1')), []);
 });
+
+test('s6RoleForRow_(결정 97·104): 기록의 기간 담당 또는 지금 담당 = assigned, 전 담당은 자기 기간만, 학생·학부모·관리자·담임은 그대로', () => {
+  const ENR = [
+    { term_id: 'T1', student_id: 's1', teacher_email: 'old@example.com' },
+    { term_id: 'T2', student_id: 's1', teacher_email: 'New@Example.com ' },
+    { term_id: 'T2', student_id: 's2', teacher_email: 'old@example.com' }
+  ];
+  const T = (email, termId, nowTermId, extra) => plain(ctx.s6RoleForRow_(ENR, email, 's1', termId, Object.assign({ role: 'none', hallTeacher: true, nowTermId }, extra || {})));
+  assert.deepStrictEqual(T('new@example.com', 'T1', 'T2'), { role: 'assigned', isSelf: false, isChild: false }, '지금 담당 → 지난 기간 기록');
+  assert.strictEqual(T('new@example.com', 'T2', 'T2').role, 'assigned');
+  assert.strictEqual(T('old@example.com', 'T1', 'T2').role, 'assigned', '전 담당 → 자기 기간 기록');
+  assert.strictEqual(T('old@example.com', 'T2', 'T2').role, 'none', '전 담당 → 다른 기간 기록은 못 봄(다른 학생 s2의 담당이어도)');
+  assert.strictEqual(T('other@example.com', 'T1', 'T2').role, 'none', '둘 다 아닌 교사');
+  assert.strictEqual(T('old@example.com', 'T1', '').role, 'assigned', '퇴실한 학생(지금 기간 없음/미등록)의 전 담당 → 자기 기간 기록');
+  assert.strictEqual(T('old@example.com', 'T3', 'T3').role, 'none', '퇴실한 학생의 전 담당 → 등록 없는 기간 기록은 못 봄');
+  assert.strictEqual(T('new@example.com', 'T1', 'T2', { hallTeacher: false }).role, 'none', '학사 교사 역할이 없으면 담당 판정을 하지 않는다');
+  assert.strictEqual(T('old@example.com', '', '').role, 'none', '기간을 모르는 기록');
+  assert.strictEqual(T('other@example.com', 'T1', 'T2', { role: 'homeroom' }).role, 'homeroom');
+  assert.strictEqual(T('new@example.com', 'T1', 'T2', { role: 'homeroom' }).role, 'assigned', '담임이면서 지금 담당이면 assigned(우선)');
+  assert.deepStrictEqual(T('x@example.com', 'T9', '', { role: 'student', isSelf: true }), { role: 'student', isSelf: true, isChild: false });
+  assert.strictEqual(T('old@example.com', 'T1', 'T2', { role: 'admin' }).role, 'admin');
+  assert.deepStrictEqual(T('p@example.com', 'T1', 'T2', { role: 'parent', isChild: true }), { role: 'parent', isSelf: false, isChild: true });
+  assert.strictEqual(plain(ctx.s6RoleForRow_(null, 'old@example.com', 's1', 'T1', null)).role, 'none', '빈 입력');
+});

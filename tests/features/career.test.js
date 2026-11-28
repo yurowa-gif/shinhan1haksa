@@ -180,6 +180,36 @@ test('운영 기간이 없으면 제출은 "운영 기간이 아니라 낼 수 �
   assert.strictEqual(env.rows('career_profiles').length, n);
 });
 
+test('결정 104: 지금 담당은 지난 기간 버전도 보고, 전 담당은 자기 기간 버전만 보며 피드백은 못 쓴다', () => {
+  const env = newEnv(), sid = me(env).id;
+  const all = profs(env, sid);
+  assert.ok(all.length >= 2, '가짜 데이터에 버전이 둘 이상');
+  const old = all[0];
+  env.asOwner((c) => {
+    c.updateRecord_('career_profiles', old.id, { term_id: 'T-OLD' }, OWNER);
+    c.appendRecord_('enrollments', { term_id: 'T-OLD', student_id: sid, teacher_email: T2 }, OWNER);
+  });
+  const vers = (r) => r.versions.map((v) => v.version);
+  const cur = plain(env.call(T1, 'getCareerStudent', sid, Number(old.version)));
+  assert.ok(vers(cur).includes(Number(old.version)), '지금 담당은 지난 기간 버전도 본다');
+  assert.strictEqual(cur.current.version, Number(old.version));
+  assert.strictEqual(cur.canFeedback, true, '지금 담당은 지난 버전에도 피드백을 쓸 수 있다');
+  const past = plain(env.call(T2, 'getCareerStudent', sid));
+  assert.deepStrictEqual(vers(past), [Number(old.version)], '전 담당은 자기 기간 버전만');
+  assert.strictEqual(past.canFeedback, false, '전 담당은 쓰지 못한다');
+  env.expectDenied(T2, 'feedback.write', 'addCareerFeedback', sid, old.id, '가짜 피드백');
+  // 지금 담당이 지난 버전에 쓴 피드백은 그 버전의 기간(T-OLD) 기록 — 전 담당도 보고, 지금 기간 버전의 피드백은 못 본다
+  assert.strictEqual(env.call(T1, 'addCareerFeedback', sid, old.id, '가짜 지난 버전 피드백').ok, true);
+  const latest = all[all.length - 1];
+  assert.strictEqual(env.call(T1, 'addCareerFeedback', sid, latest.id, '가짜 이번 버전 피드백').ok, true);
+  const seen = JSON.stringify(plain(env.call(T2, 'getCareerStudent', sid)).feedback);
+  assert.ok(seen.includes('가짜 지난 버전 피드백') && !seen.includes('가짜 이번 버전 피드백'), '전 담당은 자기 기간 기록의 피드백만');
+  // 한 번도 담당한 적 없는 학사 교사는 첫 줄에서 거부
+  const term = env.rows('terms').find((t) => env.rows('enrollments').some((e) => e.term_id === t.id && e.student_id === sid));
+  const never = env.rows('enrollments').find((e) => e.term_id === term.id && e.student_id !== sid && e.teacher_email && e.teacher_email !== T1 && e.teacher_email !== T2).teacher_email;
+  env.expectDenied(never, 'career.view', 'getCareerStudent', sid);
+});
+
 test('R24b 확인: 학부모 응답에는 공개 항목 + 낸 날(submittedAt)이 있고 버전 번호는 없다 · 피드백에는 쓴 날(at)이 학생·교사 모두에게 있다', () => {
   const env = newEnv(), sid = me(env).id, last = profs(env, sid).pop();
   const p = env.call(PA, 'getCareerStudent', sid, 0);

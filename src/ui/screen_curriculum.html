@@ -98,7 +98,7 @@
       clear(resultBox);
       if (!p.ok) {
         var c = el('div', { class: 'card' }, [el('h2', { text: '고칠 곳이 ' + (p.errorCount || p.errors.length) + '군데 있습니다' }), el('div', { class: 'muted', style: 'word-break:keep-all', text: '표를 고쳐 다시 붙여 넣어 주세요. 아직 아무것도 저장하지 않았습니다.' })]);
-        p.errors.forEach(function (e) { c.appendChild(el('div', { class: 'error', text: (e.line ? e.line + '번째 줄' + (e.column ? ' · ' + (KO[e.column] || e.column) : '') + ': ' : '') + e.message })); });
+        p.errors.forEach(function (e) { c.appendChild(el('div', { class: 'error', text: (e.line ? e.line + '번째 줄' + (e.column && e.message.indexOf(KO[e.column] || e.column) < 0 ? ' · ' + (KO[e.column] || e.column) : '') + ': ' : '') + e.message })); });
         resultBox.appendChild(c);
       } else {
         var k = p.counts;
