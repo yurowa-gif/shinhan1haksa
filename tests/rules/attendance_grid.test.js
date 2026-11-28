@@ -134,10 +134,13 @@ test('attResultTotals_: 결석·지각·조퇴 × 인정·미인정, 칸마다 �
   assert.deepStrictEqual([t['결석'], t['지각'], t['조퇴']], [{ '인정': 2, '미인정': 0 }, { '인정': 1, '미인정': 1 }, { '인정': 0, '미인정': 1 }]);
   // 학습량: 운영한 4일 × 4블록(90+80+80+50 = 300분, endType 23:50이라 전체). 빠진 블록: 3/8 무지 2개, 3/9 병결 4개, 3/10 병지 1개·무조 1개, 3/12 가정 4개
   assert.deepStrictEqual(t['학습량'], { days: 4, blocks: 16, studiedBlocks: 4, minutes: 1200, studiedMinutes: (80 + 50) + (80 + 80),
-    missedMinutes: { '무지': 170, '병결': 300, '병지': 90, '무조': 50, '가정': 300 } });
+    missedMinutes: { '무지': 170, '병결': 300, '병지': 90, '무조': 50, '가정': 300 },
+    missedDays: { '무지': 1, '병결': 1, '병지': 1, '무조': 1, '가정': 1 } });   // 하루에 블록이 여럿 빠져도 그 까닭은 1일(R28)
+  const two = plain(ctx.attResultTotals_([cells[4], cell([EX('가정사유(가족여행 포함)', '18:30-20:00', { date: '2027-03-13' })], PLAN('2027-03-13'))]));
+  assert.strictEqual(two['학습량'].missedDays['가정'], 2, '다른 날이면 날마다 1');
   const zero = plain(ctx.attResultTotals_([]));
   assert.deepStrictEqual(zero, { '결석': { '인정': 0, '미인정': 0 }, '지각': { '인정': 0, '미인정': 0 }, '조퇴': { '인정': 0, '미인정': 0 },
-    '학습량': { days: 0, blocks: 0, studiedBlocks: 0, minutes: 0, studiedMinutes: 0, missedMinutes: {} } });
+    '학습량': { days: 0, blocks: 0, studiedBlocks: 0, minutes: 0, studiedMinutes: 0, missedMinutes: {}, missedDays: {} } });
 });
 
 /* ───── 총괄 답(f11-notes 질문): 묶음·대체·끝난 기간 ───── */

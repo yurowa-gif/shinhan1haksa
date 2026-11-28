@@ -27,6 +27,8 @@ var CUR_HEADER_KO = {
   '기준연도': 'base_year', '대학': 'university', '모집단위': 'unit', '핵심과목': 'core_courses', '핵심권장': 'core_courses',
   '권장과목': 'recommended_courses', '권장': 'recommended_courses', '출처주소': 'source_url', '출처제목': 'source_title', '비고': 'note'
 };
+/** 선택군 이름 앞에 '선택군'을 한 번만 붙인다(이름이 이미 '선택군 A'면 그대로 — '선택군 선택군 A'가 되지 않게) */
+function curGroupName_(g) { return /^선택군/.test(String(g)) ? String(g) : '선택군 ' + g; }
 var CUR_LIST_MAX = 30;
 var CUR_WARN_MAX = 30;
 
@@ -167,10 +169,10 @@ function curParse_(kind, text) {
       var gk = [x.rec.entry_year, x.rec.grade, x.rec.semester, x.rec.choice_group].join('\u0001');
       gsize[gk] = (gsize[gk] || 0) + 1;
       if (picks[gk] === undefined) picks[gk] = { n: x.rec.pick_n, line: x.line, lines: [x.line], group: x.rec.choice_group };
-      else if (picks[gk].n !== x.rec.pick_n) errors.push({ line: x.line, column: 'pick_n', message: picks[gk].line + '·' + x.line + '번째 줄: 선택군 ' + x.rec.choice_group + '의 택N이 줄마다 다릅니다. 같은 선택군은 같은 수로 적어 주세요.' });
+      else if (picks[gk].n !== x.rec.pick_n) errors.push({ line: x.line, column: 'pick_n', message: picks[gk].line + '·' + x.line + '번째 줄: ' + curGroupName_(x.rec.choice_group) + ' — 택N이 줄마다 다릅니다. 같은 선택군은 같은 수로 적어 주세요.' });
     });
     Object.keys(picks).forEach(function (gk) {
-      if (/^\d+$/.test(picks[gk].n) && +picks[gk].n > gsize[gk]) errors.push({ line: picks[gk].line, column: 'pick_n', message: '선택군 ' + picks[gk].group + '는 과목이 ' + gsize[gk] + '개인데 택N이 ' + picks[gk].n + '입니다.' });
+      if (/^\d+$/.test(picks[gk].n) && +picks[gk].n > gsize[gk]) errors.push({ line: picks[gk].line, column: 'pick_n', message: curGroupName_(picks[gk].group) + ' — 과목이 ' + gsize[gk] + '개인데 택N이 ' + picks[gk].n + '입니다.' });
     });
   } else {
     var multi = Object.keys(keyFirst).filter(function (k) { return keyFirst[k].length > 1; });
@@ -209,7 +211,7 @@ function curPrepare_(kind, text, existing, plans) {
   plan.year = plan.keys[0] || '';
   plan.drops = kind === 'curriculum' && plan.ok ? careerDropWarnings_(plan.removed, plans || []) : [];
   plan.drops.forEach(function (d) {
-    plan.warnings.push('빠지는 과목 "' + d.course + '"(' + d.grade + '학년 ' + d.semester + '학기)을 이미 고른 학생이 ' + d.students + '명 있습니다. 저장해도 학생의 이수 계획 줄은 그대로 남고, 학생 화면에 "교육과정에서 빠진 과목"으로 표시됩니다.');
+    plan.warnings.push('빠지는 과목: ' + d.grade + '학년 ' + d.semester + '학기 "' + d.course + '" — 이미 고른 학생이 ' + d.students + '명입니다. 저장해도 학생의 이수 계획 줄은 그대로 남고, 학생 화면에 "교육과정에서 빠진 과목"으로 표시됩니다.');
   });
   return plan;
 }

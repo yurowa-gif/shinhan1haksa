@@ -341,20 +341,25 @@ function attGridCell_(plan, s, opts) {
 
 /**
  * 격자 칸들(attGridCell_ 결과, 한 학생의 날짜 범위)의 누적.
- * → {결석:{인정, 미인정}, 지각:{…}, 조퇴:{…}, 학습량:{days, blocks, studiedBlocks, minutes, studiedMinutes, missedMinutes:{칸 글자: 분}}}
+ * → {결석:{인정, 미인정}, 지각:{…}, 조퇴:{…}, 학습량:{days, blocks, studiedBlocks, minutes, studiedMinutes, missedMinutes:{칸 글자: 분}, missedDays:{칸 글자: 일수}}}
+ * missedDays(R28): 그 까닭으로 빠진 블록이 하루에 한 번이라도 있으면 그날을 1로 센다(타임라인 출결 요약의 학원·가정 일수, 총괄 확정).
  * 결석·지각·조퇴는 칸마다 종류당 1. 학습량은 운영한 날의 블록·분 합, missedMinutes는 빠진 까닭(칸 글자 — '가정'·'학원'·'학'·'무지' 등)별 분.
  */
 function attResultTotals_(cells) {
   var t = {};
   ['결석', '지각', '조퇴'].forEach(function (k) { t[k] = { '인정': 0, '미인정': 0 }; });
-  var s = t['학습량'] = { days: 0, blocks: 0, studiedBlocks: 0, minutes: 0, studiedMinutes: 0, missedMinutes: {} };
+  var s = t['학습량'] = { days: 0, blocks: 0, studiedBlocks: 0, minutes: 0, studiedMinutes: 0, missedMinutes: {}, missedDays: {} };
   (cells || []).forEach(function (c) {
     if (!c) return;
     (c.results || []).forEach(function (r) { if (t[r.kind]) t[r.kind][r.recognized ? '인정' : '미인정']++; });
     if (!c.operating || !c.study) return;
     s.days++;
     ['blocks', 'studiedBlocks', 'minutes', 'studiedMinutes'].forEach(function (k) { s[k] += c.study[k]; });
-    c.study.missed.forEach(function (m) { s.missedMinutes[m.text] = (s.missedMinutes[m.text] || 0) + m.minutes; });
+    var seen = {};
+    c.study.missed.forEach(function (m) {
+      s.missedMinutes[m.text] = (s.missedMinutes[m.text] || 0) + m.minutes;
+      if (!seen[m.text]) { seen[m.text] = true; s.missedDays[m.text] = (s.missedDays[m.text] || 0) + 1; }
+    });
   });
   return t;
 }

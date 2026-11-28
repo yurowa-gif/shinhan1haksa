@@ -277,8 +277,9 @@ function s6TimelineView_(sources, studentId, ctx) {
   live(s.inquiries).forEach(function (r) {
     var f = ruleStr_(r.file_id);
     if (f) {
-      var u = uploads[f] = uploads[f] || { termId: r.term_id, at: '', n: 0, mismatch: false, id: f };
+      var u = uploads[f] = uploads[f] || { termId: r.term_id, at: '', n: 0, mismatch: false, id: '' };   // file_id 값은 줄에 싣지 않는다(관리자만 보는 칸) — ref는 묶음의 첫 기록 id
       u.n++;
+      if (!u.id || ruleStr_(r.id) < u.id) u.id = ruleStr_(r.id);
       if (ruleIso_(r.created_at) > u.at) u.at = ruleIso_(r.created_at);
       u.mismatch = u.mismatch || s6True_(r.name_mismatch);
     }
@@ -330,7 +331,7 @@ function s6TimelineView_(sources, studentId, ctx) {
 /**
  * 출결 요약 줄 글(attResultTotals_ 결과) → '출석 n일 · 지각 n · 조퇴 n · 결석 n'(+ '학원 n일 · 가정 n일').
  * 출석 = 운영한 날 − 결석한 날. 지각·조퇴·결석은 인정·미인정을 합친 날 수.
- * ASSUMPTION: 학원·가정 '일수'는 지금 attResultTotals_에 없다(분만 있음). totals.학습량.missedDays{'학','가'}가 있을 때만 싣는다(총괄 확인 중).
+ * 학원·가정 = 고정 일정 '학'·'가'가 하루에 한 번이라도 든 날 수(totals.학습량.missedDays, 총괄 확정). missedDays가 없는 옛 묶음이면 싣지 않는다.
  */
 function s6AttendanceText_(totals) {
   var t = totals || {}, n = function (k) { var x = t[k] || {}; return (Number(x['인정']) || 0) + (Number(x['미인정']) || 0); };
