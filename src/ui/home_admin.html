@@ -60,7 +60,7 @@
         { text: '출석부', href: A + '?page=sheet' }, { text: '좌석표', href: A + '?page=seats' }, { text: '떨어뜨릴 짝', href: A + '?page=avoid' }] },
       { title: '학생·생활', items: [
         { text: 'OUT 기록', href: A + '?page=outs&tab=record', badge: (t.need || 0) + (t.ready || 0) }, { text: '서류 체크리스트', href: A + '?page=docs', badge: dc.items },
-        { text: '상담일지', href: A + '?page=counsel' }, { text: '연락처', href: A + '?page=contacts' }, { text: '시간표', href: A + '?page=timetable&role=admin' }, { text: '진로 프로필', href: A + '?page=career&role=admin' }] },
+        { text: '상담일지', href: A + '?page=counsel' }, { text: '상담 신청', href: A + '?page=requests', badge: (d.counselreq || {}).open }, { text: '연락처', href: A + '?page=contacts' }, { text: '시간표', href: A + '?page=timetable&role=admin' }, { text: '진로 프로필', href: A + '?page=career&role=admin' }] },
       { title: '운영 설정', items: [
         { text: '운영 기간', href: A + '?page=terms' }, { text: '명단 올리기', href: A + '?page=roster' }, { text: '자습 일정·블록', href: A + '?page=schedule' }] }
     ]);

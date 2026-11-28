@@ -101,6 +101,16 @@
         UI.rowLink({ href: d.appUrl + '?page=counsel', text: '상담일지 열기' })
       ]));
     }
+    if (d.counselreq && !d.counselreq.error) {   // 상담 신청(C49-A): 날짜를 아직 안 정한 신청이 있을 때만 '할 일' 카드(메모·이름 없음, 숫자만)
+      var cq = d.counselreq;
+      root.appendChild(el('div', { class: UI.cardClass(cq.open ? 'todo' : '') }, [
+        el('h2', { text: '상담 신청' }),
+        el('div', { style: 'margin:8px 0' }, [cq.open ? UI.statusPill('todo', '날짜를 정할 신청 ' + cq.open + '건') : UI.statusPill('confirmed', '처리할 신청 없음')]),
+        cq.earliest ? el('div', { class: 'muted', style: 'word-break:keep-all', text: '가장 빠른 희망 날짜: ' + UI.util.formatDateKo(cq.earliest, false) }) : null,
+        cq.fixed ? el('div', { class: 'muted', text: '날짜가 정해진 상담 ' + cq.fixed + '건 — 상담을 마치면 상담일지를 써 주세요.' }) : null,
+        UI.rowLink({ href: d.appUrl + '?page=requests', text: '상담 신청 처리 열기' })
+      ]));
+    }
     if (d.timetable && !d.timetable.error) {
       var tt = d.timetable;
       root.appendChild(el('div', { class: UI.cardClass(tt.todo ? 'todo' : '') }, [

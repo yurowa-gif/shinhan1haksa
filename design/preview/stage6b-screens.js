@@ -28,6 +28,10 @@ function btn(text, kind) { return el('button', { type: 'button', class: 'btn ' +
 function area(label, value, hint, rows) { var ta = el('textarea', { rows: String(rows || 3) }); ta.value = value || ''; return UI.field(label, ta, hint ? { hint: hint } : {}); }
 function kvs(rows) { var dl = el('dl', { class: 'kvs' }); rows.forEach(function (r) { dl.appendChild(el('dt', { text: r[0] })); dl.appendChild(el('dd', {}, [].concat(r[1]))); }); return dl; }
 /** 항목별 '부모님께 보이기'(기본 꺼짐). on이면 지금 공개 중이라는 꼬리표가 함께 나온다(결정 89) */
+/** 입력 화면용: 아직 내지 않았으므로 "지금"이 아니라 "제출하면"으로 말한다(D26). 지금 상태는 화면 맨 위 한 줄로 */
+function shareDraft(on) {
+  return el("div", { class: "share" }, [checkRow("부모님께 보이기", on), on ? UI.statusPill("requested", "제출하면 보임") : UI.statusPill("mute", "제출해도 나만 봄")]);
+}
 function share(on, label) {
   return el('div', { class: 'share' }, [checkRow(label || '부모님께 보이기', on), on ? UI.statusPill('confirmed', '지금 보이는 중') : UI.statusPill('mute', '나만 보는 중')]);
 }
@@ -59,11 +63,12 @@ function targetRow(n, u, d, t) {
   return el('div', { style: 'margin-bottom:8px' }, [el('b', { text: '목표 ' + n }), inputField('대학', 'text', u), inputField('학과', 'text', d), selectField('전형', ['고르기', '학생부교과', '학생부종합', '논술', '정시', '아직 모름'], t)]);
 }
 function careerForm(m, v) {
-  var c1 = card('진로 희망', [p('1순위는 꼭 적어 주세요. 2·3순위는 있으면 적습니다.'), hopeRow(1, v.h1[0], v.h1[1]), hopeRow(2, v.h2[0], v.h2[1]), hopeRow(3, '', ''), share(v.sh.hopes)]);
-  var c2 = card('목표 진학', [p('가고 싶은 대학·학과가 있으면 적어 주세요. 없으면 비워 둬도 됩니다.'), targetRow(1, v.t1[0], v.t1[1], v.t1[2]), btn('+ 목표 추가'), share(v.sh.targets)]);
-  var c3 = card('관심 분야', [area('요즘 관심 있는 것', v.interests, '과목·활동·책 무엇이든 좋습니다.'), share(v.sh.interests)]);
-  var c4 = card('강점', [area('내가 잘하는 것', v.strengths), share(v.sh.strengths)]);
-  var c5 = card('고민', [area('걱정되거나 도움이 필요한 것', v.concerns, '담당 선생님이 상담 전에 읽습니다.'), share(v.sh.concerns)]);
+  m.appendChild(card('', [el('b', { text: '지금 부모님께 보이는 항목: 진로 희망, 목표 진학' }), p('아래에서 "부모님께 보이기"를 바꿔도 [제출하기]를 눌러야 바뀝니다.')]));
+  var c1 = card('진로 희망', [p('1순위는 꼭 적어 주세요. 2·3순위는 있으면 적습니다.'), hopeRow(1, v.h1[0], v.h1[1]), hopeRow(2, v.h2[0], v.h2[1]), hopeRow(3, '', ''), shareDraft(v.sh.hopes)]);
+  var c2 = card('목표 진학', [p('가고 싶은 대학·학과가 있으면 적어 주세요. 없으면 비워 둬도 됩니다.'), targetRow(1, v.t1[0], v.t1[1], v.t1[2]), btn('+ 목표 추가'), shareDraft(v.sh.targets)]);
+  var c3 = card('관심 분야', [area('요즘 관심 있는 것', v.interests, '과목·활동·책 무엇이든 좋습니다.'), shareDraft(v.sh.interests)]);
+  var c4 = card('강점', [area('내가 잘하는 것', v.strengths), shareDraft(v.sh.strengths)]);
+  var c5 = card('고민', [area('걱정되거나 도움이 필요한 것', v.concerns, '담당 선생님이 상담 전에 읽습니다.'), shareDraft(v.sh.concerns)]);
   [c1, c2, c3, c4, c5].forEach(function (c) { m.appendChild(c); });
   return { c1: c1, c2: c2 };
 }
@@ -72,10 +77,10 @@ var CAREER = { h1: ['보건·의료', '간호사'], h2: ['교육', '보건 교�
 
 def('s-career-form', '학생 · 진로 프로필', '진로 프로필 내기(지난번 내용을 불러온 모습)', {}, function (root) {
   soft();
-  var m = frame(root, { title: '진로 프로필', who: ME, bar: [{ text: '제출하기' }], note: '학생 화면 · 지난번(2번째) 내용을 불러와 고쳐 내는 모습. 공개 항목은 지난번 것을 이어받는다(결정 89). 처음 내는 학생은 모든 칸이 비고 모든 "부모님께 보이기"가 꺼져 있다.' });
+  var m = frame(root, { title: '진로 프로필', who: ME, bar: [{ text: '제출하기' }], note: '학생 화면 · 지난번(2번째) 내용을 불러와 고쳐 내는 모습. 공개 항목은 지난번 것을 이어받는다(결정 89). 입력 화면의 꼬리표는 "제출하면 보임"·"제출해도 나만 봄"(아직 내지 않았으므로 "지금"이라고 하지 않는다, D26) — 사진은 관심 분야를 새로 켠 모습. 처음 내는 학생은 모든 칸이 비고 모든 "부모님께 보이기"가 꺼져 있다.' });
   m.appendChild(el('div', { class: 'notice info', text: '지난번에 낸 내용을 불러왔습니다. 바뀐 곳만 고쳐서 내면 새 기록으로 쌓이고, 지난 기록은 그대로 남습니다.' }));
   m.appendChild(card('', [el('b', { text: '이번 학기 제출 마감: 4월 16일(금)' }), p('마감 뒤에도 생각이 바뀌면 언제든 다시 낼 수 있습니다.')]));
-  careerForm(m, CAREER);
+  careerForm(m, Object.assign({}, CAREER, { sh: { hopes: true, targets: true, interests: true, strengths: false, concerns: false } }));
   m.appendChild(p('부모님께는 가장 최근에 낸 기록에서 "보이기"를 켠 항목만 보입니다. 선생님 말씀(피드백)은 부모님께 보이지 않습니다.'));
 });
 

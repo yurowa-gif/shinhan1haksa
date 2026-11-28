@@ -70,19 +70,19 @@ test('screenParams_: 2단계 tab·month(yyyy-MM 모양)·prefill(out2만)을 통
   assert.deepStrictEqual(run({ role: 'superuser' }), {}, '모르는 역할은 버린다');
 });
 
-test('getHomeData: 홈 역할이 보기 키(duty.view·out.view·status.list·doc.view·event.view·counsel.list·facility.view·timetable.list·career.list)를 가진 훅만 부르고 ms를 남긴다, 기존 값은 그대로, 학생·학부모 홈에는 없다', () => {
+test('getHomeData: 홈 역할이 보기 키(duty.view·out.view·status.list·doc.view·event.view·counsel.list·counsel.request.list·facility.view·timetable.list·career.list)를 가진 훅만 부르고 ms를 남긴다, 기존 값은 그대로, 학생·학부모 홈에는 없다', () => {
   const env = createGasEnv();
   env.seedFake();
   // 값은 각 CODING 세션이 시험한다. 여기서는 어느 홈에 어느 키가 있는지만 본다
-  const teachers = [['test.admin@example.com', 'admin', 'counts', ['career', 'counsel', 'docs', 'duty', 'events', 'facility', 'food', 'out', 'timetable']],
+  const teachers = [['test.admin@example.com', 'admin', 'counts', ['career', 'counsel', 'counselreq', 'docs', 'duty', 'events', 'facility', 'food', 'out', 'timetable']],
     ['test.attendance@example.com', 'attendance', 'exc', ['docs', 'duty', 'events', 'food', 'out']],
     ['test.duty@example.com', 'duty_manager', 'month', ['duty', 'events']],
-    ['test.teacher@example.com', 'hall_teacher', 'students', ['career', 'counsel', 'docs', 'duty', 'events', 'facility', 'food', 'out', 'timetable']],
+    ['test.teacher@example.com', 'hall_teacher', 'students', ['career', 'counsel', 'counselreq', 'docs', 'duty', 'events', 'facility', 'food', 'out', 'timetable']],
     ['test.homeroom@example.com', 'homeroom', 'students', ['counsel', 'events', 'food', 'out']]];
   for (const [who, role, kept, hooks] of teachers) {
     const d = env.call(who, 'getHomeData', role);
     assert.deepStrictEqual(Object.keys(d.ms).sort(), hooks, role);
-    for (const k of ['duty', 'out', 'food', 'docs', 'events', 'counsel', 'facility', 'timetable', 'career']) {
+    for (const k of ['duty', 'out', 'food', 'docs', 'events', 'counsel', 'counselreq', 'facility', 'timetable', 'career']) {
       assert.strictEqual(k in d, hooks.includes(k), role + ' ' + k);
       if (hooks.includes(k)) assert.strictEqual(typeof d.ms[k], 'number', role + ' ms.' + k);
     }
