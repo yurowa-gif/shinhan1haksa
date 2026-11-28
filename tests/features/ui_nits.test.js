@@ -173,3 +173,19 @@ test('C49-B(R24b 뒤): 저장 전 확인 시트가 합의 사항 글을 그대�
   const m = ui('screen_mynotes.html');
   assert.ok(/n\.agreement_to_parent === undefined/.test(m) && /\(true\|y\|yes\|1\|예\)/.test(m), '체크 칸은 응답의 공개 상태(TRUE·FALSE)로');
 });
+
+test('C52 탐구 기록 화면(정적): 학생 목록(AI 제안 꼬리표·진행 적기·부모님께 보이기 shareCheck)·올리기(이름 다름 확인)·관리자 정리 확인 시트·학부모 카드는 있을 때만', () => {
+  const ui = (f) => fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'ui', f), 'utf8');
+  const s = ui('screen_inquiry.html');
+  assert.ok(/'AI 제안'/.test(s) && /탐구발견 앱에서 받은 주제는 AI가 제안한 것입니다\. 선생님과 이야기해 보고 진행해 주세요\./.test(s), '출처 꼬리표와 위 안내');
+  assert.ok(/UI\.shareCheck\(\{/.test(s) && /confirmOff: true/.test(s) && /이 기록을 부모님께 보이기/.test(s) && !/UI\.confirmSheet/.test(s), '공통 shareCheck, 끄기 확인은 부품이');
+  assert.ok(/if \(canWrite\) \{[\s\S]*?진행 적기/.test(s) && /d\.canWrite/.test(s) && /학사를 나간 뒤에는 고칠 수 없습니다/.test(s), '학사를 나간 뒤에는 쓰기 칸을 그리지 않는다');
+  assert.ok(/http:\/\/ 또는 https:\/\/ 로 시작하는 주소만 됩니다\./.test(s) && /아직 올린 탐구 기록이 없습니다/.test(s), '링크 도움말·빈 상태');
+  assert.ok(/내 기록이 맞습니다/.test(s) && /맞다고 표시하면 담당 선생님 화면에 "이름 다름"이 함께 나옵니다/.test(s) && /state\.confirmed/.test(s), '이름 다름 확인');
+  assert.ok(/12 \* 1024 \* 1024/.test(s) && /이 파일의 기록은 이미 모두 올라와 있습니다\. 올릴 것이 없습니다\./.test(s), '12MB·이미 다 있음');
+  assert.ok(!/file_id|name_mismatch/.test(s), '학생 화면은 원본 id·이름 다름 표시를 쓰지 않는다');
+  const c = ui('screen_inquirycleanup.html');
+  assert.ok(/원본 파일 지우기/.test(c) && /되돌릴 수 없습니다/.test(c) && /kind: 'danger'/.test(c) && /지금 정리할 탐구 원본 파일이 없습니다/.test(c), '관리자 정리: 확인 시트·빨간 버튼·빈 상태');
+  assert.ok(/if \(iq\.length\)/.test(ui('Portal.html')) && /탐구 주제는 AI가 제안한 것으로, 자녀가 골라 진행하고 있습니다\./.test(ui('Portal.html')), '학부모 카드는 있을 때만');
+  assert.ok(/page=inquiry'/.test(ui('home_student.html')) && /page=inquirycleanup/.test(ui('home_admin.html')), '홈 링크');
+});

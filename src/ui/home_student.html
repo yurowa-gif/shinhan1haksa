@@ -33,6 +33,12 @@
       UI.rowLink({ href: d.appUrl + '?page=mynotes', text: '내 상담 기록 보기' })
     ]);
     root.appendChild(cqCard);
+    // 탐구 기록 카드(C52, F16): 탐구발견에서 받은 파일 올리기·진행 적기·부모님께 보이기
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '탐구 기록' }),
+      el('div', { class: 'muted', style: 'word-break:keep-all', text: '탐구발견 앱에서 받은 기록 파일을 올리고, 진행 상황을 적습니다.' }),
+      UI.rowLink({ href: d.appUrl + '?page=inquiry', text: '내 탐구 기록' })
+    ]));
     call('getCounselRequestsOfStudent', '').then(function (r) {
       var cur = (r.requests || [])[0];   // 가장 최근 신청(새 신청이 위)
       if (!cur) return;

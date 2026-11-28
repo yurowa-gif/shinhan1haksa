@@ -177,6 +177,6 @@ function getPortalStudent(studentId, month) {
   var res = { viewer: own ? 'student' : 'parent', today: today, term: term ? { name: term.name } : null, student: ptlStudentOne_(student),
     teacher: ptlTeacherName_(term, sid), outs: ptlOuts_(term, sid), exceptions: ptlExceptions_(term, sid, today, !own), seat: ptlSeat_(term, sid, today), room: ptlRoom_(term, sid),
     todo: ttcTodo_(sid, own, today), status: ptlStatus_(sid, today), pending: ptlPending_(sid, today), upcoming: ptlUpcoming_(today, 3), month: ptlMonth_(m) };
-  if (!own) res.counsel = ptlCounsel_(sid);
+  if (!own) { res.counsel = ptlCounsel_(sid); res.inquiry = ptlInquiry_(sid); }   // 학부모만: 상담 여부와 자녀가 공개한 탐구 기록
   return res;
 }

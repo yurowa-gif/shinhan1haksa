@@ -1,0 +1,58 @@
+<style>
+  .ic-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); min-height: 48px; word-break: keep-all; }
+  .ic-row:last-child { border-bottom: 0; }
+  .ic-row input { width: 22px; height: 22px; flex: 0 0 auto; }
+  .ic-row .muted { font-size: var(--font-sm, .85rem); }
+</style>
+<script>
+  /**
+   * 탐구 원본 정리(C52, F16 관리자 전용). docs/design/stage6/screens.md 8절, 결정 100.
+   * 졸업·퇴실 1년 뒤 학생의 Drive 원본 파일을 관리자가 확인하고 지운다(자동 삭제 없음). 지워지는 것은 원본 파일뿐 — 시트의 요약은 "취소"로 남고, 누가 언제 지웠는지 audit_log에 남는다.
+   */
+  function renderScreen(root) {
+    var state = { data: null, picked: {}, bar: null, busy: false };
+    var body = el('div');
+    root.appendChild(body);
+    function removeBar() { if (state.bar) { state.bar.remove(); state.bar = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); } }
+    function pickedList() { return state.data.students.filter(function (s) { return state.picked[s.studentId]; }); }
+    function load() {
+      call('getInquiryCleanup').then(function (d) { state.data = d; state.picked = {}; draw(); }).catch(function (err) { removeBar(); clear(body); showError(body, err); });
+    }
+    load();
+
+    function draw() {
+      var d = state.data;
+      clear(body); removeBar();
+      body.appendChild(el('div', { class: 'notice info', text: '졸업하거나 퇴실한 지 1년이 지난 학생의 탐구 원본 파일입니다. 개인정보를 오래 두지 않으려고 관리자 선생님이 확인하고 지웁니다.' }));
+      if (!d.students.length) {
+        body.appendChild(el('div', { class: 'card' }, [UI.emptyState('지금 정리할 탐구 원본 파일이 없습니다.'), el('div', { class: 'muted', text: '졸업·퇴실 뒤 1년이 지난 학생이 생기면 여기에 나옵니다.' })]));
+        return;
+      }
+      var rows = d.students.map(function (s) {
+        var cb = el('input', { type: 'checkbox', id: 'ic-' + s.studentId, onchange: function () { state.picked[s.studentId] = cb.checked; drawBar(); } }); cb.checked = !!state.picked[s.studentId];
+        return el('label', { class: 'ic-row', for: 'ic-' + s.studentId }, [cb, el('span', {}, [el('b', { text: s.label }), el('div', { class: 'muted', text: s.leaveKo + ' · 1년 지남 · 원본 파일 ' + s.files + '개' })])]);
+      });
+      body.appendChild(el('div', { class: 'card' }, [el('h2', { text: '정리 대상 ' + d.totalStudents + '명 · 원본 파일 ' + d.totalFiles + '개' }), el('div', {}, rows),
+        el('div', { class: 'muted', style: 'margin-top:8px', text: '지워지는 것은 Drive의 원본 파일뿐입니다. 탐구 기록 요약은 "취소" 상태로 남습니다.' })]));
+      drawBar();
+    }
+    function drawBar() {
+      var sel = pickedList(), n = sel.reduce(function (a, s) { return a + s.files; }, 0);
+      removeBar();
+      state.bar = UI.actionBar([{ text: sel.length ? '고른 ' + n + '개 지우기' : '고른 것 지우기', kind: 'danger', disabled: !sel.length || state.busy, onclick: function () { askDelete(sel, n); } }], { mount: true });
+    }
+    function askDelete(sel, n) {
+      UI.confirmSheet({ title: '원본 파일 지우기', lead: '학생 ' + sel.length + '명 · 원본 파일 ' + n + '개',
+        lines: ['Drive에서 원본 파일 ' + n + '개를 지웁니다. 되돌릴 수 없습니다.', '탐구 기록 요약은 "취소" 상태로 남습니다.', '누가 언제 지웠는지 기록에 남습니다.'],
+        message: '지울까요?', confirmText: '지우기', danger: true, onconfirm: function () { doDelete(sel.map(function (s) { return s.studentId; })); } });
+    }
+    function doDelete(ids) {
+      state.busy = true; drawBar();
+      call('cleanupInquiryFiles', ids).then(function (r) {
+        state.busy = false;
+        UI.toast(r.failed ? r.total + '개 중 ' + r.deleted + '개를 지웠습니다. 남은 ' + r.failed + '개는 다시 눌러 주세요.' : '원본 파일 ' + r.deleted + '개를 지웠습니다.', r.failed ? { kind: 'warn', ms: 6000 } : undefined);
+        load();
+      }).catch(function (err) { state.busy = false; UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); drawBar(); });
+    }
+  }
+</script>
