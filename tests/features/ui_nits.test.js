@@ -111,3 +111,21 @@ test('C47 결과 정리 화면: 휴대폰 [학생별] 보기(학생 1줄·예외
   assert.strictEqual(ctx.preShown(['정상 종료', '', 0]), '', '정상 종료 글자는 예외가 아니다');
   assert.strictEqual(ctx.preShown(['학·정상 종료', '', 0]), '학');
 });
+
+test('C49-A 상담 신청 화면: 입력 오류는 틀린 칸에(날짜 칸마다·주제·메모), 확인 시트 전에 화면에서 먼저 거름, 교사 화면은 공통 .ld 부품, 학생 홈에 신청 상태 한 줄', () => {
+  const ui = (f) => fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'ui', f), 'utf8');
+  const s = ui('screen_counselreq.html');
+  assert.ok(/function check\(\)/.test(s) && /errs\.push\(\{ field: 'date' \+ i/.test(s) && /field: 'topic'/.test(s) && /field: 'memo'/.test(s), '화면 쪽 먼저 거르기(날짜·주제·메모)');
+  assert.ok(/state\.errors = check\(\);\s*if \(state\.errors\.length\)/.test(s), '확인 시트 전에 걸러 낸다');
+  assert.ok(/f\.setError\(errOf\('date' \+ i\)\)/.test(s) && /class: 'error', text: errOf\('topic'\)/.test(s) && /memoF\.setError/.test(s), '틀린 칸에 안내');
+  assert.ok(/class: 'error', role: 'alert'/.test(s), '맨 위 상자는 오류색');
+  assert.ok(/kind: d\.canRequest \? 'primary' : 'secondary'/.test(s), '[+ 새 상담 신청]은 켜져 있으면 주 단추');
+  assert.ok(s.indexOf("var fixed = open.filter") < s.indexOf("if (d.whyNot && !fixed)"), '날짜가 정해진 칸이 안내보다 위(안내는 확정이 없을 때만)');
+  assert.ok(/내 상담 신청/.test(s) && /setTitle\(state\.view === 'form' \? '상담 신청' : '내 상담 신청'\)/.test(s), '머리줄 제목');
+  const r = ui('screen_requests.html');
+  assert.ok(/class: 'ld'/.test(r) && /ld-pick/.test(r) && !/rq-wrap|rq-row/.test(r), '공통 .ld 부품');
+  assert.ok(!/el\('h2', \{ text: '상담 신청 처리' \}\)/.test(r), '머리줄 아래 제목 되풀이 없음');
+  assert.ok(/who\(r\) \+ ' · ' \+ r\.topic \+ ' 상담 신청입니다\. ' \+ message/.test(r), '반려·상담 못 함 시트 첫머리에 누구 건인지');
+  const h = ui('home_student.html');
+  assert.ok(/getCounselRequestsOfStudent', ''\)/.test(h) && /신청 중/.test(h) && /에 상담합니다/.test(h) && /반려되었습니다/.test(h), '학생 홈 신청 상태 한 줄');
+});

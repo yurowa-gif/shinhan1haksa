@@ -1,0 +1,125 @@
+<style>
+  .ld-row .pill { flex: 0 0 auto; white-space: nowrap; margin-right: 4px; }   /* 좁은 화면에서 꼬리표가 글자 단위로 꺾이지 않게 */
+  .rq-k { color: var(--muted-ink); font-size: var(--font-sm, .85rem); margin-top: 12px; }
+  .rq-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .rq-dates { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+  .rq-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+</style>
+<script>
+  /**
+   * 상담 신청 처리(C49-A, F17 담당교사·관리자). docs/design/stage6/screens.md 6절 t-req. 목록 | 한 건은 상담일지와 같은 공통 .ld 부품(840px 이상 두 칸, 그보다 좁으면 번갈아).
+   * 확정은 학생이 고른 희망 날짜 중 하나로만(결정 103), 반려는 사유(학생에게 보임), 확정 뒤 못 한 경우도 반려(버튼 이름만 [상담 못 함]).
+   * 담임에게는 이 화면이 열리지 않는다(날짜·주제·상태는 학생별 보기에서). 관리자는 보기만 한다(처리는 담당교사). 학생 메모는 응답에 있을 때만 그린다.
+   * 신청한 날은 서버가 보내지 않는다(판정표에 없는 칸).
+   */
+  function renderScreen(root) {
+    var U = UI.util;
+    var state = { tab: 'todo', data: null, sel: '', pickDate: '' };
+    var head = el('div', { class: 'card ld-list' }), body = el('div', { class: 'ld-detail' });
+    var wrap = el('div', { class: 'ld' }, [head, body]);
+    var wideMq = window.matchMedia ? window.matchMedia('(min-width: 840px)') : { matches: false };
+    root.appendChild(wrap);
+    var mainEl = document.querySelector('main'); if (mainEl) mainEl.classList.add('wide');
+    var hint = function () { return el('div', { class: 'ld-empty muted', text: '왼쪽에서 신청을 고르면 여기에 나옵니다.' }); };
+    body.appendChild(hint());
+    function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
+    function dayKo(ymd) { return U.formatDateKo(ymd, false); }
+    function appHref(q) { return ((document.querySelector('a.back') || {}).href || '') + '?' + q; }   // 처음으로 링크가 앱 주소다
+
+    function load() {
+      call('getCounselRequestList').then(function (d) {
+        state.data = d;
+        Nav.bind(function (k) { if (String(k).indexOf('r:') === 0) openReq(String(k).slice(2)); else toList(); });   // 뒤로 가기: 한 건 → 목록
+        if (state.sel && !d.requests.some(function (r) { return r.id === state.sel; })) { state.sel = ''; wrap.classList.remove('has-detail'); }
+        drawHead(); if (state.sel) drawDetail(); else { clear(body); body.appendChild(hint()); }
+      }).catch(function (err) { clear(head); clear(body); showError(head, err); });
+    }
+    load();
+
+    function todo() { return state.data.requests.filter(function (r) { return r.status === '신청' || r.status === '확정'; }); }
+    function past() { return state.data.requests.filter(function (r) { return r.status !== '신청' && r.status !== '확정'; }); }
+    function pill(r) { return UI.statusPill(r.status === '신청' ? 'requested' : r.status === '확정' || r.status === '완료' ? 'confirmed' : 'canceled', r.status); }
+    function who(r) { return U.studentLabel(r.student); }
+    function current() { return state.data.requests.filter(function (r) { return r.id === state.sel; })[0] || null; }
+
+    function drawHead() {
+      clear(head);
+      head.appendChild(UI.segmented({ label: '보기', value: state.tab, options: [{ value: 'todo', label: '처리할 것 ' + todo().length }, { value: 'past', label: '지난 신청' }],
+        onchange: function (v) { state.tab = v; toList(); } }));
+      var list = state.tab === 'todo' ? todo() : past();
+      var box = el('div');
+      if (!list.length) box.appendChild(UI.emptyState(state.tab === 'todo' ? '처리할 상담 신청이 없습니다.' : '지난 상담 신청이 없습니다.'));
+      list.forEach(function (r) {
+        var line = r.status === '확정' || r.status === '완료' ? dayKo(r.decided_date) + '에 상담' : '희망 ' + dayKo(r.wishDates[0]) + (r.wishDates.length > 1 ? ' 외 ' + (r.wishDates.length - 1) + '일' : '');
+        var open = function () { if (!wideMq.matches) Nav.go('r:' + r.id); openReq(r.id); };
+        box.appendChild(el('div', { class: 'ld-row' }, [
+          el('button', { type: 'button', class: 'ld-pick', 'aria-current': state.sel === r.id ? 'true' : null, onclick: open }, [
+            el('span', { class: 'ld-name', text: who(r) + ' · ' + r.topic }), el('span', { class: 'muted', text: line })]),
+          pill(r)
+        ]));
+      });
+      head.appendChild(box);
+    }
+    function toList() { state.sel = ''; state.pickDate = ''; clear(body); body.appendChild(hint()); wrap.classList.remove('has-detail'); if (state.data) drawHead(); window.scrollTo(0, 0); }
+    function openReq(id) { state.sel = id; state.pickDate = ''; wrap.classList.add('has-detail'); drawHead(); drawDetail(); window.scrollTo(0, 0); }
+
+    function field(label, value) { return [el('div', { class: 'rq-k', text: label }), el('div', { text: value })]; }
+
+    /* ───────── 신청 한 건 ───────── */
+    function drawDetail() {
+      var r = current();
+      clear(body);
+      if (!r) { body.appendChild(hint()); return; }
+      var kids = [el('h2', { text: who(r) + ' · ' + r.topic + ' 상담' }),
+        el('div', { class: 'rq-line' }, [pill(r), el('button', { type: 'button', class: 'btn secondary row-btn ld-narrow', text: '목록으로', onclick: function () { Nav.back(toList); } })])];
+      kids = kids.concat(field('주제', r.topic), field('희망 날짜', r.wishDates.map(dayKo).join(' · ')));
+      if (r.decided_date) kids = kids.concat(field(r.status === '완료' ? '상담한 날' : r.status === '확정' ? '상담하는 날' : '정한 날', dayKo(r.decided_date)));
+      if (r.memo !== undefined) kids = kids.concat(field('학생 메모', r.memo || '(적지 않았습니다)'));
+      if (r.status === '반려' && r.cancel_reason) kids = kids.concat(field('반려 사유(학생에게 보임)', r.cancel_reason));
+      if (r.status === '취소') kids.push(el('div', { class: 'muted', style: 'margin-top:12px', text: '학생이 취소했습니다.' }));
+      if (r.status === '신청') kids = kids.concat(decideBox(r));
+      if (r.status === '확정') kids = kids.concat(fixedBox(r));
+      if (!r.canDecide && (r.status === '신청' || r.status === '확정')) kids.push(el('div', { class: 'muted', style: 'margin-top:12px', text: '처리는 담당 선생님이 합니다. 관리자 선생님은 볼 수만 있습니다.' }));
+      kids.push(el('div', { class: 'rq-k', text: '상담 전에 보기' }));
+      kids.push(UI.rowLink({ href: appHref('page=counsel&student=' + encodeURIComponent(r.student.id)), text: '이 학생의 상담일지' }));
+      body.appendChild(el('div', { class: 'card' }, kids));
+    }
+    function decideBox(r) {
+      if (!r.canDecide) return [];
+      var chips = el('div', { class: 'rq-dates', role: 'group', 'aria-label': '상담할 날' });
+      var confirmBtn = el('button', { type: 'button', class: 'btn', text: '이 날로 확정', disabled: !state.pickDate, onclick: function () { decide(r, 'confirm', { date: state.pickDate }, dayKo(state.pickDate) + '로 확정했습니다.'); } });
+      function drawChips() {
+        clear(chips);
+        r.wishDates.forEach(function (x) {
+          var on = state.pickDate === x;
+          chips.appendChild(el('button', { type: 'button', class: on ? 'chip on' : 'chip', 'aria-pressed': on ? 'true' : 'false', text: dayKo(x), onclick: function () { state.pickDate = x; drawChips(); confirmBtn.disabled = false; } }));
+        });
+      }
+      drawChips();
+      return [el('h3', { text: '상담할 날 정하기' }), el('div', { class: 'muted', text: '학생이 고른 날 중 하나를 골라 주세요.' }), chips,
+        el('div', { class: 'rq-acts' }, [confirmBtn, el('button', { type: 'button', class: 'btn secondary', text: '반려', onclick: function () { askReject(r, '반려', '사유는 학생에게 그대로 보입니다. 반려한 신청은 되돌릴 수 없고, 학생이 새로 신청할 수 있습니다.', '반려했습니다.'); } })]),
+        el('div', { class: 'muted', text: '확정하면 학생 화면에 날짜가 나옵니다. 맞는 날이 없으면 사유에 다른 날짜를 적어 반려해 주세요.' })];
+    }
+    function fixedBox(r) {
+      if (!r.canDecide) return [];
+      return [el('h3', { text: '상담을 마쳤으면' }),
+        el('div', { class: 'rq-acts' }, [
+          el('a', { class: 'btn', href: appHref('page=counsel&student=' + encodeURIComponent(r.student.id)), text: '상담일지 쓰기' }),
+          el('button', { type: 'button', class: 'btn secondary', text: '상담 못 함', onclick: function () { askReject(r, '상담 못 함', '사유는 학생에게 그대로 보입니다. 상담을 못 한 신청은 "반려"로 남고, 학생이 새로 신청할 수 있습니다.', '상담 못 함으로 처리했습니다.'); } })]),
+        el('div', { class: 'muted', text: '일지를 저장하면 신청이 "완료"가 되고 일지와 이어집니다.' })];
+    }
+    function askReject(r, title, message, done) {   // 시트 첫머리에 누구의 어떤 신청인지(confirmWithReason에는 lead 칸이 없어 message 첫 문장으로)
+      UI.confirmWithReason({ title: title, message: who(r) + ' · ' + r.topic + ' 상담 신청입니다. ' + message, reasonLabel: '학생에게 보일 사유', confirmText: title, minLength: 2, danger: true, onconfirm: function (reason) { decide(r, 'reject', { reason: reason }, done); } });
+    }
+    function decide(r, action, extra, doneText) {
+      call('decideCounselRequest', Object.assign({ studentId: r.student.id, requestId: r.id, action: action }, extra)).then(function (res) {
+        if (!res.ok) {
+          UI.toast((res.errors && res.errors[0].message) || '처리하지 못했습니다.', { kind: 'warn', ms: 6000 });
+          if (res.stale) { UI.toast('그사이 상태가 바뀌었습니다. 목록을 새로 불러옵니다.', { kind: 'info', ms: 5000 }); load(); }
+          return;
+        }
+        UI.toast(doneText); state.sel = ''; state.pickDate = ''; wrap.classList.remove('has-detail'); load();
+      }).catch(fail);
+    }
+  }
+</script>
