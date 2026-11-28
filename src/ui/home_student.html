@@ -11,14 +11,15 @@
     root.appendChild(body);
     Nav.bind(function (k) { renderPortal(body, d.me.id, '', k || 'home'); });   // 뒤로 가기(C39)
     renderPortal(body, d.me.id);
-    // 진로 프로필 카드(C50, F15): 안 냈으면 할 일 칸, 냈으면 보기·고쳐서 다시 내기
+    // 진로 프로필 카드(C50, F15): 안 냈으면 '할 일' 자리(포털 카드들 위), 냈으면 아래에 보기·고쳐서 다시 내기
     if (d.career) {
-      var cr = d.career, url = d.appUrl + '?page=career&role=student';
-      root.appendChild(el('div', { class: UI.cardClass(cr.submitted || !cr.active ? '' : 'todo') }, [
+      var cr = d.career, url = d.appUrl + '?page=career&role=student', todo = !cr.submitted && cr.active;
+      var crCard = el('div', { class: UI.cardClass(todo ? 'todo' : '') }, [
         el('h2', { text: cr.submitted ? '내 진로 프로필' : '진로 프로필을 내 주세요' }),
         el('div', { class: 'muted', style: 'word-break:keep-all', text: cr.submitted ? cr.version + '번째 기록 · ' + UI.util.formatDateKo(cr.at) + '에 냄' : (cr.dueKo ? (cr.duePassed ? '마감(' + cr.dueKo + ')이 지났습니다. 지금 내도 됩니다.' : '이번 학기 제출 마감: ' + cr.dueKo) : '희망 진로와 목표 진학을 적어 냅니다.') }),
         UI.rowLink({ href: url, text: cr.submitted ? '내 진로 프로필 보기' : '진로 프로필 쓰기' })
-      ]));
+      ]);
+      if (todo) root.insertBefore(crCard, body); else root.appendChild(crCard);
     }
     // 상담 신청 카드(C49-A, F17): 신청·내 신청은 ?page=counselreq
     var cqLine = el('div', { style: 'margin:8px 0;word-break:keep-all' });   // 신청 상태 한 줄(신청 화면을 다시 열지 않아도 알 수 있게). 서버가 보는 사람에 맞게 준 칸만 쓴다

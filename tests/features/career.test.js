@@ -72,8 +72,9 @@ test('학부모: 가장 최근 버전의 공개 항목만 응답에 있다 — �
   const shown = last.parent_fields.split(';').filter(Boolean);
   assert.deepStrictEqual(Object.keys(r.current).filter((k) => ['hopes', 'targets', 'interests', 'strengths', 'concerns'].includes(k)).sort(), shown.sort());
   assert.ok(!('parentFields' in r.current) && !('versions' in r) && !('feedback' in r) && !('canFeedback' in r));
+  ['version', 'parentFields', 'teacherName', 'feedback', 'versions', 'canWrite', 'canFeedback', 'total'].forEach((k) => assert.ok(!JSON.stringify(r).includes('"' + k + '"'), '학부모 응답에 ' + k + ' 키가 없다'));
   assert.ok(!JSON.stringify(r).includes('teacher'), '교사 이메일·이름 없음');
-  assert.strictEqual(env.call(PA, 'getCareerStudent', sid, 1).current.version, r.current.version, '옛 버전을 달라고 해도 가장 최근 것');
+  assert.deepStrictEqual(plain(env.call(PA, 'getCareerStudent', sid, 1)), plain(r), '옛 버전을 달라고 해도 가장 최근 것');
   // 끄면 바로 사라진다 → 안 냄과 같은 응답 모양
   env.call(ST, 'setCareerPublish', last.id, Object.fromEntries(shown.map((f) => [f, false])));
   const none = env.call(PA, 'getCareerStudent', sid, 0);
@@ -154,4 +155,27 @@ test('홈: 학사 교사 홈에만 미제출 숫자(관리자·담임 없음), �
   const s = env.call(ST, 'getHomeData', 'student');
   assert.strictEqual(s.career.submitted, true); assert.ok(s.career.version >= 1 && s.career.at);
   assert.ok(!('career' in env.call(PA, 'getHomeData', 'parent')));
+});
+
+test('응답 칸은 판정표가 돌려준 것만: 판정표에서 칸을 빼면 응답에서도 빠진다(프로필·피드백)', () => {
+  const env = newEnv(), sid = me(env).id, last = profs(env, sid).pop();
+  env.call(T1, 'addCareerFeedback', sid, last.id, '가짜 피드백');
+  const base = env.call(ST, 'getCareerStudent', sid, 0);
+  assert.ok('concerns' in base.current && base.feedback.length && base.feedback[0].content);
+  const cut = plain(env.as(ST, (c) => {
+    c.S6_TABLE.profile.student = c.S6_TABLE.profile.cols.filter((x) => x !== 'concerns' && x !== 'version');
+    c.S6_TABLE.feedback.student = c.S6_TABLE.feedback.student.filter((x) => x !== 'content');
+    return c.getCareerStudent(sid, 0);
+  }));
+  assert.ok(!('concerns' in cut.current) && !('version' in cut.current), '판정표에 없는 칸은 응답에도 없다');
+  assert.ok(cut.feedback.length && cut.feedback.every((f) => !('content' in f)));
+  const noParent = plain(env.as(PA, (c) => { c.S6_TABLE.profile.parent = []; return c.getCareerStudent(sid, 0); }));
+  assert.strictEqual(noParent.none, true);
+});
+
+test('운영 기간이 없으면 제출은 "운영 기간이 아니라 낼 수 없습니다"로 알린다', () => {
+  const env = newEnv(), n = env.rows('career_profiles').length;
+  const r = plain(env.as(ST, (c) => { c.getCurrentTerm_ = () => null; return c.submitCareerProfile(OK); }));
+  assert.deepStrictEqual(r, { ok: false, errors: ['지금은 운영 기간이 아니라 낼 수 없습니다.'] });
+  assert.strictEqual(env.rows('career_profiles').length, n);
 });

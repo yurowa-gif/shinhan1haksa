@@ -82,7 +82,7 @@
 `UI.confirmWithReason({title, message, reasonLabel?:'사유', confirmText?:'확인', minLength?:2, danger?:true, onconfirm(reason), oncancel})` → 열린 시트. 사유를 `minLength`자 이상 적어야 확인 버튼이 켜진다. `onconfirm`에는 앞뒤 공백을 자른 사유가 온다. 사유 저장·`audit_log`는 서버 몫이다.
 
 ### UI.shareCheck
-`UI.shareCheck({label?:'부모님께 보이기', on, disabled?, itemName?, confirmOff?, onchange(next, done)})` → 한 줄(체크 칸 + 지금 상태 꼬리표 "지금 보이는 중"/"나만 보는 중"). 노드: `setOn(v)`, `isOn()`. `confirmOff`면 끄는 순간 확인 시트("보이기 끄기", 항목 이름 `itemName`, "끄면 부모님 화면에서 바로 사라집니다.", "이미 보신 내용은 되돌릴 수 없습니다.", 결정 92)를 띄우고 확인해야 꺼진다. 저장이 끝나면 `done(true)`, 실패하면 `done(false)`로 이전 상태로 되돌린다. 진로 프로필(C50)이 쓰고, 상담·탐구 기록(C49·C52)도 같은 부품을 쓴다.
+`UI.shareCheck({label?:'부모님께 보이기', on, disabled?, itemName?, confirmOff?, onText?, offText?, onKind?, offKind?, onchange(next, done)})` → 한 줄(체크 칸 + 지금 상태 꼬리표 "지금 보이는 중"/"나만 보는 중"). 노드: `setOn(v)`, `isOn()`. `confirmOff`면 끄는 순간 확인 시트("보이기 끄기", 항목 이름 `itemName`, "끄면 부모님 화면에서 바로 사라집니다.", "이미 보신 내용은 되돌릴 수 없습니다.", 결정 92)를 띄우고 확인해야 꺼진다. 꼬리표 글·색 기본값은 "지금 보이는 중"(초록 `confirmed`)/"나만 보는 중"(회색 `mute`)로, **체크하는 순간 저장되는** 화면(보기 화면·상담 기록·탐구 목록)용이다. 제출해야 바뀌는 입력 화면은 `onText`·`offText`·`onKind`·`offKind`로 사실대로 바꾼다(진로 프로필 입력: "제출하면 보임"(`requested`)/"제출해도 나만 봄"(`mute`)). 저장이 끝나면 `done(true)`, 실패하면 `done(false)`로 이전 상태로 되돌린다. 진로 프로필(C50)이 쓰고, 상담·탐구 기록(C49·C52)도 같은 부품을 쓴다.
 
 ### UI.versionNav
 `UI.versionNav({index, total, label, sub?, onchange(index)})` → ‹ n번째 기록 · 낸 날 › 한 줄. `index`는 0부터. 첫 기록에서는 ‹, 가장 최근에서는 ›가 꺼진다(`disabled`). 학생·교사 진로 프로필 화면(C50).

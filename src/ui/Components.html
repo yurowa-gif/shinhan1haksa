@@ -366,7 +366,8 @@ var UI = {};
   };
 
   /**
-   * UI.shareCheck({label:'부모님께 보이기', on, disabled, itemName, confirmOff, onchange(next, done)}) — "부모님께 보이기" 체크 한 줄 + 지금 상태 꼬리표(결정 89·92).
+   * UI.shareCheck({label:'부모님께 보이기', on, disabled, itemName, confirmOff, onText, offText, onKind, offKind, onchange(next, done)}) — "부모님께 보이기" 체크 한 줄 + 지금 상태 꼬리표(결정 89·92).
+   * 꼬리표 글·색은 기본 '지금 보이는 중'(초록)/'나만 보는 중'(회색) — 체크하는 순간 저장되는 화면용. 제출해야 바뀌는 입력 화면은 onText·offText·onKind·offKind로 사실대로 바꾼다('제출하면 보임'/'제출해도 나만 봄').
    * 끄는 순간 confirmOff면 확인 시트(제목 "보이기 끄기", 항목 이름, "이미 보신 내용은 되돌릴 수 없습니다.")를 띄운다.
    * onchange(next, done): 저장이 끝나면 done(true)로 새 상태를 굳히고, 실패하면 done(false)로 되돌린다. 반환 노드: setOn(v), isOn()
    */
@@ -379,7 +380,7 @@ var UI = {};
     var row = el('label', { class: 'check share-check' }, [input, el('span', { class: 'share-label', text: opts.label || '부모님께 보이기' }), tag]);
     function draw() {
       input.checked = on;
-      var t = on ? UI.statusPill('confirmed', '지금 보이는 중') : UI.statusPill('mute', '나만 보는 중');
+      var t = on ? UI.statusPill(opts.onKind || 'confirmed', opts.onText || '지금 보이는 중') : UI.statusPill(opts.offKind || 'mute', opts.offText || '나만 보는 중');
       tag.replaceWith ? tag.replaceWith(t) : null;
       tag = t;
     }

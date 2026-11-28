@@ -45,11 +45,13 @@ function carViewer_(user, d, sid, termId) {
 
 function carJson_(text) { try { var v = JSON.parse(String(text || '[]')); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
 
-/** 프로필 행 → 응답(보는 사람이 볼 수 있는 칸만) */
+/** 프로필 행 → 응답. 판정표(s6Visible_)가 돌려준 칸만 담는다 — version·submitted_at·id도 그 칸이 있을 때만(학부모에게는 공개 항목뿐, 총괄 확정) */
 function carProfileOut_(row, fields) {
-  var p = s6Pick_(row, fields), out = { id: row.id, version: Number(row.version), submittedAt: String(row.submitted_at || '') };
+  var p = s6Pick_(row, fields), out = {};
   if (!p) return null;
-  if (fields.indexOf('id') < 0) delete out.id;
+  if ('id' in p) out.id = row.id;
+  if ('version' in p) out.version = Number(row.version);
+  if ('submitted_at' in p) out.submittedAt = String(row.submitted_at || '');
   CAR_FIELDS.forEach(function (f) {
     if (f in p) out[f] = (f === 'hopes' || f === 'targets') ? carJson_(p[f]) : String(p[f] || '');
   });
@@ -64,13 +66,20 @@ function carUserName_(d, email) {
 
 function carFeedbackOut_(d, user, sid, profilesById) {
   return readAll_('feedback').filter(function (f) { return f.student_id === sid && f.target_kind === '진로 프로필' && ruleStr_(f.status) !== '취소'; })
-    .filter(function (f) { return s6Visible_(carViewer_(user, d, sid, f.term_id), 'feedback', f).length > 0; })
     .sort(function (a, b) { return String(a.created_at) < String(b.created_at) ? 1 : -1; })
     .map(function (f) {
-      var p = profilesById[f.target_id];
-      return { id: f.id, content: f.content, teacherName: carUserName_(d, f.teacher_email), at: String(f.created_at || ''), version: p ? Number(p.version) : 0,
-        mine: normalizeEmail_(f.teacher_email) === user.email };
-    });
+      var fields = s6Visible_(carViewer_(user, d, sid, f.term_id), 'feedback', f);
+      var p = s6Pick_(f, fields, { teacherName: carUserName_(d, f.teacher_email) });
+      if (!p) return null;
+      var out = { id: f.id };
+      if ('content' in p) out.content = p.content;
+      if ('teacher_name' in p) out.teacherName = p.teacher_name;
+      else if ('teacher_email' in p) out.teacherName = carUserName_(d, f.teacher_email);   // 교사 화면: 이메일 대신 이름만 내보낸다
+      if ('created_at' in p) out.at = String(f.created_at || '');
+      if ('target_id' in p) { var pr = profilesById[p.target_id]; out.version = pr ? Number(pr.version) : 0; }
+      if ('teacher_email' in p) out.mine = normalizeEmail_(f.teacher_email) === user.email;
+      return out;
+    }).filter(Boolean);
 }
 
 function carDue_(term, today) {
@@ -138,7 +147,7 @@ function getCareerStudent(studentId, version) {
   if (!st) throw new Error('학생을 찾을 수 없습니다.');
   var all = careerRowsOf_(d.profiles, sid).sort(function (a, b) { return Number(a.version) - Number(b.version); });
   var latest = careerLatest_(d.profiles, sid);
-  var head = { id: st.id, name: st.name, label: carStudentLabel_(st), track: st.track || '' };
+  var head = { id: st.id, name: st.name, title: st.grade + '. ' + st.name, label: carStudentLabel_(st), track: st.track || '' };
   var en = term ? carEnrollment_(d, sid, term.id) : null;
   var active = carActive_(d, sid, today), due = carDue_(term, today);
   var base = carViewer_(user, d, sid, term ? term.id : '');
@@ -182,6 +191,7 @@ function submitCareerProfile(input) {
   if (!chk.row) return carFail_(chk.errors);
   return withLock_(function () {
     var d = carLoad_(), term = getCurrentTerm_(), today = today_();
+    if (!term) return carFail_('지금은 운영 기간이 아니라 낼 수 없습니다.');
     var w = s6CanWrite_({ role: 'student', isSelf: true }, 'profile.submit', { active: carActive_(d, sid, today) });
     if (!w.ok) return carFail_(w.reason);
     var inherited = careerNextParentFields_(d.profiles, sid);
