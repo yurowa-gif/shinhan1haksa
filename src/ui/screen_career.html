@@ -294,7 +294,7 @@
       } : null });
       body.appendChild(fbCard);
       if (r.canFeedback) {
-        var ta = el('textarea', { class: 'car-text', maxlength: '1200' }), fld = UI.field('피드백 쓰기', ta, { hint: '학생에게 보입니다. 학부모에게는 보이지 않습니다. 학생이 보면 안 되는 내용은 상담일지에 써 주세요.' });
+        var ta = el('textarea', { class: 'car-text', maxlength: '1200' }), fld = UI.field('피드백 쓰기 (학생에게 보임)', ta, { hint: '학부모에게는 보이지 않습니다. 학생이 보면 안 되는 내용은 상담일지에 써 주세요.' });
         var btn = el('button', { type: 'button', class: 'btn', text: '피드백 남기기' });
         btn.addEventListener('click', function () {
           if (!ta.value.trim()) { fld.setError('피드백 내용을 적어 주세요.'); return; }
