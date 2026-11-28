@@ -251,6 +251,10 @@
     "saveCurriculum": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getCurriculumSummary": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }

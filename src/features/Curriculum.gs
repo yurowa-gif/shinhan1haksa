@@ -6,11 +6,13 @@
  *  - 첫 줄은 열 이름이다(순서는 자유). 열 이름 = 탭의 열 이름 그대로: 편제표 entry_year·grade·semester·choice_group·pick_n·course,
  *    권장 과목 base_year·university·unit·core_courses·recommended_courses·source_url·source_title·note. data/course_recommendations/*.csv를 그대로 붙여 넣을 수 있다.
  *  - 오류가 한 줄이라도 있으면 아무것도 쓰지 않는다. 표준 과목 이름 표와 다른 이름은 **경고**만(저장을 막지 않는다 — 학교 편제표에 표에 없는 과목이 있을 수 있다).
- *  - 저장은 올린 글에 나온 입학년도(편제표)·기준 연도(권장 과목)마다 그 해의 유효 줄을 새 글과 맞춘다: 같은 줄은 그대로 두고, 빠진 줄은 status '취소', 새 줄은 추가(삭제 없음).
+ *  - 한 번에 한 입학년도(편제표)·기준 연도(권장 과목)만 올린다(screens.md 11절). 저장은 그 해의 유효 줄을 새 글과 맞춘다(총괄 확정):
+ *    같은 줄은 그대로, 같은 자리(편제표: 학년·학기·선택군·과목 / 권장: 대학·모집단위)인데 내용이 바뀐 줄은 옛 줄 '취소' + 새 줄, 빠진 줄은 '취소', 새 줄은 추가(삭제 없음).
  *    락 안에서 다시 계산해 미리 볼 때와 개수가 다르면 거부한다(stale). audit_log에는 일괄 1줄(추가 id 목록)·취소 줄의 바뀐 칸이 남는다.
+ *  - curPlan_은 R25(CareerRules, #312)가 순수 규칙 함수를 넣으면 그 함수로 바꾼다(자리표시: 같은 결과를 내는 계산).
  *  - 읽기(곧 만들 이수 계획 화면)는 curriculumRows_·recommendationRows_ 내부 함수.
  * ASSUMPTION: 편제표 같은 선택군의 pick_n은 줄마다 같아야 한다(다르면 오류). 선택군이 비면(필수 과목) pick_n은 비우거나 0.
- * ASSUMPTION: 권장 과목에는 같은 대학·모집단위 줄이 여럿 있을 수 있다(실제 자료에 그렇다) — 내용이 다르면 모두 올리고 경고만, 내용까지 같으면 하나로 합치고 경고.
+ * 권장 과목에 대학·모집단위가 같은 줄이 여럿이면 뒤의 줄만 쓴다(경고, screens.md 11절). 출처 주소는 꼭 있어야 한다.
  */
 
 var CUR_KINDS = {
@@ -74,7 +76,10 @@ function curRow_(kind, raw) {
     if (!rec.choice_group) {
       if (pick !== '' && pick !== '0') err('pick_n', '선택군이 비어 있으면(필수 과목) 택N은 비우거나 0으로 적어 주세요.');
       rec.pick_n = '0';
-    } else if (!/^\d{1,2}$/.test(pick) || +pick < 1 || +pick > 20) {
+    } else if (!/^\d{1,2}$/.test(pick)) {
+      err('pick_n', '택N "' + pick + '"은 숫자가 아닙니다. 2처럼 숫자로 적어 주세요.');
+      rec.pick_n = pick;
+    } else if (+pick < 1 || +pick > 20) {
       err('pick_n', '선택군이 있으면 택N은 1~20 숫자입니다.');
       rec.pick_n = pick;
     } else rec.pick_n = String(+pick);
@@ -95,8 +100,10 @@ function curRow_(kind, raw) {
       rec[c] = out.join(';');
       if (rec[c].length > 400) err(c, '과목이 너무 많습니다.');
     });
-    rec.source_url = str('source_url', 300, false);
-    if (rec.source_url && !/^https?:\/\//i.test(rec.source_url)) err('source_url', '출처 주소는 http:// 또는 https://로 시작해야 합니다.');
+    rec.source_url = String(raw.source_url === undefined || raw.source_url === null ? '' : raw.source_url).trim();
+    if (!rec.source_url) err('source_url', '출처 주소가 없습니다. 대학 발표 자료의 주소를 적어 주세요.');
+    else if (rec.source_url.length > 300) err('source_url', '300자 안으로 적어 주세요.');
+    else if (!/^https?:\/\//i.test(rec.source_url)) err('source_url', '출처 주소는 http:// 또는 https://로 시작해야 합니다.');
     rec.source_title = str('source_title', 200, false);
     rec.note = str('note', 600, false);
   }
@@ -130,30 +137,39 @@ function curParse_(kind, text) {
     });
     if (kind === 'curriculum') {
       var ck = [r.rec.entry_year, r.rec.grade, r.rec.semester, r.rec.choice_group, r.rec.course].join('\u0001');
-      if (seen[ck]) { errors.push({ line: line, column: 'course', message: '같은 과목이 ' + seen[ck] + '번째 줄에 이미 있습니다(같은 입학년도·학년·학기·선택군).' }); return; }
+      if (seen[ck]) { errors.push({ line: line, column: 'course', message: '과목 "' + r.rec.course + '"이 ' + r.rec.grade + '학년 ' + r.rec.semester + '학기 ' + (r.rec.choice_group || '필수') + '에 두 번 있습니다(' + seen[ck] + '·' + line + '번째 줄). 한 줄을 지워 주세요.' }); return; }
       seen[ck] = line;
     } else {
-      var sig = curSig_(def, r.rec);
-      if (seen[sig]) { warnings.push(line + '번째 줄은 ' + seen[sig] + '번째 줄과 내용까지 같아 하나로 합칩니다.'); return; }
-      seen[sig] = line;
       var key = r.rec.base_year + '\u0001' + r.rec.university + '\u0001' + r.rec.unit;
       if (keyFirst[key]) keyFirst[key].push(line); else keyFirst[key] = [line];
     }
     recs.push({ line: line, rec: r.rec });
   });
   if (!errors.length && !recs.length) errors.push({ line: 0, column: '', message: '올릴 줄이 없습니다. 열 이름 아래에 내용을 붙여 넣어 주세요.' });
+  var yset = {};
+  recs.forEach(function (x) { yset[x.rec[def.scope]] = true; });
+  var ylist = Object.keys(yset).sort();
+  if (ylist.length > 1) errors.push({ line: 0, column: def.scope, message: (kind === 'curriculum' ? '입학년도' : '기준 연도') + '가 ' + ylist.length + '가지(' + ylist.join(', ') + ') 섞여 있습니다. 한 번에 한 ' + (kind === 'curriculum' ? '입학년도' : '기준 연도') + '만 올려 주세요.' });
   if (kind === 'curriculum') {
-    var picks = {};
+    var picks = {}, gsize = {};
     recs.forEach(function (x) {
       if (!x.rec.choice_group) return;
       var gk = [x.rec.entry_year, x.rec.grade, x.rec.semester, x.rec.choice_group].join('\u0001');
-      if (picks[gk] === undefined) picks[gk] = { n: x.rec.pick_n, line: x.line };
-      else if (picks[gk].n !== x.rec.pick_n) errors.push({ line: x.line, column: 'pick_n', message: '같은 선택군(' + x.rec.choice_group + ')의 택N이 ' + picks[gk].line + '번째 줄(' + picks[gk].n + ')과 다릅니다.' });
+      gsize[gk] = (gsize[gk] || 0) + 1;
+      if (picks[gk] === undefined) picks[gk] = { n: x.rec.pick_n, line: x.line, lines: [x.line], group: x.rec.choice_group };
+      else if (picks[gk].n !== x.rec.pick_n) errors.push({ line: x.line, column: 'pick_n', message: picks[gk].line + '·' + x.line + '번째 줄: 선택군 ' + x.rec.choice_group + '의 택N이 줄마다 다릅니다. 같은 선택군은 같은 수로 적어 주세요.' });
+    });
+    Object.keys(picks).forEach(function (gk) {
+      if (/^\d+$/.test(picks[gk].n) && +picks[gk].n > gsize[gk]) errors.push({ line: picks[gk].line, column: 'pick_n', message: '선택군 ' + picks[gk].group + '는 과목이 ' + gsize[gk] + '개인데 택N이 ' + picks[gk].n + '입니다.' });
     });
   } else {
     var multi = Object.keys(keyFirst).filter(function (k) { return keyFirst[k].length > 1; });
-    if (multi.length) warnings.push('같은 대학·모집단위가 둘 이상인 줄이 ' + multi.length + '곳 있습니다(내용이 달라 모두 올립니다): ' +
-      multi.slice(0, 3).map(function (k) { var p = k.split('\u0001'); return p[1] + ' ' + p[2] + '(' + keyFirst[k].join('·') + '번째 줄)'; }).join(', ') + (multi.length > 3 ? ' 외 ' + (multi.length - 3) + '곳' : ''));
+    if (multi.length) {
+      var drop = {};
+      multi.forEach(function (k) { keyFirst[k].slice(0, -1).forEach(function (ln) { drop[ln] = true; }); });
+      recs = recs.filter(function (x) { return !drop[x.line]; });
+      warnings.unshift('대학·모집단위가 같은 줄이 ' + multi.length + '쌍 있습니다(' + multi.slice(0, 3).map(function (k) { var q = k.split('\u0001'); return q[1] + ' ' + q[2] + ' ' + keyFirst[k].join('·') + '번째 줄'; }).join(', ') + (multi.length > 3 ? ' 외 ' + (multi.length - 3) + '쌍' : '') + '). 뒤의 줄만 쓰입니다.');
+    }
   }
   var odd = nameOrder.filter(function (n) { return !curStdCheck_(n).ok; });
   odd.slice(0, CUR_WARN_MAX).forEach(function (n) {
@@ -166,30 +182,39 @@ function curParse_(kind, text) {
 
 function curIsLive_(r) { return String(r.status || '유효').trim() !== '취소'; }
 
+/** 같은 '자리'(편제표: 학년·학기·선택군·과목, 권장: 대학·모집단위). 자리는 같은데 내용이 다르면 '바뀌는 줄' */
+function curPlace_(kind, r) {
+  return kind === 'curriculum' ? [r.grade, r.semester, r.choice_group || '', r.course].join('\u0001') : [r.university, r.unit].join('\u0001');
+}
+
 /**
- * 순수: 붙여넣은 글과 지금 시트(그 종류 탭의 모든 행)를 비교한다. 올린 글에 나온 입학년도·기준 연도의 유효 줄만 맞춘다.
- * → {ok, errors, warnings, add:[rec], remove:[시트 행], same, years:[{year, add, remove, same}], counts:{add, remove, same, rows, years}}
+ * 순수: 붙여넣은 글과 지금 시트(그 종류 탭의 모든 행)를 비교한다. 올린 글의 입학년도(기준 연도) 하나의 유효 줄만 맞춘다.
+ * → {ok, errors, warnings, year, add:[rec], changed:[{before: 시트 행, after: rec}], remove:[시트 행], same, counts:{add, changed, remove, same, rows}}
+ * 저장은 add + changed.after를 새로 쓰고 changed.before + remove를 '취소'로 바꾼다.
  */
 function curPlan_(kind, text, existing) {
   var def = curKind_(kind);
   var p = curParse_(kind, text);
-  if (p.errors.length) return { ok: false, errors: p.errors, warnings: p.warnings, add: [], remove: [], same: 0, years: [], counts: { add: 0, remove: 0, same: 0, rows: 0, years: 0 } };
-  var years = {}, order = [];
-  p.recs.forEach(function (x) { var y = x.rec[def.scope]; if (!years[y]) { years[y] = { year: y, add: 0, remove: 0, same: 0 }; order.push(y); } });
-  var bucket = {};
-  (existing || []).filter(function (r) { return curIsLive_(r) && years[String(r[def.scope])]; }).forEach(function (r) {
-    var s = curSig_(def, r);
-    (bucket[s] = bucket[s] || []).push(r);
-  });
-  var add = [], same = 0;
+  var empty = { add: [], changed: [], remove: [], same: 0, counts: { add: 0, changed: 0, remove: 0, same: 0, rows: 0 } };
+  if (p.errors.length) return Object.assign({ ok: false, errors: p.errors, warnings: p.warnings, year: '' }, empty);
+  var year = String(p.recs[0].rec[def.scope]);
+  var pool = (existing || []).filter(function (r) { return curIsLive_(r) && String(r[def.scope]) === year; });
+  var bySig = {}, byPlace = {};
+  pool.forEach(function (r) { (bySig[curSig_(def, r)] = bySig[curSig_(def, r)] || []).push(r); });
+  var used = {};
+  var add = [], changed = [], same = 0, rest = [];
   p.recs.forEach(function (x) {
-    var s = curSig_(def, x.rec), b = bucket[s];
-    if (b && b.length) { b.pop(); same++; years[x.rec[def.scope]].same++; } else { add.push(x.rec); years[x.rec[def.scope]].add++; }
+    var b = bySig[curSig_(def, x.rec)];
+    if (b && b.length) { used[b.pop().id] = true; same++; } else rest.push(x.rec);
   });
-  var remove = [];
-  Object.keys(bucket).forEach(function (s) { bucket[s].forEach(function (r) { remove.push(r); years[String(r[def.scope])].remove++; }); });
-  return { ok: true, errors: [], warnings: p.warnings, add: add, remove: remove, same: same, years: order.sort().map(function (y) { return years[y]; }),
-    counts: { add: add.length, remove: remove.length, same: same, rows: p.recs.length, years: order.length } };
+  pool.filter(function (r) { return !used[r.id]; }).forEach(function (r) { (byPlace[curPlace_(kind, r)] = byPlace[curPlace_(kind, r)] || []).push(r); });
+  rest.forEach(function (rec) {
+    var b = byPlace[curPlace_(kind, rec)];
+    if (b && b.length) { var old = b.shift(); used[old.id] = true; changed.push({ before: old, after: rec }); } else add.push(rec);
+  });
+  var remove = pool.filter(function (r) { return !used[r.id]; });
+  return { ok: true, errors: [], warnings: p.warnings, year: year, add: add, changed: changed, remove: remove, same: same,
+    counts: { add: add.length, changed: changed.length, remove: remove.length, same: same, rows: p.recs.length } };
 }
 
 /** 줄 한 개를 사람이 읽는 글로: '2027학년 입학 · 2학년 1학기 · 선택군 A(택2) · 화법과 언어' / '2028 · 연세대 · 문과대학 전 모집단위' */
@@ -201,8 +226,11 @@ function curLabel_(kind, r) {
 
 function curPreviewView_(kind, plan) {
   if (!plan.ok) return { ok: false, kind: kind, errors: plan.errors.slice(0, 50), errorCount: plan.errors.length, warnings: plan.warnings, counts: plan.counts };
-  return { ok: true, kind: kind, counts: plan.counts, years: plan.years, warnings: plan.warnings, nothingToDo: !plan.add.length && !plan.remove.length,
-    lists: { add: plan.add.slice(0, CUR_LIST_MAX).map(function (r) { return curLabel_(kind, r); }), remove: plan.remove.slice(0, CUR_LIST_MAX).map(function (r) { return curLabel_(kind, r); }) } };
+  var cut = function (a) { return a.slice(0, CUR_LIST_MAX); };
+  return { ok: true, kind: kind, year: plan.year, counts: plan.counts, warnings: plan.warnings, nothingToDo: !plan.add.length && !plan.changed.length && !plan.remove.length,
+    lists: { add: cut(plan.add).map(function (r) { return curLabel_(kind, r); }),
+      changed: cut(plan.changed).map(function (c) { return curLabel_(kind, c.after) + (kind === 'curriculum' ? ' (택' + c.before.pick_n + ' → 택' + c.after.pick_n + ')' : ''); }),
+      remove: cut(plan.remove).map(function (r) { return curLabel_(kind, r); }) } };
 }
 
 function curCountsEqual_(a, b) {
@@ -233,11 +261,26 @@ function saveCurriculum(kind, text, expect) {
     if (!expect || expect.kind !== String(kind) || !curCountsEqual_(plan.counts, expect.counts)) {
       return { ok: false, stale: true, errors: [{ line: 0, column: '', message: '미리 보기 이후 입력이나 올려 둔 ' + def.label + '이 바뀌었습니다. [미리 보기]를 다시 눌러 결과를 보고 저장해 주세요.' }] };
     }
-    if (!plan.add.length && !plan.remove.length) return { ok: true, nothingToDo: true, counts: plan.counts };
-    bulkAppend_(def.tab, plan.add.map(function (r) { return Object.assign({}, r, { status: '유효' }); }), user.email, 'config');
-    bulkUpdateRecords_(def.tab, plan.remove.map(function (r) { return { id: r.id, patch: { status: '취소' } }; }), user.email, 'config');
+    if (!plan.add.length && !plan.changed.length && !plan.remove.length) return { ok: true, nothingToDo: true, counts: plan.counts };
+    var fresh = plan.add.concat(plan.changed.map(function (c) { return c.after; }));
+    var cancel = plan.changed.map(function (c) { return c.before; }).concat(plan.remove);
+    bulkAppend_(def.tab, fresh.map(function (r) { return Object.assign({}, r, { status: '유효' }); }), user.email, 'config');
+    bulkUpdateRecords_(def.tab, cancel.map(function (r) { return { id: r.id, patch: { status: '취소' } }; }), user.email, 'config');
     return { ok: true, counts: plan.counts };
   });
+}
+
+/** 지금 올라와 있는 자료: 편제표는 입학년도마다 줄 수, 권장 과목은 기준 연도마다 줄 수 (화면 맨 위 카드) */
+function getCurriculumSummary() {
+  requirePermission_('curriculum.edit');
+  var out = {};
+  Object.keys(CUR_KINDS).forEach(function (k) {
+    var def = CUR_KINDS[k], n = {};
+    invalidate_('config', def.tab);
+    readAll_(def.tab, 'config').filter(curIsLive_).forEach(function (r) { n[r[def.scope]] = (n[r[def.scope]] || 0) + 1; });
+    out[k] = Object.keys(n).sort().map(function (y) { return { year: y, rows: n[y] }; });
+  });
+  return out;
 }
 
 /* ───────────── 읽기(내부) — 이수 계획·권장 과목 화면이 plan.view를 거친 뒤 쓴다 ───────────── */
