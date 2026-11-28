@@ -101,7 +101,8 @@ function getCounselRequestsOfStudent(studentId) {
  * 담당교사·관리자의 상담 신청 목록(counsel.request.list는 역할만 — 학생별 범위는 여기서 계산).
  * 담당교사 = 지금 자기 담당 학생(이번 기간 등록)의 신청 전부(지난 기간 신청 포함), 관리자 = 이번 기간 학사생 전체의 신청.
  * 지난 기간 담당이었지만 지금 담당이 아닌 교사는 이 목록에 넣지 않는다(결정 97 — 그 학생 화면에서 학생별로 본다).
- * → {ok, today, open:n(날짜를 아직 안 정한 '신청' 건수), requests:[{…crqView_, student:{id,name,grade,classNo,number}}]} (처리할 것 = 신청·확정이 위, 새 신청이 위)
+ * → {ok, today, open:n(날짜를 아직 안 정한 '신청' 건수), requests:[{…crqView_, student:{id,name,grade,classNo,number}, canDecide}]}
+ * 순서: 신청 → 확정 → 지난 신청. 신청·확정은 가장 이른 희망·확정 날짜 순(급한 것이 위), 지난 신청은 새 것이 위
  */
 function getCounselRequestList() {
   var user = requirePermission_('counsel.request.list');
@@ -124,15 +125,18 @@ function getCounselRequestList() {
     v.student = crqStudentView_(s);
     v.canDecide = viewer.role === 'assigned';   // 버튼을 그릴지만 알린다(처리할 때 서버가 다시 판정)
     v._at = String(r.created_at);
+    v._first = v.status === '확정' ? ruleStr_(v.decided_date) : (v.wishDates || []).slice().sort()[0] || '';
     if (v.status === '신청') open++;
     out.push(v);
   });
   var rank = { '신청': 0, '확정': 1 };
-  out.sort(function (a, b) {
+  out.sort(function (a, b) {   // 처리할 것(신청·확정)은 가장 이른 날짜(희망·확정) 순, 지난 신청은 새 것이 위
     var ra = rank[a.status] === undefined ? 2 : rank[a.status], rb = rank[b.status] === undefined ? 2 : rank[b.status];
-    return ra !== rb ? ra - rb : a._at < b._at ? 1 : a._at > b._at ? -1 : 0;
+    if (ra !== rb) return ra - rb;
+    if (ra < 2 && a._first !== b._first) return a._first < b._first ? -1 : 1;
+    return a._at < b._at ? 1 : a._at > b._at ? -1 : 0;
   });
-  out.forEach(function (v) { delete v._at; });
+  out.forEach(function (v) { delete v._at; delete v._first; });
   return { ok: true, today: d.today, open: open, requests: out };
 }
 

@@ -54,7 +54,7 @@ test('담임은 자기 반 학생만, 학사 교사는 자기 담당만 목록�
   assert.ok(ids(adm).includes(x.mine.id) && ids(adm).includes(x.other.id));
   assert.ok(t1.students.every((s) => s.mine) && adm.students.some((s) => !s.mine));
   hr.students.forEach((s) => assert.ok(x.env.rows('students').find((q) => q.id === s.id), '반 학생'));
-  assert.deepStrictEqual(t1.types, ['학업', '생활', '진로', '건강', '가정', '기타']);
+  assert.deepStrictEqual(t1.types, ['학습', '생활', '진로', '진학', '건강', '가정', '기타']);
   for (const r of [t1, t2, adm, hr]) assert.ok(!JSON.stringify(r).includes(MARK) && !JSON.stringify(r).includes('@'), '목록 응답에 내용·이메일 없음');
 });
 
@@ -62,7 +62,7 @@ test('저장: 상담 파일에만 내용이 있고(운영 DB audit에는 글자 
   const x = makeEnv();
   const a0 = x.env.rows('audit_log').length;
   const r = save(x);
-  assert.deepStrictEqual(Object.keys(r).sort(), ['id', 'ok']);
+  assert.deepStrictEqual(Object.keys(r).sort(), ['id', 'ok', 'warnings']);
   const n = x.notes();
   assert.strictEqual(n.length, 1);
   assert.deepStrictEqual([n[0].student_id, n[0].date, n[0].teacher_email, n[0].type, n[0].target, n[0].linked_violation_id, n[0].show_to_parent, n[0].status, n[0].cancel_reason],
@@ -190,7 +190,7 @@ test('설정 counsel.types: 쉼표 목록이 유형이 되고, 예약어·중복
   assert.strictEqual(save(x, T1, { type: '멘토링' }).ok, true);
   assert.strictEqual(save(x, T1, { type: '생활', content: '목록에서 빠진 유형' }).ok, false);
   set('2OUT 학부모 면담');
-  assert.deepStrictEqual(call(x, T1, 'getCounselContext').types, ['학업', '생활', '진로', '건강', '가정', '기타']);
+  assert.deepStrictEqual(call(x, T1, 'getCounselContext').types, ['학습', '생활', '진로', '진학', '건강', '가정', '기타']);
 });
 
 test('홈 카드: 담당교사만 숫자(최근 30일 내가 쓴 상담·기록 없는 담당 학생)가 있고 이름·내용은 없다', () => {

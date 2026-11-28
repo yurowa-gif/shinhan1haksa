@@ -15,7 +15,7 @@ const ATT = 'test.attendance@example.com', DUTYM = 'test.duty@example.com';
 const TODAY = '2027-03-20';
 const MARK_RE = /\[CN-(\d{4})\]/g;
 const marksIn = (text) => new Set([...String(text).matchAll(MARK_RE)].map((m) => 'CN-' + m[1]));
-const TYPES = ['생활', '학업', '진로', '생활', '건강', '가정', '기타'];
+const TYPES = ['생활', '학습', '진로', '생활', '건강', '가정', '기타'];
 
 function seededEnv() {
   const env = createGasEnv({ owner: ADMIN, now: TODAY + 'T15:00:00' });

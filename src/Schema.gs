@@ -128,7 +128,12 @@ var SCHEMA = {
     counsel_requests: ['term_id', 'student_id', 'requester_email', 'wish_dates', 'topic', 'memo', 'status', 'decided_date', 'linked_note_id', 'cancel_reason']
   },
   config: {
-    settings: ['key', 'value', 'description']
+    settings: ['key', 'value', 'description'],
+    // 6단계(결정 102, S6-1): 관리자가 '교육과정 올리기'로 올린다. setup은 탭만 만들고 기본은 비운다. status: 유효·취소(지우지 않는다)
+    // 편제표: 입학년도(entry_year)·학년·학기('1'·'2')·선택군(비면 필수 과목)·택N(그 선택군에서 고를 수 있는 과목 수, 필수는 0)·과목
+    curriculum_courses: ['entry_year', 'grade', 'semester', 'choice_group', 'pick_n', 'course', 'status'],
+    // 권장 이수 과목(대학이 해마다 내는 자료). 열 이름은 data/course_recommendations/course_recommendations.csv와 같고, 과목 여럿은 ';'
+    course_recommendations: ['base_year', 'university', 'unit', 'core_courses', 'recommended_courses', 'source_url', 'source_title', 'note', 'status']
   }
 };
 
@@ -159,7 +164,7 @@ var DEFAULT_SETTINGS = [
   ['print.title', '신한학사 출석부', '출석부 머리말 제목'],
   ['print.vacant_label', '공석', '빈 좌석 표기'],
   // 5단계 C32(F12 상담일지). 쉼표 구분, 관리자가 수정. '2OUT 학부모 면담'은 예약어라 넣어도 빠진다
-  ['counsel.types', '학업,생활,진로,건강,가정,기타', '상담일지 상담 유형'],
+  ['counsel.types', '학습,생활,진로,진학,건강,가정,기타', '상담일지 상담 유형'],
   // 7단계 결정 83(F10): 시설 사용 일지의 시설 목록(쉼표 구분, 관리자가 수정)
   ['facility.names', '특강실,원형테이블', '시설 사용 일지 시설 목록']
 ];

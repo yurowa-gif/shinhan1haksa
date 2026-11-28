@@ -292,10 +292,11 @@ function logDenied_(actorEmail, action, detail) {
  * audit_log after에는 새 행 id 목록(JSON 배열)만 남긴다(행 값은 행의 created_*와 이후 수정 기록으로 본다).
  * 칸 한도를 넘지 않게 AUDIT_CHUNK_CHARS 단위로 나눠 여러 줄로 쓴다.
  */
-function bulkAppend_(sheetName, rows, actorEmail) {
+function bulkAppend_(sheetName, rows, actorEmail, kind) {
   if (!rows.length) return;
+  kind = kind || 'db';
   withLock_(function () {
-    var sh = getSheet_('db', sheetName);
+    var sh = getSheet_(kind, sheetName);
     var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(cellToString_);
     var now = nowIso_();
     var ids = [];
@@ -313,7 +314,7 @@ function bulkAppend_(sheetName, rows, actorEmail) {
     var range = sh.getRange(firstRow, 1, values.length, headers.length);
     range.setNumberFormat('@');
     range.setValues(values);
-    invalidate_('db', sheetName);
+    invalidate_(kind, sheetName);
     // 감사 기록: JSON 배열 길이 = 1 + Σ(JSON 문자열 길이 + 쉼표 1)
     var chunks = [[]], size = 1;
     ids.forEach(function (id) {
@@ -322,7 +323,7 @@ function bulkAppend_(sheetName, rows, actorEmail) {
       chunks[chunks.length - 1].push(id); size += add;
     });
     chunks.forEach(function (ch, i) {
-      writeAudit_(sheetName, '', 'bulk_create', null, ch, actorEmail, 'db',
+      writeAudit_(sheetName, '', 'bulk_create', null, ch, actorEmail, kind,
         rows.length + '행 (일괄 추가' + (chunks.length > 1 ? ' ' + (i + 1) + '/' + chunks.length : '') + ')');
     });
   });

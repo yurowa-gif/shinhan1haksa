@@ -129,3 +129,47 @@ test('C49-A 상담 신청 화면: 입력 오류는 틀린 칸에(날짜 칸마�
   const h = ui('home_student.html');
   assert.ok(/getCounselRequestsOfStudent', ''\)/.test(h) && /신청 중/.test(h) && /에 상담합니다/.test(h) && /반려되었습니다/.test(h), '학생 홈 신청 상태 한 줄');
 });
+
+test('C49-B 화면: 상담일지 쓰기에 합의 사항·참고 프로필 버전·신청 연결, 학생 내 상담 기록(보이기 켜기·끄기 확인 시트), 학부모 포털에 공개된 합의 사항, 학생 홈 링크', () => {
+  const ui = (f) => fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'ui', f), 'utf8');
+  const c = ui('screen_counsel.html');
+  assert.ok(/합의 사항·다음 할 일 \(선택\)/.test(c) && /학생에게 보입니다\. 학생이 "부모님께 보이기"를 켜면 학부모도 봅니다/.test(c), '합의 사항 칸과 도움말');
+  assert.ok(/교사만 봅니다\. 학생·학부모에게 보이지 않습니다/.test(c), '내용 칸 도움말');
+  assert.ok(/type !== '진로' && type !== '진학'/.test(c) && /참하지 않음|참고하지 않음/.test(c) && /아직 진로 프로필을 내지 않았습니다/.test(c), '참고한 진로 프로필(진로·진학일 때만)');
+  assert.ok(/data\.types\.indexOf\(fr\.topic\) >= 0/.test(c), '신청 주제와 같은 이름의 유형을 미리 고른다');
+  assert.ok(/requestId: linkChk && linkChk\.checked \? fr\.id : ''/.test(c) && /fromRequest = \(window\.SCREEN_PARAMS \|\| \{\}\)\.request/.test(c), '신청 연결');
+  const m = ui('screen_mynotes.html');
+  assert.ok(/UI\.shareCheck\(\{/.test(m) && /confirmOff: true/.test(m) && !/UI\.confirmSheet/.test(m), '공통 UI.shareCheck(끄기 확인 시트 결정 92는 부품이 띄운다)');
+  assert.ok(/'부모님께 보입니다\.'/.test(m) && /'부모님께 보이지 않습니다\.'/.test(m) && /이 합의 사항을 부모님께 보이기/.test(m), '켜기·끄기 알림과 체크 문구');
+  assert.ok(/적힌 합의 사항이 없습니다/.test(m) && /아직 상담 기록이 없습니다/.test(m) && /학사를 나간 뒤에는 고칠 수 없습니다/.test(m), '빈 상태·학사를 나간 뒤');
+  assert.ok(!/content|\.type\b/.test(m.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\*.*$/gm, '')), '학생 화면에 상담 내용·유형을 쓰지 않는다');
+  const p = ui('Portal.html');
+  assert.ok(/if \(c\.agreement\)/.test(p) && /합의 사항·다음 할 일/.test(p), '학부모 포털의 공개된 합의 사항');
+  const h = ui('home_student.html');
+  assert.ok(/내 상담 기록 보기/.test(h) && /formLink\.parentNode\.removeChild\(formLink\)/.test(h), '학생 홈: 내 상담 기록 링크, 열린 신청이 있으면 [상담 신청하기] 링크를 뺀다');
+});
+
+test('C49-B 검토 반영: 두 글 칸 꼬리표(교사만 봄·학생에게 보임)와 저장 전 확인 시트, 학부모 빈 상태, 완료 줄 [상담 기록 보기], 경고는 토스트가 아니라 목록 위 한 줄, 빈 내 상담 기록은 안내 없음', () => {
+  const ui = (f) => fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'ui', f), 'utf8');
+  const c = ui('screen_counsel.html');
+  assert.ok(/상담 내용 \(교사만\)/.test(c) && /UI\.statusPill\('mute', '교사만 봄'\)/.test(c), '내용 칸: 교사만 봄');
+  assert.ok(/합의 사항·다음 할 일 \(학생에게 보임\)/.test(c) && /UI\.statusPill\('requested', '학생에게 보임'\)/.test(c), '합의 사항 칸: 학생에게 보임(주의색)');
+  assert.ok(/'합의 사항 ' \+ agrLen\(\) \+ '자가 학생에게 보입니다\.'/.test(c) && /저장한 뒤에는 고칠 수 없고, 고치려면 취소하고 다시 써야 합니다/.test(c) && /if \(!agrLen\(\)\) \{ save\(\); return; \}/.test(c), '합의 사항이 있을 때만 저장 전 확인 시트');
+  assert.ok(!/UI\.toast\(r\.warnings/.test(c) && /if \(flash\)/.test(c), '경고는 토스트가 아니라 목록 위 한 줄');
+  const p = ui('Portal.html');
+  assert.ok(/보여 드릴 상담 기록이 없습니다/.test(p) && /if \(cn\.length\) cnKids\.push\(note\(/.test(p), '학부모 빈 상태: 단정하지 않고 아래 안내 줄 없음');
+  const m = ui('screen_mynotes.html');
+  assert.ok(/if \(d\.notes\.length\) body\.appendChild\(el\('div', \{ class: 'notice info'/.test(m), '빈 상담 기록에는 맨 위 안내가 없다');
+  const r = ui('screen_counselreq.html');
+  assert.ok(/page=mynotes', text: '상담 기록 보기'/.test(r), '완료 줄 [상담 기록 보기]');
+});
+
+test('C49-B(R24b 뒤): 저장 전 확인 시트가 합의 사항 글을 그대로(앞 세 줄 + …) 보여 주고, 신청한 날이 요청 처리·내 신청에 그려지고, 학생 체크 칸은 응답의 공개 상태로 그린다', () => {
+  const ui = (f) => fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'ui', f), 'utf8');
+  const c = ui('screen_counsel.html');
+  assert.ok(/lines\.slice\(0, 3\)/.test(c) && /shown\.push\('…'\)/.test(c) && /lines: shown/.test(c), '확인 시트에 합의 사항 글(길면 앞 세 줄 + …)');
+  assert.ok(/field\('신청한 날'/.test(ui('screen_requests.html')), '요청 처리 화면 신청한 날');
+  assert.ok(/에 신청'/.test(ui('screen_counselreq.html')), '내 상담 신청 지난 신청 줄');
+  const m = ui('screen_mynotes.html');
+  assert.ok(/n\.agreement_to_parent === undefined/.test(m) && /\(true\|y\|yes\|1\|예\)/.test(m), '체크 칸은 응답의 공개 상태(TRUE·FALSE)로');
+});

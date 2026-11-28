@@ -59,7 +59,7 @@
 | duty_slots | status | `유효` · `취소` |
 | duty_slots | end_time / swapped_at | `HH:mm` / `yyyy-MM-ddTHH:mm:ss`(교대 전에는 빈칸) |
 | violation_rules | active | `TRUE` · `FALSE` |
-| counsel_notes | type | 일반 상담 = settings `counsel.types` 값(기본 `학업` · `생활` · `진로` · `건강` · `가정` · `기타`, C32), 그리고 예약어 `2OUT 학부모 면담`(OUT 화면 전용, 일반 상담 화면에서 고를 수 없음). 2단계 이전 값 `학습`·`진학`은 옛 행에만 남을 수 있다 |
+| counsel_notes | type | 일반 상담 = settings `counsel.types` 값(기본 `학습` · `생활` · `진로` · `진학` · `건강` · `가정` · `기타`(결정 103, C49-B; 2단계 기본값은 `학업`·`진학` 없음), C32), 그리고 예약어 `2OUT 학부모 면담`(OUT 화면 전용, 일반 상담 화면에서 고를 수 없음). 2단계 이전 값 `학습`·`진학`은 옛 행에만 남을 수 있다 |
 | counsel_notes | target | `학생` · `학부모` |
 | counsel_notes | show_to_parent / status | `TRUE`(기본, 2단계는 늘 TRUE) · `FALSE` / `유효` · `취소` |
 | status_changes | requested_at | source `명단업로드`이면 `''`(C16). F6·F7은 날짜+시각 필수 |
@@ -156,6 +156,13 @@ Apps Script는 같은 전역 이름을 경고 없이 덮는다. 새 전역 이�
 | counsel_notes · agreement_to_parent | `TRUE` · `FALSE`(건마다 학생이 켬, 기본 `FALSE`, 결정 90). `show_to_parent`(상담했다는 날짜·교사 표시)와 별개 |
 | counsel_notes · profile_version | 참고한 진로 프로필 버전(정수 글자) 또는 `''` |
 | counsel_notes · request_id | 연결한 `counsel_requests.id` 또는 `''` |
+| curriculum_courses *(설정 스프레드시트, S6-1)* · entry_year · grade · semester | `2027`처럼 4자리 입학년도 · `1`~`3` · `1`/`2` |
+| curriculum_courses · choice_group · pick_n | 선택군 이름(비면 필수 과목, pick_n `0`) · 선택군이 있으면 `1`~`20`(같은 선택군은 줄마다 같음) |
+| curriculum_courses · course | 과목 이름(표준 과목 이름과 같게. 다르면 올릴 때 경고만) |
+| course_recommendations *(설정 스프레드시트, S6-1)* · base_year · university · unit | `2028`처럼 4자리 기준 연도 · 대학 · 모집단위(같은 대학·모집단위가 여러 줄일 수 있음) |
+| course_recommendations · core_courses · recommended_courses | 과목 이름을 `;`로 구분(공백 앞뒤 무시, 중복 합침) |
+| course_recommendations · source_url · source_title · note | `http(s)://` 주소 또는 `''` · 출처 이름 · 비고 |
+| curriculum_courses · course_recommendations · status | `유효` · `취소`(관리자가 새 글로 다시 올리면 빠진 줄이 `취소`, 삭제 없음) |
 
 **제안 — 아직 정하지 못한 값(총괄·선생님 확인):** (1) `settings counsel.types` 기본값은 `학업,생활,진로,건강,가정,기타`인데 PRD F17·7절의 유형은 `생활·학습·진로·진학·2OUT 학부모 면담·기타`다(`학업`↔`학습`, `진학`·`건강`·`가정` 차이). 상담 신청 `topic`은 PRD대로 두었다. 일지 유형 목록을 PRD에 맞출지 결정이 필요하다. (2) 공개 항목 이름(`hopes`…`concerns`)은 코드 안의 영문 이름이다 — 화면 이름은 C50이 정한다.
 
@@ -184,7 +191,7 @@ Apps Script는 같은 전역 이름을 경고 없이 덮는다. 새 전역 이�
 | `print.title` | 글자 | `sheetSettings_` → 출석부 머리말 | `신한학사 출석부` | 시트 |
 | `print.vacant_label` | 글자 | `sheetSettings_` → 빈 좌석 표기 | `공석` | 시트 |
 | `timetable.submit_start_day` · `timetable.submit_end_day` | 날짜 숫자 · 숫자 또는 `last` | `ttSubmitWindow_`(F9 시간표 제출 기간, R23 — 화면은 C37) | `25` · `last` | 시트 |
-| `counsel.types` | 유형 이름 쉼표 목록(`2OUT 학부모 면담`과 겹치는 이름은 무시) | CounselLog.gs `cnlTypes_`(상담일지 유형 칩, C32) | `학업,생활,진로,건강,가정,기타` | 시트 |
+| `counsel.types` | 유형 이름 쉼표 목록(`2OUT 학부모 면담`과 겹치는 이름은 무시) | CounselLog.gs `cnlTypes_`(상담일지 유형 칩, C32) | `학습,생활,진로,진학,건강,가정,기타` | 시트 |
 | `out.instant_rule_ids` | violation_rules `id` 쉼표 목록 | Outs.gs `vioInstantIds_` → `outInstantNext_`·`vioOutOpts_`(결정 69·78) | 즉시 퇴실 항목 없음 | **화면**(OUT 항목 설정, `setOutInstantRule` — 지정 이력 `OUT_INSTANT_SINCE`와 함께 바뀌므로 시트로 고치지 않는다) |
 
 ### 스크립트 속성(Script Properties)

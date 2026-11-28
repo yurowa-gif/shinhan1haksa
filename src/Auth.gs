@@ -142,6 +142,8 @@ function permissions_() {
     // 학생·학부모가 보는 상담 기록(결정 90·94): 날짜·교사(·학생이 공개한 합의 사항)만. 합의 사항 공개는 학생이 건마다(행 id → 본인 확인은 락 안에서)
     'counsel.note.view': { roles: ['student', 'parent'], scope: 'student', noDuty: true },
     'counsel.agreement.publish': { roles: ['student'] },
+    // 교육과정 올리기(S6-1, 결정 102): 편제표·권장 이수 과목을 설정 시트에 올린다. 관리자만. 읽기는 서버 내부 함수(plan.view를 거친 기능이 쓴다)
+    'curriculum.edit': { roles: ['admin'] },
     // 학생 타임라인(F17, 교사용): 프로필·계획·탐구·상담·OUT·출결 요약
     'timeline.view': { roles: ['admin', 'hall_teacher', 'homeroom'], scope: 'student', noDuty: true, pastAssigned: true },
     // 입퇴실·급식(F6·F7): list는 화면 열기·행 id 함수 첫 줄(역할만), 저장은 근무일 제외

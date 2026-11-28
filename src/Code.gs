@@ -92,8 +92,10 @@ var SCREENS = {
   // 6단계 F17 상담 신청(C49-A): 학생이 신청·내 신청 목록(counselreq), 담당교사·관리자가 신청 처리(requests)
   counselreq: { file: 'ui/screen_counselreq', title: '내 상담 신청', view: 'counsel.request.create' },
   requests: { file: 'ui/screen_requests', title: '상담 신청 처리', view: 'counsel.request.list' },
+  mynotes: { file: 'ui/screen_mynotes', title: '내 상담 기록', view: 'counsel.agreement.publish' },   // 학생만(합의 사항 공개를 고르는 사람)
   timetable: { file: 'ui/screen_timetable', title: '시간표', view: 'timetable.screen' },
   inbox: { file: 'ui/screen_inbox', title: '확인함', view: 'inbox.view' },
+  curriculum: { file: 'ui/screen_curriculum', title: '교육과정 올리기', view: 'curriculum.edit' },
   career: { file: 'ui/screen_career', title: '진로 프로필', view: 'career.view' }
 };
 
@@ -110,6 +112,7 @@ function screenParams_(p) {
   if (ROLES.indexOf(String(p.role)) >= 0) out.role = String(p.role);   // 한 화면을 여러 역할이 쓸 때(시간표) 어느 쪽으로 열지
   if (String(p.prefill) === 'out2') out.prefill = 'out2';   // 2OUT 퇴실 확정 뒤 입퇴실 화면 미리 채우기
   if (/^[0-9a-fA-F-]{8,40}$/.test(String(p.student || ''))) out.student = String(p.student);   // 학생 id(UUID 모양만)
+  if (/^[0-9a-fA-F-]{8,40}$/.test(String(p.request || ''))) out.request = String(p.request);   // 상담 신청 id(UUID 모양만, 상담일지가 신청에서 넘어올 때)
   return JSON.stringify(out).replace(/</g, '\\u003c');
 }
 

@@ -13,7 +13,7 @@
  * ASSUMPTION: 같은 교사가 같은 학생·날짜·유형·대상·내용을 다시 보내면(두 번 누르기) 한 번만 저장한다.
  */
 var CNL_TYPES_KEY = 'counsel.types';
-var CNL_DEFAULT_TYPES = ['학업', '생활', '진로', '건강', '가정', '기타'];
+var CNL_DEFAULT_TYPES = ['학습', '생활', '진로', '진학', '건강', '가정', '기타'];   // 결정 103: '학업' → '학습', '진학' 추가
 var CNL_TARGETS = ['학생', '학부모'];
 var CNL_REASON_MIN = 2;
 var CNL_REASON_MAX = 200;
@@ -96,7 +96,8 @@ function getCounselContext() {
 
 /**
  * 한 학생의 상담 기록(내용 포함 — 담당교사·담임(자기 반)·관리자만, 그 밖은 권한 거부). 취소된 행도 사유와 함께 보인다(지우지 않는다). 새로 쓴 것이 위.
- * → {student, canWrite, types, notes:[{id, date, dateKo, type, target, teacher, content, showToParent, status, cancelReason, fixed(2OUT 면담), mine, canEdit}]}
+ * → {student, canWrite, types, notes:[{id, date, dateKo, type, target, teacher, content, showToParent, status, cancelReason, fixed(2OUT 면담), mine, canEdit,
+ *   agreement(합의 사항·다음 할 일), agreementToParent, profileVersion, requestId}], profiles:[{version, submittedAt}](쓰는 교사만), fixedRequest:{id, topic, decidedDate, decidedKo, relink}|null(쓰는 교사만, relink = 일지가 취소된 완료 신청)}
  */
 function getCounselNotes(studentId) {
   var user = requirePermission_('counsel.view', { studentId: studentId });
@@ -113,12 +114,26 @@ function getCounselNotes(studentId) {
       var fixed = String(n.type).trim() === CNS_TYPE_OUT2, live = ruleRowLive_(n), author = normalizeEmail_(n.teacher_email) === user.email;
       return { id: n.id, date: String(n.date), dateKo: ymdIsValid_(String(n.date)) ? foodDateKo_(n.date) : String(n.date), type: String(n.type), target: String(n.target || ''),
         teacher: names[normalizeEmail_(n.teacher_email)] || '(등록 안 된 교사)', content: String(n.content || ''), showToParent: String(n.show_to_parent).toUpperCase() !== 'FALSE',
-        status: live ? '유효' : '취소', cancelReason: String(n.cancel_reason || ''), fixed: fixed, mine: author, canEdit: live && !fixed && author && mine };
+        status: live ? '유효' : '취소', cancelReason: String(n.cancel_reason || ''), fixed: fixed, mine: author, canEdit: live && !fixed && author && mine,
+        agreement: String(n.agreement || ''), agreementToParent: s6True_(n.agreement_to_parent), profileVersion: String(n.profile_version || ''), requestId: String(n.request_id || '') };
     });
   var enrolled = term ? enr.filter(function (e) { return e.term_id === term.id && e.student_id === sid; })[0] : null;
   var one = cnlOne_(student);
   one.teacher = enrolled ? (names[normalizeEmail_(enrolled.teacher_email)] || '') : '';   // 담당교사 이름(화면 머리줄)
-  return { student: one, canWrite: mine, types: cnlTypes_(), notes: notes };
+  var res = { student: one, canWrite: mine, types: cnlTypes_(), notes: notes, profiles: [], fixedRequest: null };
+  if (mine) {   // 쓰는 담당교사에게만: 참고할 수 있는 진로 프로필 버전(번호·낸 날)과, 날짜가 정해진 상담 신청(일지로 이을 수 있는 것)
+    try {
+      res.profiles = readAll_('career_profiles').filter(function (r) { return ruleStr_(r.student_id) === sid && ruleRowLive_(r); })
+        .map(function (r) { return { version: +r.version, submittedAt: ruleStr_(r.submitted_at).slice(0, 10) }; })
+        .sort(function (a, b) { return b.version - a.version; });
+    } catch (e) { if (String(e.message).indexOf('탭이 없습니다') < 0) throw e; }
+    var mineReq = readAll_('counsel_requests', 'counsel').filter(function (r) { return ruleStr_(r.student_id) === sid; });
+    var fixed = mineReq.filter(function (r) { return ruleStr_(r.status) === '확정'; })[0];
+    var relink = !fixed ? mineReq.filter(cnlRelinkable_)[0] : null;   // 확정이 없으면 일지가 취소된 완료 신청을 다시 이을 수 있게 내보낸다
+    var pick = fixed || relink;
+    if (pick) res.fixedRequest = { id: pick.id, topic: ruleStr_(pick.topic), decidedDate: ruleStr_(pick.decided_date), decidedKo: ymdIsValid_(ruleStr_(pick.decided_date)) ? foodDateKo_(pick.decided_date) : '', relink: !!relink };
+  }
+  return res;
 }
 
 /** 그 학생의 상담 기록을 이 교사가 볼 수 있는가 — counsel.view와 같은 판정(Auth.gs studentFacts_·canAccessStudentByFacts_ 재사용, 새 규칙 없음) */
@@ -168,9 +183,63 @@ function cnlDuplicate_(studentId, rec, email) {
   })[0] || null;
 }
 
-function cnlRow_(studentId, rec, email) {
+/** 6단계 칸(합의 사항·학부모 공개·참고 버전·신청 연결)은 counselNoteCheck_가 돌려준 patch(six). 학부모 공개는 학생이 켜므로 교사가 쓸 때는 늘 FALSE(결정 90) */
+function cnlRow_(studentId, rec, email, six) {
+  six = six || {};
   return { student_id: studentId, date: rec.date, teacher_email: email, type: rec.type, target: rec.target, linked_violation_id: '', content: rec.content,
+    agreement: six.agreement || '', agreement_to_parent: 'FALSE', profile_version: six.profile_version || '', request_id: six.request_id || '',
     show_to_parent: rec.show ? 'TRUE' : 'FALSE', status: '유효', cancel_reason: '' };
+}
+
+/** 그 학생의 살아 있는 진로 프로필 버전 번호(문자열). 탭이 아직 없으면(setup 전) [] */
+function cnlProfileVersions_(studentId) {
+  try {
+    return readAll_('career_profiles').filter(function (r) { return ruleStr_(r.student_id) === studentId && ruleRowLive_(r); }).map(function (r) { return ruleStr_(r.version); });
+  } catch (e) { if (String(e.message).indexOf('탭이 없습니다') < 0) throw e; return []; }
+}
+
+/** 상담일지에 이을 신청 행(그 학생의 것일 때만, 아니면 null → counselNoteCheck_가 '찾지 못했습니다'로 거절) */
+function cnlRequestFor_(requestId, studentId) {
+  var rid = ruleStr_(requestId);
+  if (!rid) return null;
+  var r = findById_('counsel_requests', rid, 'counsel');
+  return r && ruleStr_(r.student_id) === studentId ? r : null;
+}
+
+/** 일지가 취소돼 이어진 일지가 없어진 '완료' 신청인가 — 새 일지를 같은 신청에 다시 이을 수 있다(총괄 판단: 일지를 취소해도 신청은 '완료'로 둔다) */
+function cnlRelinkable_(req) {
+  if (!req || ruleStr_(req.status) !== '완료') return false;
+  var n = findById_('counsel_notes', ruleStr_(req.linked_note_id), 'counsel');
+  return !n || !ruleRowLive_(n);
+}
+
+/** 규칙 문구 → 화면 칸 이름(오류를 틀린 칸에 보이게) */
+function cnlSixErrors_(list) {
+  return list.map(function (m) { return { field: /합의 사항/.test(m) ? 'agreement' : /프로필/.test(m) ? 'profileVersion' : /신청/.test(m) ? 'requestId' : '', message: m }; });
+}
+
+/**
+ * 6단계 칸 검사(규칙 counselNoteCheck_) + 이을 신청 확인 → {six, errors, warnings, request}. 락 안에서 부른다.
+ * opts.keepRequestId: 고치기에서 옛 행의 신청 연결을 그대로 잇는다(이미 완료된 신청이라 '확정' 검사를 거치지 않는다).
+ */
+function cnlSixCheck_(input, type, sid, opts) {
+  opts = opts || {};
+  var req = opts.keepRequestId ? null : cnlRequestFor_(input && input.requestId, sid);
+  var relink = cnlRelinkable_(req);   // 완료됐지만 일지가 취소된 신청: 규칙에는 '확정'인 것처럼 넘겨 검사하고, 저장 때는 완료 처리 대신 이어진 일지만 바꾼다
+  var chk = counselNoteCheck_({ type: type, agreement: input && input.agreement, agreementToParent: false, profileVersion: input && input.profileVersion,
+    requestId: opts.keepRequestId ? '' : (input && input.requestId) }, { profileVersions: cnlProfileVersions_(sid), request: relink ? Object.assign({}, req, { status: '확정' }) : req, byStudent: false });
+  if (chk.errors.length) return { errors: cnlSixErrors_(chk.errors), warnings: [] };
+  var six = chk.patch;
+  if (opts.keepRequestId) six.request_id = ruleStr_(opts.keepRequestId);
+  return { six: six, errors: [], warnings: chk.warnings, request: req, relink: relink };
+}
+
+/** 신청을 '완료'로 바꾸고 일지와 잇는다(같은 락 안, 일지를 쓴 다음). 규칙 counselRequestNext_ complete가 patch를 만든다. 이미 완료된(일지가 취소된) 신청은 이어진 일지만 바꾼다 */
+function cnlCompleteRequest_(req, noteId, user, today) {
+  if (ruleStr_(req.status) === '완료') { updateRecord_('counsel_requests', req.id, { linked_note_id: noteId }, user.email, 'counsel'); return; }
+  var n = counselRequestNext_(req, 'complete', { role: 'assigned', isSelf: false }, { noteId: noteId }, today);
+  if (n.errors.length) throw new Error(n.errors[0]);
+  updateRecord_('counsel_requests', req.id, n.patch, user.email, 'counsel');
 }
 
 /**
@@ -189,9 +258,17 @@ function saveCounselNote(input) {
     var bad = cnlEnrollError_(sid, v.rec.date, d.terms, d.enrollments);
     if (bad) return err('date', bad);
     var dup = cnlDuplicate_(sid, v.rec, user.email);
-    if (dup) return { ok: true, duplicate: true, id: dup.id };
-    var saved = appendRecord_('counsel_notes', cnlRow_(sid, v.rec, user.email), user.email, 'counsel');
-    return { ok: true, id: saved.id };
+    if (dup) {   // 두 번 누르기. 앞 저장이 신청 완료 처리 직전에 끊겼다면 이어서 마무리한다
+      var dreq = cnlRequestFor_(dup.request_id, sid);
+      if (dreq && (ruleStr_(dreq.status) === '확정' || cnlRelinkable_(dreq))) cnlCompleteRequest_(dreq, dup.id, user, d.today);
+      return { ok: true, duplicate: true, id: dup.id };
+    }
+    var c6 = cnlSixCheck_(input, v.rec.type, sid);
+    if (c6.errors.length) return { ok: false, errors: c6.errors };
+    if (c6.request && !c6.relink) { var pre = counselRequestNext_(c6.request, 'complete', { role: 'assigned', isSelf: false }, { noteId: 'pending' }, d.today); if (pre.errors.length) return err('requestId', pre.errors[0]); }
+    var saved = appendRecord_('counsel_notes', cnlRow_(sid, v.rec, user.email, c6.six), user.email, 'counsel');
+    if (c6.request) cnlCompleteRequest_(c6.request, saved.id, user, d.today);
+    return c6.request ? { ok: true, id: saved.id, warnings: c6.warnings, completedRequest: true } : { ok: true, id: saved.id, warnings: c6.warnings };
   });
 }
 
@@ -250,9 +327,13 @@ function reviseCounselNote(noteId, input, reason) {
     if (v.errors.length) return { ok: false, errors: v.errors };
     var enrollBad = cnlEnrollError_(sid, v.rec.date, d.terms, d.enrollments);
     if (enrollBad) return { ok: false, errors: [{ field: 'date', message: enrollBad }] };
-    var saved = appendRecord_('counsel_notes', cnlRow_(sid, v.rec, user.email), user.email, 'counsel');
+    var c6 = cnlSixCheck_(input, v.rec.type, sid, { keepRequestId: o.note.request_id });   // 신청 연결은 옛 행 것을 그대로 잇는다. 학부모 공개는 새 글이라 다시 학생이 켠다
+    if (c6.errors.length) return { ok: false, errors: c6.errors };
+    var saved = appendRecord_('counsel_notes', cnlRow_(sid, v.rec, user.email, c6.six), user.email, 'counsel');
     updateRecord_('counsel_notes', o.note.id, { status: '취소', cancel_reason: String(reason).trim() }, user.email, 'counsel');
-    return { ok: true, id: saved.id };
+    var rq = cnlRequestFor_(o.note.request_id, sid);
+    if (rq && ruleStr_(rq.linked_note_id) === o.note.id) updateRecord_('counsel_requests', rq.id, { linked_note_id: saved.id }, user.email, 'counsel');
+    return { ok: true, id: saved.id, warnings: c6.warnings };
   });
 }
 

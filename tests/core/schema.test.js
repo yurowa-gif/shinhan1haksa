@@ -149,7 +149,7 @@ test('2단계: 승인안 밖 기존 탭(0단계·설정) 열은 그대로', () =
     const [kind, sheet] = key.split('/');
     assert.deepStrictEqual(plain(ctx.headersFor_(kind, sheet)), cols, key);
   }
-  assert.deepStrictEqual(Object.keys(ctx.SCHEMA.config), ['settings']);
+  assert.deepStrictEqual(Object.keys(ctx.SCHEMA.config), ['settings', 'curriculum_courses', 'course_recommendations']);
 });
 
 test('2단계: violations 열 = R5 초안(outDraft_)이 만드는 행의 열 그대로', () => {

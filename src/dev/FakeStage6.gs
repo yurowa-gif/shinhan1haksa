@@ -111,7 +111,7 @@ function buildFakeStage6_(term, ordered) {
   var n1 = note(2, '2027-03-22', '진로', '학생', '가짜 합의: 이수 계획을 다음 주까지 다시 보기', true, '1', done.id, true);
   done.linked_note_id = n1.id;
   note(0, '2027-04-15', '진로', '학생', '가짜 합의: 방학 전까지 진로 프로필 보완', false, '3', '', true);
-  note(1, '2027-03-30', '학업', '학부모', '', false, '', '', false);
+  note(1, '2027-03-30', '학습', '학부모', '', false, '', '', false);
 
   return { termPatch: { career_due: FAKE6_DUE }, profiles: profiles, plans: plans, inquiries: inquiries, feedback: feedback, requests: requests, notes: notes };
 }
