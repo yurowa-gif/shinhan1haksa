@@ -14,6 +14,7 @@
  *                    linked_note_id, cancel_reason(반려·취소 공용 — 반려 사유는 학생에게 보임)
  *   counsel_notes:   student_id, date, teacher_email, type, target, linked_violation_id, content, agreement, agreement_to_parent,
  *                    profile_version, request_id, show_to_parent, status, cancel_reason
+ * created_at은 모든 탭 끝의 공통 열(CLAUDE.md 5) — 판정표는 feedback(쓴 날)·request(신청한 날)에만 넣는다. 다른 기록은 날짜 칸이 따로 있다.
  * 가상 칸 teacher_name: 서버가 teacher_email을 교사 이름으로 바꿔 넣는 칸(학생·학부모에게 이메일을 내보내지 않는다).
  */
 
@@ -53,24 +54,24 @@ var S6_TABLE = {
       'progress', 'result_link', 'memo', 'show_to_parent', 'status'],
     parent: 'PUBLIC', none: []
   },
-  feedback: {   // 결정 91: 학부모에게 보이지 않는다
-    cols: ['id', 'term_id', 'student_id', 'target_kind', 'target_id', 'content', 'teacher_email', 'status', 'cancel_reason'],
+  feedback: {   // 결정 91: 학부모에게 보이지 않는다. created_at = 쓴 날(화면 '박선생 · 4월 3일(토)')
+    cols: ['id', 'term_id', 'student_id', 'target_kind', 'target_id', 'content', 'teacher_email', 'status', 'cancel_reason', 'created_at'],
     admin: 'ALL', assigned: 'ALL', homeroom: 'ALL',
-    student: ['id', 'term_id', 'student_id', 'target_kind', 'target_id', 'content', 'teacher_name', 'status'],
+    student: ['id', 'term_id', 'student_id', 'target_kind', 'target_id', 'content', 'teacher_name', 'status', 'created_at'],
     parent: [], none: []
   },
-  request: {   // 결정 95·96: 반려 사유는 학생에게 보임, 담임은 날짜·주제·상태만(메모 없음), 학부모 —
-    cols: ['id', 'term_id', 'student_id', 'requester_email', 'wish_dates', 'topic', 'memo', 'status', 'decided_date', 'linked_note_id', 'cancel_reason'],
+  request: {   // 결정 95·96: 반려 사유는 학생에게 보임, 담임은 날짜·주제·상태만(메모 없음), 학부모 —. created_at = 신청한 날
+    cols: ['id', 'term_id', 'student_id', 'requester_email', 'wish_dates', 'topic', 'memo', 'status', 'decided_date', 'linked_note_id', 'cancel_reason', 'created_at'],
     admin: 'ALL', assigned: 'ALL',
-    homeroom: ['id', 'student_id', 'wish_dates', 'topic', 'status', 'decided_date'],
-    student: ['id', 'term_id', 'student_id', 'wish_dates', 'topic', 'memo', 'status', 'decided_date', 'cancel_reason'],
+    homeroom: ['id', 'student_id', 'wish_dates', 'topic', 'status', 'decided_date', 'created_at'],
+    student: ['id', 'term_id', 'student_id', 'wish_dates', 'topic', 'memo', 'status', 'decided_date', 'cancel_reason', 'created_at'],
     parent: [], none: []
   },
-  note: {   // 결정 94: 학생은 날짜·교사·합의 사항만. 학부모는 날짜·교사(show_to_parent) + 공개한 합의 사항(결정 90)
+  note: {   // 결정 94: 학생은 날짜·교사·합의 사항(+ 본인의 공개 표시)만. 학부모는 날짜·교사(show_to_parent) + 공개한 합의 사항(결정 90)
     cols: ['id', 'student_id', 'date', 'teacher_email', 'type', 'target', 'linked_violation_id', 'content', 'agreement', 'agreement_to_parent',
       'profile_version', 'request_id', 'show_to_parent', 'status', 'cancel_reason'],
     admin: 'ALL', assigned: 'ALL', homeroom: 'ALL',
-    student: ['id', 'date', 'teacher_name', 'agreement'],
+    student: ['id', 'date', 'teacher_name', 'agreement', 'agreement_to_parent'],   // agreement_to_parent = 학생 본인이 켠 '부모님께 보이기'(결정 90)
     parent: 'PUBLIC', none: []
   },
   timeline: {
@@ -112,7 +113,13 @@ function s6Visible_(viewer, kind, row, opts) {
   var spec = t[role];
   if (spec === 'ALL') return t.cols.slice();
   if (spec !== 'PUBLIC') return spec.slice();
-  if (kind === 'profile' && !(opts || {}).isLatest) return [];
+  if (kind === 'profile') {
+    // 가장 최근 버전의 공개 항목 + 낸 날(submitted_at, 시안 p-career '4월 12일(월)에 낸 내용'). 몇 번째 기록(version)은 내보내지 않는다.
+    // 공개 항목이 없으면 []: 냈는지조차 알 수 없다.
+    if (!(opts || {}).isLatest) return [];
+    var pub = s6ParentFields_(r, 'profile');
+    return pub.length ? pub.concat(['submitted_at']) : [];
+  }
   if (kind === 'note') {
     // ASSUMPTION: show_to_parent가 FALSE면 합의 사항을 공개했어도 학부모에게는 그 상담 자체가 보이지 않는다(상담 여부부터 숨긴 건).
     if (!s6True_(r.show_to_parent)) return [];

@@ -117,6 +117,15 @@
         UI.rowLink({ href: d.appUrl + '?page=timetable&role=hall_teacher', text: '시간표 열기' })
       ]));
     }
+    if (d.career && !d.career.error) {   // 진로 프로필(결정 98): 담당 학생 중 미제출은 다른 할 일과 같은 모양의 카드 한 장
+      var cr = d.career;
+      root.appendChild(el('div', { class: UI.cardClass(cr.missing ? 'todo' : '') }, [
+        el('h2', { text: '진로 프로필' }),
+        el('div', { style: 'margin:8px 0' }, [cr.missing ? UI.statusPill('todo', '미제출 ' + cr.missing + '명') : UI.statusPill('confirmed', '미제출 없음')]),
+        el('div', { class: 'muted', style: 'word-break:keep-all', text: cr.missing && cr.dueKo ? '마감 ' + cr.dueKo + ' 지남 · 담당 학생이 낸 진로 프로필을 보고 피드백을 남깁니다.' : '담당 학생이 낸 진로 프로필을 보고 피드백을 남깁니다.' }),
+        UI.rowLink({ href: d.appUrl + '?page=career&role=hall_teacher', text: '진로 프로필 열기' })
+      ]));
+    }
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '출석부' }),
       el('div', { class: 'muted', text: '날짜를 고르면 그날 출석부를 미리 보고 PDF로 받습니다.' }),
