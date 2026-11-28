@@ -55,3 +55,6 @@
 - [ ] **배포 방식 확인(점검 #7):** 웹앱은 '나(소유자)로 실행'으로 배포한다. '접속한 사용자로 실행'이면 `assertOwnerRun_`(active === effective)가 누구에게나 통과한다. 0단계 진단에서 다른 방식을 고르면 `OWNER_EMAIL` 속성과 비교하도록 강화한다. → 안내서 `docs/plan/pilot-guide.md`에 넣음(실제 확인은 시범 운영 시작 때).
 - [ ] **시범 운영 전:** Script Property `DIAG_ENABLED`를 false(또는 지움)로 두어 `diagPing`을 막는다. → 안내서 `docs/plan/pilot-guide.md`에 넣음(실제 확인은 시범 운영 시작 때).
 - 점검 #4(넓은 보기의 ymd 범위)는 결정 53의 뜻 안이라 그대로 둔다(쓰기 없음).
+
+## 탐구 기록 — R26 #314 (C52에서)
+- [ ] **탐구발견 실제 내보내기 파일과 대조:** `InquiryRules.gs`는 내보내기 명세 없이 가정한 모양(`records[]`의 `id·createdAt·source·standards·subject·title·question·events`)으로 읽는다(선생님 답: "상관없음" — 지금 가정 그대로). 탐구발견에서 가짜 학생으로 내보낸 파일을 받으면 `inquiryRecordOf_` 한 곳만 맞추고, `tests/fixtures/discovery/fake-export.json`을 그 파일 모양으로 바꾼다.
