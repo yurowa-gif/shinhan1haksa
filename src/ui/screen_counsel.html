@@ -5,6 +5,8 @@
   .cn-agree b { display: block; }
   .cn-note { padding: 12px 0; border-bottom: 1px solid var(--line); word-break: keep-all; }
   .cn-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .cn-head .pill { flex: 0 0 auto; white-space: nowrap; }   /* 글 칸 제목 옆 꼬리표가 글자 단위로 꺾이지 않게 */
+  .cn-head h2 { margin: 0; min-width: 0; }
   .cn-body { white-space: pre-wrap; margin: 8px 0; padding: 10px 12px; background: var(--muted-weak); border-radius: var(--radius-sm); }
   .cn-btns { display: flex; gap: 6px; margin-top: 8px; flex-wrap: nowrap; }
   .cn-btns .btn { flex: 0 0 auto; white-space: nowrap; padding-left: 12px; padding-right: 12px; }
@@ -17,6 +19,7 @@
    */
   function renderScreen(root) {
     var ctx = null, roster = [], seq = 0, data = null, tab = 'list', editing = null, bar = null, picked = null;
+    var flash = '';
     var fromRequest = (window.SCREEN_PARAMS || {}).request || '';   // 상담 신청 처리 화면의 [상담일지 쓰기]에서 넘어온 신청 id(C49-B). 그 학생을 열면 바로 쓰기 탭
     var head = el('div', { class: 'card ld-list' }), body = el('div', { class: 'ld-detail' });
     var wrap = el('div', { class: 'ld' }, [head, body]);   // 840px 이상: 목록 | 상세 두 칸(D15 ⑤). 그보다 좁으면 지금처럼 화면이 옮겨 간다
@@ -95,6 +98,7 @@
     }
 
     function listCard(status) {
+      if (flash) { body.appendChild(el('div', { class: 'notice warn', text: flash })); flash = ''; }
       body.appendChild(el('div', { class: 'notice info', text: '상담 내용은 이 학생의 담당교사·담임(자기 반)·관리자 선생님만 봅니다. 다른 학사 교사·출결 담당에게는 이 목록이 없습니다.' }));
       var live = data.notes.filter(function (n) { return n.status === '유효'; }).length;
       var card = el('div', { class: 'card' }, [el('h2', { text: '상담 ' + live + '건' })]);
@@ -177,8 +181,9 @@
       if (fr && fromRequest === fr.id) body.appendChild(el('div', { class: 'notice info', text: UI.util.studentLabel(data.student) + '의 ' + fr.topic + ' 상담 신청(' + fr.decidedKo + ' 확정)에서 넘어왔습니다. ' + (fr.relink ? '앞에 쓴 일지가 취소되어 있어, 저장하면 신청이 이 일지와 새로 이어집니다.' : '저장하면 신청이 "완료"로 바뀝니다.') }));
       body.appendChild(el('div', { class: 'card' }, [el('h2', { text: editing ? '상담 고치기' : '상담' }), date, typeBox, targetBox]));
       body.appendChild(profBox);
-      body.appendChild(el('div', { class: 'card' }, [el('h2', { text: '내용' }), contentBox, check]));
-      body.appendChild(el('div', { class: 'card' }, [el('h2', { text: '합의 사항' }), agrBox].concat(linkChk ? [el('label', { class: 'check' }, [linkChk, el('span', { text: fr.topic + ' 상담 신청(' + fr.decidedKo + (fr.relink ? ' 상담, 앞의 일지는 취소됨)에서 이어진 상담입니다. 저장하면 신청이 이 일지와 새로 이어집니다.' : ' 확정)에서 이어진 상담입니다. 저장하면 신청이 "완료"가 됩니다.') })])] : [])));
+      // 두 글 칸이 누구에게 보이는지: 내용은 교사만, 합의 사항은 저장하는 순간 학생에게(학생이 보이기를 켜면 학부모에게도) 보인다
+      body.appendChild(el('div', { class: 'card' }, [el('div', { class: 'cn-head' }, [el('h2', { text: '상담 내용 (교사만)' }), UI.statusPill('mute', '교사만 봄')]), contentBox, check]));
+      body.appendChild(el('div', { class: 'card' }, [el('div', { class: 'cn-head' }, [el('h2', { text: '합의 사항·다음 할 일 (학생에게 보임)' }), UI.statusPill('requested', '학생에게 보임')]), agrBox].concat(linkChk ? [el('label', { class: 'check' }, [linkChk, el('span', { text: fr.topic + ' 상담 신청(' + fr.decidedKo + (fr.relink ? ' 상담, 앞의 일지는 취소됨)에서 이어진 상담입니다. 저장하면 신청이 이 일지와 새로 이어집니다.' : ' 확정)에서 이어진 상담입니다. 저장하면 신청이 "완료"가 됩니다.') })])] : [])));
       body.appendChild(el('div', { class: 'notice info', text: '내용은 담당교사·담임(자기 반)·관리자 선생님만 봅니다. 감사 기록에는 "(내용 생략, N자)"만 남습니다.' }));
       var send;
       function input() { return { studentId: data.student.id, date: date.getValue(), type: type, target: target, content: area.value, showToParent: show.checked,
@@ -191,20 +196,25 @@
         send.disabled = false;
         if (!r.ok) { fail(r); return; }
         UI.toast(msg + (r.completedRequest ? ' 상담 신청이 완료되었습니다.' : ''));
-        if (r.warnings && r.warnings.length) UI.toast(r.warnings[0], { kind: 'info', ms: 6000 });
+        flash = (r.warnings && r.warnings[0]) || '';   // 경고는 토스트(목록의 [취소] 단추를 가린다) 말고 목록 위 한 줄로
         fromRequest = ''; openStudent(data.student.id);
       }
+      function agrLen() { return agrArea.value.trim().length; }
       function submit() {
         if (send.disabled) return;
         if (editing) {
-          UI.confirmWithReason({ title: '상담을 고칩니다', message: '옛 기록은 "취소됨"으로 남고 새 기록이 생깁니다.', reasonLabel: '고치는 이유', confirmText: '고쳐서 저장', danger: false, onconfirm: function (reason) {
+          UI.confirmWithReason({ title: '상담을 고칩니다', message: '옛 기록은 "취소됨"으로 남고 새 기록이 생깁니다.' + (agrLen() ? ' 합의 사항 ' + agrLen() + '자는 학생에게 보입니다.' : ''), reasonLabel: '고치는 이유', confirmText: '고쳐서 저장', danger: false, onconfirm: function (reason) {
             send.disabled = true;
             call('reviseCounselNote', editing.id, input(), reason).then(function (r) { done(r, '고쳐서 저장했습니다.'); }).catch(function (e) { send.disabled = false; showError(status, e); });
           } });
           return;
         }
-        send.disabled = true;
-        call('saveCounselNote', input()).then(function (r) { done(r, r.duplicate ? '이미 같은 기록이 있습니다.' : '저장했습니다.'); }).catch(function (e) { send.disabled = false; showError(status, e); });
+        function save() {
+          send.disabled = true;
+          call('saveCounselNote', input()).then(function (r) { done(r, r.duplicate ? '이미 같은 기록이 있습니다.' : '저장했습니다.'); }).catch(function (e) { send.disabled = false; showError(status, e); });
+        }
+        if (!agrLen()) { save(); return; }   // 합의 사항이 비면 시트 없이 저장한다
+        UI.confirmSheet({ title: '저장하기', lead: '합의 사항 ' + agrLen() + '자가 학생에게 보입니다.', lines: ['저장한 뒤에는 고칠 수 없고, 고치려면 취소하고 다시 써야 합니다.'], confirmText: '저장하기', cancelText: '돌아가기', onconfirm: save });
       }
       bar = UI.actionBar([{ text: '닫기', kind: 'secondary', onclick: function () { editing = null; tab = 'list'; draw(); } },
         { text: editing ? '고쳐서 저장' : '상담일지 저장', disabled: !area.value.trim(), onclick: submit }], { mount: true });

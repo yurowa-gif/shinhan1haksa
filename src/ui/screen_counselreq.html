@@ -66,7 +66,10 @@
         var pc = el('div', { class: 'card' }, [el('h2', { text: '지난 신청' })]);
         past.forEach(function (r) {
           var kids = [el('div', { class: 'cr-line' }, [el('b', { text: r.topic + ' 상담' }), pill(r)])];
-          if (r.status === '완료') kids.push(el('div', { class: 'muted', text: '상담한 날: ' + dayKo(r.decided_date) + ' · ' + teacherText(d) }));
+          if (r.status === '완료') {
+            kids.push(el('div', { class: 'muted', text: '상담한 날: ' + dayKo(r.decided_date) + ' · ' + teacherText(d) }));
+            kids.push(el('a', { class: 'btn secondary', style: 'margin-top:8px', href: ((document.querySelector('a.back') || {}).href || '') + '?page=mynotes', text: '상담 기록 보기' }));
+          }
           else if (r.status === '반려') {
             kids.push(el('div', { class: 'muted', text: wishText(r) }));
             if (r.cancel_reason) kids.push(el('div', { class: 'cr-fb' }, [el('b', { text: '선생님 말씀' }), el('span', { text: r.cancel_reason })]));

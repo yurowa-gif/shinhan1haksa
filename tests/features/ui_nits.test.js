@@ -148,3 +148,19 @@ test('C49-B 화면: 상담일지 쓰기에 합의 사항·참고 프로필 버�
   const h = ui('home_student.html');
   assert.ok(/내 상담 기록 보기/.test(h) && /formLink\.parentNode\.removeChild\(formLink\)/.test(h), '학생 홈: 내 상담 기록 링크, 열린 신청이 있으면 [상담 신청하기] 링크를 뺀다');
 });
+
+test('C49-B 검토 반영: 두 글 칸 꼬리표(교사만 봄·학생에게 보임)와 저장 전 확인 시트, 학부모 빈 상태, 완료 줄 [상담 기록 보기], 경고는 토스트가 아니라 목록 위 한 줄, 빈 내 상담 기록은 안내 없음', () => {
+  const ui = (f) => fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'ui', f), 'utf8');
+  const c = ui('screen_counsel.html');
+  assert.ok(/상담 내용 \(교사만\)/.test(c) && /UI\.statusPill\('mute', '교사만 봄'\)/.test(c), '내용 칸: 교사만 봄');
+  assert.ok(/합의 사항·다음 할 일 \(학생에게 보임\)/.test(c) && /UI\.statusPill\('requested', '학생에게 보임'\)/.test(c), '합의 사항 칸: 학생에게 보임(주의색)');
+  assert.ok(/'합의 사항 ' \+ agrLen\(\) \+ '자가 학생에게 보입니다\.'/.test(c) && /저장한 뒤에는 고칠 수 없고, 고치려면 취소하고 다시 써야 합니다/.test(c) && /if \(!agrLen\(\)\) \{ save\(\); return; \}/.test(c), '합의 사항이 있을 때만 저장 전 확인 시트');
+  assert.ok(!/UI\.toast\(r\.warnings/.test(c) && /if \(flash\)/.test(c), '경고는 토스트가 아니라 목록 위 한 줄');
+  const p = ui('Portal.html');
+  assert.ok(/보여 드릴 상담 기록이 없습니다/.test(p) && /if \(cn\.length\) cnKids\.push\(note\(/.test(p), '학부모 빈 상태: 단정하지 않고 아래 안내 줄 없음');
+  const m = ui('screen_mynotes.html');
+  assert.ok(/if \(d\.notes\.length\) body\.appendChild\(el\('div', \{ class: 'notice info'/.test(m), '빈 상담 기록에는 맨 위 안내가 없다');
+  assert.ok(!/danger: true/.test(m), '[보이기 끄기]는 빨강이 아니라 보통 단추');
+  const r = ui('screen_counselreq.html');
+  assert.ok(/page=mynotes', text: '상담 기록 보기'/.test(r), '완료 줄 [상담 기록 보기]');
+});
