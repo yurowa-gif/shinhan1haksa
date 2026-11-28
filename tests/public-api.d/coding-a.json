@@ -279,6 +279,30 @@
     "cancelCareerFeedback": {
       "use": "화면",
       "guard": "requirePermission_"
+    },
+    "getCoursePlanContext": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getCoursePlanStudent": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveCoursePlan": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "setCoursePlanPublish": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "confirmCoursePlan": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "addPlanFeedback": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }

@@ -235,6 +235,14 @@
         }
         carCards(r.current, {}).forEach(function (c) { body.appendChild(c); });
         if (r.current.submittedAt) body.appendChild(el('div', { class: 'muted', text: carKo(r.current.submittedAt) + '에 낸 내용' }));
+      }).then(function () { return call('getCoursePlanStudent', child.id); }).then(function (pr) {   // 이수 계획 카드(C51): 자녀가 켠 과목이 있을 때만(없으면 카드를 그리지 않는다)
+        if (!pr || !pr.semesters || !pr.semesters.length) return;
+        var pc = el('div', { class: 'card' }, [el('h2', { text: '이수 계획' }), el('div', { class: 'muted', style: 'word-break:keep-all', text: '"확정"은 담당 선생님이 확인한 과목입니다.' })]);
+        pr.semesters.forEach(function (s) {
+          pc.appendChild(el('b', { style: 'display:block;margin-top:8px', text: s.grade + '학년 ' + s.semester + '학기' }));
+          s.rows.forEach(function (p) { pc.appendChild(el('div', { class: 'car-hope' }, [el('span', { text: p.course + ' ' }), UI.statusPill(p.state === '확정' ? 'confirmed' : 'mute', p.state)])); });
+        });
+        body.appendChild(pc);
       }).catch(function (err) { clear(body); showError(body, err); });
     }
     if (ctx.children.length > 1) box.appendChild(UI.segmented({ label: '자녀', value: ctx.children[0].id, options: ctx.children.map(function (c) { return { value: c.id, label: c.name }; }),

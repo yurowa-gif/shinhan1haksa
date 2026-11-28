@@ -21,6 +21,12 @@
       ]);
       if (todo) root.insertBefore(crCard, body); else root.appendChild(crCard);
     }
+    // 이수 계획 카드(C51, F15): 학기·선택군별로 과목을 고르고 부모님께 보일 과목을 정한다
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '내 이수 계획' }),
+      el('div', { class: 'muted', style: 'word-break:keep-all', text: '학기마다 들을 과목을 고릅니다. 담당 선생님이 확인하면 "확정"으로 바뀝니다.' }),
+      UI.rowLink({ href: d.appUrl + '?page=plan&role=student', text: '이수 계획 보기·고르기' })
+    ]));
     // 상담 신청 카드(C49-A, F17): 신청·내 신청은 ?page=counselreq
     var formLink = UI.rowLink({ href: d.appUrl + '?page=counselreq&tab=form', text: '상담 신청하기' });
     var cqLine = el('div', { style: 'margin:8px 0;word-break:keep-all' });   // 신청 상태 한 줄(신청 화면을 다시 열지 않아도 알 수 있게). 서버가 보는 사람에 맞게 준 칸만 쓴다

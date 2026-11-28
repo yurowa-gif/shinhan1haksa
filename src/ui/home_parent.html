@@ -19,7 +19,8 @@
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '자녀의 진로' }),
       el('div', { class: 'muted', style: 'word-break:keep-all', text: '자녀가 학부모님께 보여 주기로 한 진로 프로필을 볼 수 있습니다.' }),
-      UI.rowLink({ href: d.appUrl + '?page=career&role=parent', text: '진로 프로필 보기' })
+      UI.rowLink({ href: d.appUrl + '?page=career&role=parent', text: '진로 프로필 보기' }),
+      UI.rowLink({ href: d.appUrl + '?page=plan&role=parent', text: '자녀의 이수 계획 보기' })
     ]));
     var first = d.children[0];
     window.PORTAL_NAV = function (id, v) { return id === first.id && v === 'home' ? '' : id + ':' + v; };   // 뒤로 가기(C39): 자녀 전환·자세히 화면이 기록에 남는다
