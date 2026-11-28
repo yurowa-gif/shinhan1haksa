@@ -267,3 +267,119 @@ function courseRecsFor_(recs, targets, opts) {
   });
   return out;
 }
+
+/** 편제·이수 계획 줄의 과목 열쇠: 입학년도|학년|학기|선택군|과목 */
+function careerCourseKey_(r) {
+  return [ruleStr_(r.entry_year), ruleStr_(r.grade), ruleStr_(r.semester), ruleStr_(r.choice_group), careerTxt_(r.course)].join('|');
+}
+
+/**
+ * 편제표에서 빠지는 과목을 이미 고른 학생(디자인2 제안, 총괄 승인). plans = course_plans 행, curriculum = 새(또는 지금) 편제 행.
+ * → [{studentId, planId, entryYear, grade, semester, choiceGroup, course}] 입학년도·학년·학기·과목·학생 순.
+ * - 살아 있는(status 유효) 이수 계획 줄 중, curriculum에 같은 입학년도·학년·학기·선택군·과목의 살아 있는 줄이 없는 것.
+ * - curriculum에 나오는 입학년도의 줄만 본다(올리기 미리 보기에서 그 해 표만 넘겨도 다른 해 학생을 잘못 세지 않게).
+ * 쓰는 곳: 올리기 미리 보기 "이 과목을 고른 학생 n명" 경고, 학생 화면 그 줄의 '교육과정에서 빠진 과목' 표시.
+ */
+function careerDroppedPicks_(plans, curriculum) {
+  var years = {}, have = {};
+  (curriculum || []).forEach(function (c) {
+    if (!c || ruleStr_(c.status) === '취소') return;
+    years[ruleStr_(c.entry_year)] = true;
+    have[careerCourseKey_(c)] = true;
+  });
+  return (plans || []).filter(function (p) {
+    return p && ruleStr_(p.status) !== '취소' && years[ruleStr_(p.entry_year)] && !have[careerCourseKey_(p)];
+  }).map(function (p) {
+    return { studentId: ruleStr_(p.student_id), planId: ruleStr_(p.id), entryYear: ruleStr_(p.entry_year), grade: ruleStr_(p.grade),
+      semester: ruleStr_(p.semester), choiceGroup: ruleStr_(p.choice_group), course: careerTxt_(p.course) };
+  }).sort(function (a, b) {
+    var ka = [a.entryYear, a.grade, a.semester, a.course, a.studentId].join('|'), kb = [b.entryYear, b.grade, b.semester, b.course, b.studentId].join('|');
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
+  });
+}
+
+/**
+ * 담당교사 홈 '이수 계획 확인 n명'(디자인2 제안, 총괄 승인). plans = course_plans 행, studentIds = 그 교사의 담당 학생 id.
+ * → {count, studentIds:[]} 살아 있는(status 유효) state '계획' 줄이 하나라도 있는 담당 학생(studentIds 순서, 중복 없음).
+ */
+function coursePlanPendingCount_(plans, studentIds) {
+  var pending = {};
+  (plans || []).forEach(function (p) {
+    if (p && ruleStr_(p.status) !== '취소' && ruleStr_(p.state) === '계획') pending[ruleStr_(p.student_id)] = true;
+  });
+  var seen = {}, ids = (studentIds || []).map(ruleStr_).filter(function (sid) {
+    if (!sid || seen[sid] || !pending[sid]) return false;
+    seen[sid] = true;
+    return true;
+  });
+  return { count: ids.length, studentIds: ids };
+}
+
+/** 교육과정 올리기 종류별 칸(결정 102). key = 한 번에 바꾸는 묶음 열, cols = 같은 줄인지 견주는 열. */
+var CURRICULUM_KINDS = {
+  curriculum: { key: 'entry_year', cols: ['entry_year', 'grade', 'semester', 'choice_group', 'pick_n', 'course'] },
+  recs: { key: 'base_year', cols: ['base_year', 'university', 'unit', 'core_courses', 'recommended_courses', 'source_url', 'source_title', 'note'] }
+};
+
+/** 줄 정규화: 공백 정리, 과목 목록(';')은 조각마다 다듬고 빈 조각을 뺀다, pick_n 빈칸은 0. */
+function careerUploadRow_(r, kind) {
+  var out = {};
+  CURRICULUM_KINDS[kind].cols.forEach(function (c) {
+    var v = careerTxt_((r || {})[c]);
+    if (c === 'core_courses' || c === 'recommended_courses') v = v.split(';').map(careerTxt_).filter(Boolean).join(';');
+    if (c === 'pick_n' && v === '') v = '0';
+    out[c] = v;
+  });
+  return out;
+}
+
+/**
+ * 교육과정 올리기 저장 계획(결정 102 — 관리자, 코딩A S6-1이 씀). kind 'curriculum'(curriculum_courses)|'recs'(course_recommendations),
+ * existing = 그 탭의 지금 행, newRows = 올린 표의 줄.
+ * → {toAdd:[행(status 유효)], toCancel:[id], same:n, errors:[], keys:[이번에 바꾸는 입학년도·기준 연도]}
+ * - 올린 표에 나오는 입학년도(편제)·기준 연도(권장 과목)의 기존 살아 있는 줄만 견준다. 다른 해 줄은 그대로.
+ * - 같은 줄(견주는 열이 모두 같음)은 그대로, 바뀌거나 빠진 줄은 취소, 새 줄은 추가 — 같은 표를 두 번 올리면 0건.
+ * - 검사(하나라도 있으면 아무것도 쓰지 않는다 — toAdd·toCancel 빈 배열):
+ *   편제: 입학년도 4자리, 학년 1~3, 학기 1~2, 과목 빈칸 아님, 택N 0 이상 정수. 같은 학년·학기·선택군·과목 두 번 오류.
+ *   권장 과목: 기준 연도 4자리, 대학·모집단위 빈칸 아님. 같은 기준 연도·대학·모집단위 두 번 오류.
+ */
+function curriculumSavePlan_(kind, existing, newRows) {
+  var k = CURRICULUM_KINDS[ruleStr_(kind)];
+  if (!k) throw new Error('kind는 curriculum 또는 recs여야 합니다: ' + kind);
+  var errors = [], rows = [], seen = {}, keys = {};
+  (newRows || []).forEach(function (raw, i) {
+    var r = careerUploadRow_(raw, kind), line = (i + 1) + '번째 줄: ';
+    if (kind === 'curriculum') {
+      if (!/^\d{4}$/.test(r.entry_year)) errors.push(line + '입학년도는 숫자 4자리여야 합니다' + ruleNowText_(r.entry_year) + '. 입학년도를 고쳐 주세요.');
+      if (!/^[1-3]$/.test(r.grade)) errors.push(line + '학년은 1~3이어야 합니다' + ruleNowText_(r.grade) + '. 학년을 고쳐 주세요.');
+      if (!/^[12]$/.test(r.semester)) errors.push(line + '학기는 1 또는 2여야 합니다' + ruleNowText_(r.semester) + '. 학기를 고쳐 주세요.');
+      if (!r.course) errors.push(line + '과목 이름이 비어 있습니다. 과목을 적어 주세요.');
+      if (!/^\d+$/.test(r.pick_n)) errors.push(line + '택N은 0 이상의 정수여야 합니다' + ruleNowText_(r.pick_n) + '. 숫자를 고쳐 주세요.');
+    } else {
+      if (!/^\d{4}$/.test(r.base_year)) errors.push(line + '기준 연도는 숫자 4자리여야 합니다' + ruleNowText_(r.base_year) + '. 기준 연도를 고쳐 주세요.');
+      if (!r.university || !r.unit) errors.push(line + '대학과 모집단위를 모두 적어 주세요.');
+    }
+    var dupKey = kind === 'curriculum' ? [r.entry_year, r.grade, r.semester, r.choice_group, r.course].join('|') : [r.base_year, r.university, r.unit].join('|');
+    if (seen[dupKey]) errors.push(line + seen[dupKey] + '번째 줄과 같은 ' + (kind === 'curriculum' ? '과목' : '대학·모집단위') + '입니다. 한 줄만 남겨 주세요.');
+    else seen[dupKey] = i + 1;
+    keys[r[k.key]] = true;
+    rows.push(r);
+  });
+  if (!rows.length) errors.push('올린 표에 줄이 없습니다. 표를 붙여 넣어 주세요.');
+  var keyList = Object.keys(keys).sort();
+  if (errors.length) return { toAdd: [], toCancel: [], same: 0, errors: errors, keys: keyList };
+  var sig = function (r) { var n = careerUploadRow_(r, kind); return JSON.stringify(k.cols.map(function (c) { return n[c]; })); };
+  var want = {}, out = { toAdd: [], toCancel: [], same: 0, errors: [], keys: keyList };
+  rows.forEach(function (r) { want[sig(r)] = r; });
+  var kept = {};
+  (existing || []).forEach(function (e) {
+    if (!e || ruleStr_(e.status) === '취소' || !keys[careerTxt_(e[k.key])]) return;
+    var s = sig(e);
+    if (want[s] && !kept[s]) { kept[s] = true; out.same++; } else out.toCancel.push(ruleStr_(e.id));
+  });
+  rows.forEach(function (r) {
+    var s = sig(r);
+    if (!kept[s]) { kept[s] = true; out.toAdd.push(Object.assign({}, r, { status: '유효' })); }
+  });
+  return out;
+}
