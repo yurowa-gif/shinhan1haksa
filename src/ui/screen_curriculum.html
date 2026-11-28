@@ -8,9 +8,10 @@
   /** 교육과정 올리기(S6-1, 결정 102): 편제표·권장 이수 과목을 붙여넣기 → 미리 보기 → 하단 바에서 저장. 명단 올리기와 같은 흐름. */
   function renderScreen(root) {
     var KINDS = {
-      curriculum: { label: '편제표', cols: 'entry_year, grade, semester, choice_group, pick_n, course', hint: '입학년도(2027)·학년·학기별 과목표입니다. 선택군이 있으면 택N(몇 과목 고르나)을 함께 적습니다. 선택군이 비면 필수 과목입니다.' },
-      recommendations: { label: '권장 이수 과목', cols: 'base_year, university, unit, core_courses, recommended_courses, source_url, source_title, note', hint: '대학·모집단위별 핵심·권장 과목입니다. 과목은 ; 로 구분합니다. 자료 폴더의 CSV를 그대로 붙여 넣을 수 있습니다.' }
+      curriculum: { label: '편제표', cols: '입학년도, 학년, 학기, 선택군, 택N, 과목 (영어 열 이름 entry_year, grade, … 도 됩니다)', hint: '입학년도(2027)·학년·학기별 과목표입니다. 선택군이 있으면 택N(몇 과목 고르나)을 함께 적습니다. 선택군이 비면 필수 과목입니다.' },
+      recommendations: { label: '권장 이수 과목', cols: '기준 연도, 대학, 모집단위, 핵심 과목, 권장 과목, 출처 주소, 출처 제목, 비고 (영어 열 이름 base_year, university, … 도 됩니다)', hint: '대학·모집단위별 핵심·권장 과목입니다. 과목은 ; 로 구분합니다. 자료 폴더의 CSV를 그대로 붙여 넣을 수 있습니다.' }
     };
+    var KO = { entry_year: '입학년도', grade: '학년', semester: '학기', choice_group: '선택군', pick_n: '택N', course: '과목', base_year: '기준 연도', university: '대학', unit: '모집단위', core_courses: '핵심 과목', recommended_courses: '권장 과목', source_url: '출처 주소', source_title: '출처 제목', note: '비고' };
     var state = { kind: 'curriculum', preview: null, snapshot: '', busy: false };
     var summary = el('div', { class: 'card' });
     var head = el('div', { class: 'card' });
@@ -29,8 +30,8 @@
       call('getCurriculumSummary').then(function (d) {
         clear(summary);
         summary.appendChild(el('h2', { text: '지금 올라와 있는 자료' }));
-        var rows = [['편제표', d.curriculum.length ? d.curriculum.map(function (y) { return y.year + '학년 입학 ' + y.rows + '줄'; }).join(' · ') : '아직 없음'],
-          ['권장 과목', d.recommendations.length ? d.recommendations.map(function (y) { return y.year + ' 기준 ' + y.rows + '줄'; }).join(' · ') : '아직 없음']];
+        var rows = [['편제표', d.curriculum.length ? d.curriculum.map(function (y) { return y.year + '학년도 입학 ' + y.rows + '줄'; }).join(' · ') : '아직 없음'],
+          ['권장 과목', d.recommendations.length ? d.recommendations.map(function (y) { return y.year + '년 기준 ' + y.rows + '줄'; }).join(' · ') : '아직 없음']];
         summary.appendChild(kv(rows));
       }).catch(function (err) { clear(summary); showError(summary, err); });
     }
@@ -40,7 +41,7 @@
 
     function build() {
       clear(head);
-      head.appendChild(el('h2', { text: '교육과정 올리기' }));
+      head.appendChild(el('h2', { text: '올릴 자료' }));
       head.appendChild(UI.segmented({
         label: '무엇을 올리나요', value: state.kind,
         options: [{ value: 'curriculum', label: '편제표' }, { value: 'recommendations', label: '권장 이수 과목' }],
@@ -96,8 +97,8 @@
     function drawResult(p) {
       clear(resultBox);
       if (!p.ok) {
-        var c = el('div', { class: 'card' }, [el('h2', { text: '고칠 곳이 ' + (p.errorCount || p.errors.length) + '군데 있습니다' })]);
-        p.errors.forEach(function (e) { c.appendChild(el('div', { class: 'error', text: (e.line ? e.line + '번째 줄' + (e.column ? ' · ' + e.column : '') + ': ' : '') + e.message })); });
+        var c = el('div', { class: 'card' }, [el('h2', { text: '고칠 곳이 ' + (p.errorCount || p.errors.length) + '군데 있습니다' }), el('div', { class: 'muted', style: 'word-break:keep-all', text: '표를 고쳐 다시 붙여 넣어 주세요. 아직 아무것도 저장하지 않았습니다.' })]);
+        p.errors.forEach(function (e) { c.appendChild(el('div', { class: 'error', text: (e.line ? e.line + '번째 줄' + (e.column ? ' · ' + (KO[e.column] || e.column) : '') + ': ' : '') + e.message })); });
         resultBox.appendChild(c);
       } else {
         var k = p.counts;
@@ -114,7 +115,7 @@
         };
         sect('새 줄', '', p.lists.add, k.add);
         sect('바뀌는 줄', '옛 줄은 "취소"로 남고 새 줄이 생깁니다.', p.lists.changed, k.changed);
-        sect('새 글에 없는 줄', '삭제하지 않고 "취소"로 바꿉니다.', p.lists.remove, k.remove);
+        sect('빠지는 줄', '삭제하지 않고 "취소"로 바꿉니다.', p.lists.remove, k.remove);
       }
       if (p.warnings && p.warnings.length) {
         var w = el('div', { class: 'card' }, [el('h2', { text: '알아 두세요 (' + p.warnings.length + ')' })]);
@@ -126,7 +127,10 @@
     function onSave() {
       var p = state.preview;
       if (!p || !isFresh()) { onInputChanged(); UI.toast('입력이 바뀌었습니다. [미리 보기]를 다시 눌러 주세요.', { kind: 'warn' }); return; }
-      UI.confirmSheet({ title: '저장할까요?', message: p.year + (state.kind === 'curriculum' ? '학년도 입학 편제표' : ' 기준 권장 이수 과목') + ': 새 줄 ' + p.counts.add + '줄, 바뀌는 줄 ' + p.counts.changed + '줄, 빠지는 줄 ' + p.counts.remove + '줄, 같은 줄 ' + p.counts.same + '줄. 바뀌거나 빠지는 줄의 옛 내용은 "취소"로 남습니다. 잘못 올렸으면 고친 표를 다시 올리면 됩니다.', confirmText: '저장', onconfirm: function () {
+      var k = p.counts;
+      UI.confirmSheet({ title: '저장', lead: p.year + (state.kind === 'curriculum' ? '학년도 입학 편제표' : '년 기준 권장 이수 과목'),
+        lines: ['새 줄 ' + k.add + '줄, 바뀌는 줄 ' + k.changed + '줄, 빠지는 줄 ' + k.remove + '줄, 같은 줄 ' + k.same + '줄', '바뀌거나 빠지는 줄의 옛 내용은 "취소"로 남습니다.', '잘못 올렸으면 고친 표를 다시 올리면 됩니다.'],
+        message: '저장할까요?', confirmText: '저장', onconfirm: function () {
         state.busy = true; saveBtn.disabled = true;
         call('saveCurriculum', state.kind, textarea.value, { kind: state.kind, counts: p.counts }).then(function (r) {
           state.busy = false;

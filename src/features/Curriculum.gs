@@ -35,10 +35,13 @@ function curKind_(kind) {
   return CUR_KINDS[String(kind)];
 }
 
-/** 표준 과목 이름이면 {ok:true}, 아니면 {ok:false, suggest: 표준 이름 또는 ''} */
+/** 표준 과목 이름이면 {ok:true}, 아니면 {ok:false, suggest: 표준 이름 또는 ''}. 이름 바꿈 표는 careerCourseName_(R25)로, 띄어쓰기만 다른 이름은 공백을 뺀 비교로 찾는다 */
 function curStdCheck_(name) {
   if (CUR_STANDARD_COURSES.indexOf(name) >= 0) return { ok: true, suggest: '' };
-  return { ok: false, suggest: Object.prototype.hasOwnProperty.call(CUR_NAME_MAP, name) ? CUR_NAME_MAP[name] : '' };
+  var mapped = careerCourseName_(name, CUR_NAME_MAP);
+  if (mapped !== name && CUR_STANDARD_COURSES.indexOf(mapped) >= 0) return { ok: false, suggest: mapped };
+  var squeeze = function (x) { return String(x).replace(/\s+/g, ''); }, hit = CUR_STANDARD_COURSES.filter(function (c) { return squeeze(c) === squeeze(name); })[0];
+  return { ok: false, suggest: hit || '' };
 }
 
 function curSig_(def, rec) { return def.cols.map(function (c) { return String(rec[c] === undefined || rec[c] === null ? '' : rec[c]); }).join('\u0001'); }
@@ -180,11 +183,13 @@ function curParse_(kind, text) {
     }
   }
   var odd = nameOrder.filter(function (n) { return !curStdCheck_(n).ok; });
+  if (odd.length) warnings.push('과목 이름 ' + odd.length + '개가 표준 과목 이름과 다릅니다. 그대로 저장할 수 있지만, 표준 이름과 다르면 학생 화면에서 "권장" 표시가 붙지 않습니다.');
   odd.slice(0, CUR_WARN_MAX).forEach(function (n) {
-    var s = curStdCheck_(n).suggest, ls = nameLines[n];
-    warnings.push('과목 이름이 표준 과목 표와 다릅니다: "' + n + '"(' + ls.slice(0, 3).join('·') + '번째 줄' + (ls.length > 3 ? ' 외 ' + (ls.length - 3) + '줄' : '') + ')' + (s ? ' — 표준 이름은 "' + s + '"입니다.' : ' — 표에 없는 이름입니다. 맞으면 그대로 올려도 됩니다.'));
+    var s2 = curStdCheck_(n).suggest, ls = nameLines[n];
+    warnings.push(ls.slice(0, 3).join('·') + (ls.length > 3 ? ' 외 ' + (ls.length - 3) + '줄' : '') + '번째 줄 "' + n + '"' + (s2 ? ' → 혹시 "' + s2 + '"인가요?' : ' → 표에 없는 이름입니다. 맞으면 그대로 올려도 됩니다.'));
   });
   if (odd.length > CUR_WARN_MAX) warnings.push('표준 표와 다른 과목 이름이 ' + (odd.length - CUR_WARN_MAX) + '개 더 있습니다.');
+  errors.sort(function (x, y) { return x.line - y.line; });   // 줄 번호 순
   return { recs: recs, errors: errors, warnings: warnings };
 }
 
@@ -225,11 +230,11 @@ function curPlan_(kind, text, existing) {
     counts: { add: add.length, changed: changed.length, remove: remove.length, same: same, rows: p.recs.length } };
 }
 
-/** 줄 한 개를 사람이 읽는 글로: '2027학년 입학 · 2학년 1학기 · 선택군 A(택2) · 화법과 언어' / '2028 · 연세대 · 문과대학 전 모집단위' */
+/** 줄 한 개를 사람이 읽는 글로(한 번에 한 해만 올리므로 해는 뺀다): '2학년 1학기 · 선택군 A(택2) · 화법과 언어' / '연세대 · 문과대학 전 모집단위 · 핵심: … · 권장: …' */
 function curLabel_(kind, r) {
   return kind === 'curriculum'
-    ? r.entry_year + '학년 입학 · ' + r.grade + '학년 ' + r.semester + '학기 · ' + (r.choice_group ? r.choice_group + '(택' + r.pick_n + ')' : '필수') + ' · ' + r.course
-    : r.base_year + ' · ' + r.university + ' · ' + r.unit;
+    ? r.grade + '학년 ' + r.semester + '학기 · ' + (r.choice_group ? r.choice_group + '(택' + r.pick_n + ')' : '필수') + ' · ' + r.course
+    : r.university + ' · ' + r.unit + ' · 핵심: ' + (String(r.core_courses).split(';').join(', ') || '없음') + ' · 권장: ' + (String(r.recommended_courses).split(';').join(', ') || '없음');
 }
 
 function curPreviewView_(kind, plan) {

@@ -40,7 +40,7 @@ test('권장 과목 CSV를 그대로 붙여 넣어 올린다(열 이름 일치, 
   assert.strictEqual(p.ok, true, JSON.stringify(p.errors));
   assert.strictEqual(p.counts.rows, 619); assert.strictEqual(p.counts.add, 619); assert.strictEqual(p.counts.remove, 0);
   assert.ok(p.warnings.some((w) => /대학·모집단위가 같은 줄이 2쌍/.test(w) && /뒤의 줄만 쓰입니다/.test(w)), '같은 대학·모집단위 안내');
-  assert.ok(!p.warnings.some((w) => /표준 과목 표와 다릅니다/.test(w)), '표준 이름 경고 없음');
+  assert.ok(!p.warnings.some((w) => /표준 과목 이름과 다릅니다/.test(w)), '표준 이름 경고 없음');
   assert.strictEqual(env.rows('course_recommendations', 'config').length, 0, '미리 보기는 쓰지 않는다');
   const r = env.call(OWNER, 'saveCurriculum', 'recommendations', text, { kind: 'recommendations', counts: p.counts });
   assert.strictEqual(r.ok, true);
@@ -67,7 +67,7 @@ test('가짜 편제표: 미리 보기 개수·저장·읽기, 다시 올리면 �
   const edited = CUR.split('\n').slice(0, 5).join('\n') + '\n2099\t2\t1\t선택군A\t2\t기하';
   const p2 = env.call(OWNER, 'previewCurriculum', 'curriculum', edited);
   assert.deepStrictEqual(plain(p2.counts), { add: 1, changed: 0, remove: 1, same: 4, rows: 5 });
-  assert.deepStrictEqual(plain(p2.lists.remove), ['2099학년 입학 · 2학년 1학기 · 선택군A(택2) · 대수']);
+  assert.deepStrictEqual(plain(p2.lists.remove), ['2학년 1학기 · 선택군A(택2) · 대수']);
   assert.ok(p2.warnings.some((w) => /"기하"/.test(w)) === false, '기하는 표준 과목');
   env.call(OWNER, 'saveCurriculum', 'curriculum', edited, { kind: 'curriculum', counts: p2.counts });
   const after = env.rows('curriculum_courses', 'config');
@@ -171,7 +171,7 @@ test('바뀌는 줄: 같은 자리인데 내용이 다르면 옛 줄 취소 + �
   const three = CUR.replace(/선택군A\t2/g, '선택군A\t3');
   const [p, r] = up(three);
   assert.deepStrictEqual(plain(p.counts), { add: 0, changed: 3, remove: 0, same: 2, rows: 5 });
-  assert.deepStrictEqual(plain(p.lists.changed).slice(0, 1), ['2099학년 입학 · 2학년 1학기 · 선택군A(택3) · 화법과 언어 (택2 → 택3)']);
+  assert.deepStrictEqual(plain(p.lists.changed).slice(0, 1), ['2학년 1학기 · 선택군A(택3) · 화법과 언어 (택2 → 택3)']);
   assert.strictEqual(r.ok, true);
   const rows = env.rows('curriculum_courses', 'config');
   assert.strictEqual(rows.length, 8);
@@ -193,4 +193,19 @@ test('한글 머리글도 받는다(열 순서 자유, 영어와 섞어도 됨) 
   assert.strictEqual(env.call(OWNER, 'previewCurriculum', 'recommendations', mix).ok, true);
   const bad = env.call(OWNER, 'previewCurriculum', 'curriculum', ko.replace('택N', '몇개'));
   assert.strictEqual(bad.ok, false); assert.ok(/빠진 열: pick_n/.test(bad.errors[0].message) && /모르는 열: 몇개/.test(bad.errors[0].message));
+});
+
+test('이름 경고: 이유 한 줄 + 띄어쓰기만 다른 이름은 표준 이름을 알려 준다 · 오류는 줄 번호 순 · 권장 과목 목록에 핵심·권장이 붙는다', () => {
+  const env = newEnv();
+  const t = 'entry_year,grade,semester,choice_group,pick_n,course\n2099,1,1,,,확률과통계\n2099,1,1,,,동아시아 역사기행';
+  const p = env.call(OWNER, 'previewCurriculum', 'curriculum', t);
+  assert.ok(p.warnings[0].includes('표준 이름과 다르면 학생 화면에서 "권장" 표시가 붙지 않습니다'));
+  assert.ok(p.warnings.some((w) => /"확률과통계" → 혹시 "확률과 통계"인가요\?/.test(w)));
+  assert.ok(p.warnings.some((w) => /"동아시아 역사기행" → 혹시 "동아시아 역사 기행"인가요\?/.test(w)));
+  const bad = env.call(OWNER, 'previewCurriculum', 'curriculum', 'entry_year,grade,semester,choice_group,pick_n,course\n2099,9,1,,,공통국어1\n2099,1,1,,,공통수학1\n2099,1,7,,,공통국어1\n2099,1,1,A,x,공통국어1');
+  const lines = bad.errors.map((e) => e.line);
+  assert.deepStrictEqual(lines, lines.slice().sort((a, b) => a - b));
+  const head = 'base_year,university,unit,core_courses,recommended_courses,source_url,source_title,note';
+  const r = env.call(OWNER, 'previewCurriculum', 'recommendations', head + '\n2099,가짜대,가짜학과,물리학;화학,생명과학,https://example.com,출처,');
+  assert.deepStrictEqual(plain(r.lists.add), ['가짜대 · 가짜학과 · 핵심: 물리학, 화학 · 권장: 생명과학']);
 });
