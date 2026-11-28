@@ -179,3 +179,17 @@ test('운영 기간이 없으면 제출은 "운영 기간이 아니라 낼 수 �
   assert.deepStrictEqual(r, { ok: false, errors: ['지금은 운영 기간이 아니라 낼 수 없습니다.'] });
   assert.strictEqual(env.rows('career_profiles').length, n);
 });
+
+test('R24b 확인: 학부모 응답에는 공개 항목 + 낸 날(submittedAt)이 있고 버전 번호는 없다 · 피드백에는 쓴 날(at)이 학생·교사 모두에게 있다', () => {
+  const env = newEnv(), sid = me(env).id, last = profs(env, sid).pop();
+  const p = env.call(PA, 'getCareerStudent', sid, 0);
+  assert.strictEqual(p.current.submittedAt, last.submitted_at, '학부모에게 "○월 ○일에 낸 내용"의 날짜');
+  assert.ok(!('version' in p.current) && !JSON.stringify(p).includes('"version"'), '버전 번호는 나가지 않는다');
+  env.call(T1, 'addCareerFeedback', sid, last.id, '가짜 피드백 날짜');
+  const wrote = env.rows('feedback').find((f) => f.content === '가짜 피드백 날짜').created_at;
+  [[ST, 'student'], [T1, 'teacher']].forEach(([who]) => {
+    const f = env.call(who, 'getCareerStudent', sid, 0).feedback.find((x) => x.content === '가짜 피드백 날짜');
+    assert.strictEqual(f.at, wrote, who + ' 피드백의 쓴 날');
+  });
+  assert.ok(!('feedback' in env.call(PA, 'getCareerStudent', sid, 0)));
+});
