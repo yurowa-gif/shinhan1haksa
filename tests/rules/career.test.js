@@ -102,7 +102,9 @@ test('coursePlanDiff_·coursePlanConfirm_: 과목 줄마다 취소 + 새 줄(결
   const rows = plain(ctx.coursePlanCheck_(CUR, 2026, [SEL('일반선택A', '물리학'), SEL('일반선택A', '생명과학'), SEL('진로선택', '기하')], ex)).rows;
   const d = plain(ctx.coursePlanDiff_(ex, 's1', rows, 'T1'));
   assert.deepStrictEqual([d.same, d.toCancel], [1, ['r2']], '화학 → 생명과학: 화학 줄 취소');
-  assert.deepStrictEqual(d.toAdd.map((r) => [r.course, r.state, r.status, r.show_to_parent, r.student_id, r.term_id]), [['생명과학', '계획', '유효', 'TRUE', 's1', 'T1'], ['기하', '계획', '유효', 'TRUE', 's1', 'T1']]);
+  assert.deepStrictEqual(d.toAdd.map((r) => [r.course, r.state, r.status, r.show_to_parent, r.student_id, r.term_id]), [['생명과학', '계획', '유효', 'FALSE', 's1', 'T1'], ['기하', '계획', '유효', 'FALSE', 's1', 'T1']],
+    '켜진 줄(물리학)이 있어도 새 줄은 늘 꺼짐 — 학부모 공개는 과목마다 학생이 고른다(기본 비공개)');
+  assert.ok(!d.toCancel.includes('r1'), '그대로 둔 줄(물리학)은 건드리지 않으니 켠 채 유지');
   assert.deepStrictEqual(plain(ctx.coursePlanDiff_(ex, 's1', [{ entry_year: '2026', grade: '2', semester: '1', choice_group: '일반선택A', course: '물리학' }, { entry_year: '2026', grade: '2', semester: '1', choice_group: '일반선택A', course: '화학' }])),
     { toAdd: [], toCancel: [], same: 2 }, '같은 계획 다시 저장 = 0건');
   const dup = ex.concat([Object.assign({}, ex[0], { id: 'r1b' })]);
