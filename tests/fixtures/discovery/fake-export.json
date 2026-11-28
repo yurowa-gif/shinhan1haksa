@@ -1,0 +1,21 @@
+{
+  "app": "shinhan-discovery",
+  "schema": 1,
+  "exportedAt": "2027-04-02T11:30:00Z",
+  "student": { "name": "가짜학생01", "class": "2-3" },
+  "records": [
+    { "id": "rec-001", "createdAt": "2027-03-30T12:00:00Z", "source": "chatgpt",
+      "standards": ["[12물리01-02]", "[12정보02-01]"], "subject": "물리학",
+      "title": "가짜 주제: 자습실 소음과 집중 시간", "question": "가짜 질문: 소음이 줄면 집중 시간이 늘까?",
+      "events": [{ "type": "like", "at": "2027-03-30T12:05:00Z" }] },
+    { "id": "rec-002", "createdAt": "2027-03-31T20:10:00+09:00", "source": "example",
+      "standards": [{ "code": "[12생명01-03]" }, { "code": "[12화학02-01]" }], "subject": "생명과학",
+      "title": "가짜 주제: 기숙사 식단과 수면", "question": "가짜 질문: 저녁 식단이 수면에 영향을 줄까?", "events": [] },
+    { "id": "rec-001", "createdAt": "2027-03-30T12:00:00Z", "source": "chatgpt",
+      "standards": ["[12물리01-02]", "[12정보02-01]"], "subject": "물리학",
+      "title": "가짜 주제: 자습실 소음과 집중 시간", "question": "가짜 질문: 소음이 줄면 집중 시간이 늘까?",
+      "events": [{ "type": "unlike", "at": "2027-03-30T12:01:00Z" }] },
+    { "id": "rec-003", "createdAt": "2027-04-01 09:00", "source": "default",
+      "standards": ["[12수학03-01]"], "subject": "수학", "title": "가짜 주제: 급식 대기 줄 길이", "question": "가짜 질문: 줄 길이를 예측할 수 있을까?", "liked": true }
+  ]
+}
