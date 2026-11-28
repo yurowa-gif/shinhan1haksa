@@ -20,7 +20,7 @@ const STAGE2_KEYS = {
   'out.cancel': { roles: ['admin'] },
   'out.rules': { roles: ['admin'] },
   'out.dismiss': { roles: ['admin'] },
-  'counsel.view': { roles: ['admin', 'hall_teacher', 'homeroom'], scope: 'student', noDuty: true },
+  'counsel.view': { roles: ['admin', 'hall_teacher', 'homeroom'], scope: 'student', noDuty: true, pastAssigned: true },
   'counsel.save': { roles: ['hall_teacher'], scope: 'student', noDuty: true },
   'counsel.cancel': { roles: ['hall_teacher'] },
   'status.list': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] },

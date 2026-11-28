@@ -47,10 +47,10 @@ test('pastAssigned(6단계 보기 키, 결정 97·104): 지난 기간 담당이�
   assert.ok(!past(['homeroom'], { wasAssigned: true }, true) && !past(['student'], { wasAssigned: true }, true) && !past(['parent'], { wasAssigned: true }, true));
   assert.ok(!ctx.canAccessStudentByFacts_(['hall_teacher'], Object.assign({}, NONE, { wasAssigned: true }), ['admin', 'homeroom'], false, true), '키 역할에 학사 교사가 없으면 거부');
 });
-test('permissions_: pastAssigned는 6단계 보기 키 6개에만(쓰기·처리 키, 2단계 counsel.view는 없다)', () => {
+test('permissions_: pastAssigned는 보기 키 7개에만(6단계 보기 키 6개 + 상담일지 counsel.view, 쓰기·처리 키는 없다)', () => {
   const p = ctx.permissions_();
   assert.deepStrictEqual(Object.keys(p).filter((k) => p[k].pastAssigned).sort(),
-    ['career.view', 'counsel.request.view', 'feedback.view', 'inquiry.view', 'plan.view', 'timeline.view']);
+    ['career.view', 'counsel.request.view', 'counsel.view', 'feedback.view', 'inquiry.view', 'plan.view', 'timeline.view']);
 });
 test('담임: 자기 반만', () => {
   assert.ok(can(['homeroom'], { inHomeroom: true }));
