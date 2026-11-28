@@ -34,15 +34,19 @@ function crqTeacherOf_(enrollments, termId, studentId) {
 
 /**
  * 이 접속자가 그 학생의 그 기간(termId) 신청을 어떤 자격으로 보나 → s6Visible_의 viewer(규칙 s6RoleForRow_).
- * 학생 본인 > 관리자 > 담당교사('assigned' = 그 신청의 기간 담당 또는 지금 담당, 결정 97·104) > 자기 반 담임 > none. 학부모는 신청을 보지 못한다(none).
+ * 학생 본인 > 담당교사('assigned' = 그 신청의 기간 담당 또는 지금 담당, 결정 97·104) > 관리자 > 자기 반 담임 > none — Career.gs carViewer_와 같은 순서.
+ * 관리자이면서 학사 교사인 사람(소유자 선생님)이 자기 담당 학생의 신청을 처리할 수 있게 담당을 관리자보다 먼저 본다(보이는 칸은 판정표에서 둘 다 ALL로 같다).
+ * 학부모는 신청을 보지 못한다(none).
  */
 function crqViewer_(user, student, termId, enrollments) {
   var self = portalWho_().ownStudentIds.indexOf(student.id) >= 0 && hasRole_(user, 'student');
   var now = getCurrentTerm_();
-  var base = { role: self ? 'student' : hasRole_(user, 'admin') ? 'admin' :
-      hasRole_(user, 'homeroom') && sameClass_(user.homeroomClass, student.grade, student.class_no) ? 'homeroom' : 'none',
+  var base = { role: self ? 'student' : hasRole_(user, 'homeroom') && sameClass_(user.homeroomClass, student.grade, student.class_no) ? 'homeroom' : 'none',
     isSelf: self, isChild: false, hallTeacher: hasRole_(user, 'hall_teacher'), nowTermId: now ? now.id : '' };
-  return s6RoleForRow_(enrollments, user.email, student.id, termId, base);
+  var v = s6RoleForRow_(enrollments, user.email, student.id, termId, base);
+  if (v.role === 'student' || v.role === 'assigned') return v;
+  if (hasRole_(user, 'admin')) return { role: 'admin', isSelf: false, isChild: false };
+  return v;
 }
 
 /** 한 신청을 보는 사람에 맞게 줄인다(s6Visible_이 돌려준 칸만) + 희망 날짜 배열. 못 보면 null */

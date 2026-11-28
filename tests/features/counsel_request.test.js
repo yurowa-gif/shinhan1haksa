@@ -240,3 +240,24 @@ test('신청한 날(created_at): 학생·담당교사·관리자·담임 응답�
   x.env.expectDenied(PARENT, 'counsel.request.view', 'getCounselRequestsOfStudent', x.me.id);
   x.env.expectDenied(T2, 'counsel.request.view', 'getCounselRequestsOfStudent', x.me.id);
 });
+
+test('관리자이면서 학사 교사(소유자 선생님)는 지금 담당 학생의 신청을 확정·반려할 수 있고, 담당이 아닌 학생의 신청은 관리자여도 보기만 한다', () => {
+  const x = makeEnv();
+  // 이 학생의 담당교사 계정에 관리자 역할을 더한다(실제 운영의 소유자 선생님과 같은 모양)
+  x.env.asOwner((c) => { const u = c.readAll_('users').find((q) => q.email === x.teacher); c.updateRecord_('users', u.id, { roles: 'admin,hall_teacher' }, ADMIN); });
+  const id = submit(x).id;
+  const v = call(x, x.teacher, 'getCounselRequestsOfStudent', x.me.id);
+  assert.strictEqual(v.role, 'assigned', '담당이면 관리자보다 담당이 먼저');
+  assert.strictEqual(v.canDecide, true);
+  const r = call(x, x.teacher, 'decideCounselRequest', { studentId: x.me.id, requestId: id, action: 'confirm', date: '2027-03-12' });
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.strictEqual(x.rows().find((q) => q.id === id).status, '확정');
+  assert.strictEqual(call(x, x.teacher, 'decideCounselRequest', { studentId: x.me.id, requestId: id, action: 'reject', reason: WHY }).ok, true, '확정 뒤 반려(상담 못 함)');
+  // 담당이 아닌 학생: 관리자라 보기는 되지만 처리는 못 한다
+  const strangerTeacher = x.enr(x.stranger.id).teacher_email;
+  const sv = call(x, x.teacher, 'getCounselRequestsOfStudent', x.stranger.id);
+  assert.strictEqual(sv.role, 'admin');
+  assert.strictEqual(sv.canDecide, false);
+  assert.notStrictEqual(strangerTeacher, x.teacher);
+  x.env.expectDenied(x.teacher, 'counsel.request.decide', 'decideCounselRequest', { studentId: x.stranger.id, requestId: id, action: 'reject', reason: WHY });
+});
