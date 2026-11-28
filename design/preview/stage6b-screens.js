@@ -530,14 +530,18 @@ def('t-timeline-pick', '교사 · 학생 타임라인', '학생 고르기(담당
   m.appendChild(card('', [el('div', { class: 'ld-row' }, [el('button', { type: 'button', class: 'ld-pick' }, [el('span', { class: 'ld-name', text: '1. 김가온' }), el('span', { class: 'muted', text: '2026 2학기에 담당 · 지금 담당 박선생' })]), el('span', { style: 'flex:0 0 auto;white-space:nowrap' }, [UI.statusPill('mute', '읽기 전용')])])]));
 });
 
-def('t-timeline-hr-home', '교사 · 학생 타임라인', '담임 홈에서 들어가는 길(우리 반 학사생)', {}, function (root) {
+def('t-timeline-hr-home', '교사 · 학생 타임라인', '담임 홈에서 들어가는 길(지금 있는 학사생 목록 줄에 단추 하나)', {}, function (root) {
   root.appendChild(el('header', { class: 'top' }, [el('h1', { text: '신한1학사 · 담임' }), el('div', { class: 'who', text: '최선생' })]));
   var m = el('main', { class: 'home' }); root.appendChild(m);
-  m.appendChild(noteBox('담임 최선생 홈 · 담임이 타임라인으로 가는 길은 "우리 반 학사생" 카드의 학생 줄이다(이름 링크가 아니라 줄 끝의 [타임라인]). 담임 홈에는 처리할 일 줄(상담 신청·미제출)을 넣지 않는다. 학사를 나간 학생은 이 목록에 없다.'));
-  m.appendChild(card('우리 반 학사생 (2명)', [p('2027 1학기 · 이번 학기 기록을 볼 수 있습니다.'),
-    el('div', { class: 'ld-row' }, [el('div', { style: 'flex:1 1 auto;padding:8px 0' }, [el('b', { text: '5번 김가온' }), p('담당 박선생 · 진로 프로필 3번째 · 상담 1건')]), btn('타임라인')]),
-    el('div', { class: 'ld-row' }, [el('div', { style: 'flex:1 1 auto;padding:8px 0' }, [el('b', { text: '25번 권보람' }), p('담당 이선생 · 진로 프로필 안 냄')]), btn('타임라인')]),
-    UI.rowLink({ href: '#', text: '우리 반 진로 프로필 보기' })]));
+  m.appendChild(noteBox('담임 최선생 홈 · 새 카드를 만들지 않는다. 지금 있는 "○-○ 학사생" 목록(home_homeroom.html)의 줄에 [타임라인] 단추 하나만 더한다. 줄의 나머지는 그대로: 이름을 누르면 지금처럼 그 학생의 특이사항 기록으로 가고, 번호·OUT·요청 꼬리표도 그대로다. "요청 중"으로 걸러도 단추는 남는다. 학사를 나간 학생은 이 목록에 없다.'));
+  function li(name, num, pills) {
+    return el('li', {}, [el('a', { href: '#', text: name }), el('span', { class: 'muted', style: 'display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end;margin-left:auto' }, [num + '번 '].concat(pills)),
+      el('button', { type: 'button', class: 'btn secondary row-btn', style: 'flex:0 0 auto;margin-left:8px', text: '타임라인' })]);
+  }
+  m.appendChild(card('1-3 학사생 (3명)', [p('2027 1학기'),
+    UI.segmented({ label: '보기', value: 'all', options: [{ value: 'all', label: '모두' }, { value: 'req', label: '요청 중' }], onchange: function () {} }),
+    el('ul', { class: 'list' }, [li('김가온', 5, [UI.statusPill('out1'), UI.statusPill('requested', '요청 1')]), li('신나래', 14, []), li('권보람', 25, [UI.statusPill('requested', '요청 2')])])]));
+  m.appendChild(card('상담일지', [p('우리 반 학생의 상담 기록을 읽습니다(쓰기는 담당교사).'), UI.rowLink({ href: '#', text: '상담일지 열기' }), UI.rowLink({ href: '#', text: '우리 반 진로 프로필 보기' })]));
 });
 
 /* ═════════ 8. 관리자 — 탐구 원본 정리 ═════════ */
