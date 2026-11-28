@@ -243,6 +243,30 @@
     "seedFakeStage6": {
       "use": "편집기",
       "guard": "assertOwnerRun_"
+    },
+    "getCareerContext": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getCareerStudent": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "submitCareerProfile": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "setCareerPublish": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "addCareerFeedback": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "cancelCareerFeedback": {
+      "use": "화면",
+      "guard": "requirePermission_"
     }
   }
 }
