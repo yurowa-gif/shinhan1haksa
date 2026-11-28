@@ -244,6 +244,18 @@
       "use": "편집기",
       "guard": "assertOwnerRun_"
     },
+    "previewCurriculum": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "saveCurriculum": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getCurriculumSummary": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
     "getCareerContext": {
       "use": "화면",
       "guard": "requirePermission_"

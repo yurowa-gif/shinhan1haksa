@@ -1,0 +1,145 @@
+<style>
+  .cur-text { width: 100%; min-height: 200px; }
+  .cur-list { margin: 4px 0 12px; padding-left: 1.2em; word-break: keep-all; }
+  .cur-list li { margin: 2px 0; }
+  .cur-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+</style>
+<script>
+  /** 교육과정 올리기(S6-1, 결정 102): 편제표·권장 이수 과목을 붙여넣기 → 미리 보기 → 하단 바에서 저장. 명단 올리기와 같은 흐름. */
+  function renderScreen(root) {
+    var KINDS = {
+      curriculum: { label: '편제표', cols: '입학년도, 학년, 학기, 선택군, 택N, 과목 (영어 열 이름 entry_year, grade, … 도 됩니다)', hint: '입학년도(2027)·학년·학기별 과목표입니다. 선택군이 있으면 택N(몇 과목 고르나)을 함께 적습니다. 선택군이 비면 필수 과목입니다.' },
+      recommendations: { label: '권장 이수 과목', cols: '기준 연도, 대학, 모집단위, 핵심 과목, 권장 과목, 출처 주소, 출처 제목, 비고 (영어 열 이름 base_year, university, … 도 됩니다)', hint: '대학·모집단위별 핵심·권장 과목입니다. 과목은 ; 로 구분합니다. 자료 폴더의 CSV를 그대로 붙여 넣을 수 있습니다.' }
+    };
+    var KO = { entry_year: '입학년도', grade: '학년', semester: '학기', choice_group: '선택군', pick_n: '택N', course: '과목', base_year: '기준 연도', university: '대학', unit: '모집단위', core_courses: '핵심 과목', recommended_courses: '권장 과목', source_url: '출처 주소', source_title: '출처 제목', note: '비고' };
+    var state = { kind: 'curriculum', preview: null, snapshot: '', busy: false };
+    var summary = el('div', { class: 'card' });
+    var head = el('div', { class: 'card' });
+    var inputCard = el('div', { class: 'card' });
+    var resultBox = el('div');
+    root.appendChild(summary); root.appendChild(head); root.appendChild(inputCard); root.appendChild(resultBox);
+    var textarea, textField, checkBtn;
+    var bar = UI.actionBar([
+      { text: '저장', kind: 'primary', enter: true, disabled: true, onclick: onSave },
+      { text: '지우기', kind: 'secondary', onclick: function () { if (textarea) { textarea.value = ''; } setPreview(null); } }
+    ], { mount: true });
+    var saveBtn = bar.querySelectorAll('button')[0];
+    build(); loadSummary();
+
+    function loadSummary() {
+      call('getCurriculumSummary').then(function (d) {
+        clear(summary);
+        summary.appendChild(el('h2', { text: '지금 올라와 있는 자료' }));
+        var rows = [['편제표', d.curriculum.length ? d.curriculum.map(function (y) { return y.year + '학년도 입학 ' + y.rows + '줄'; }).join(' · ') : '아직 없음'],
+          ['권장 과목', d.recommendations.length ? d.recommendations.map(function (y) { return y.year + '년 기준 ' + y.rows + '줄'; }).join(' · ') : '아직 없음']];
+        summary.appendChild(kv(rows));
+      }).catch(function (err) { clear(summary); showError(summary, err); });
+    }
+
+    function key() { return state.kind + '|' + textarea.value; }
+    function hintNote() { return el('div', { class: 'notice info', text: '저장하려면 먼저 [미리 보기]를 눌러 결과를 봐 주세요. 저장 버튼은 미리 본 뒤에 켜집니다.' }); }
+
+    function build() {
+      clear(head);
+      head.appendChild(el('h2', { text: '올릴 자료' }));
+      head.appendChild(UI.segmented({
+        label: '무엇을 올리나요', value: state.kind,
+        options: [{ value: 'curriculum', label: '편제표' }, { value: 'recommendations', label: '권장 이수 과목' }],
+        onchange: function (v) { state.kind = v; state.preview = null; state.snapshot = ''; saveBtn.disabled = true; build(); }
+      }));
+      head.appendChild(el('div', { class: 'muted', text: KINDS[state.kind].hint }));
+      head.appendChild(el('div', { class: 'muted', text: '한 번에 한 ' + (state.kind === 'curriculum' ? '입학년도' : '기준 연도') + '만 올립니다. 다른 해의 자료는 바뀌지 않습니다. 바뀌거나 빠진 줄은 삭제하지 않고 "취소"로 남습니다.' }));
+      clear(inputCard);
+      textarea = el('textarea', { class: 'cur-text', placeholder: '첫 줄(열 이름)부터 함께 붙여넣으세요.\n열 이름: ' + KINDS[state.kind].cols });
+      textarea.addEventListener('input', onInputChanged);
+      textField = UI.field(KINDS[state.kind].label, textarea, { name: 'text', hint: '구글 시트에서 복사해 붙이거나 CSV를 붙입니다. 이 단계에서는 아직 저장되지 않습니다.' });
+      inputCard.appendChild(textField);
+      checkBtn = el('button', { type: 'button', class: 'btn secondary', text: '미리 보기', onclick: onCheck });
+      inputCard.appendChild(el('div', { class: 'cur-actions' }, [checkBtn]));
+      clear(resultBox); resultBox.appendChild(hintNote());
+    }
+
+    function isFresh() { return !!state.preview && state.snapshot === key(); }
+    function refreshSave() {
+      var p = state.preview;
+      saveBtn.disabled = state.busy || !(p && p.ok && !p.nothingToDo && isFresh());
+    }
+    function setPreview(p) {
+      state.preview = p; state.snapshot = p ? key() : '';
+      refreshSave();
+      if (!p) { clear(resultBox); resultBox.appendChild(hintNote()); }
+    }
+    function onInputChanged() {
+      refreshSave();
+      if (state.preview && !isFresh()) { clear(resultBox); resultBox.appendChild(el('div', { class: 'notice warn', text: '내용을 바꿨습니다. [미리 보기]를 다시 눌러 결과를 보고 저장해 주세요.' })); }
+    }
+
+    function onCheck() {
+      if (!textarea.value.trim()) { textField.setError('붙여넣은 내용이 없습니다. 시트에서 복사해 붙여넣어 주세요.'); return; }
+      textField.setError('');
+      checkBtn.disabled = true;
+      clear(resultBox); resultBox.appendChild(el('div', { class: 'loading', text: '확인하는 중…' }));
+      var snap = key();
+      call('previewCurriculum', state.kind, textarea.value).then(function (p) {
+        checkBtn.disabled = false;
+        state.preview = p; state.snapshot = snap;
+        refreshSave(); drawResult(p);
+      }).catch(function (err) { checkBtn.disabled = false; clear(resultBox); showError(resultBox, err); });
+    }
+
+    function lines(items, total) {
+      var ul = el('ul', { class: 'cur-list' });
+      items.forEach(function (t) { ul.appendChild(el('li', { text: t })); });
+      if (total > items.length) ul.appendChild(el('li', { class: 'muted', text: '외 ' + (total - items.length) + '줄' }));
+      return ul;
+    }
+
+    function drawResult(p) {
+      clear(resultBox);
+      if (!p.ok) {
+        var c = el('div', { class: 'card' }, [el('h2', { text: '고칠 곳이 ' + (p.errorCount || p.errors.length) + '군데 있습니다' }), el('div', { class: 'muted', style: 'word-break:keep-all', text: '표를 고쳐 다시 붙여 넣어 주세요. 아직 아무것도 저장하지 않았습니다.' })]);
+        p.errors.forEach(function (e) { c.appendChild(el('div', { class: 'error', text: (e.line ? e.line + '번째 줄' + (e.column ? ' · ' + (KO[e.column] || e.column) : '') + ': ' : '') + e.message })); });
+        resultBox.appendChild(c);
+      } else {
+        var k = p.counts;
+        var card = el('div', { class: 'card' }, [el('h2', { text: '미리 보기 결과' })]);
+        resultBox.appendChild(card);
+        if (p.nothingToDo) card.appendChild(el('div', { class: 'notice ok', text: '변경 없음 — 이미 같은 내용이 저장되어 있습니다.' }));
+        card.appendChild(el('div', { class: 'muted', text: p.year + (p.kind === 'curriculum' ? '학년도 입학 편제표' : ' 기준 권장 이수 과목') }));
+        card.appendChild(el('div', { class: 'stats', style: 'margin:8px 0 12px' }, [statBox(k.add, '새 줄'), statBox(k.changed, '바뀌는 줄'), statBox(k.remove, '빠지는 줄'), statBox(k.same, '같은 줄')]));
+        var sect = function (title, note, list, total) {
+          if (!list.length) return;
+          card.appendChild(el('h2', { style: 'margin-top:12px', text: title }));
+          if (note) card.appendChild(el('div', { class: 'muted', text: note }));
+          card.appendChild(lines(list, total));
+        };
+        sect('새 줄', '', p.lists.add, k.add);
+        sect('바뀌는 줄', '옛 줄은 "취소"로 남고 새 줄이 생깁니다.', p.lists.changed, k.changed);
+        sect('빠지는 줄', '삭제하지 않고 "취소"로 바꿉니다.', p.lists.remove, k.remove);
+      }
+      if (p.warnings && p.warnings.length) {
+        var w = el('div', { class: 'card' }, [el('h2', { text: '알아 두세요 (' + p.warnings.length + ')' })]);
+        p.warnings.forEach(function (m) { w.appendChild(el('div', { class: 'notice warn', style: 'word-break:keep-all', text: m })); });
+        resultBox.appendChild(w);
+      }
+    }
+
+    function onSave() {
+      var p = state.preview;
+      if (!p || !isFresh()) { onInputChanged(); UI.toast('입력이 바뀌었습니다. [미리 보기]를 다시 눌러 주세요.', { kind: 'warn' }); return; }
+      var k = p.counts;
+      UI.confirmSheet({ title: '저장', lead: p.year + (state.kind === 'curriculum' ? '학년도 입학 편제표' : '년 기준 권장 이수 과목'),
+        lines: ['새 줄 ' + k.add + '줄, 바뀌는 줄 ' + k.changed + '줄, 빠지는 줄 ' + k.remove + '줄, 같은 줄 ' + k.same + '줄', '바뀌거나 빠지는 줄의 옛 내용은 "취소"로 남습니다.', '잘못 올렸으면 고친 표를 다시 올리면 됩니다.'],
+        message: '저장할까요?', confirmText: '저장', onconfirm: function () {
+        state.busy = true; saveBtn.disabled = true;
+        call('saveCurriculum', state.kind, textarea.value, { kind: state.kind, counts: p.counts }).then(function (r) {
+          state.busy = false;
+          if (!r.ok) { setPreview(null); drawResult(r); UI.toast(r.stale ? '그사이 입력이나 저장된 내용이 바뀌었습니다. [미리 보기]를 다시 눌러 주세요.' : '저장하지 못했습니다. 아래 고칠 곳을 확인해 주세요.', { kind: 'warn', ms: 6000 }); return; }
+          UI.toast(r.nothingToDo ? '변경 없음' : '저장했습니다. 새 줄 ' + r.counts.add + '줄, 바뀐 줄 ' + r.counts.changed + '줄.', { kind: 'ok' });
+          textarea.value = ''; setPreview(null); loadSummary();
+          resultBox.appendChild(el('div', { class: 'notice ok', text: '저장했습니다.' }));
+        }).catch(function (err) { state.busy = false; clear(resultBox); showError(resultBox, err); });
+      } });
+    }
+  }
+</script>

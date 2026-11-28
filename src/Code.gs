@@ -94,6 +94,7 @@ var SCREENS = {
   requests: { file: 'ui/screen_requests', title: '상담 신청 처리', view: 'counsel.request.list' },
   timetable: { file: 'ui/screen_timetable', title: '시간표', view: 'timetable.screen' },
   inbox: { file: 'ui/screen_inbox', title: '확인함', view: 'inbox.view' },
+  curriculum: { file: 'ui/screen_curriculum', title: '교육과정 올리기', view: 'curriculum.edit' },
   career: { file: 'ui/screen_career', title: '진로 프로필', view: 'career.view' }
 };
 

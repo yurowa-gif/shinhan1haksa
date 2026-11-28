@@ -128,7 +128,12 @@ var SCHEMA = {
     counsel_requests: ['term_id', 'student_id', 'requester_email', 'wish_dates', 'topic', 'memo', 'status', 'decided_date', 'linked_note_id', 'cancel_reason']
   },
   config: {
-    settings: ['key', 'value', 'description']
+    settings: ['key', 'value', 'description'],
+    // 6단계(결정 102, S6-1): 관리자가 '교육과정 올리기'로 올린다. setup은 탭만 만들고 기본은 비운다. status: 유효·취소(지우지 않는다)
+    // 편제표: 입학년도(entry_year)·학년·학기('1'·'2')·선택군(비면 필수 과목)·택N(그 선택군에서 고를 수 있는 과목 수, 필수는 0)·과목
+    curriculum_courses: ['entry_year', 'grade', 'semester', 'choice_group', 'pick_n', 'course', 'status'],
+    // 권장 이수 과목(대학이 해마다 내는 자료). 열 이름은 data/course_recommendations/course_recommendations.csv와 같고, 과목 여럿은 ';'
+    course_recommendations: ['base_year', 'university', 'unit', 'core_courses', 'recommended_courses', 'source_url', 'source_title', 'note', 'status']
   }
 };
 
