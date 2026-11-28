@@ -28,6 +28,10 @@ function btn(text, kind) { return el('button', { type: 'button', class: 'btn ' +
 function area(label, value, hint, rows) { var ta = el('textarea', { rows: String(rows || 3) }); ta.value = value || ''; return UI.field(label, ta, hint ? { hint: hint } : {}); }
 function kvs(rows) { var dl = el('dl', { class: 'kvs' }); rows.forEach(function (r) { dl.appendChild(el('dt', { text: r[0] })); dl.appendChild(el('dd', {}, [].concat(r[1]))); }); return dl; }
 /** 항목별 '부모님께 보이기'(기본 꺼짐). on이면 지금 공개 중이라는 꼬리표가 함께 나온다(결정 89) */
+/** 입력 화면용: 아직 내지 않았으므로 "지금"이 아니라 "제출하면"으로 말한다(D26). 지금 상태는 화면 맨 위 한 줄로 */
+function shareDraft(on) {
+  return el("div", { class: "share" }, [checkRow("부모님께 보이기", on), on ? UI.statusPill("requested", "제출하면 보임") : UI.statusPill("mute", "제출해도 나만 봄")]);
+}
 function share(on, label) {
   return el('div', { class: 'share' }, [checkRow(label || '부모님께 보이기', on), on ? UI.statusPill('confirmed', '지금 보이는 중') : UI.statusPill('mute', '나만 보는 중')]);
 }
@@ -59,11 +63,12 @@ function targetRow(n, u, d, t) {
   return el('div', { style: 'margin-bottom:8px' }, [el('b', { text: '목표 ' + n }), inputField('대학', 'text', u), inputField('학과', 'text', d), selectField('전형', ['고르기', '학생부교과', '학생부종합', '논술', '정시', '아직 모름'], t)]);
 }
 function careerForm(m, v) {
-  var c1 = card('진로 희망', [p('1순위는 꼭 적어 주세요. 2·3순위는 있으면 적습니다.'), hopeRow(1, v.h1[0], v.h1[1]), hopeRow(2, v.h2[0], v.h2[1]), hopeRow(3, '', ''), share(v.sh.hopes)]);
-  var c2 = card('목표 진학', [p('가고 싶은 대학·학과가 있으면 적어 주세요. 없으면 비워 둬도 됩니다.'), targetRow(1, v.t1[0], v.t1[1], v.t1[2]), btn('+ 목표 추가'), share(v.sh.targets)]);
-  var c3 = card('관심 분야', [area('요즘 관심 있는 것', v.interests, '과목·활동·책 무엇이든 좋습니다.'), share(v.sh.interests)]);
-  var c4 = card('강점', [area('내가 잘하는 것', v.strengths), share(v.sh.strengths)]);
-  var c5 = card('고민', [area('걱정되거나 도움이 필요한 것', v.concerns, '담당 선생님이 상담 전에 읽습니다.'), share(v.sh.concerns)]);
+  m.appendChild(card('', [el('b', { text: '지금 부모님께 보이는 항목: 진로 희망, 목표 진학' }), p('아래에서 "부모님께 보이기"를 바꿔도 [제출하기]를 눌러야 바뀝니다.')]));
+  var c1 = card('진로 희망', [p('1순위는 꼭 적어 주세요. 2·3순위는 있으면 적습니다.'), hopeRow(1, v.h1[0], v.h1[1]), hopeRow(2, v.h2[0], v.h2[1]), hopeRow(3, '', ''), shareDraft(v.sh.hopes)]);
+  var c2 = card('목표 진학', [p('가고 싶은 대학·학과가 있으면 적어 주세요. 없으면 비워 둬도 됩니다.'), targetRow(1, v.t1[0], v.t1[1], v.t1[2]), btn('+ 목표 추가'), shareDraft(v.sh.targets)]);
+  var c3 = card('관심 분야', [area('요즘 관심 있는 것', v.interests, '과목·활동·책 무엇이든 좋습니다.'), shareDraft(v.sh.interests)]);
+  var c4 = card('강점', [area('내가 잘하는 것', v.strengths), shareDraft(v.sh.strengths)]);
+  var c5 = card('고민', [area('걱정되거나 도움이 필요한 것', v.concerns, '담당 선생님이 상담 전에 읽습니다.'), shareDraft(v.sh.concerns)]);
   [c1, c2, c3, c4, c5].forEach(function (c) { m.appendChild(c); });
   return { c1: c1, c2: c2 };
 }
@@ -72,10 +77,10 @@ var CAREER = { h1: ['보건·의료', '간호사'], h2: ['교육', '보건 교�
 
 def('s-career-form', '학생 · 진로 프로필', '진로 프로필 내기(지난번 내용을 불러온 모습)', {}, function (root) {
   soft();
-  var m = frame(root, { title: '진로 프로필', who: ME, bar: [{ text: '제출하기' }], note: '학생 화면 · 지난번(2번째) 내용을 불러와 고쳐 내는 모습. 공개 항목은 지난번 것을 이어받는다(결정 89). 처음 내는 학생은 모든 칸이 비고 모든 "부모님께 보이기"가 꺼져 있다.' });
+  var m = frame(root, { title: '진로 프로필', who: ME, bar: [{ text: '제출하기' }], note: '학생 화면 · 지난번(2번째) 내용을 불러와 고쳐 내는 모습. 공개 항목은 지난번 것을 이어받는다(결정 89). 입력 화면의 꼬리표는 "제출하면 보임"·"제출해도 나만 봄"(아직 내지 않았으므로 "지금"이라고 하지 않는다, D26) — 사진은 관심 분야를 새로 켠 모습. 처음 내는 학생은 모든 칸이 비고 모든 "부모님께 보이기"가 꺼져 있다.' });
   m.appendChild(el('div', { class: 'notice info', text: '지난번에 낸 내용을 불러왔습니다. 바뀐 곳만 고쳐서 내면 새 기록으로 쌓이고, 지난 기록은 그대로 남습니다.' }));
   m.appendChild(card('', [el('b', { text: '이번 학기 제출 마감: 4월 16일(금)' }), p('마감 뒤에도 생각이 바뀌면 언제든 다시 낼 수 있습니다.')]));
-  careerForm(m, CAREER);
+  careerForm(m, Object.assign({}, CAREER, { sh: { hopes: true, targets: true, interests: true, strengths: false, concerns: false } }));
   m.appendChild(p('부모님께는 가장 최근에 낸 기록에서 "보이기"를 켠 항목만 보입니다. 선생님 말씀(피드백)은 부모님께 보이지 않습니다.'));
 });
 
@@ -318,7 +323,7 @@ def('p-career', '학부모', '자녀의 진로·탐구·상담(공개된 것이 
 def('p-empty', '학부모', '자녀의 진로·탐구·상담(보여 드릴 것이 없는 모습)', {}, function (root) {
   var m = parentFrame(root, '학부모 화면 · 빈 상태. 자녀가 아직 안 냈을 때, 냈지만 공개하지 않았을 때, 공개했다가 끈 때 모두 똑같은 문구다(결정 92: "비공개" 흔적을 남기지 않는다). "비공개"·"숨김"·"0건 공개" 같은 말을 쓰지 않는다.');
   m.appendChild(card('진로와 탐구', [UI.emptyState('지금은 보여 드릴 진로·탐구 기록이 없습니다.'), p('자녀가 학부모님께 보여 주기로 한 기록이 생기면 여기에 나옵니다.')]));
-  m.appendChild(card('상담', [UI.emptyState('이번 학기에 상담한 기록이 없습니다.')]));
+  m.appendChild(card('상담', [UI.emptyState('보여 드릴 상담 기록이 없습니다.')]));
 });
 
 /* ═════════ 7. 교사 ═════════ */
@@ -352,7 +357,7 @@ function teacherCareerDetail() {
     card('강점', [p('꾸준히 기록하는 습관이 있습니다.', '')]),
     card('고민', [p('수학 성적이 걱정됩니다.', '')]),
     card('피드백', [el('div', { class: 'fb' }, [el('b', { text: '박선생 · 4월 3일(토) · 2번째 기록에' }), p('전형을 정하려면 1학기 성적을 보고 다시 이야기합시다.', '')]),
-      el('div', { style: 'margin-top:12px' }, [area('피드백 쓰기', '', '학생에게 보입니다. 학부모에게는 보이지 않습니다. 학생이 보면 안 되는 내용은 상담일지에 써 주세요.')]),
+      el('div', { style: 'margin-top:12px' }, [area('피드백 쓰기 (학생에게 보임)', '', '학부모에게는 보이지 않습니다. 학생이 보면 안 되는 내용은 상담일지에 써 주세요.')]),
       row([btn('피드백 남기기', '')], '')])
   ];
 }
@@ -420,15 +425,27 @@ def('t-req-homeroom', '교사 · 상담 신청', '담임이 보는 상담 신청
   listDetail(m, [REQS[0]], 'r1', reqDetail(true));
 });
 
+var NOTE_AGREE = '· 생명과학 탐구 보고서를 5월 중순까지 쓰기\n· 수학 질문은 화요일 자습 시간에 하기';
+/** 교사가 쓰는 글 칸: 누구에게 보이는지를 카드 제목 줄에 꼬리표로(D27) */
+function audCard(title, kind, tag, nodes) {
+  return card('', [row([el('h2', { text: title, style: 'margin:0' }), UI.statusPill(kind, tag)], 'justify-content:space-between;margin-bottom:8px')].concat(nodes));
+}
 def('t-note', '교사 · 상담일지', '상담일지 쓰기(신청에서 넘어온 진로 상담)', {}, function (root) {
-  var m = frame(root, { title: '상담일지 쓰기', who: '박선생', bar: [{ text: '저장' }], note: '신청에서 [상담일지 쓰기]로 넘어온 모습. 2단계 상담일지 화면에 더해지는 것: ① 이어진 신청 줄 ② 유형에 진학이 더해지고 신청 주제와 같은 유형을 미리 골라 준다(결정 103) ③ 참고한 프로필 버전(진로·진학일 때) ④ "합의 사항·다음 할 일" 칸(학생에게 보임). 내용 칸은 교사만.' });
+  var m = frame(root, { title: '상담일지 쓰기', who: '박선생', bar: [{ text: '저장' }], note: '신청에서 [상담일지 쓰기]로 넘어온 모습. 2단계 상담일지 화면에 더해지는 것: ① 이어진 신청 줄 ② 유형에 진학이 더해지고 신청 주제와 같은 유형을 미리 골라 준다(결정 103) ③ 참고한 프로필 버전(진로·진학일 때) ④ "합의 사항·다음 할 일" 칸. 두 글 칸은 누구에게 보이는지를 제목과 꼬리표로 적는다(D27): 내용 = 교사만 봄, 합의 사항 = 학생에게 보임.' });
   m.appendChild(el('div', { class: 'notice info', text: '1. 김가온의 진로 상담 신청(4월 14일(수) 확정)에서 넘어왔습니다. 저장하면 신청이 "완료"로 바뀝니다.' }));
   m.appendChild(card('누구와 언제', [kvs([['학생', '1. 김가온']]), UI.dateField({ label: '상담한 날', value: '2027-04-14', onchange: function () {} }),
     UI.field('유형', el('div', { class: 'chips' }, ['학습', '생활', '진로', '진학', '건강', '가정', '기타'].map(function (t) { return el('button', { type: 'button', class: 'chip' + (t === '진로' ? ' on' : ''), text: t }); })))]));
   m.appendChild(card('참고한 진로 프로필', [selectField('프로필 버전', ['3번째 · 4월 12일(월)에 냄 (가장 최근)', '2번째 · 4월 2일(금)에 냄', '참고하지 않음'], '3번째 · 4월 12일(월)에 냄 (가장 최근)', '어느 기록을 보고 상담했는지 남깁니다.'),
     kvs([['진로 희망', '1순위 보건·의료 · 간호사 / 2순위 교육 · 보건 교사'], ['목표 진학', '가람대학교 간호학과 · 학생부종합'], ['탐구 기록', '진행 중 1건 · 관심 1건 · 완료 1건']]), UI.rowLink({ href: '#', text: '학생 타임라인 열기' })]));
-  m.appendChild(card('상담 내용', [area('내용', '간호학과 지원을 위해 생명과학Ⅱ 선택을 권함. 수학 부담을 크게 느끼고 있음.', '교사만 봅니다. 학생·학부모에게 보이지 않습니다.', 4)]));
-  m.appendChild(card('합의 사항·다음 할 일', [area('합의 사항', '· 생명과학 탐구 보고서를 5월 중순까지 쓰기\n· 수학 질문은 화요일 자습 시간에 하기', '학생에게 보입니다. 학생이 "부모님께 보이기"를 켜면 학부모도 봅니다.', 3)]));
+  m.appendChild(audCard('상담 내용 (교사만)', 'mute', '교사만 봄', [area('내용', '간호학과 지원을 위해 생명과학Ⅱ 선택을 권함. 수학 부담을 크게 느끼고 있음.', '학생·학부모에게 보이지 않습니다. 저장한 뒤에는 고치지 않습니다(취소하고 새로 씁니다).', 4)]));
+  m.appendChild(audCard('합의 사항·다음 할 일 (학생에게 보임)', 'requested', '학생에게 보임', [area('합의 사항 (선택)', NOTE_AGREE, '저장하면 학생 화면에 바로 나옵니다. 학생이 "부모님께 보이기"를 켜면 학부모도 봅니다. 민감한 내용은 위 상담 내용 칸에 적어 주세요.', 3)]));
+});
+def('t-note-confirm', '교사 · 상담일지', '상담일지 저장 확인(합의 사항이 있을 때)', { sheet: true }, function (root) {
+  var m = frame(root, { title: '상담일지 쓰기', who: '박선생', bar: [{ text: '저장' }], note: '합의 사항 칸에 글이 있으면 저장 전에 한 번 묻는다(D27). 합의 사항이 비어 있으면 이 창 없이 바로 저장한다. 학생에게 보일 글을 그대로 다시 보여 준다.' });
+  m.appendChild(audCard('상담 내용 (교사만)', 'mute', '교사만 봄', [area('내용', '간호학과 지원을 위해 생명과학Ⅱ 선택을 권함. 수학 부담을 크게 느끼고 있음.', '', 4)]));
+  m.appendChild(audCard('합의 사항·다음 할 일 (학생에게 보임)', 'requested', '학생에게 보임', [area('합의 사항 (선택)', NOTE_AGREE, '', 3)]));
+  UI.confirmSheet({ title: '저장', lead: '합의 사항이 학생에게 보입니다',
+    lines: ['· 생명과학 탐구 보고서를 5월 중순까지 쓰기', '· 수학 질문은 화요일 자습 시간에 하기', '상담 내용은 교사만 봅니다.', '저장한 뒤에는 고칠 수 없습니다(취소하고 새로 씁니다).', '저장할까요?'], confirmText: '저장', onconfirm: function () {} });
 });
 
 def('t-timeline', '교사 · 학생 타임라인', '학생 타임라인(프로필·탐구·상담·OUT·출결 요약)', {}, function (root) {
@@ -541,7 +558,7 @@ function tPlanDetail(homeroom) {
     card('2학년 2학기', [UI.emptyState('학생이 아직 고르지 않았습니다.')]),
     card('희망 학과가 권하는 과목 (참고)', [el('b', { text: '가람대학교 간호학과' }), kvs([['핵심 권장', '생명과학, 화학'], ['권장', '확률과 통계, 생활과 윤리']]), p('출처: 2028학년도 가람대학교 전공 연계 과목 안내 · 기준 2028학년도. 참고 자료이며 판정하지 않습니다.')])];
   var fb = [el('div', { class: 'fb' }, [el('b', { text: '박선생 · 4월 10일(토)' }), p('선택군 A는 잘 골랐습니다. 선택군 B는 상담 때 같이 정합시다.', '')])];
-  if (!homeroom) fb.push(el('div', { style: 'margin-top:12px' }, [area('피드백 쓰기', '', '학생에게 보입니다. 학부모에게는 보이지 않습니다. 학생이 보면 안 되는 내용은 상담일지에 써 주세요.')]), row([btn('피드백 남기기', '')], ''));
+  if (!homeroom) fb.push(el('div', { style: 'margin-top:12px' }, [area('피드백 쓰기 (학생에게 보임)', '', '학부모에게는 보이지 않습니다. 학생이 보면 안 되는 내용은 상담일지에 써 주세요.')]), row([btn('피드백 남기기', '')], ''));
   out.push(card('피드백', fb));
   return out;
 }

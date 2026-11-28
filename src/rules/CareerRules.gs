@@ -267,3 +267,180 @@ function courseRecsFor_(recs, targets, opts) {
   });
   return out;
 }
+
+/** 편제·이수 계획 줄의 과목 열쇠: 입학년도|학년|학기|선택군|과목 */
+function careerCourseKey_(r) {
+  return [ruleStr_(r.entry_year), ruleStr_(r.grade), ruleStr_(r.semester), ruleStr_(r.choice_group), careerTxt_(r.course)].join('|');
+}
+
+/**
+ * 편제표에서 빠지는 과목을 이미 고른 학생(디자인2 제안, 총괄 승인). plans = course_plans 행, curriculum = 새(또는 지금) 편제 행.
+ * → [{studentId, planId, entryYear, grade, semester, choiceGroup, course}] 입학년도·학년·학기·과목·학생 순.
+ * - 살아 있는(status 유효) 이수 계획 줄 중, curriculum에 같은 입학년도·학년·학기·선택군·과목의 살아 있는 줄이 없는 것.
+ * - curriculum에 나오는 입학년도의 줄만 본다(올리기 미리 보기에서 그 해 표만 넘겨도 다른 해 학생을 잘못 세지 않게).
+ * 쓰는 곳: 올리기 미리 보기 "이 과목을 고른 학생 n명" 경고, 학생 화면 그 줄의 '교육과정에서 빠진 과목' 표시.
+ */
+function careerDroppedPicks_(plans, curriculum) {
+  var years = {}, have = {};
+  (curriculum || []).forEach(function (c) {
+    if (!c || ruleStr_(c.status) === '취소') return;
+    years[ruleStr_(c.entry_year)] = true;
+    have[careerCourseKey_(c)] = true;
+  });
+  return (plans || []).filter(function (p) {
+    return p && ruleStr_(p.status) !== '취소' && years[ruleStr_(p.entry_year)] && !have[careerCourseKey_(p)];
+  }).map(function (p) {
+    return { studentId: ruleStr_(p.student_id), planId: ruleStr_(p.id), entryYear: ruleStr_(p.entry_year), grade: ruleStr_(p.grade),
+      semester: ruleStr_(p.semester), choiceGroup: ruleStr_(p.choice_group), course: careerTxt_(p.course) };
+  }).sort(function (a, b) {
+    var ka = [a.entryYear, a.grade, a.semester, a.course, a.studentId].join('|'), kb = [b.entryYear, b.grade, b.semester, b.course, b.studentId].join('|');
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
+  });
+}
+
+/**
+ * 담당교사 홈 '이수 계획 확인 n명'(디자인2 제안, 총괄 승인). plans = course_plans 행, studentIds = 그 교사의 담당 학생 id.
+ * → {count, studentIds:[]} 살아 있는(status 유효) state '계획' 줄이 하나라도 있는 담당 학생(studentIds 순서, 중복 없음).
+ */
+function coursePlanPendingCount_(plans, studentIds) {
+  var pending = {};
+  (plans || []).forEach(function (p) {
+    if (p && ruleStr_(p.status) !== '취소' && ruleStr_(p.state) === '계획') pending[ruleStr_(p.student_id)] = true;
+  });
+  var seen = {}, ids = (studentIds || []).map(ruleStr_).filter(function (sid) {
+    if (!sid || seen[sid] || !pending[sid]) return false;
+    seen[sid] = true;
+    return true;
+  });
+  return { count: ids.length, studentIds: ids };
+}
+
+/**
+ * 교육과정 올리기 종류별 칸(결정 102, 코딩A Curriculum.gs CUR_KINDS와 같은 이름). key = 한 번에 바꾸는 묶음 열,
+ * cols = 같은 줄인지 견주는 열, place = 같은 '자리'(자리는 같은데 내용이 다르면 '바뀌는 줄').
+ */
+var CURRICULUM_KINDS = {
+  curriculum: { key: 'entry_year', cols: ['entry_year', 'grade', 'semester', 'choice_group', 'pick_n', 'course'],
+    place: ['entry_year', 'grade', 'semester', 'choice_group', 'course'] },
+  recommendations: { key: 'base_year', cols: ['base_year', 'university', 'unit', 'core_courses', 'recommended_courses', 'source_url', 'source_title', 'note'],
+    place: ['base_year', 'university', 'unit'] }
+};
+
+/** 종류 이름 → CURRICULUM_KINDS 열쇠('recs'도 받는다). 모르면 ''. */
+function careerUploadKind_(kind) {
+  var k = ruleStr_(kind);
+  return k === 'recs' ? 'recommendations' : CURRICULUM_KINDS.hasOwnProperty(k) ? k : '';
+}
+
+/** 줄 정규화: 공백 정리, 과목 목록(';')은 조각마다 다듬고 빈 조각을 뺀다, pick_n 빈칸은 0. */
+function careerUploadRow_(r, kind) {
+  var out = {};
+  CURRICULUM_KINDS[kind].cols.forEach(function (c) {
+    var v = careerTxt_((r || {})[c]);
+    if (c === 'core_courses' || c === 'recommended_courses') v = v.split(';').map(careerTxt_).filter(Boolean).join(';');
+    if (c === 'pick_n' && v === '') v = '0';
+    out[c] = v;
+  });
+  return out;
+}
+
+/** 견줄 글자: 열 목록 값(정규화 뒤)을 이은 것. */
+function careerUploadSig_(r, kind, cols) {
+  var n = careerUploadRow_(r, kind);
+  return JSON.stringify(cols.map(function (c) { return n[c]; }));
+}
+
+/**
+ * 교육과정 올리기 저장 계획(결정 102 — 관리자, 코딩A S6-1 Curriculum.gs curPlan_과 같은 결과).
+ * kind 'curriculum'(curriculum_courses)|'recommendations'(course_recommendations, 'recs'도 받음), existing = 그 탭의 지금 행, newRows = 올린 표의 줄.
+ * → {ok, errors, warnings, keys, add:[줄], changed:[{before:시트 행, after:줄}], removed:[시트 행], same,
+ *    toAppend:[줄(status 유효)] (= add + changed.after), toCancel:[{id, why:'changed'|'removed'}], counts:{add, changed, remove, same, rows}}
+ * - 올린 표에 나오는 입학년도(편제)·기준 연도(권장 과목)의 기존 살아 있는 줄만 견준다. 다른 해 줄은 그대로.
+ * - 맞추는 순서(curPlan_과 같음): ① 내용이 모두 같은 줄 = 같은 줄(그대로) ② 남은 줄 중 같은 자리(편제: 학년·학기·선택군·과목,
+ *   권장 과목: 대학·모집단위)의 기존 줄 = 바뀌는 줄(옛 줄 취소 + 새 줄) ③ 그래도 남은 새 줄 = 추가 ④ 짝이 없는 기존 줄 = 빠지는 줄(취소).
+ *   같은 표를 두 번 올리면 0건.
+ * - 권장 과목에서 같은 기준 연도·대학·모집단위가 여러 줄이면 뒤의 줄만 쓰고 경고(curPlan_과 같음).
+ * - 검사(하나라도 있으면 ok false, 바꿀 것 없음):
+ *   편제: 입학년도 4자리, 학년 1~3, 학기 1~2, 과목 빈칸 아님, 택N 0 이상 정수, 같은 학년·학기·선택군·과목 두 번.
+ *   권장 과목: 기준 연도 4자리, 대학·모집단위, 출처 주소(http(s)) 필수.
+ * 열 이름 줄 읽기·표준 과목 이름 경고·택N 맞춤 검사 같은 붙여넣기 검사는 기능 쪽(curParse_)이 한다.
+ */
+function curriculumSavePlan_(kind, existing, newRows) {
+  var kk = careerUploadKind_(kind), k = CURRICULUM_KINDS[kk];
+  if (!k) throw new Error('kind는 curriculum 또는 recommendations여야 합니다: ' + kind);
+  var errors = [], warnings = [], rows = [], seen = {}, keys = {};
+  (newRows || []).forEach(function (raw, i) {
+    var r = careerUploadRow_(raw, kk), line = (i + 1) + '번째 줄: ';
+    if (kk === 'curriculum') {
+      if (!/^\d{4}$/.test(r.entry_year)) errors.push(line + '입학년도는 숫자 4자리여야 합니다' + ruleNowText_(r.entry_year) + '. 입학년도를 고쳐 주세요.');
+      if (!/^[1-3]$/.test(r.grade)) errors.push(line + '학년은 1~3이어야 합니다' + ruleNowText_(r.grade) + '. 학년을 고쳐 주세요.');
+      if (!/^[12]$/.test(r.semester)) errors.push(line + '학기는 1 또는 2여야 합니다' + ruleNowText_(r.semester) + '. 학기를 고쳐 주세요.');
+      if (!r.course) errors.push(line + '과목 이름이 비어 있습니다. 과목을 적어 주세요.');
+      if (!/^\d+$/.test(r.pick_n)) errors.push(line + '택N은 0 이상의 정수여야 합니다' + ruleNowText_(r.pick_n) + '. 숫자를 고쳐 주세요.');
+    } else {
+      if (!/^\d{4}$/.test(r.base_year)) errors.push(line + '기준 연도는 숫자 4자리여야 합니다' + ruleNowText_(r.base_year) + '. 기준 연도를 고쳐 주세요.');
+      if (!r.university || !r.unit) errors.push(line + '대학과 모집단위를 모두 적어 주세요.');
+      if (!/^https?:\/\/\S+$/i.test(r.source_url)) errors.push(line + '출처 주소가 비어 있거나 주소가 아닙니다. 대학 안내 자료의 http(s) 주소를 적어 주세요.');
+    }
+    var place = careerUploadSig_(r, kk, k.place);
+    if (seen[place]) {
+      if (kk === 'curriculum') errors.push(line + seen[place].line + '번째 줄과 같은 과목입니다. 한 줄만 남겨 주세요.');
+      else { seen[place].lines.push(i + 1); rows[seen[place].at] = null; seen[place].at = rows.length; }
+    } else seen[place] = { line: i + 1, lines: [i + 1], at: rows.length };
+    keys[r[k.key]] = true;
+    rows.push(r);
+  });
+  rows = rows.filter(Boolean);
+  var multi = Object.keys(seen).filter(function (p) { return seen[p].lines.length > 1; });
+  if (multi.length) {
+    warnings.push('대학·모집단위가 같은 줄이 ' + multi.length + '쌍 있습니다(' + multi.slice(0, 3).map(function (p) {
+      var v = JSON.parse(p); return v[1] + ' ' + v[2] + ' ' + seen[p].lines.join('·') + '번째 줄';
+    }).join(', ') + (multi.length > 3 ? ' 외 ' + (multi.length - 3) + '쌍' : '') + '). 뒤의 줄만 쓰입니다.');
+  }
+  if (!rows.length && !errors.length) errors.push('올린 표에 줄이 없습니다. 표를 붙여 넣어 주세요.');
+  var keyList = Object.keys(keys).sort();
+  var out = { ok: !errors.length, errors: errors, warnings: warnings, keys: keyList, add: [], changed: [], removed: [], same: 0, toAppend: [], toCancel: [],
+    counts: { add: 0, changed: 0, remove: 0, same: 0, rows: errors.length ? 0 : rows.length } };
+  if (errors.length) return out;
+  var pool = (existing || []).filter(function (e) { return e && ruleStr_(e.status) !== '취소' && keys[careerTxt_(e[k.key])]; });
+  var bySig = {}, byPlace = {}, used = {}, rest = [];
+  pool.forEach(function (e) { var g = careerUploadSig_(e, kk, k.cols); (bySig[g] = bySig[g] || []).push(e); });
+  rows.forEach(function (r) {
+    var b = bySig[careerUploadSig_(r, kk, k.cols)];
+    if (b && b.length) { used[ruleStr_(b.pop().id)] = true; out.same++; } else rest.push(r);
+  });
+  pool.filter(function (e) { return !used[ruleStr_(e.id)]; }).forEach(function (e) { var g = careerUploadSig_(e, kk, k.place); (byPlace[g] = byPlace[g] || []).push(e); });
+  rest.forEach(function (r) {
+    var b = byPlace[careerUploadSig_(r, kk, k.place)];
+    if (b && b.length) { var old = b.shift(); used[ruleStr_(old.id)] = true; out.changed.push({ before: old, after: r }); } else out.add.push(r);
+  });
+  out.removed = pool.filter(function (e) { return !used[ruleStr_(e.id)]; });
+  out.toAppend = out.add.concat(out.changed.map(function (c) { return c.after; })).map(function (r) { return Object.assign({}, r, { status: '유효' }); });
+  out.toCancel = out.changed.map(function (c) { return { id: ruleStr_(c.before.id), why: 'changed' }; })
+    .concat(out.removed.map(function (e) { return { id: ruleStr_(e.id), why: 'removed' }; }));
+  out.counts = { add: out.add.length, changed: out.changed.length, remove: out.removed.length, same: out.same, rows: rows.length };
+  return out;
+}
+
+/**
+ * 올리기 미리 보기 경고(디자인2 제안): 취소될 편제 줄(curriculumSavePlan_의 removed) 중 이미 고른 학생이 있는 과목.
+ * removedRows = 빠지는 편제 줄, plans = course_plans 행 → [{entryYear, grade, semester, choiceGroup, course, students:n}] (n = 그 과목을 고른 서로 다른 학생, 0이면 뺌).
+ * 택N만 바뀐 줄(changed)은 과목이 남으므로 세지 않는다.
+ */
+function careerDropWarnings_(removedRows, plans) {
+  var byKey = {};
+  (plans || []).forEach(function (p) {
+    if (!p || ruleStr_(p.status) === '취소') return;
+    var key = careerCourseKey_(p);
+    (byKey[key] = byKey[key] || {})[ruleStr_(p.student_id)] = true;
+  });
+  var seen = {};
+  return (removedRows || []).map(function (r) {
+    var key = careerCourseKey_(r);
+    if (seen[key]) return null;
+    seen[key] = true;
+    var n = Object.keys(byKey[key] || {}).length;
+    return n ? { entryYear: ruleStr_(r.entry_year), grade: ruleStr_(r.grade), semester: ruleStr_(r.semester), choiceGroup: ruleStr_(r.choice_group),
+      course: careerTxt_(r.course), students: n } : null;
+  }).filter(Boolean);
+}
