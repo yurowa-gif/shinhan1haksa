@@ -11,6 +11,13 @@
     root.appendChild(body);
     Nav.bind(function (k) { renderPortal(body, d.me.id, '', k || 'home'); });   // 뒤로 가기(C39)
     renderPortal(body, d.me.id);
+    // 상담 신청 카드(C49-A, F17): 신청·내 신청은 ?page=counselreq
+    root.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '상담' }),
+      el('div', { class: 'muted', style: 'word-break:keep-all', text: '담당 선생님과 이야기하고 싶으면 날짜와 주제를 알려 주세요.' }),
+      UI.rowLink({ href: d.appUrl + '?page=counselreq&tab=form', text: '상담 신청하기' }),
+      UI.rowLink({ href: d.appUrl + '?page=counselreq', text: '내 상담 신청 보기' })
+    ]));
     // 시설 일지 카드(C35, F10): 포털 본문 아래에 한 카드. 쓰기·내 기록은 ?page=facility
     root.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: '시설 일지' }),
