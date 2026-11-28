@@ -11,7 +11,7 @@
  *  3) 결정 92: 학생이 공개를 끄면 다음 응답에서 바로 사라진다(합의 사항·진로 프로필 항목).
  *  4) 결정 97: 퇴실한 학생은 기록을 계속 보지만 쓰기는 모두 거부.
  *  5) 쓰기 함수마다: 첫 줄 거부가 denied로 남고, 저장은 audit_log에 남되 글 칸은 글자 수만, 삭제(delete) 없음·취소는 사유와 함께.
- * 아직 넣지 않은 줄(#332 병합 뒤): owner가 자기 담당 학생의 신청을 decideCounselRequest로 처리 · 전 담당(결정 104)이 자기 기간 기록을 봄.
+ * #332 뒤 더한 줄: 전 담당(결정 97·104)은 자기 기간 기록만 보고 쓰지 못함, owner(관리자+학사 교사)가 지금 담당인 학생의 신청을 처리.
  */
 const assert = require('assert');
 const { test, plain } = require('../helpers/harness');
@@ -273,4 +273,65 @@ test('T12 쓰기 함수: 첫 줄 거부는 denied로 남고(남의 기록은 락
   assert.deepStrictEqual([st(w.env.rows('feedback'), w.feedback.id), st(w.env.rows('counsel_requests', 'counsel'), w.request.id), st(w.env.rows('counsel_notes', 'counsel'), w.note.id)],
     [['취소', true], ['취소', true], ['취소', true]]);
   assert.ok(!w.env.rows('audit_log').some((r) => /delete/i.test(r.action)), 'audit_log에 delete 없음');
+});
+
+const PREV = 'test.prev@example.com';
+const OLD = { request: 'ZZ12옛신청메모', feedback: 'ZZ12옛피드백', note: 'ZZ12옛상담내용' };
+/** 전 담당 만들기(결정 97·104): 지난 기간(2026 2학기) A의 담당을 PREV로 바꾸고, 그 기간 기록(프로필 1번째·신청·상담·PREV의 피드백)을 심는다 */
+function withPast(w) {
+  const sid = w.A.id, env = w.env;
+  const old = env.rows('terms').find((t) => t.id !== w.term.id && t.end_date < w.term.start_date);
+  assert.ok(old, '지난 기간이 가짜 데이터에 있다');
+  const oldEnr = env.rows('enrollments').find((e) => e.term_id === old.id && e.student_id === sid);
+  const oldProfile = env.rows('career_profiles').filter((r) => r.student_id === sid && r.status === '유효').sort((a, b) => Number(a.version) - Number(b.version))[0];
+  env.asOwner((c) => {
+    c.addUser(PREV, '시험 전 담당', 'hall_teacher');
+    c.updateRecord_('enrollments', oldEnr.id, { teacher_email: PREV }, OWNER);
+    c.updateRecord_('career_profiles', oldProfile.id, { term_id: old.id }, OWNER);
+    c.appendRecord_('feedback', { term_id: old.id, student_id: sid, target_kind: '진로 프로필', target_id: oldProfile.id, content: OLD.feedback, teacher_email: PREV, status: '유효', cancel_reason: '' }, OWNER);
+    c.appendRecord_('counsel_requests', { term_id: old.id, student_id: sid, requester_email: A_EMAIL, wish_dates: '2027-02-10', topic: '생활', memo: OLD.request, status: '완료',
+      decided_date: '2027-02-10', linked_note_id: '', cancel_reason: '' }, OWNER, 'counsel');
+    c.appendRecord_('counsel_notes', { student_id: sid, date: '2027-02-10', teacher_email: PREV, type: '생활', target: '학생', linked_violation_id: '', content: OLD.note, agreement: '',
+      agreement_to_parent: 'FALSE', profile_version: '', request_id: '', show_to_parent: 'TRUE', status: '유효', cancel_reason: '' }, OWNER, 'counsel');
+  });
+  return { old, oldProfile, oldRequest: env.rows('counsel_requests', 'counsel').find((r) => r.memo === OLD.request), oldFeedback: env.rows('feedback').find((f) => f.content === OLD.feedback) };
+}
+
+test('T12 결정 97·104 전 담당: 지난 기간 담당은 그 기간 기록만(프로필 버전·피드백·신청, 칸은 표의 assigned) 보고 쓰기는 거부, 지금 담당은 지난 기간 기록도 본다', () => {
+  const w = world(), sid = w.A.id, p = withPast(w);
+  const prof = w.call(PREV, 'getCareerStudent', sid);
+  assert.deepStrictEqual(prof.versions.map((v) => v.version), [Number(p.oldProfile.version)], '전 담당은 자기 기간 버전만');
+  assert.deepStrictEqual(colsOf(prof.current, PROFILE_MAP), expectCols(allowed(w, 'profile', 'assigned'), PROFILE_MAP));
+  assert.deepStrictEqual(prof.feedback.map((f) => f.id), [p.oldFeedback.id], '자기 기간 기록의 피드백만');
+  assert.deepStrictEqual(colsOf(prof.feedback[0], FB_MAP('assigned')), expectCols(allowed(w, 'feedback', 'assigned'), FB_MAP('assigned')));
+  assert.strictEqual(prof.canFeedback, false);
+  const req = w.call(PREV, 'getCounselRequestsOfStudent', sid);
+  assert.deepStrictEqual(req.requests.map((r) => r.id), [p.oldRequest.id], '자기 기간 신청만');
+  assert.deepStrictEqual(colsOf(req.requests[0], REQ_MAP), expectCols(allowed(w, 'request', 'assigned'), REQ_MAP));
+  assert.strictEqual(req.canDecide, false);
+  const seen = textOf(prof) + textOf(req);
+  assert.deepStrictEqual(Object.values(M).filter((m) => seen.includes(m)), [], '이번 기간 기록의 글은 전 담당에게 없다');
+  w.env.expectDenied(PREV, 'feedback.write', 'addCareerFeedback', sid, p.oldProfile.id, '가짜');
+  w.env.expectDenied(PREV, 'counsel.request.decide', 'decideCounselRequest', { studentId: sid, requestId: w.request.id, action: 'confirm', date: '2027-04-22' });
+  w.env.expectDenied(PREV, 'counsel.save', 'saveCounselNote', { studentId: sid, date: '2027-02-10', type: '생활', target: '학생', content: '가짜' });
+  // 지금 담당은 지난 기간 기록도 본다(결정 104)
+  const tp = w.call(T, 'getCareerStudent', sid), tr = w.call(T, 'getCounselRequestsOfStudent', sid);
+  assert.ok(tp.versions.some((v) => v.version === Number(p.oldProfile.version)) && tp.feedback.some((f) => f.id === p.oldFeedback.id), '지금 담당: 지난 버전·피드백');
+  assert.ok(tr.requests.some((r) => r.id === p.oldRequest.id && r.memo === OLD.request), '지금 담당: 지난 신청(메모 포함)');
+  assert.ok(w.call(T, 'getCounselNotes', sid).notes.some((n) => n.content === OLD.note), '지금 담당: 지난 상담');
+  // 상담일지(counsel.view)는 #332에서 pastAssigned를 받지 않아 전 담당은 첫 줄에서 막힌다 — 결정 97 문구와 다를 수 있어 총괄에게 물음(지금 동작을 적어 둠)
+  w.env.expectDenied(PREV, 'counsel.view', 'getCounselNotes', sid);
+});
+
+test('T12 owner(관리자+학사 교사)가 지금 담당인 학생의 상담 신청을 decideCounselRequest로 확정한다(#332) — 이전 담당은 거부', () => {
+  const w = world(), sid = w.A.id;
+  const enr = w.env.rows('enrollments').find((e) => e.term_id === w.term.id && e.student_id === sid);
+  w.env.asOwner((c) => c.updateRecord_('enrollments', enr.id, { teacher_email: OWNER }, OWNER));
+  const view = w.call(OWNER, 'getCounselRequestsOfStudent', sid);
+  assert.strictEqual(view.canDecide, true, 'owner에게 처리 버튼');
+  assert.deepStrictEqual(colsOf(view.requests.find((r) => r.id === w.request.id), REQ_MAP), expectCols(allowed(w, 'request', 'assigned'), REQ_MAP));
+  const r = w.ok(w.call(OWNER, 'decideCounselRequest', { studentId: sid, requestId: w.request.id, action: 'confirm', date: '2027-04-22' }), 'owner 확정');
+  assert.strictEqual(r.status, '확정');
+  assert.strictEqual(w.env.rows('counsel_requests', 'counsel').find((x) => x.id === w.request.id).decided_date, '2027-04-22');
+  w.env.expectDenied(T, 'counsel.request.decide', 'decideCounselRequest', { studentId: sid, requestId: w.request.id, action: 'reject', reason: '가짜 반려' });
 });
