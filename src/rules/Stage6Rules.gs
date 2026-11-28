@@ -67,11 +67,11 @@ var S6_TABLE = {
     student: ['id', 'term_id', 'student_id', 'wish_dates', 'topic', 'memo', 'status', 'decided_date', 'cancel_reason', 'created_at'],
     parent: [], none: []
   },
-  note: {   // 결정 94: 학생은 날짜·교사·합의 사항만. 학부모는 날짜·교사(show_to_parent) + 공개한 합의 사항(결정 90)
+  note: {   // 결정 94: 학생은 날짜·교사·합의 사항(+ 본인의 공개 표시)만. 학부모는 날짜·교사(show_to_parent) + 공개한 합의 사항(결정 90)
     cols: ['id', 'student_id', 'date', 'teacher_email', 'type', 'target', 'linked_violation_id', 'content', 'agreement', 'agreement_to_parent',
       'profile_version', 'request_id', 'show_to_parent', 'status', 'cancel_reason'],
     admin: 'ALL', assigned: 'ALL', homeroom: 'ALL',
-    student: ['id', 'date', 'teacher_name', 'agreement'],
+    student: ['id', 'date', 'teacher_name', 'agreement', 'agreement_to_parent'],   // agreement_to_parent = 학생 본인이 켠 '부모님께 보이기'(결정 90)
     parent: 'PUBLIC', none: []
   },
   timeline: {

@@ -29,7 +29,7 @@ const EXPECT = {
   feedback: { admin: ALL.feedback, assigned: ALL.feedback, homeroom: ALL.feedback, student: 'id term_id student_id target_kind target_id content teacher_name status created_at', parent: '', none: '' },
   request: { admin: ALL.request, assigned: ALL.request, homeroom: 'id student_id wish_dates topic status decided_date created_at',
     student: 'id term_id student_id wish_dates topic memo status decided_date cancel_reason created_at', parent: '', none: '' },
-  note: { admin: ALL.note, assigned: ALL.note, homeroom: ALL.note, student: 'id date teacher_name agreement', parent: 'id date teacher_name agreement', none: '' },
+  note: { admin: ALL.note, assigned: ALL.note, homeroom: ALL.note, student: 'id date teacher_name agreement agreement_to_parent', parent: 'id date teacher_name agreement', none: '' },
   timeline: { admin: ALL.timeline, assigned: ALL.timeline, homeroom: ALL.timeline, student: '', parent: '', none: '' }
 };
 const ROW_ON = { status: '유효', parent_fields: 'hopes;targets;interests;strengths;concerns', show_to_parent: 'TRUE', agreement_to_parent: 'TRUE', agreement: '다음 주까지 탐구 주제 정하기' };
@@ -42,9 +42,9 @@ test('판정표: 역할 6 × 기록 종류 8 — 돌려주는 칸 목록이 표�
 
 // 금지 칸: 학생·학부모·담임에게 절대 나가면 안 되는 칸(결정 91·94·96·100, CLAUDE.md 6)
 const FORBID = {
-  student: { note: ['content', 'type', 'target', 'teacher_email', 'linked_violation_id', 'profile_version', 'show_to_parent', 'agreement_to_parent', 'request_id', 'cancel_reason'],
+  student: { note: ['content', 'type', 'target', 'teacher_email', 'linked_violation_id', 'profile_version', 'show_to_parent', 'request_id', 'cancel_reason'],
     inquiry: ['file_id', 'name_mismatch', 'cancel_reason'], feedback: ['teacher_email', 'cancel_reason'], request: ['requester_email', 'linked_note_id'], timeline: ['at', 'kind', 'title', 'detail', 'ref'], plan: ['confirmed_by', 'cancel_reason'] },
-  parent: { note: ['content', 'type', 'target', 'teacher_email', 'linked_violation_id', 'profile_version', 'request_id', 'cancel_reason'],
+  parent: { note: ['content', 'type', 'target', 'teacher_email', 'linked_violation_id', 'profile_version', 'request_id', 'cancel_reason', 'agreement_to_parent', 'show_to_parent'],
     inquiry: ['file_id', 'name_mismatch', 'liked', 'source_id', 'show_to_parent', 'student_id', 'cancel_reason'], feedback: ['content', 'created_at'], request: ['created_at', 'memo', 'topic', 'wish_dates', 'status', 'cancel_reason'],
     profile: ['version', 'submitted_at', 'parent_fields', 'student_id', 'term_id', 'cancel_reason'], plan: ['show_to_parent', 'confirmed_by', 'student_id', 'cancel_reason'], recs: ['university'], timeline: ['title'] },
   homeroom: { request: ['memo', 'requester_email', 'cancel_reason', 'linked_note_id'], inquiry: ['file_id'] },
