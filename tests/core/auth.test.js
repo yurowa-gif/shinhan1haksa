@@ -39,6 +39,19 @@ test('permissions_: wideView는 보기 키 4개에만(student.view·status.view�
   const wideKeys = Object.keys(p).filter((k) => p[k].wideView).sort();
   assert.deepStrictEqual(wideKeys, ['exception.view', 'out.view', 'status.view', 'student.view']);
 });
+test('pastAssigned(6단계 보기 키, 결정 97·104): 지난 기간 담당이었던 학사 교사도 통과 · 표시 없는 키(쓰기)는 지금 담당만 · 다른 역할은 넓어지지 않는다', () => {
+  const past = (roles, facts, on) => ctx.canAccessStudentByFacts_(roles, Object.assign({}, NONE, facts), VIEW, false, on);
+  assert.ok(past(['hall_teacher'], { wasAssigned: true }, true));
+  assert.ok(!past(['hall_teacher'], { wasAssigned: true }, false), '표시 없는 키는 지금 담당만');
+  assert.ok(!past(['hall_teacher'], {}, true), '한 번도 담당이 아니면 거부');
+  assert.ok(!past(['homeroom'], { wasAssigned: true }, true) && !past(['student'], { wasAssigned: true }, true) && !past(['parent'], { wasAssigned: true }, true));
+  assert.ok(!ctx.canAccessStudentByFacts_(['hall_teacher'], Object.assign({}, NONE, { wasAssigned: true }), ['admin', 'homeroom'], false, true), '키 역할에 학사 교사가 없으면 거부');
+});
+test('permissions_: pastAssigned는 6단계 보기 키 6개에만(쓰기·처리 키, 2단계 counsel.view는 없다)', () => {
+  const p = ctx.permissions_();
+  assert.deepStrictEqual(Object.keys(p).filter((k) => p[k].pastAssigned).sort(),
+    ['career.view', 'counsel.request.view', 'feedback.view', 'inquiry.view', 'plan.view', 'timeline.view']);
+});
 test('담임: 자기 반만', () => {
   assert.ok(can(['homeroom'], { inHomeroom: true }));
   assert.ok(!can(['homeroom'], { isAssigned: true }));

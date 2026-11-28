@@ -110,32 +110,33 @@ function permissions_() {
     // ── 6단계(결정 89~101, S6-0, 표는 docs/plan/s6-0-design.md). 대상은 학사생만. 열람 = 학사 담당교사·담임(자기 반)·관리자.
     // 출결 담당·근무표 담당은 어느 키에도 넣지 않는다(출결 담당을 넣으면 canAccessStudentByFacts_가 학사생 전체를 허용한다). 근무일(isOnDuty) 범위도 쓰지 않는다(noDuty).
     // 학생·학부모 신원은 portalWho_ 한 곳(결정 82). 키는 역할·범위만 막고, 보는 사람에 맞는 칸만 응답에 담는 것(s6Visible_)은 기능(C49~C53)의 몫이다.
-    // 퇴실·졸업 뒤(결정 97): 교사는 기록의 term_id 기간 담당 기준, 본인·학부모는 계속 보기, 쓰기는 막는다 — 기능 함수가 기록의 기간으로 판정한다.
+    // 퇴실·졸업 뒤(결정 97·104): 교사는 기록의 term_id 기간 담당 또는 지금 담당이 보고, 본인·학부모는 계속 보기, 쓰기는 지금 담당만 — 기능 함수가 기록마다 s6RoleForRow_로 판정한다.
+    // pastAssigned: 지난 기간 담당이었던 학사 교사도 첫 줄을 통과(보기 키에만). 이 키를 쓰는 기능은 반드시 기록마다 s6RoleForRow_ + s6Visible_로 거른다.
     // 진로 프로필(F15): 제출·공개는 학생 본인만. list = 미제출 목록·홈 배지(역할만, 범위는 함수가 계산)
-    'career.view': { roles: ['admin', 'hall_teacher', 'homeroom', 'student', 'parent'], scope: 'student', noDuty: true },
+    'career.view': { roles: ['admin', 'hall_teacher', 'homeroom', 'student', 'parent'], scope: 'student', noDuty: true, pastAssigned: true },
     'career.submit': { roles: ['student'], scope: 'student', noDuty: true },
     'career.publish': { roles: ['student'], scope: 'student', noDuty: true },
     'career.list': { roles: ['admin', 'hall_teacher'] },
     // 이수 계획(F15): 작성·바꾸기·공개는 학생, 확정(담당교사 확인 표시)은 학사 담당교사
-    'plan.view': { roles: ['admin', 'hall_teacher', 'homeroom', 'student', 'parent'], scope: 'student', noDuty: true },
+    'plan.view': { roles: ['admin', 'hall_teacher', 'homeroom', 'student', 'parent'], scope: 'student', noDuty: true, pastAssigned: true },
     'plan.edit': { roles: ['student'], scope: 'student', noDuty: true },
     'plan.confirm': { roles: ['hall_teacher'], scope: 'student', noDuty: true },
     'plan.publish': { roles: ['student'], scope: 'student', noDuty: true },
     // 탐구 기록(F16): 올리기·진행 기록·공개는 학생 본인(교사가 대신 올리지 않는다). cleanup = 졸업·퇴실 1년 뒤 원본 파일 '정리 대상'(결정 100, 관리자만)
-    'inquiry.view': { roles: ['admin', 'hall_teacher', 'homeroom', 'student', 'parent'], scope: 'student', noDuty: true },
+    'inquiry.view': { roles: ['admin', 'hall_teacher', 'homeroom', 'student', 'parent'], scope: 'student', noDuty: true, pastAssigned: true },
     'inquiry.upload': { roles: ['student'], scope: 'student', noDuty: true },
     'inquiry.progress': { roles: ['student'], scope: 'student', noDuty: true },
     'inquiry.publish': { roles: ['student'], scope: 'student', noDuty: true },
     'inquiry.cleanup': { roles: ['admin'] },
     // 교사 피드백: 학부모에게는 보이지 않는다(결정 91). 쓰기는 학사 담당교사만, 관리자는 보기만. cancel은 행 id만 받는 첫 줄(역할만), 범위는 락 안에서 feedback.write로 다시
-    'feedback.view': { roles: ['admin', 'hall_teacher', 'homeroom', 'student'], scope: 'student', noDuty: true },
+    'feedback.view': { roles: ['admin', 'hall_teacher', 'homeroom', 'student'], scope: 'student', noDuty: true, pastAssigned: true },
     'feedback.write': { roles: ['hall_teacher'], scope: 'student', noDuty: true },
     'feedback.cancel': { roles: ['hall_teacher'] },
     // 상담 신청(F17, 결정 16·95·96): 신청은 학생만, 처리(확정·반려·완료)는 학사 담당교사. 학부모는 보지 않는다. list = 홈 배지(역할만)
     // cancel은 행 id만 받는 첫 줄(역할만), 본인 신청인지는 락 안에서 다시 확인. 신청 메모 칸은 담임에게 내보내지 않는다(결정 96, 응답에서 거른다)
     'counsel.request.create': { roles: ['student'], scope: 'student', noDuty: true },
     'counsel.request.cancel': { roles: ['student'] },
-    'counsel.request.view': { roles: ['admin', 'hall_teacher', 'homeroom', 'student'], scope: 'student', noDuty: true },
+    'counsel.request.view': { roles: ['admin', 'hall_teacher', 'homeroom', 'student'], scope: 'student', noDuty: true, pastAssigned: true },
     'counsel.request.list': { roles: ['admin', 'hall_teacher'] },
     'counsel.request.decide': { roles: ['hall_teacher'], scope: 'student', noDuty: true },
     // 학생·학부모가 보는 상담 기록(결정 90·94): 날짜·교사(·학생이 공개한 합의 사항)만. 합의 사항 공개는 학생이 건마다(행 id → 본인 확인은 락 안에서)
@@ -144,7 +145,7 @@ function permissions_() {
     // 교육과정 올리기(S6-1, 결정 102): 편제표·권장 이수 과목을 설정 시트에 올린다. 관리자만. 읽기는 서버 내부 함수(plan.view를 거친 기능이 쓴다)
     'curriculum.edit': { roles: ['admin'] },
     // 학생 타임라인(F17, 교사용): 프로필·계획·탐구·상담·OUT·출결 요약
-    'timeline.view': { roles: ['admin', 'hall_teacher', 'homeroom'], scope: 'student', noDuty: true },
+    'timeline.view': { roles: ['admin', 'hall_teacher', 'homeroom'], scope: 'student', noDuty: true, pastAssigned: true },
     // 입퇴실·급식(F6·F7): list는 화면 열기·행 id 함수 첫 줄(역할만), 저장은 근무일 제외
     // 보기: 1학사 교사(학사 교사·출결 담당)는 학사생 전체, 담임은 자기 반(결정 45). 저장은 담당·관리자
     'status.list': { roles: ['admin', 'attendance', 'hall_teacher', 'homeroom'] },
@@ -304,6 +305,10 @@ function studentFacts_(user, student, ymd, windowDays, noDuty) {
       return en.term_id === termId && en.student_id === student.id &&
         normalizeEmail_(en.teacher_email) === user.email;
     }),
+    // 어느 기간이든 그 학생의 담당이었던 적이 있다(결정 97·104) — pastAssigned 보기 키에서만 쓴다. 기록마다 보이는지는 기능이 s6RoleForRow_로 거른다
+    wasAssigned: readAll_('enrollments').some(function (en) {
+      return en.student_id === student.id && normalizeEmail_(en.teacher_email) === user.email;
+    }),
     // 근무교사: 열람 키는 ymd = 오늘의 실제 근무자만(windowDays 0), out.save는 발생일의 근무자가 다음 날까지(규칙의 dutyWindow). 화면이 보낸 ymd로는 넓어지지 않는다
     isOnDuty: !noDuty && hasRole_(user, 'hall_teacher') && isOnDutyFor_(user.email, ymd || '', windowDays || 0),   // noDuty 키는 근무표를 읽지 않는다
     // 담임은 "자기 반 학사생"만: 같은 반 + 이번 운영 기간 등록 학생
@@ -325,14 +330,15 @@ function sameClass_(homeroomClass, grade, classNo) {
  * @param {Object} facts studentFacts_ 결과
  * @param {string[]} allowedRoles 이 기능에 허용된 역할
  * @param {boolean=} wide 보기 키(wideView): 학사 교사도 이번 기간 학사생이면 통과
+ * @param {boolean=} pastAssigned 6단계 보기 키(결정 97·104): 지난 기간에 담당이었던 학사 교사도 통과(기록마다 거르기는 기능의 몫)
  */
-function canAccessStudentByFacts_(roles, facts, allowedRoles, wide) {
+function canAccessStudentByFacts_(roles, facts, allowedRoles, wide, pastAssigned) {
   var allowed = function (r) { return roles.indexOf(r) >= 0 && allowedRoles.indexOf(r) >= 0; };
   if (allowed('admin')) return true;
   // 출결 담당: 이번 기간 학사생 전체
   if (allowed('attendance') && facts.isEnrolled) return true;
   // 근무일이어도 이번 기간 등록 학생에게만(미등록 학생은 제외). 보기 키(wide)는 학사생 전체
-  if (allowed('hall_teacher') && (facts.isAssigned || (facts.isOnDuty && facts.isEnrolled) || (wide && facts.isEnrolled))) return true;
+  if (allowed('hall_teacher') && (facts.isAssigned || (pastAssigned && facts.wasAssigned) || (facts.isOnDuty && facts.isEnrolled) || (wide && facts.isEnrolled))) return true;
   if (allowed('homeroom') && facts.inHomeroom) return true;
   if (allowed('student') && facts.isOwn) return true;
   if (allowed('parent') && facts.isGuardian) return true;
@@ -377,7 +383,7 @@ function requirePermission_(action, context) {
     if (!student) deny('학생 없음');
     var facts = studentFacts_(user, student, ymd, rule.dutyWindow, rule.noDuty);
     if (rule.noDuty) facts.isOnDuty = false;
-    if (!canAccessStudentByFacts_(user.roles, facts, rule.roles, !!rule.wideView)) deny('범위 밖 학생');
+    if (!canAccessStudentByFacts_(user.roles, facts, rule.roles, !!rule.wideView, !!rule.pastAssigned)) deny('범위 밖 학생');
   }
   return user;
 }

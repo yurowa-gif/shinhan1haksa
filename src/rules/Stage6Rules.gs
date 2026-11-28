@@ -156,6 +156,29 @@ function s6Pick_(row, fields, opts) {
 }
 
 /**
+ * 기록 한 건을 보는 자격(결정 97·104) → s6Visible_의 viewer {role, isSelf, isChild}.
+ * 교사가 그 기록을 'assigned'로 보는 조건 = ① 그 기록의 운영 기간(termId)에 그 학생의 담당이었다, 또는 ② 지금(base.nowTermId) 그 학생의 담당이다.
+ * base = {role: 'student'|'parent'|'admin'|'homeroom'|'none', isSelf, isChild, hallTeacher(학사 교사 역할이 있나), nowTermId}
+ *   — 부르는 쪽이 학생 본인·학부모·관리자·담임(자기 반 + 이번 기간 등록) 판정을 미리 넣는다. 학생·학부모·관리자는 그대로 돌려준다.
+ * termId: 기록의 term_id. 상담일지(counsel_notes)는 term_id 열이 없으니 그 date가 속한 기간을 부르는 쪽이 구해 넘긴다.
+ * 쓰기 자격이 아니다: 쓰기(피드백·신청 처리·상담일지)는 지금 담당만 — 권한 키와 s6CanWrite_가 따로 막는다.
+ */
+function s6RoleForRow_(enrollments, email, studentId, termId, base) {
+  var b = base || {}, role = ruleStr_(b.role);
+  var out = function (r) { return { role: r, isSelf: !!b.isSelf, isChild: !!b.isChild }; };
+  if (role === 'student' || role === 'parent' || role === 'admin') return out(role);
+  var me = ruleStr_(email).toLowerCase(), sid = ruleStr_(studentId);
+  var taught = function (t) {
+    t = ruleStr_(t);
+    return !!t && (enrollments || []).some(function (e) {
+      return ruleStr_(e.term_id) === t && ruleStr_(e.student_id) === sid && ruleStr_(e.teacher_email).toLowerCase() === me;
+    });
+  };
+  if (b.hallTeacher && me && sid && (taught(termId) || taught(b.nowTermId))) return out('assigned');
+  return out(role === 'homeroom' ? 'homeroom' : 'none');
+}
+
+/**
  * 쓰기 가능 여부(누가 무엇을 새로 쓰거나 고치나). 결정 16·97.
  * action 'profile.submit'|'profile.publish'|'plan.edit'|'plan.confirm'|'inquiry.upload'|'inquiry.progress'|'inquiry.publish'|
  *        'feedback.write'|'request.create'|'request.cancel'|'request.process'|'note.write'|'note.publish'
