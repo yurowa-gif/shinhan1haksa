@@ -222,10 +222,20 @@ test('빠지는 과목을 이미 고른 학생 n명 경고(careerDropWarnings_) 
   const without = CUR.split('\n').filter((l) => !/대수/.test(l)).join('\n');
   const p = env.call(OWNER, 'previewCurriculum', 'curriculum', without);
   assert.deepStrictEqual(plain(p.counts), { add: 0, changed: 0, remove: 1, same: 4, rows: 4 });
-  assert.ok(p.warnings.some((w) => /빠지는 과목 "대수"/.test(w) && /이미 고른 학생이 2명/.test(w) && /교육과정에서 빠진 과목/.test(w)));
+  assert.ok(p.warnings.some((w) => /빠지는 과목: 2학년 1학기 "대수"/.test(w) && /이미 고른 학생이 2명입니다/.test(w) && /교육과정에서 빠진 과목/.test(w)));
   const plans = env.rows('course_plans').length;
   env.call(OWNER, 'saveCurriculum', 'curriculum', without, { kind: 'curriculum', counts: p.counts });
   assert.strictEqual(env.rows('course_plans').length, plans);
   assert.ok(env.rows('course_plans').every((r) => r.status === '유효'), '이수 계획 줄은 건드리지 않는다');
   assert.ok(!/function curPlan_\b/.test(require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'src', 'features', 'Curriculum.gs'), 'utf8')), '같은 계산이 두 곳에 없다');
+});
+
+test('문구 겹침 없음: 선택군 이름에 "선택군"이 이미 있으면 한 번만, 오류 줄에 열 이름이 이미 문장에 있으면 앞에 또 붙이지 않는다', () => {
+  const env = newEnv();
+  const t = 'entry_year\tgrade\tsemester\tchoice_group\tpick_n\tcourse\n2099\t2\t1\t선택군 A\t5\t화법과 언어\n2099\t2\t1\t선택군 A\t5\t대수\n2099\t2\t1\tB\t3\t기하\n2099\t2\t1\tB\t4\t독서와 작문';
+  const p = env.call(OWNER, 'previewCurriculum', 'curriculum', t);
+  const all = p.errors.map((e) => e.message).join('\n');
+  assert.ok(/선택군 A — 과목이 2개인데 택N이 5입니다/.test(all) && !/선택군 선택군/.test(all), all);
+  assert.ok(/선택군 B — 택N이 줄마다 다릅니다/.test(all), all);
+  assert.ok(!/\)(을|를|은|는|이|가) /.test(JSON.stringify(env.call(OWNER, 'previewCurriculum', 'curriculum', t.replace('5\t대수', '2\t대수'))) ), '괄호 바로 뒤에 조사가 없다');
 });
