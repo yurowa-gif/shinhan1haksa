@@ -181,3 +181,16 @@ test('바뀌는 줄: 같은 자리인데 내용이 다르면 옛 줄 취소 + �
   assert.deepStrictEqual(plain(env.call(OWNER, 'getCurriculumSummary')), { curriculum: [{ year: '2099', rows: 5 }], recommendations: [] });
   env.expectDenied(TEACHER, 'curriculum.edit', 'getCurriculumSummary');
 });
+
+test('한글 머리글도 받는다(열 순서 자유, 영어와 섞어도 됨) — 모르는 머리글은 오류', () => {
+  const env = newEnv();
+  const ko = ['과목\t입학년도\t학년\t학기\t선택군\t택N', '공통국어1\t2099\t1\t1\t\t', '화법과 언어\t2099\t2\t1\t선택군A\t1'].join('\n');
+  const p = env.call(OWNER, 'previewCurriculum', 'curriculum', ko);
+  assert.strictEqual(p.ok, true, JSON.stringify(p.errors)); assert.strictEqual(p.counts.add, 2);
+  const rec = ['기준 연도,대학,모집단위,핵심 과목,권장 과목,출처 주소,출처 제목,비고', '2099,가짜대,가짜학과,물리학,화학,https://example.com,출처,'].join('\n');
+  assert.strictEqual(env.call(OWNER, 'previewCurriculum', 'recommendations', rec).ok, true);
+  const mix = 'base_year,대학,unit,핵심 권장,권장,source_url,출처제목,note\n2099,가짜대,가짜학과,물리학,화학,https://example.com,출처,';
+  assert.strictEqual(env.call(OWNER, 'previewCurriculum', 'recommendations', mix).ok, true);
+  const bad = env.call(OWNER, 'previewCurriculum', 'curriculum', ko.replace('택N', '몇개'));
+  assert.strictEqual(bad.ok, false); assert.ok(/빠진 열: pick_n/.test(bad.errors[0].message) && /모르는 열: 몇개/.test(bad.errors[0].message));
+});

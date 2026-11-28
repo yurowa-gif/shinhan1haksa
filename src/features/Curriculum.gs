@@ -21,6 +21,12 @@ var CUR_KINDS = {
   recommendations: { tab: 'course_recommendations', label: '권장 이수 과목', scope: 'base_year',
     cols: ['base_year', 'university', 'unit', 'core_courses', 'recommended_courses', 'source_url', 'source_title', 'note'] }
 };
+/** 한글 머리글 → 열 이름(공백 없이 비교). 영어 열 이름은 그대로 받는다(총괄 확정) */
+var CUR_HEADER_KO = {
+  '입학년도': 'entry_year', '학년': 'grade', '학기': 'semester', '선택군': 'choice_group', '택n': 'pick_n', '과목': 'course',
+  '기준연도': 'base_year', '대학': 'university', '모집단위': 'unit', '핵심과목': 'core_courses', '핵심권장': 'core_courses',
+  '권장과목': 'recommended_courses', '권장': 'recommended_courses', '출처주소': 'source_url', '출처제목': 'source_title', '비고': 'note'
+};
 var CUR_LIST_MAX = 30;
 var CUR_WARN_MAX = 30;
 
@@ -43,13 +49,15 @@ function curHeader_(def, row) {
   row.forEach(function (h, i) {
     var name = String(h).trim().toLowerCase();
     if (!name) return;
+    var ko = CUR_HEADER_KO[name.replace(/\s+/g, '')];
+    if (ko) name = ko;
     if (Object.prototype.hasOwnProperty.call(index, name)) dup.push(name); else index[name] = i;
   });
   var missing = def.cols.filter(function (c) { return !(c in index); });
   var unknown = Object.keys(index).filter(function (c) { return def.cols.indexOf(c) < 0; });
   if (missing.length || unknown.length || dup.length) {
     errors.push({ line: 1, column: '', message: '첫 줄의 열 이름이 맞지 않습니다.' + (missing.length ? ' 빠진 열: ' + missing.join(', ') + '.' : '') +
-      (unknown.length ? ' 모르는 열: ' + unknown.join(', ') + '.' : '') + (dup.length ? ' 겹친 열: ' + dup.join(', ') + '.' : '') + ' 열 이름: ' + def.cols.join(', ') });
+      (unknown.length ? ' 모르는 열: ' + unknown.join(', ') + '.' : '') + (dup.length ? ' 겹친 열: ' + dup.join(', ') + '.' : '') + ' 열 이름(한글 머리글도 됩니다): ' + def.cols.join(', ') });
   }
   return { index: index, errors: errors };
 }
