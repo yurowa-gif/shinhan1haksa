@@ -178,6 +178,43 @@ function ttTransition_(rows, studentId, month, action, ctx)
         // → {ok, reason, add:[fixed_schedules 행(id 없음)], update:[{id, set}], cancel:[id], warnings, returned:{by, reason}|null}
 function ttCopyPrevious_(rows, studentId, month) // [지난달 시간표 그대로 가져오기] → {entries(제출 초안), fromMonth:'yyyy-MM'|''}
 function ttMissing_(rows, studentIds, month)    // → 그 달 살아 있는 행이 없거나 반려인 학생 id
+
+// src/rules/Stage6Rules.gs (R24, 6단계 공개 판정표 — 결정 89~97) — DateRules·AttendanceRules(attTypeBase_)를 부른다
+function s6Visible_(viewer, kind, row, opts)   // viewer = {role:'admin'|'assigned'|'homeroom'|'student'|'parent'|'none', isSelf, isChild}, opts = {isLatest} → 보여 줄 칸 이름 배열
+function s6ParentFields_(row, kind)            // → 학부모 공개 칸 배열(기본 [])
+function s6Pick_(row, fields, opts)            // → 그 칸만 담은 객체(가상 칸 teacher_name = opts.teacherName) 또는 null
+function s6CanWrite_(viewer, action, ctx)      // ctx = {active} → {ok, reason}
+function s6Timeline_(sources, studentId, opts) // → [{at, kind, title, detail, ref:{kind, id}}] 시간 내림차순, opts = {from, to}
+
+// src/rules/CounselRules.gs (R24, F17 상담 신청·상담일지 6단계 칸) — Stage6Rules를 부른다
+function counselRequestCheck_(input, today, existing)   // input = {studentId, dates, topic, memo} → {row, errors}
+function counselRequestNext_(request, action, actor, input, today)   // action 'confirm'|'reject'|'complete'|'cancel' → {patch, errors}
+function counselNoteCheck_(input, opts)        // 6단계 칸만 → {patch:{agreement, agreement_to_parent, profile_version, request_id}, errors, warnings}
+function counselView_(note, viewer, opts)      // → 판정표 칸만 담은 객체 또는 null
+
+// src/rules/CareerRules.gs (R25, F15 — 결정 89·92·98·99) — Stage6Rules·StatusRules를 부른다
+function careerProfileCheck_(input)            // → {row:{hopes(JSON), targets(JSON), interests, strengths, concerns}, errors}
+function careerNextVersion_(profiles, studentId)   // 취소 행까지 센 max + 1
+function careerLatest_(profiles, studentId, opts)  // opts = {termId, asOf} → 살아 있는 가장 큰 버전 행 또는 null
+function careerNextParentFields_(profiles, studentId)   // 새 버전 공개 항목 초기값(이어받기)
+function careerPublishPlan_(current, request)  // request = {fields:{항목:bool}} → {patch:{parent_fields}, added, removed, notice, errors}
+function careerMissing_(enrollments, changes, profiles, term, today, opts)   // term = {id, career_due}, opts = {graceDays} → [{studentId, since, lastSubmittedAt}]
+function coursePlanCheck_(curriculum, entryYear, selections, existing)       // → {rows, errors, warnings}
+function coursePlanDiff_(existing, studentId, rows, termId)   // → {toAdd, toCancel:[id], same}
+function coursePlanConfirm_(existing, studentId, ids, teacherEmail, now)     // → {patches:[{id, patch}], errors}
+function careerCourseName_(name, nameMap)      // 과목 이름 맞추기(course_name_map.csv)
+function courseRecsFor_(recs, targets, opts)   // opts = {baseYear, nameMap} → [{university, unit, target, match, core, recommended, baseYear, sourceTitle, sourceUrl, note}]
+function careerDroppedPicks_(plans, curriculum)   // 편제에서 빠진 과목을 고른 이수 계획 줄 → [{studentId, planId, entryYear, grade, semester, choiceGroup, course}]
+function coursePlanPendingCount_(plans, studentIds)   // → {count, studentIds} 확인을 기다리는(state 계획) 담당 학생
+function curriculumSavePlan_(kind, existing, newRows)   // kind 'curriculum'|'recommendations' → {ok, errors, warnings, keys, add, changed:[{before, after}], removed, same, toAppend, toCancel:[{id, why}], counts}
+function careerDropWarnings_(removedRows, plans)   // 빠지는 편제 줄 → [{entryYear, grade, semester, choiceGroup, course, students}]
+
+// src/rules/InquiryRules.gs (R26, F16 — 결정 93·100) — Stage6Rules·StatusRules를 부른다
+function inquiryParse_(text, opts)             // opts = {accountName, maxBytes, maxRecords} → {meta, records:[요약], nameMismatch, errors, warnings}
+function inquiryRecordOf_(r)                   // 파일 속 기록 한 건 → 요약(파일 모양 가정은 이 한 곳)
+function inquiryMergePlan_(existing, parsed, studentId, fileId, termId)   // → {toAppend, toUpdate:[{id, patch:{liked}}], same, conflicts:[{sourceId, why}]}
+function inquiryProgressCheck_(input)          // {progress, resultLink, memo} → {patch, errors}
+function inquiryCleanupTargets_(records, changes, today, opts)    // opts = {years} → [{id, studentId, fileId, leaveDate, since}]
 ```
 
 ## 동작 메모(R1, 2026-11-06)
@@ -461,3 +498,51 @@ function ttMissing_(rows, studentIds, month)    // → 그 달 살아 있는 행
 - **예외: 근무(DutyRules) 경고는 앞머리에 'yyyy-MM-dd'를 그대로 둔다** — `Duty.gs`가 앞 10글자로 날짜를 읽고 `dtyWarnText_`로 바꿔 보인다.
 - 글자로 맞추는 곳: MoveRules는 MealRules의 '덮는 기록' 경고를 `mealCoverWarnHead_`(한 곳)로 찾는다. 기능 쪽 `Duty.gs`(운영 안 하는 날 근무 경고)·`Roster.gs`(기록과 명단이 다른 경고)·`Meals.gs`(' 학생의 ')·`Rooms.gs`·`SeatDraft.gs`(학생·좌석 id를 이름으로 바꿈)가 문구 조각을 쓴다 — 이 PR에서 Duty.gs·Roster.gs의 찾는 글자를 새 문구에 맞췄다.
 - ScheduleRules의 "방학 블록이 모두 잘못돼 학기 블록을 씀" 경고는 경고 글자 대신 경고 수로 판정한다(같은 동작).
+
+## 동작 메모(R24, 2026-11-27) — 6단계 공개 판정표·상담
+
+근거: `docs/plan/stage6-rules-draft.md` 2절(판정표)·3.3·3.4, 결정 89~97·101. 학생·학부모 신원은 `portalWho_()`(결정 82)가 정하고, 서버가 `viewer`를 만들어 넘긴다.
+
+- **열 이름** = S6-0 Schema(`docs/plan/s6-0-design.md` 2절, 시트 열이 기준). `Stage6Rules.gs` 머리말에 옮겼다. 이수 계획·탐구의 학부모 공개는 줄마다 `show_to_parent`, 진로 프로필은 `parent_fields`, 합의 사항은 `agreement_to_parent`. 이수 계획은 `state`(계획·확정)와 `status`(유효·취소)가 따로다. 상담 신청은 `wish_dates`·`linked_note_id`, 반려·취소 사유는 `cancel_reason` 한 칸.
+- **`s6Visible_`**: 판정표를 상수 `S6_TABLE`로 둔다. 서버는 돌려받은 칸만 응답에 담는다(`s6Pick_`). 확정한 칸:
+  - 피드백은 학부모 —(결정 91), 학생 상담은 날짜·교사·합의 사항만(유형·내용 없음, 결정 94), 담임의 상담 신청은 날짜·주제·상태만(메모 없음, 결정 96), 반려 사유는 학생에게 보임(결정 95).
+  - 학부모 진로 프로필은 `opts.isLatest`(가장 최근 제출 버전)일 때 공개 항목만(결정 89). 이수 계획·탐구는 그 줄의 `show_to_parent`가 TRUE일 때 정해진 칸만. 상담은 `show_to_parent`가 TRUE일 때 날짜·교사 + `agreement_to_parent`가 TRUE인 합의 사항(결정 90).
+  - 탐구 원본 파일 id(`file_id`)는 관리자만(결정 100), '이름 다름'(`name_mismatch`)은 교사만(결정 93).
+  - 학생·학부모는 취소된 기록을 보지 않는다(학생 본인 상담 신청만 예외 — 취소·반려 사유 확인). 공개를 거두면 다음 응답부터 바로 사라진다(결정 92, 흔적 없음 — 켜고 끈 기록은 서버가 audit_log에).
+  - `role`은 서버가 정한다: `assigned` = **그 기록의 `term_id` 운영 기간**에 그 학생의 담당교사였던 사람(결정 97 — 권한 키는 '지금' 담당을 보므로, 지난 기록은 기능 함수가 기록의 `term_id`로 다시 판정해 넘긴다), `homeroom` = 자기 반 담임, 그 밖의 교사는 `none`. 학생 `isSelf`·학부모 `isChild`가 아니면 [].
+  - 가상 칸 `teacher_name`: 학생에게는 `teacher_email` 대신 이 칸을 준다(서버가 이름으로 채움).
+  - 학부모 진로 프로필: 공개 항목이 하나라도 있으면 그 항목 + `submitted_at`(낸 날, R24b·C50 — 시안 p-career). `version`은 내보내지 않는다. 공개 항목이 없으면 [](냈는지조차 모른다).
+  - 학생 상담 결과에 `agreement_to_parent`(학생 본인이 켠 '부모님께 보이기' 상태, 결정 90 — '내 상담 기록' 토글). 학부모에게는 이 칸을 내보내지 않는다(공개된 합의 사항 글만).
+  - `created_at`(공통 열): 상담 신청(신청한 날)과 피드백(쓴 날)에만 판정표에 넣었다(R24b, C49-A). 관리자·담당교사·담임·학생 본인은 보고 학부모는 —. 다른 기록은 날짜 칸이 따로 있다(`submitted_at`·`recorded_at`·`date`·`confirmed_at`).
+  - `show_to_parent`가 FALSE인 상담은 합의 사항을 공개했어도 학부모에게 그 상담 자체가 보이지 않는다(총괄 승인).
+- **`s6CanWrite_`**: 학생 본인(진로 제출·공개, 이수 계획, 탐구 올리기·진행·공개, 상담 신청·취소, 합의 사항 공개)·담당교사(이수 계획 확정, 피드백, 상담일지)·담당교사와 관리자(상담 신청 처리). 담임은 쓰지 않는다. `ctx.active`(지금 학사생)가 아니면 누구도 새로 쓰거나 고치지 않는다(결정 97 — 보기는 그대로).
+- **`s6Timeline_`**: 취소 행을 빼고 시간 내림차순. 상담 줄은 '상담' + 합의 사항(내용·유형 없음), OUT은 '1OUT: 항목', 출결은 확정 특이사항만.
+- **`counselRequestCheck_`**: 희망 날짜 1~3개(오늘 포함 이후·중복 없음, 결정 95), 주제는 생활·학습·진로·진학·기타 다섯 가지로 고정(결정 103, PRD F17 — 상담일지 유형 `counsel.types`와 묶지 않는다), 메모 500자, 처리되지 않은(신청·확정) 신청이 있으면 거부.
+- **`counselRequestNext_`**: 신청 → 확정(`decided_date` = 희망 날짜 중 하나, 결정 103: 다른 날이면 반려 + 사유) / 신청·확정 → 반려(`cancel_reason` 필수 200자, 학생에게 보임. 확정 뒤 상담을 못 한 경우도 반려 — 화면 버튼만 '상담 못 함') / 확정 → 완료(`linked_note_id`) / 신청·확정 → 취소(학생 본인, `cancel_reason` 선택). 완료·반려·취소는 끝.
+- **`counselNoteCheck_`**: 6단계 칸만(기본 칸은 `CounselLog.gs` `cnlValidate_`). 합의 사항 1000자. 합의 사항 학부모 공개는 학생만 켠다(`opts.byStudent`, 총괄 승인) — 교사 저장은 늘 FALSE. 참고 버전은 그 학생의 살아 있는 버전, 진로·진학 상담인데 비면 경고. 신청 연결은 '확정' 신청만.
+
+## 동작 메모(R25, 2026-11-27) — 진로 프로필·이수 계획
+
+근거: stage6-rules-draft 3.1, 결정 14·15·89·92·98·99·101. 열 이름은 `Stage6Rules.gs` 머리말. 편제표·권장 과목은 **행 배열을 인자로** 받는다(시트 읽기는 기능 쪽): 편제 행 = 설정 시트 `curriculum_courses`(결정 102) `entry_year, grade, semester, choice_group, pick_n, course, status`, 권장 과목 행 = `course_recommendations`(결정 102) `base_year, university, unit, core_courses, recommended_courses, source_url, source_title, note, status`(과목 여럿은 `;`). 두 탭 모두 `status` 취소 행은 쓰지 않는다.
+
+- `careerProfileCheck_`: 희망 1~3순위(1순위 필수, 중복 없음, 순위 순 저장), 목표 진학 0~6개(대학·학과 필수), 글 칸 1000자. 희망·목표는 JSON 글자 한 칸씩(초안 4절).
+- 버전(F15 덮어쓰지 않음): `careerNextVersion_`은 취소 행까지 세어 번호를 다시 쓰지 않는다. `careerLatest_`는 살아 있는 가장 큰 버전. 새 버전의 공개 항목은 `careerNextParentFields_`로 이어받는다(결정 89). 학부모에게는 최근 버전만 — `s6Visible_(…, {isLatest})`.
+- `careerPublishPlan_`: 적지 않은 항목은 그대로, 모르는 항목은 오류, 거둔 항목이 있으면 학생 안내 '학부모님이 이미 보신 내용은 되돌릴 수 없습니다.'(결정 92). 켜고 끈 기록은 서버가 audit_log.
+- `careerMissing_`(결정 98): 마감일(`term.career_due`)이 없거나 오늘이 마감 전이면 []. 대상 = 그 기간 등록생 중 오늘 학사 입실인 학생: 마감일에 입실이었으면 마감일부터, 마감 뒤 입실했으면 **입실일 + 14일**부터 센다. 제출 = 그 기간(`term_id`)의 살아 있는 버전. 마감일에 입실이었다가 퇴실 뒤 다시 들어온 학생은 유예 없이 센다(총괄 승인).
+- 이수 계획(결정 99): `coursePlanCheck_` — 편제에 없는 과목·택N 초과(F15)·같은 학년·학기 같은 과목 두 번은 오류. 택N이 비거나 0인 묶음(공통·필수 — S6-0 제안: 필수는 `choice_group` 빈칸·`pick_n` 0)은 개수를 보지 않는다(총괄 승인). 확정 줄을 빼면 경고. `course_plans`는 `state`(계획·확정)와 `status`(유효·취소)가 따로다(S6-0). `coursePlanDiff_` — 과목 줄마다: 같은 줄은 그대로(확정 유지), 새 과목은 새 줄(`state` 계획, `status` 유효, `term_id` = 쓴 때의 기간), 빠진 과목은 `status` 취소. 같은 계획을 다시 저장하면 0건. 새 줄의 `show_to_parent`는 그 학생의 살아 있는 줄 중 하나라도 공개면 TRUE(계획 전체 단위로 이어받음, 총괄 승인). `coursePlanConfirm_` — 담당교사 확인 = `state` 계획 → 확정 + `confirmed_by`·`confirmed_at`(이미 확정은 0건, 취소·다른 학생 줄은 오류).
+- `courseRecsFor_`: 대학 이름 정확히, 모집단위 정확히 → 없으면 서로 포함하는 것 모두(match 'partial', 판정하지 않고 후보로). 그 대학의 최신 기준 연도만(`opts.baseYear`로 고정). 과목 이름은 `course_name_map.csv`(`opts.nameMap`)로 맞춘다.
+- `careerDroppedPicks_`(디자인2 제안, 총괄 승인): 살아 있는 이수 계획 줄 중, 넘긴 편제에 같은 입학년도·학년·학기·선택군·과목의 살아 있는 줄이 없는 것. 넘긴 편제에 나오는 입학년도만 본다(올리기 미리 보기에서 그 해 표만 넘겨도 된다). 쓰는 곳: 올리기 미리 보기 "이 과목을 고른 학생 n명", 학생 화면 '교육과정에서 빠진 과목'.
+- `coursePlanPendingCount_`: 담당 학생 중 살아 있는 `state` 계획 줄이 하나라도 있는 학생 수(담당교사 홈 '이수 계획 확인 n명').
+- `curriculumSavePlan_`(결정 102, 코딩A S6-1 `Curriculum.gs` `curPlan_`과 같은 결과 — 코딩A가 바꿔 끼움): 올린 표에 나오는 입학년도(편제)·기준 연도(권장 과목)의 기존 살아 있는 줄과 견준다(다른 해는 그대로). 맞추는 순서: ① 내용이 모두 같은 줄 = 같은 줄 ② 같은 자리(편제 학년·학기·선택군·과목 / 권장 과목 대학·모집단위)의 기존 줄 = 바뀌는 줄(`changed`, 옛 줄 취소 `why:'changed'` + 새 줄) ③ 남은 새 줄 = 추가 ④ 짝 없는 기존 줄 = 빠지는 줄(`removed`, 취소 `why:'removed'`). 같은 표를 두 번 올리면 0건. 같은 내용 기존 줄이 둘이면 뒤의 줄을 남긴다(curPlan_과 같음). 권장 과목에서 대학·모집단위가 겹치면 뒤의 줄만 쓰고 경고. 검사 오류가 하나라도 있으면 `ok` false, 바꿀 것 없음: 편제 입학년도 4자리·학년 1~3·학기 1~2·과목·택N 정수·같은 자리 두 번 / 권장 과목 기준 연도 4자리·대학·모집단위·출처 주소(http(s)). 열 이름 줄·표준 과목 이름·택N 맞춤 같은 붙여넣기 검사는 기능 쪽(`curParse_`).
+- `careerDropWarnings_`: 빠지는 편제 줄(`removed`) 중 살아 있는 이수 계획 줄로 고른 학생이 있는 과목과 서로 다른 학생 수(미리 보기 "이 과목을 고른 학생 n명"). 택N만 바뀐 줄은 과목이 남으므로 세지 않는다.
+
+## 동작 메모(R26, 2026-11-27) — 탐구 기록(신한고 탐구발견)
+
+근거: PRD F16, stage6-rules-draft 3.2, 결정 17·93·100. 시험 파일은 가짜 학생으로 만든 `tests/fixtures/discovery/fake-export.json`.
+
+- **파일 모양은 ASSUMPTION**: 탐구발견 앱의 내보내기 명세가 이 저장소에 없다. `InquiryRules.gs` 머리말의 모양(`records[]`의 `id·createdAt·source·standards·subject·title·question·events`)으로 읽고, 명세를 받으면 `inquiryRecordOf_` 한 곳만 맞춘다. `topic.title`·`topic.question`, `standards`의 `{code}`, `liked:true`도 읽는다.
+- `inquiryParse_`: 12MB·1,000건 초과(F16, 탐구발견과 같은 기준), JSON 아님, `app !== 'shinhan-discovery'`·`schema !== 1`, id 없는 기록, 시각을 읽을 수 없는 기록은 오류(그때 records []). 시각은 KST 'yyyy-MM-ddTHH:mm:ss'(Z·+09:00 표시가 있으면 바꾸고, 없으면 KST로 본다). 같은 id가 파일 안에 여럿이면 본문(시각·출처·성취기준·과목·제목·질문)이 같을 때 반응 이벤트만 합치고(관심 표시 = 시각 순 마지막 like/unlike, 없으면 `liked`), 다르면 오류. 출처 `chatgpt`·`example`·`default` → 'ChatGPT'·'연결 예시'·'기본 추천', 모르는 출처는 '기본 추천' + 경고(ASSUMPTION). 성취기준은 2개까지.
+- 신원은 로그인 계정(부르는 쪽이 `studentId`를 넘김). 파일 속 이름이 `opts.accountName`과 다르면(띄어쓰기 무시) 받되 경고 '파일 속 이름이 다릅니다. 내 기록이 맞나요? 맞으면 그대로 올려 주세요.' + `nameMismatch`(결정 93) → 새 행 `name_mismatch` TRUE(교사 화면 표시).
+- `inquiryMergePlan_`: 그 학생의 살아 있는 행과 `source_id`로 맞춘다. 본문 같음 → 관심 표시가 다를 때만 `liked` 한 칸(**같은 파일 두 번 = 0건**), 본문 다름 → `conflicts`(덮어쓰지 않음). 학생이 덧붙인 진행·링크·메모·공개는 건드리지 않는다. 새 행은 진행 '관심'·`show_to_parent` FALSE·`file_id`·`term_id`(올린 때의 기간). 취소된 행은 없는 것으로 본다.
+- `inquiryProgressCheck_`: 진행 관심·진행 중·완료, 결과물 링크 http(s)만·500자, 메모 500자. 적지 않은 칸은 patch에 넣지 않는다.
+- `inquiryCleanupTargets_`(결정 100): 살아 있고 `file_id`가 있는 행 중, 그 학생이 오늘 학사 퇴실(임시 퇴실 제외 — 돌아올 학생)이고 퇴실일 + 1년 ≤ 오늘인 것. 졸업은 학년 일괄 퇴실(R20)이라 퇴실과 같다. 2월 29일 퇴실은 다음 해 3월 1일부터. 정리(Drive 원본 삭제, 행 '취소', audit_log)는 관리자가 확인해 서버(C52)가 한다 — 자동 삭제 없음.
