@@ -107,8 +107,8 @@ function getCounselNotes(studentId) {
   var term = getCurrentTerm_(), enr = readAll_('enrollments');
   var names = {};
   readAll_('users').forEach(function (u) { names[normalizeEmail_(u.email)] = String(u.name || ''); });
-  var mine = cnlIsMine_(user, enr, term, sid);
-  var notes = readAll_('counsel_notes', 'counsel').filter(function (n) { return ruleStr_(n.student_id) === sid; })
+  var mine = cnlIsMine_(user, enr, term, sid), terms = readAll_('terms');
+  var notes = readAll_('counsel_notes', 'counsel').filter(function (n) { return ruleStr_(n.student_id) === sid && cnlRowVisible_(user, student, n, enr, terms); })
     .sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : (a.created_at < b.created_at ? 1 : -1); })
     .map(function (n) {
       var fixed = String(n.type).trim() === CNS_TYPE_OUT2, live = ruleRowLive_(n), author = normalizeEmail_(n.teacher_email) === user.email;
@@ -136,10 +136,19 @@ function getCounselNotes(studentId) {
   return res;
 }
 
-/** 그 학생의 상담 기록을 이 교사가 볼 수 있는가 — counsel.view와 같은 판정(Auth.gs studentFacts_·canAccessStudentByFacts_ 재사용, 새 규칙 없음) */
+/** 그 학생의 상담 기록을 이 교사가 볼 수 있는가 — counsel.view와 같은 판정(Auth.gs studentFacts_·canAccessStudentByFacts_ 재사용, 새 규칙 없음). 지난 기간 담당도 통과 — 기록마다는 cnlRowVisible_ */
 function cnlCanView_(user, student) {
   var rule = permissions_()['counsel.view'];
-  return canAccessStudentByFacts_(user.roles, studentFacts_(user, student, '', rule.dutyWindow, rule.noDuty), rule.roles, !!rule.wideView);
+  return canAccessStudentByFacts_(user.roles, studentFacts_(user, student, '', rule.dutyWindow, rule.noDuty), rule.roles, !!rule.wideView, !!rule.pastAssigned);
+}
+
+/**
+ * 이 상담 한 건을 이 교사가 보는가(결정 97·104, 기록마다). 그 상담 날짜가 속한 기간(counsel_notes에는 term_id 열이 없다)의 담당이었거나 지금 담당이면 담당,
+ * 아니면 관리자·담임(자기 반)으로, 그도 아니면 못 본다. 순서는 crqViewer_와 같다(본인 > 담당 > 관리자 > 담임) — 관리자이면서 담당인 계정도 '담당'으로 본다.
+ */
+function cnlRowVisible_(user, student, note, enrollments, terms) {
+  var t = termOnDate_(ruleStr_(note.date), terms);
+  return crqViewer_(user, student, t ? t.id : '', enrollments).role !== 'none';
 }
 
 /**
@@ -160,10 +169,11 @@ function getCounselRoster() {
     seen[s.id] = true;
     if (cnlCanView_(user, s)) list.push(s);
   });
-  var count = {}, last = {};
+  var count = {}, last = {}, enr = readAll_('enrollments'), terms = readAll_('terms');
   readAll_('counsel_notes', 'counsel').forEach(function (n) {
     if (!ruleRowLive_(n)) return;
     var id = ruleStr_(n.student_id), d = String(n.date || '');
+    if (!byId[id] || !cnlRowVisible_(user, byId[id], n, enr, terms)) return;   // 기록마다: 지난 기간 담당은 자기 담당이던 기간의 상담만 센다
     count[id] = (count[id] || 0) + 1;
     if (d > (last[id] || '')) last[id] = d;
   });
