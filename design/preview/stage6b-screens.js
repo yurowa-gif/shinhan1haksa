@@ -448,21 +448,96 @@ def('t-note-confirm', '교사 · 상담일지', '상담일지 저장 확인(합�
     lines: ['· 생명과학 탐구 보고서를 5월 중순까지 쓰기', '· 수학 질문은 화요일 자습 시간에 하기', '상담 내용은 교사만 봅니다.', '저장한 뒤에는 고칠 수 없습니다(취소하고 새로 씁니다).', '저장할까요?'], confirmText: '저장', onconfirm: function () {} });
 });
 
-def('t-timeline', '교사 · 학생 타임라인', '학생 타임라인(프로필·탐구·상담·OUT·출결 요약)', {}, function (root) {
-  var m = frame(root, { title: '학생 타임라인', who: '박선생', note: '한 학생의 기록을 최근 것부터 한 줄로. 종류 꼬리표 + 제목 + 한두 줄. 줄을 누르면 그 기록 화면으로 간다. 담임에게는 상담 줄이 날짜·교사·합의 사항만 나오고 [상담일지 열기]가 없다. 탐구 파일의 이름이 달랐으면 "이름 다름" 꼬리표(결정 93).' });
-  m.appendChild(card('1. 김가온', [p('1학년 3반 5번 · 담당 박선생 · 담임 최선생 · 2027 1학기'), row([UI.statusPill('out1', '1OUT'), UI.statusPill('mute', '진로 프로필 3번째'), UI.statusPill('mute', '탐구 3건')], 'margin-top:8px')]));
-  m.appendChild(UI.field('보기', el('div', { class: 'chips' }, ['전체', '진로', '탐구', '상담', 'OUT·출결'].map(function (t, i) { return el('button', { type: 'button', class: 'chip' + (i === 0 ? ' on' : ''), text: t }); }))));
-  m.appendChild(card('', [timeline([
-    { d: '4월 12일(월)', tag: '진로 프로필', t: '3번째 기록을 냄', lines: [] },
-    { d: '4월 12일(월)', tag: '상담 신청', kind: 'requested', t: '진로 상담 신청', lines: ['희망 4월 14일(수) · 4월 16일(금)'] },
-    { d: '4월 9일(금)', tag: '탐구', t: '손 씻기 시간에 따른 세균 수 변화', lines: ['진행 중 · 피드백 1건'] },
-    { d: '4월 5일(월)', tag: '상담', kind: 'confirmed', t: '박선생 · 학습 상담', lines: ['합의: 수학 오답 노트를 주 2회 쓰기 / 4월 말에 다시 만나 점검하기'] },
-    { d: '4월 2일(금)', tag: '탐구', t: '기록 파일 올림 · 새 기록 2건', lines: ['파일 속 이름이 계정 이름과 다름(학생이 "내 기록이 맞습니다"로 확인)'] },
-    { d: '4월 2일(금)', tag: '진로 프로필', t: '2번째 기록을 냄', lines: [] },
-    { d: '3월 24일(수)', tag: 'OUT', kind: 'out1', t: '1OUT · 휴대폰·전자기기', lines: [] },
-    { d: '3월', tag: '출결', t: '3월 출결 요약', lines: ['출석 18일 · 지각 1 · 조퇴 0 · 결석 0 · 학원 4 · 가정 2'] },
-    { d: '3월 8일(월)', tag: '진로 프로필', t: '1번째 기록을 냄', lines: [] }])]));
-  var tl = document.querySelector('.tl'); if (tl) { var li = tl.children[4]; li.querySelector('.tl-b div').appendChild(document.createTextNode(' ')); li.querySelector('.tl-b div').appendChild(UI.statusPill('requested', '이름 다름')); }
+/* 타임라인 공통(D28, 결정 104): 기간 구분 줄 + 보는 사람에 따라 달라지는 머리 안내 */
+function tlStyles() {
+  if (document.getElementById('tl-extra')) return;
+  document.head.appendChild(el('style', { id: 'tl-extra', text: '.tl-term{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:16px 4px 4px;padding-bottom:4px;border-bottom:2px solid var(--line)}.tl-term b{font-size:var(--font-lg)}.tl-term .muted{font-size:var(--font-sm)}' }));
+}
+function tlTerm(name, sub, pill) { return el('div', { class: 'tl-term' }, [el('div', {}, [el('b', { text: name }), sub ? el('div', { class: 'muted', text: sub }) : null]), pill || null]); }
+function tlHead(o) {
+  return card('1. 김가온', [p(o.sub), row([UI.statusPill('out1', '1OUT'), UI.statusPill('mute', '진로 프로필 3번째'), UI.statusPill('mute', '탐구 3건')].concat(o.pills || []), 'margin-top:8px')]);
+}
+function tlChips() { return UI.field('보기', el('div', { class: 'chips' }, ['전체', '진로', '탐구', '상담', 'OUT·출결'].map(function (t, i) { return el('button', { type: 'button', class: 'chip' + (i === 0 ? ' on' : ''), text: t }); }))); }
+var TL_NOW = [
+  { d: '4월 12일(월)', tag: '진로 프로필', t: '3번째 기록을 냄', lines: [] },
+  { d: '4월 12일(월)', tag: '상담 신청', kind: 'requested', t: '진로 상담 신청', lines: ['희망 4월 14일(수) · 4월 16일(금)'] },
+  { d: '4월 9일(금)', tag: '탐구', t: '손 씻기 시간에 따른 세균 수 변화', lines: ['진행 중 · 피드백 1건'] },
+  { d: '4월 5일(월)', tag: '상담', kind: 'confirmed', t: '박선생 · 학습 상담', lines: ['합의: 수학 오답 노트를 주 2회 쓰기 / 4월 말에 다시 만나 점검하기'] },
+  { d: '4월 2일(금)', tag: '탐구', t: '기록 파일 올림 · 새 기록 2건', lines: ['파일 속 이름이 계정 이름과 다름(학생이 "내 기록이 맞습니다"로 확인)'], extra: 'name' },
+  { d: '3월 24일(수)', tag: 'OUT', kind: 'out1', t: '1OUT · 휴대폰·전자기기', lines: [] },
+  { d: '3월', tag: '출결', t: '3월 출결 요약', lines: ['출석 18일 · 지각 1 · 조퇴 0 · 결석 0 · 학원 4 · 가정 2'] }
+];
+var TL_PAST = [
+  { d: '12월 14일(월)', tag: '상담', kind: 'confirmed', t: '김선생 · 진로 상담', lines: ['합의: 겨울방학에 간호학과 전공 체험 프로그램 알아보기'] },
+  { d: '11월 2일(월)', tag: '진로 프로필', t: '2번째 기록을 냄', lines: [] },
+  { d: '9월 7일(월)', tag: '진로 프로필', t: '1번째 기록을 냄', lines: [] },
+  { d: '2학기', tag: '출결', t: '2학기 출결 요약', lines: ['출석 71일 · 지각 2 · 조퇴 1 · 결석 0'] }
+];
+function tlList(items) {
+  var ul = timeline(items);
+  items.forEach(function (it, i) { if (it.extra === 'name') { var b = ul.children[i].querySelector('.tl-b div'); b.appendChild(document.createTextNode(' ')); b.appendChild(UI.statusPill('requested', '이름 다름')); } });
+  return card('', [ul]);
+}
+
+def('t-timeline', '교사 · 학생 타임라인', '학생 타임라인(지금 담당: 이번 기간 + 지난 기간)', {}, function (root) {
+  tlStyles();
+  var m = frame(root, { title: '학생 타임라인', who: '박선생', note: '지금 담당교사가 보는 모습. 운영 기간마다 구분 줄을 두고 최근 기간이 위. 지금 담당은 전 담당 때의 기록(상담 내용 포함)도 본다(결정 104) — 지난 기간 구분 줄에 그때 담당을 적는다. 줄을 누르면 그 기록 화면으로 간다. 지난 기간의 기록에는 쓰는 단추가 없다(피드백·일지는 이번 기간 것만 새로 쓴다).' });
+  m.appendChild(tlHead({ sub: '1학년 3반 5번 · 담당 박선생 · 담임 최선생' }));
+  m.appendChild(tlChips());
+  m.appendChild(tlTerm('2027 1학기', '담당 박선생', UI.statusPill('confirmed', '이번 기간')));
+  m.appendChild(tlList(TL_NOW));
+  m.appendChild(tlTerm('2026 2학기', '그때 담당 김선생', UI.statusPill('mute', '지난 기간')));
+  m.appendChild(tlList(TL_PAST));
+  m.appendChild(p('이 학생이 학사에 처음 들어온 2026 2학기부터의 기록입니다.'));
+});
+
+def('t-timeline-former', '교사 · 학생 타임라인', '학생 타임라인(전 담당: 자기 기간만, 읽기 전용)', {}, function (root) {
+  tlStyles();
+  var m = frame(root, { title: '학생 타임라인', who: '김선생', note: '전 담당 김선생이 보는 모습(결정 104). 자기가 담당했던 기간의 기록만 나오고, 그 뒤 기간은 구분 줄조차 없다. 쓰기(피드백·상담일지·신청 처리)는 못 한다 — 머리 꼬리표 "읽기 전용"과 맨 위 안내로 알린다. 줄을 눌러 들어간 화면에서도 쓰는 단추가 없다.' });
+  m.appendChild(el('div', { class: 'notice info', text: '2026 2학기에 담당했던 학생입니다. 그 기간의 기록만 보이고, 새로 쓰거나 고칠 수 없습니다. 지금 담당은 박선생 선생님입니다.' }));
+  m.appendChild(card('1. 김가온', [p('1학년 3반 5번 · 지금 담당 박선생'), row([UI.statusPill('mute', '읽기 전용')], 'margin-top:8px')]));
+  m.appendChild(tlChips());
+  m.appendChild(tlTerm('2026 2학기', '내가 담당', UI.statusPill('mute', '지난 기간')));
+  m.appendChild(tlList(TL_PAST));
+  m.appendChild(p('2027 1학기부터의 기록은 지금 담당 선생님이 봅니다.'));
+});
+
+def('t-timeline-homeroom', '교사 · 학생 타임라인', '학생 타임라인(담임: 이번 기간만, 보기만)', {}, function (root) {
+  tlStyles();
+  var m = frame(root, { title: '학생 타임라인', who: '최선생', note: '담임 최선생이 보는 모습. 자기 반 + 이번 기간 등록 학생의 이번 기간 기록만(결정 104 총괄 가정). 상담 신청 줄에 학생 메모가 없고(결정 96), 줄을 눌러도 처리 단추가 없는 보기 화면으로 간다. 지난 기간 구분 줄은 없다.' });
+  m.appendChild(el('div', { class: 'notice info', text: '담임 선생님은 이번 학기 기록을 볼 수 있습니다. 피드백·상담 신청 처리는 담당 선생님(박선생)이 합니다.' }));
+  m.appendChild(card('1. 김가온', [p('1학년 3반 5번 · 담당 박선생'), row([UI.statusPill('out1', '1OUT'), UI.statusPill('mute', '진로 프로필 3번째'), UI.statusPill('mute', '보기만')], 'margin-top:8px')]));
+  m.appendChild(tlChips());
+  m.appendChild(tlTerm('2027 1학기', '담당 박선생', UI.statusPill('confirmed', '이번 기간')));
+  m.appendChild(tlList(TL_NOW));
+});
+
+def('t-timeline-empty', '교사 · 학생 타임라인', '학생 타임라인(기록 없음)', {}, function (root) {
+  tlStyles();
+  var m = frame(root, { title: '학생 타임라인', who: '박선생', note: '이번 기간에 새로 들어와 아직 기록이 없는 학생. 기간 구분 줄은 그리고 그 아래에 빈 상태를 둔다. 보기 칩으로 걸렀는데 없을 때는 "이 종류의 기록이 없습니다."' });
+  m.appendChild(card('2. 이나래', [p('2학년 1반 12번 · 담당 박선생 · 입실 4월 6일(화)')]));
+  m.appendChild(tlChips());
+  m.appendChild(tlTerm('2027 1학기', '담당 박선생', UI.statusPill('confirmed', '이번 기간')));
+  m.appendChild(card('', [UI.emptyState('아직 기록이 없습니다.'), p('진로 프로필을 내거나 상담·탐구 기록이 생기면 여기에 날짜순으로 나옵니다.')]));
+});
+
+def('t-timeline-pick', '교사 · 학생 타임라인', '학생 고르기(담당교사: 지금 담당 + 전에 담당한 학생)', {}, function (root) {
+  var m = frame(root, { title: '학생 타임라인', who: '김선생', note: '홈에서 [학생 타임라인]으로 들어왔을 때. 지금 담당 학생과 "전에 담당한 학생"을 나눠 보인다(결정 104). 전에 담당한 학생은 그 기간과 "읽기 전용"을 줄에 적는다. 다른 화면(진로 프로필·상담 신청·상담일지)의 [학생 타임라인 열기]로 오면 이 목록 없이 그 학생으로 바로 간다.' });
+  m.appendChild(UI.field('학생 찾기', el('input', { type: 'text', placeholder: '이름 또는 학번' })));
+  m.appendChild(h2('지금 담당 학생 3명'));
+  listDetail(m, [{ id: 'a', name: '2. 최하늘', sub: '2학년 2반 3번 · 최근 기록 4월 9일(금)' }, { id: 'b', name: '3. 박다솜', sub: '3학년 2반 7번 · 최근 기록 4월 2일(금)' }, { id: 'c', name: '1. 정한결', sub: '1학년 1반 9번 · 기록 없음' }], '', null, '왼쪽에서 학생을 고르면 타임라인이 여기에 나옵니다.');
+  m.appendChild(h2('전에 담당한 학생 1명'));
+  m.appendChild(card('', [el('div', { class: 'ld-row' }, [el('button', { type: 'button', class: 'ld-pick' }, [el('span', { class: 'ld-name', text: '1. 김가온' }), el('span', { class: 'muted', text: '2026 2학기에 담당 · 지금 담당 박선생' })]), el('span', { style: 'flex:0 0 auto;white-space:nowrap' }, [UI.statusPill('mute', '읽기 전용')])])]));
+});
+
+def('t-timeline-hr-home', '교사 · 학생 타임라인', '담임 홈에서 들어가는 길(우리 반 학사생)', {}, function (root) {
+  root.appendChild(el('header', { class: 'top' }, [el('h1', { text: '신한1학사 · 담임' }), el('div', { class: 'who', text: '최선생' })]));
+  var m = el('main', { class: 'home' }); root.appendChild(m);
+  m.appendChild(noteBox('담임 최선생 홈 · 담임이 타임라인으로 가는 길은 "우리 반 학사생" 카드의 학생 줄이다(이름 링크가 아니라 줄 끝의 [타임라인]). 담임 홈에는 처리할 일 줄(상담 신청·미제출)을 넣지 않는다. 학사를 나간 학생은 이 목록에 없다.'));
+  m.appendChild(card('우리 반 학사생 (2명)', [p('2027 1학기 · 이번 학기 기록을 볼 수 있습니다.'),
+    el('div', { class: 'ld-row' }, [el('div', { style: 'flex:1 1 auto;padding:8px 0' }, [el('b', { text: '5번 김가온' }), p('담당 박선생 · 진로 프로필 3번째 · 상담 1건')]), btn('타임라인')]),
+    el('div', { class: 'ld-row' }, [el('div', { style: 'flex:1 1 auto;padding:8px 0' }, [el('b', { text: '25번 권보람' }), p('담당 이선생 · 진로 프로필 안 냄')]), btn('타임라인')]),
+    UI.rowLink({ href: '#', text: '우리 반 진로 프로필 보기' })]));
 });
 
 /* ═════════ 8. 관리자 — 탐구 원본 정리 ═════════ */
