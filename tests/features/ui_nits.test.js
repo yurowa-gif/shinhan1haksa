@@ -173,3 +173,10 @@ test('C49-B(R24b 뒤): 저장 전 확인 시트가 합의 사항 글을 그대�
   const m = ui('screen_mynotes.html');
   assert.ok(/n\.agreement_to_parent === undefined/.test(m) && /\(true\|y\|yes\|1\|예\)/.test(m), '체크 칸은 응답의 공개 상태(TRUE·FALSE)로');
 });
+
+test('상담일지 참고 프로필 요약: 고른 버전의 진로 희망·목표 진학 두 줄 + [진로 프로필 열기], 기존 getCareerStudent를 쓴다(새 서버 함수 없음), 버전을 바꾸면 다시 그린다', () => {
+  const c = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'ui', 'screen_counsel.html'), 'utf8');
+  assert.ok(/call\('getCareerStudent', data\.student\.id, Number\(v\)\)/.test(c), '기존 서버 함수');
+  assert.ok(/profLine\('진로 희망'/.test(c) && /profLine\('목표 진학'/.test(c) && /text: '진로 프로필 열기'/.test(c) && /page=career&student=/.test(c), '두 줄 + 링크');
+  assert.ok(/sel\.addEventListener\('change', function \(\) \{ profVer = sel\.value; loadSum\(sum\); \}\)/.test(c) && /if \(v !== profVer\) return;/.test(c), '버전을 바꾸면 다시 그리고, 늦게 온 응답은 버린다');
+});

@@ -238,3 +238,15 @@ test('일지를 취소해도 신청은 \'완료\'로 둔다(총괄 판단). 새 
   assert.strictEqual(third.ok, false);
   assert.deepStrictEqual(call(x, x.teacher, 'getCounselNotes', x.me.id).fixedRequest, null, '살아 있는 일지에 이어진 완료 신청은 내려오지 않는다');
 });
+
+test('참고 프로필 요약(후속): 상담일지 화면은 기존 getCareerStudent(진로 프로필 화면과 같은 함수)의 current.hopes·targets로 두 줄을 그린다 — 담당교사는 고른 버전의 칸을 받는다', () => {
+  const x = makeEnv();
+  x.env.asOwner((c) => c.appendRecord_('career_profiles', { term_id: x.term.id, student_id: x.me.id, version: 1, hopes: JSON.stringify([{ rank: 1, field: '보건·의료', job: '간호사' }, { rank: 2, field: '교육', job: '보건 교사' }]),
+    targets: JSON.stringify([{ university: '가짜대학교', unit: '간호학과', track: '학생부종합' }]), interests: '', strengths: '', concerns: '', parent_fields: '', submitted_at: '2027-03-04T10:00:00', status: '유효', cancel_reason: '' }, ADMIN));
+  const r = call(x, x.teacher, 'getCareerStudent', x.me.id, 1);
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.deepStrictEqual(r.current.hopes.map((h) => [h.rank, h.field, h.job]), [[1, '보건·의료', '간호사'], [2, '교육', '보건 교사']]);
+  assert.deepStrictEqual(r.current.targets.map((t) => [t.university, t.unit, t.track]), [['가짜대학교', '간호학과', '학생부종합']]);
+  // 상담일지가 알려 주는 버전 목록과 같은 번호
+  assert.deepStrictEqual(call(x, x.teacher, 'getCounselNotes', x.me.id).profiles.map((p) => p.version), [1]);
+});
