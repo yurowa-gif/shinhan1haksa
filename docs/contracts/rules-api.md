@@ -206,7 +206,8 @@ function careerCourseName_(name, nameMap)      // 과목 이름 맞추기(course
 function courseRecsFor_(recs, targets, opts)   // opts = {baseYear, nameMap} → [{university, unit, target, match, core, recommended, baseYear, sourceTitle, sourceUrl, note}]
 function careerDroppedPicks_(plans, curriculum)   // 편제에서 빠진 과목을 고른 이수 계획 줄 → [{studentId, planId, entryYear, grade, semester, choiceGroup, course}]
 function coursePlanPendingCount_(plans, studentIds)   // → {count, studentIds} 확인을 기다리는(state 계획) 담당 학생
-function curriculumSavePlan_(kind, existing, newRows)   // kind 'curriculum'|'recs' → {toAdd, toCancel:[id], same, errors, keys}
+function curriculumSavePlan_(kind, existing, newRows)   // kind 'curriculum'|'recommendations' → {ok, errors, warnings, keys, add, changed:[{before, after}], removed, same, toAppend, toCancel:[{id, why}], counts}
+function careerDropWarnings_(removedRows, plans)   // 빠지는 편제 줄 → [{entryYear, grade, semester, choiceGroup, course, students}]
 ```
 
 ## 동작 메모(R1, 2026-11-06)
@@ -522,4 +523,5 @@ function curriculumSavePlan_(kind, existing, newRows)   // kind 'curriculum'|'re
 - `courseRecsFor_`: 대학 이름 정확히, 모집단위 정확히 → 없으면 서로 포함하는 것 모두(match 'partial', 판정하지 않고 후보로). 그 대학의 최신 기준 연도만(`opts.baseYear`로 고정). 과목 이름은 `course_name_map.csv`(`opts.nameMap`)로 맞춘다.
 - `careerDroppedPicks_`(디자인2 제안, 총괄 승인): 살아 있는 이수 계획 줄 중, 넘긴 편제에 같은 입학년도·학년·학기·선택군·과목의 살아 있는 줄이 없는 것. 넘긴 편제에 나오는 입학년도만 본다(올리기 미리 보기에서 그 해 표만 넘겨도 된다). 쓰는 곳: 올리기 미리 보기 "이 과목을 고른 학생 n명", 학생 화면 '교육과정에서 빠진 과목'.
 - `coursePlanPendingCount_`: 담당 학생 중 살아 있는 `state` 계획 줄이 하나라도 있는 학생 수(담당교사 홈 '이수 계획 확인 n명').
-- `curriculumSavePlan_`(결정 102, 코딩A S6-1): 올린 표에 나오는 입학년도(편제)·기준 연도(권장 과목)의 기존 살아 있는 줄과 견준다. 같은 줄은 그대로, 바뀌거나 빠진 줄은 취소, 새 줄은 추가(status 유효) — 같은 표를 두 번 올리면 0건, 다른 해 줄은 그대로. 견주는 열: 편제 `entry_year, grade, semester, choice_group, pick_n, course`, 권장 과목 `base_year, university, unit, core_courses, recommended_courses, source_url, source_title, note`(공백 정리, 과목 목록은 `;` 조각마다 다듬음, 빈 `pick_n`은 0). 검사 오류가 하나라도 있으면 아무것도 쓰지 않는다: 편제 입학년도 4자리·학년 1~3·학기 1~2·과목·택N 정수, 같은 학년·학기·선택군·과목 두 번 / 권장 과목 기준 연도 4자리·대학·모집단위, 같은 기준 연도·대학·모집단위 두 번.
+- `curriculumSavePlan_`(결정 102, 코딩A S6-1 `Curriculum.gs` `curPlan_`과 같은 결과 — 코딩A가 바꿔 끼움): 올린 표에 나오는 입학년도(편제)·기준 연도(권장 과목)의 기존 살아 있는 줄과 견준다(다른 해는 그대로). 맞추는 순서: ① 내용이 모두 같은 줄 = 같은 줄 ② 같은 자리(편제 학년·학기·선택군·과목 / 권장 과목 대학·모집단위)의 기존 줄 = 바뀌는 줄(`changed`, 옛 줄 취소 `why:'changed'` + 새 줄) ③ 남은 새 줄 = 추가 ④ 짝 없는 기존 줄 = 빠지는 줄(`removed`, 취소 `why:'removed'`). 같은 표를 두 번 올리면 0건. 같은 내용 기존 줄이 둘이면 뒤의 줄을 남긴다(curPlan_과 같음). 권장 과목에서 대학·모집단위가 겹치면 뒤의 줄만 쓰고 경고. 검사 오류가 하나라도 있으면 `ok` false, 바꿀 것 없음: 편제 입학년도 4자리·학년 1~3·학기 1~2·과목·택N 정수·같은 자리 두 번 / 권장 과목 기준 연도 4자리·대학·모집단위·출처 주소(http(s)). 열 이름 줄·표준 과목 이름·택N 맞춤 같은 붙여넣기 검사는 기능 쪽(`curParse_`).
+- `careerDropWarnings_`: 빠지는 편제 줄(`removed`) 중 살아 있는 이수 계획 줄로 고른 학생이 있는 과목과 서로 다른 학생 수(미리 보기 "이 과목을 고른 학생 n명"). 택N만 바뀐 줄은 과목이 남으므로 세지 않는다.
