@@ -156,6 +156,26 @@
       "use": "화면",
       "guard": "requirePermission_"
     },
+    "getCounselRequestsOfStudent": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "getCounselRequestList": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "submitCounselRequest": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "cancelCounselRequest": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
+    "decideCounselRequest": {
+      "use": "화면",
+      "guard": "requirePermission_"
+    },
     "getCounselNotes": {
       "use": "화면",
       "guard": "requirePermission_"

@@ -1,0 +1,171 @@
+<style>
+  .cr-req { padding: 12px 0; border-bottom: 1px solid var(--line); word-break: keep-all; }
+  .cr-req:last-child { border-bottom: 0; }
+  .cr-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cr-fb { background: var(--muted-weak); border-radius: var(--radius-sm); padding: 10px 12px; margin-top: 8px; }   /* 선생님 말씀 상자 */
+  .cr-fb b { display: block; margin-bottom: 2px; }
+  .cr-dates { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
+</style>
+<script>
+  /**
+   * 상담 신청·내 상담 신청(C49-A, F17 학생). docs/design/stage6/screens.md 2절. 학생 본인만(서버가 portalWho_로 판정).
+   * 희망 날짜 1~3개·주제 5가지 고정·메모(담당 선생님만 읽음). 열린(신청·확정) 신청은 1건 — 있으면 새 신청 버튼이 꺼지고 이유를 맨 위에 적는다.
+   * 반려 사유는 학생에게 보인다(결정 95). 신청 날짜(신청한 날)는 서버가 보내지 않는다.
+   */
+  function renderScreen(root) {
+    var U = UI.util;
+    var titleEl = document.querySelector('header.top h1');   // 화면 틀의 제목: 목록 = 내 상담 신청, 입력 = 상담 신청(시안)
+    function setTitle(t) { if (titleEl) titleEl.textContent = t; }
+    var state = { view: window.SCREEN_TAB === 'form' ? 'form' : 'list', data: null, dates: ['', '', ''], topic: '', memo: '', busy: false, bar: null, errors: [] };
+    var body = el('div');
+    root.appendChild(body);
+    function fail(err) { UI.toast((err && err.message) || String(err), { kind: 'warn', ms: 5000 }); }
+    function removeBar() { if (state.bar) { state.bar.remove(); state.bar = null; var m = document.querySelector('main'); if (m) m.classList.remove('has-actionbar'); } }
+    function dayKo(ymd) { return U.formatDateKo(ymd, false); }
+    function teacherText(d) { return d.teacherName ? d.teacherName + ' 선생님' : '담당 선생님'; }
+
+    function load(then) {
+      call('getCounselRequestsOfStudent', '').then(function (d) { state.data = d; draw(); if (then) then(); })
+        .catch(function (err) { removeBar(); clear(body); showError(body, err); });
+    }
+    load();
+
+    function draw() { clear(body); removeBar(); setTitle(state.view === 'form' ? '상담 신청' : '내 상담 신청'); if (state.view === 'form') drawForm(); else drawList(); }
+
+    /* ───────── 내 신청 목록 ───────── */
+    function pill(r) {
+      var kind = r.status === '신청' ? 'requested' : r.status === '확정' || r.status === '완료' ? 'confirmed' : 'canceled';
+      return UI.statusPill(kind, r.status);
+    }
+    function wishText(r) { return '희망 날짜: ' + r.wishDates.map(dayKo).join(' · '); }
+    function drawList() {
+      var d = state.data, open = d.requests.filter(function (r) { return r.status === '신청' || r.status === '확정'; }), past = d.requests.filter(function (r) { return r.status !== '신청' && r.status !== '확정'; });
+      var fixed = open.filter(function (r) { return r.status === '확정'; })[0];
+      if (d.whyNot && !fixed) body.appendChild(el('div', { class: 'notice info', text: d.whyNot }));   // 날짜가 정해졌으면 아래 한 칸이 이유를 말한다
+      if (fixed) {
+        body.appendChild(el('div', { class: UI.cardClass('key') }, [
+          el('h2', { text: dayKo(fixed.decided_date) + '에 상담합니다' }),
+          el('div', { text: fixed.topic + ' 상담 · ' + teacherText(d) }),
+          el('div', { class: 'muted', text: '못 가게 되면 미리 취소해 주세요.' }),
+          el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:8px', text: '신청 취소', onclick: function () { askCancel(fixed); } })
+        ]));
+      }
+      var card = el('div', { class: 'card' }, [el('h2', { text: '진행 중' })]);
+      var pending = open.filter(function (r) { return r.status === '신청'; });
+      if (!pending.length && !fixed) card.appendChild(UI.emptyState(d.requests.length ? '진행 중인 신청이 없습니다.' : '아직 상담 신청이 없습니다. 아래 [+ 새 상담 신청]을 눌러 시작해 주세요.'));
+      pending.forEach(function (r) {
+        card.appendChild(el('div', { class: 'cr-req' }, [
+          el('div', { class: 'cr-line' }, [el('b', { text: r.topic + ' 상담' }), pill(r)]),
+          el('div', { class: 'muted', text: wishText(r) }),
+          el('div', { class: 'muted', text: '선생님이 날짜를 정하면 알려 드립니다.' }),
+          el('button', { type: 'button', class: 'btn secondary', style: 'margin-top:8px', text: '신청 취소', onclick: function () { askCancel(r); } })
+        ]));
+      });
+      if (pending.length || !fixed) body.appendChild(card);
+      if (past.length) {
+        var pc = el('div', { class: 'card' }, [el('h2', { text: '지난 신청' })]);
+        past.forEach(function (r) {
+          var kids = [el('div', { class: 'cr-line' }, [el('b', { text: r.topic + ' 상담' }), pill(r)])];
+          if (r.status === '완료') kids.push(el('div', { class: 'muted', text: '상담한 날: ' + dayKo(r.decided_date) + ' · ' + teacherText(d) }));
+          else if (r.status === '반려') {
+            kids.push(el('div', { class: 'muted', text: wishText(r) }));
+            if (r.cancel_reason) kids.push(el('div', { class: 'cr-fb' }, [el('b', { text: '선생님 말씀' }), el('span', { text: r.cancel_reason })]));
+          } else kids.push(el('div', { class: 'muted', text: wishText(r) + ' · 내가 취소했습니다.' }));
+          pc.appendChild(el('div', { class: 'cr-req' }, kids));
+        });
+        body.appendChild(pc);
+      }
+      state.bar = UI.actionBar([{ text: '+ 새 상담 신청', kind: d.canRequest ? 'primary' : 'secondary', disabled: !d.canRequest, onclick: function () { state.view = 'form'; state.errors = []; draw(); } }], { mount: true });
+    }
+    function askCancel(r) {
+      UI.confirmSheet({ title: '신청 취소', lead: r.topic + ' 상담' + (r.status === '확정' ? ' · ' + dayKo(r.decided_date) : ''),
+        lines: ['취소한 신청은 목록에 "취소"로 남습니다.', '취소한 뒤에는 새로 신청할 수 있습니다.', '이 신청을 취소할까요?'], confirmText: '신청 취소', cancelText: '돌아가기', danger: true,
+        onconfirm: function () {
+          call('cancelCounselRequest', r.id, '').then(function (res) {
+            if (!res.ok) { UI.toast((res.errors && res.errors[0].message) || '취소하지 못했습니다.', { kind: 'warn', ms: 5000 }); if (res.stale) load(); return; }
+            UI.toast('신청을 취소했습니다.'); load();
+          }).catch(fail);
+        } });
+    }
+
+    /* ───────── 신청 입력 ───────── */
+    function drawForm() {
+      var d = state.data;
+      if (!d.canRequest) {
+        body.appendChild(el('div', { class: 'notice info', text: d.whyNot || '지금은 신청할 수 없습니다.' }));
+        body.appendChild(el('button', { type: 'button', class: 'btn secondary', text: '내 상담 신청 보기', onclick: function () { state.view = 'list'; draw(); } }));
+        return;
+      }
+      body.appendChild(el('div', { class: 'notice info', text: '이야기하고 싶은 날과 주제를 알려 주세요. 선생님이 날짜를 정하면 이 화면에서 알려 드립니다.' }));
+      var errBox = el('div', { class: 'error', role: 'alert' });
+      if (state.errors.length) {   // 맨 위 상자(오류색) + 틀린 칸마다 안내. 칸을 못 찾는 서버 오류는 상자 안에 그대로 적는다
+        errBox.appendChild(el('b', { text: '고칠 곳이 ' + state.errors.length + '군데 있습니다. 빨간 칸을 확인해 주세요.' }));
+        state.errors.filter(function (e) { return !e.field; }).forEach(function (e) { errBox.appendChild(el('div', { text: e.message })); });
+        body.appendChild(errBox);
+      }
+      function errOf(field) { var e = state.errors.filter(function (x) { return x.field === field; })[0]; return e ? e.message : ''; }
+      body.appendChild(el('div', { class: 'card' }, [el('h2', { text: '만날 선생님' }), el('b', { text: teacherText(d) }), el('div', { class: 'muted', text: '담당 선생님께 신청합니다.' })]));
+
+      var dateCard = el('div', { class: 'card' }, [el('h2', { text: '만나고 싶은 날' }), el('div', { class: 'muted', text: '1개 이상, 3개까지 고를 수 있습니다. 오늘 이후 날짜만 됩니다.' })]);
+      var dateFs = [0, 1, 2].map(function (i) {
+        var f = UI.dateField({ label: '희망 날짜 ' + (i + 1) + (i ? ' (선택)' : ''), value: state.dates[i], min: d.today, name: 'date' + i, onchange: function (v) { state.dates[i] = v; } });
+        dateCard.appendChild(f);
+        if (errOf('date' + i)) f.setError(errOf('date' + i));
+        return f;
+      });
+      body.appendChild(dateCard);
+
+      var topicCard = el('div', { class: 'card' }, [el('h2', { text: '무엇에 대해 이야기할까요?' })]);
+      var chips = el('div', { class: 'chips', role: 'group', 'aria-label': '주제' });
+      function drawChips() {
+        clear(chips);
+        d.topics.forEach(function (t) {
+          var on = state.topic === t;
+          chips.appendChild(el('button', { type: 'button', class: on ? 'chip on' : 'chip', 'aria-pressed': on ? 'true' : 'false', text: t, onclick: function () { state.topic = t; drawChips(); } }));
+        });
+      }
+      drawChips();
+      topicCard.appendChild(chips);
+      if (errOf('topic')) topicCard.appendChild(el('div', { class: 'error', text: errOf('topic') }));
+      body.appendChild(topicCard);
+
+      var memoIn = el('textarea', { maxlength: '500', rows: '4' }); memoIn.value = state.memo; memoIn.addEventListener('input', function () { state.memo = memoIn.value; });
+      var memoF = UI.field('하고 싶은 말 (선택)', memoIn, { name: 'memo', hint: '담당 선생님만 읽습니다. 짧게 적어도 됩니다.' });
+      if (errOf('memo')) memoF.setError(errOf('memo'));
+      body.appendChild(el('div', { class: 'card' }, [memoF]));
+
+      function picked() { return state.dates.filter(function (x) { return x; }); }
+      function check() {   // 확인 시트를 열기 전에 화면에서 먼저 거른다(서버 검사 counselRequestCheck_가 기준이고 그대로 다시 한다)
+        var errs = [], seen = {};
+        if (!picked().length) errs.push({ field: 'date0', message: '희망 날짜를 하나 이상 골라 주세요.' });
+        state.dates.forEach(function (v, i) {
+          if (!v) return;
+          if (v < d.today) errs.push({ field: 'date' + i, message: '오늘(' + dayKo(d.today) + ') 이후 날짜를 골라 주세요.' });
+          else if (seen[v]) errs.push({ field: 'date' + i, message: '같은 날짜를 두 번 고를 수 없습니다. 다른 날로 고쳐 주세요.' });
+          seen[v] = true;
+        });
+        if (!state.topic) errs.push({ field: 'topic', message: '주제를 하나 골라 주세요.' });
+        if (state.memo.length > 500) errs.push({ field: 'memo', message: '글이 너무 깁니다. 500자 안으로 줄여 주세요.' });
+        return errs;
+      }
+      function send() {
+        if (state.busy) return; state.busy = true;
+        call('submitCounselRequest', { dates: picked(), topic: state.topic, memo: state.memo }).then(function (r) {
+          state.busy = false;
+          if (!r.ok) { state.errors = r.errors.map(function (e) { return { field: e.field || '', message: e.message }; }); draw(); window.scrollTo(0, 0); return; }
+          UI.toast('신청했습니다.');
+          state.view = 'list'; state.dates = ['', '', '']; state.topic = ''; state.memo = ''; state.errors = []; load();
+        }).catch(function (err) { state.busy = false; fail(err); });
+      }
+      state.bar = UI.actionBar([
+        { text: '신청하기', kind: 'primary', onclick: function () {
+          state.errors = check();
+          if (state.errors.length) { draw(); window.scrollTo(0, 0); return; }
+          var lines = ['희망 날짜: ' + (picked().map(dayKo).join(' · ') || '(없음)')];
+          if (state.memo.trim()) lines.push('하고 싶은 말: ' + state.memo.trim());
+          UI.confirmSheet({ title: '신청하기', lead: (state.topic ? state.topic + ' 상담' : '주제를 고르지 않았습니다') + ' · ' + teacherText(d), lines: lines, confirmText: '신청하기', onconfirm: send });
+        } }
+      ], { mount: true });
+    }
+  }
+</script>
