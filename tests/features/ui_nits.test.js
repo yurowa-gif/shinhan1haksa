@@ -139,7 +139,7 @@ test('C49-B 화면: 상담일지 쓰기에 합의 사항·참고 프로필 버�
   assert.ok(/data\.types\.indexOf\(fr\.topic\) >= 0/.test(c), '신청 주제와 같은 이름의 유형을 미리 고른다');
   assert.ok(/requestId: linkChk && linkChk\.checked \? fr\.id : ''/.test(c) && /fromRequest = \(window\.SCREEN_PARAMS \|\| \{\}\)\.request/.test(c), '신청 연결');
   const m = ui('screen_mynotes.html');
-  assert.ok(/title: '보이기 끄기'/.test(m) && /이미 보신 내용은 되돌릴 수 없습니다/.test(m) && /끄면 부모님 화면에서 바로 사라집니다/.test(m), '끄기 확인 시트(결정 92)');
+  assert.ok(/UI\.shareCheck\(\{/.test(m) && /confirmOff: true/.test(m) && !/UI\.confirmSheet/.test(m), '공통 UI.shareCheck(끄기 확인 시트 결정 92는 부품이 띄운다)');
   assert.ok(/'부모님께 보입니다\.'/.test(m) && /'부모님께 보이지 않습니다\.'/.test(m) && /이 합의 사항을 부모님께 보이기/.test(m), '켜기·끄기 알림과 체크 문구');
   assert.ok(/적힌 합의 사항이 없습니다/.test(m) && /아직 상담 기록이 없습니다/.test(m) && /학사를 나간 뒤에는 고칠 수 없습니다/.test(m), '빈 상태·학사를 나간 뒤');
   assert.ok(!/content|\.type\b/.test(m.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\*.*$/gm, '')), '학생 화면에 상담 내용·유형을 쓰지 않는다');
@@ -160,7 +160,6 @@ test('C49-B 검토 반영: 두 글 칸 꼬리표(교사만 봄·학생에게 보
   assert.ok(/보여 드릴 상담 기록이 없습니다/.test(p) && /if \(cn\.length\) cnKids\.push\(note\(/.test(p), '학부모 빈 상태: 단정하지 않고 아래 안내 줄 없음');
   const m = ui('screen_mynotes.html');
   assert.ok(/if \(d\.notes\.length\) body\.appendChild\(el\('div', \{ class: 'notice info'/.test(m), '빈 상담 기록에는 맨 위 안내가 없다');
-  assert.ok(!/danger: true/.test(m), '[보이기 끄기]는 빨강이 아니라 보통 단추');
   const r = ui('screen_counselreq.html');
   assert.ok(/page=mynotes', text: '상담 기록 보기'/.test(r), '완료 줄 [상담 기록 보기]');
 });

@@ -40,29 +40,17 @@
       if (!n.agreement) { box.appendChild(el('div', { class: 'muted', style: 'margin-top:6px', text: '적힌 합의 사항이 없습니다.' })); return box; }
       box.appendChild(el('div', { class: 'mn-agree' }, [el('b', { text: '합의 사항·다음 할 일' }), el('span', { text: n.agreement })]));
       if (!canShare) return box;
-      if (n.agreement_to_parent === undefined) return box;   // 학생 칸에 공개 표시가 아직 안 온 동안(규칙 R24b 전)은 켜진 상태를 알 수 없으므로 체크 칸을 그리지 않는다(틀린 모습을 보이지 않는다)
+      if (n.agreement_to_parent === undefined) return box;   // 판정표(R24b)가 학생 칸에 공개 상태를 주므로 늘 온다. 혹시 없으면 켜진 상태를 알 수 없어 체크 칸을 그리지 않는다(틀린 모습을 보이지 않는다)
       var on = /^(true|y|yes|1|예)$/i.test(String(n.agreement_to_parent));
-      var chk = el('input', { type: 'checkbox' }); chk.checked = on;
-      var tag = on ? UI.statusPill('confirmed', '지금 보이는 중') : UI.statusPill('mute', '나만 보는 중');
-      var row = el('label', { class: 'check' }, [chk, el('span', { text: '이 합의 사항을 부모님께 보이기' })]);
-      chk.addEventListener('change', function () {
-        var want = chk.checked;
-        if (want) { send(n, true, chk); return; }
-        chk.checked = true;   // 끄기는 확인 시트에서 [보이기 끄기]를 눌러야 바뀐다
-        UI.confirmSheet({ title: '보이기 끄기', lead: n.dateKo + ' 상담의 합의 사항',
-          lines: ['끄면 부모님 화면에서 바로 사라집니다.', '이미 보신 내용은 되돌릴 수 없습니다.', '부모님께 보이기를 끌까요?'], confirmText: '보이기 끄기', cancelText: '돌아가기',
-          onconfirm: function () { send(n, false, chk); } });
-      });
-      box.appendChild(row); box.appendChild(el('div', { style: 'margin:4px 0 0 36px' }, [tag]));
+      // 공통 부품 UI.shareCheck(체크하는 순간 저장되는 화면이라 기본 꼬리표 '지금 보이는 중'/'나만 보는 중'). 끄면 확인 시트(결정 92)는 부품이 띄운다
+      box.appendChild(UI.shareCheck({ label: '이 합의 사항을 부모님께 보이기', on: on, confirmOff: true, itemName: n.dateKo + ' 상담의 합의 사항',
+        onchange: function (next, done) {
+          call('setAgreementShare', n.id, next).then(function (r) {
+            if (!r.ok) { done(false); UI.toast((r.errors && r.errors[0].message) || '바꾸지 못했습니다.', { kind: 'warn', ms: 5000 }); if (r.stale) load(); return; }
+            done(true); UI.toast(next ? '부모님께 보입니다.' : '부모님께 보이지 않습니다.');
+          }).catch(function (err) { done(false); fail(err); });
+        } }));
       return box;
-    }
-    function send(n, want, chk) {
-      chk.disabled = true;
-      call('setAgreementShare', n.id, want).then(function (r) {
-        if (!r.ok) { chk.disabled = false; chk.checked = !want; UI.toast((r.errors && r.errors[0].message) || '바꾸지 못했습니다.', { kind: 'warn', ms: 5000 }); if (r.stale) load(); return; }
-        UI.toast(want ? '부모님께 보입니다.' : '부모님께 보이지 않습니다.');
-        load();
-      }).catch(function (err) { chk.disabled = false; chk.checked = !want; fail(err); });
     }
   }
 </script>
