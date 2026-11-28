@@ -198,4 +198,14 @@ test('결정 104: 지금 담당은 지난 기간 버전도 보고, 전 담당은
   assert.deepStrictEqual(vers(past), [Number(old.version)], '전 담당은 자기 기간 버전만');
   assert.strictEqual(past.canFeedback, false, '전 담당은 쓰지 못한다');
   env.expectDenied(T2, 'feedback.write', 'addCareerFeedback', sid, old.id, '가짜 피드백');
+  // 지금 담당이 지난 버전에 쓴 피드백은 그 버전의 기간(T-OLD) 기록 — 전 담당도 보고, 지금 기간 버전의 피드백은 못 본다
+  assert.strictEqual(env.call(T1, 'addCareerFeedback', sid, old.id, '가짜 지난 버전 피드백').ok, true);
+  const latest = all[all.length - 1];
+  assert.strictEqual(env.call(T1, 'addCareerFeedback', sid, latest.id, '가짜 이번 버전 피드백').ok, true);
+  const seen = JSON.stringify(plain(env.call(T2, 'getCareerStudent', sid)).feedback);
+  assert.ok(seen.includes('가짜 지난 버전 피드백') && !seen.includes('가짜 이번 버전 피드백'), '전 담당은 자기 기간 기록의 피드백만');
+  // 한 번도 담당한 적 없는 학사 교사는 첫 줄에서 거부
+  const term = env.rows('terms').find((t) => env.rows('enrollments').some((e) => e.term_id === t.id && e.student_id === sid));
+  const never = env.rows('enrollments').find((e) => e.term_id === term.id && e.student_id !== sid && e.teacher_email && e.teacher_email !== T1 && e.teacher_email !== T2).teacher_email;
+  env.expectDenied(never, 'career.view', 'getCareerStudent', sid);
 });
