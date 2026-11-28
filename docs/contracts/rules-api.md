@@ -185,7 +185,9 @@ function s6ParentFields_(row, kind)            // → 학부모 공개 칸 배�
 function s6Pick_(row, fields, opts)            // → 그 칸만 담은 객체(가상 칸 teacher_name = opts.teacherName) 또는 null
 function s6CanWrite_(viewer, action, ctx)      // ctx = {active} → {ok, reason}
 function s6RoleForRow_(enrollments, email, studentId, termId, base)   // base = {role, isSelf, isChild, hallTeacher, nowTermId} → 기록 한 건의 viewer(결정 97·104)
-function s6Timeline_(sources, studentId, opts) // → [{at, kind, title, detail, ref:{kind, id}}] 시간 내림차순, opts = {from, to}
+function s6TimelineView_(sources, studentId, ctx)   // ctx = {terms, enrollments, base, email, names} → {groups:[{termId, termName, teacherEmail, teacherName, now, role, items:[{at, kind, title, detail, tags, ref}]}], chips, empty}
+function s6TermOf_(terms, ymd)                 // 날짜가 속한 운영 기간 id 또는 ''
+function s6AttendanceText_(totals)            // attResultTotals_ 결과 → '출석 n일 · 지각 n · 조퇴 n · 결석 n'(+ 학원·가정 일수)
 
 // src/rules/CounselRules.gs (R24, F17 상담 신청·상담일지 6단계 칸) — Stage6Rules를 부른다
 function counselRequestCheck_(input, today, existing)   // input = {studentId, dates, topic, memo} → {row, errors}
@@ -518,7 +520,12 @@ function inquiryCleanupTargets_(records, changes, today, opts)    // opts = {yea
   - `show_to_parent`가 FALSE인 상담은 합의 사항을 공개했어도 학부모에게 그 상담 자체가 보이지 않는다(총괄 승인).
 - **`s6RoleForRow_`**(R27, 결정 97·104): 기록 한 건을 보는 자격. 학생·학부모·관리자(`base.role`)는 그대로, 학사 교사(`base.hallTeacher`)는 **그 기록의 기간(`termId`)에 그 학생의 담당이었거나 지금(`base.nowTermId`) 담당이면** `assigned`, 아니면 `base.role`이 담임이면 담임, 그 밖은 `none`(→ `s6Visible_` = []). 이메일은 대소문자·앞뒤 공백을 무시한다. 상담일지는 `term_id` 열이 없으니 부르는 쪽이 `date`가 속한 기간(`termOnDate_`)을 넘긴다. 짝인 권한 키 표시 `pastAssigned`(Auth.gs, 6단계 보기 키 6개 — `career`·`plan`·`inquiry`·`feedback`·`counsel.request`·`timeline`의 `.view`)는 지난 기간 담당이었던 교사(`facts.wasAssigned`)도 첫 줄을 통과시키므로, **이 키를 쓰는 기능은 반드시 기록마다 이 함수 + `s6Visible_`로 거른다.** 쓰기 자격이 아니다(쓰기 키는 지금 담당만, `s6CanWrite_`가 학사 입실을 따로 본다). 관리자이면서 학사 교사인 사람은 기능이 `base.role`에 관리자를 넣지 않고 먼저 이 함수로 담당을 본 뒤, 담당이 아니면 관리자로 정한다(`crqViewer_`·`carViewer_`: 본인 > 담당 > 관리자 > 담임 — 담당 학생의 신청 처리·피드백을 위해). 규칙은 `base.role`이 관리자면 그대로 돌려주므로 탐구의 `file_id`(관리자만) 판정은 바뀌지 않는다.
 - **`s6CanWrite_`**: 학생 본인(진로 제출·공개, 이수 계획, 탐구 올리기·진행·공개, 상담 신청·취소, 합의 사항 공개)·담당교사(이수 계획 확정, 피드백, 상담일지)·담당교사와 관리자(상담 신청 처리). 담임은 쓰지 않는다. `ctx.active`(지금 학사생)가 아니면 누구도 새로 쓰거나 고치지 않는다(결정 97 — 보기는 그대로).
-- **`s6Timeline_`**: 취소 행을 빼고 시간 내림차순. 상담 줄은 '상담' + 합의 사항(내용·유형 없음), OUT은 '1OUT: 항목', 출결은 확정 특이사항만.
+- **`s6TimelineView_`**(R28, 시안 t-timeline — `s6Timeline_`를 대신함, 쓰던 기능 없음): 운영 기간 묶음(시작일이 늦은 기간이 위). 묶음 = 그 학생이 등록된 기간 + 줄이 있는 기간. 기간마다 `s6RoleForRow_`(그 기간) → `s6Visible_(viewer, 'timeline')`이 비면 묶음째 뺀다: 지금 담당·관리자 = 전부, 전 담당 = 자기 기간만, 담임 = 이번 기간만(결정 104 총괄 가정), 그 밖·학생·학부모 = 없음. 관리자이면서 학사 교사는 `base.adminToo`(담당 기간은 assigned, 그 밖은 admin). 줄 없는 기간도 묶음은 남는다(화면이 `empty.all`·`empty.allHelp`). 줄 글:
+  - 진로 프로필 'n번째 기록을 냄'(아래 줄 없음). 이수 계획은 같은 시각에 저장한 줄을 묶어 'g학년 s학기 · n과목을 고름', 같은 시각에 확정한 줄을 묶어 '… n과목 확정'(아래 줄 = 과목 이름).
+  - 상담 신청 '주제 상담 신청'(희망 날짜 · 상태 — 메모는 넣지 않음, 결정 96; 학생이 취소한 신청은 뺌). 상담 '교사 이름 · 유형 상담'('합의: …' — 내용은 넣지 않음. 유형은 판정표에서 교사 셋 모두 ALL이라 넣는다). 상담일지는 `term_id`가 없어 `date`로 기간(`s6TermOf_`).
+  - 탐구: 같은 `file_id`를 묶어 '기록 파일 올림 · 새 기록 n건'(시각 = 묶음의 가장 늦은 `created_at`, `name_mismatch`가 하나라도 있으면 꼬리표 '이름 다름'), 진행이 '관심'이 아닌 기록은 제목 줄(진행 · 피드백 n건, 시각 = `updated_at` — ASSUMPTION: 진행을 바꾼 시각 칸이 없음).
+  - OUT '1OUT · 항목'. 출결은 기능이 `attResultTotals_`로 낸 묶음을 받아(`attendance: [{termId, month, totals}]`, 이번 기간은 달마다·지난 기간은 month '') 'n월 출결 요약'·'기간 이름 출결 요약' + `s6AttendanceText_`. 학원·가정 일수는 `totals.학습량.missedDays`가 있을 때만(ASSUMPTION — 지금 집계에 없음).
+  - 보기 칩 `chips`(전체·진로·탐구·상담·OUT·출결 → kind 묶음)와 빈 상태 글 `empty`도 돌려준다.
 - **`counselRequestCheck_`**: 희망 날짜 1~3개(오늘 포함 이후·중복 없음, 결정 95), 주제는 생활·학습·진로·진학·기타 다섯 가지로 고정(결정 103, PRD F17 — 상담일지 유형 `counsel.types`와 묶지 않는다), 메모 500자, 처리되지 않은(신청·확정) 신청이 있으면 거부.
 - **`counselRequestNext_`**: 신청 → 확정(`decided_date` = 희망 날짜 중 하나, 결정 103: 다른 날이면 반려 + 사유) / 신청·확정 → 반려(`cancel_reason` 필수 200자, 학생에게 보임. 확정 뒤 상담을 못 한 경우도 반려 — 화면 버튼만 '상담 못 함') / 확정 → 완료(`linked_note_id`) / 신청·확정 → 취소(학생 본인, `cancel_reason` 선택). 완료·반려·취소는 끝.
 - **`counselNoteCheck_`**: 6단계 칸만(기본 칸은 `CounselLog.gs` `cnlValidate_`). 합의 사항 1000자. 합의 사항 학부모 공개는 학생만 켠다(`opts.byStudent`, 총괄 승인) — 교사 저장은 늘 FALSE. 참고 버전은 그 학생의 살아 있는 버전, 진로·진학 상담인데 비면 경고. 신청 연결은 '확정' 신청만.

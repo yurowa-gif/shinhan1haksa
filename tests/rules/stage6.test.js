@@ -119,22 +119,72 @@ test('s6CanWrite_: 누가 쓰나 — 학생 본인·담당교사만, 담임은 �
   assert.strictEqual(ctx.s6CanWrite_(V('admin'), 'delete', { active: true }).ok, false);
 });
 
-test('s6Timeline_: 그 학생 것만·취소 빼고·시간 내림차순, 상담은 합의 사항만(내용 없음), 날짜 범위', () => {
+test('s6TimelineView_: 기간 묶음(이번 기간 위)·줄 글·취소 빼기·상담 내용 없음·올림 묶음·이수 계획 묶음·출결 요약', () => {
+  const terms = [
+    { id: 'T1', name: '2026 2학기', start_date: '2026-08-20', end_date: '2027-02-10' },
+    { id: 'T2', name: '2027 1학기', start_date: '2027-03-02', end_date: '2027-07-20' }
+  ];
+  const enrollments = [{ term_id: 'T1', student_id: 's1', teacher_email: 'old@example.com' }, { term_id: 'T2', student_id: 's1', teacher_email: 'new@example.com' }];
+  const names = { 'old@example.com': '김선생', 'new@example.com': '박선생' };
   const src = {
-    profiles: [{ id: 'p1', student_id: 's1', version: 1, submitted_at: '2027-03-05T10:00:00' }, { id: 'p2', student_id: 's2', version: 1, submitted_at: '2027-03-06T10:00:00' }],
-    plans: [{ id: 'c1', student_id: 's1', grade: 2, semester: 1, course: '물리학', state: '계획', status: '유효', created_at: '2027-03-07T09:00:00' },
-      { id: 'c2', student_id: 's1', grade: 2, semester: 1, course: '화학', state: '계획', status: '취소', created_at: '2027-03-07T10:00:00' }],
-    inquiries: [{ id: 'i1', student_id: 's1', title: '가짜 탐구 주제', progress: '진행 중', recorded_at: '2027-03-04T20:00:00' }],
-    notes: [{ id: 'n1', student_id: 's1', date: '2027-03-10', content: '비밀 내용', type: '진로', agreement: '다음 주 다시' }],
-    violations: [{ id: 'v1', student_id: 's1', occurred_at: '2027-03-08T21:00:00', rule_name: '자습 중 휴대폰' }],
-    exceptions: [{ id: 'e1', student_id: 's1', date: '2027-03-09', type: '병결', status: '확정' }, { id: 'e2', student_id: 's1', date: '2027-03-09', type: '병결', status: '요청' }],
+    profiles: [{ id: 'p1', term_id: 'T1', student_id: 's1', version: 1, submitted_at: '2026-09-05T10:00:00', status: '유효' },
+      { id: 'p2', term_id: 'T2', student_id: 's1', version: 2, submitted_at: '2027-03-05T10:00:00', status: '유효' },
+      { id: 'p9', term_id: 'T2', student_id: 's2', version: 1, submitted_at: '2027-03-06T10:00:00', status: '유효' }],
+    plans: [{ id: 'c1', term_id: 'T2', student_id: 's1', grade: 2, semester: 1, course: '물리학Ⅰ', state: '확정', confirmed_at: '2027-03-09T09:00:00', status: '유효', created_at: '2027-03-07T09:00:00' },
+      { id: 'c2', term_id: 'T2', student_id: 's1', grade: 2, semester: 1, course: '화학Ⅰ', state: '계획', status: '유효', created_at: '2027-03-07T09:00:00' },
+      { id: 'c3', term_id: 'T2', student_id: 's1', grade: 2, semester: 1, course: '생명과학Ⅰ', state: '계획', status: '취소', created_at: '2027-03-07T09:00:00' }],
+    requests: [{ id: 'q1', term_id: 'T2', student_id: 's1', topic: '진로', wish_dates: '2027-03-12;2027-03-15', memo: '비밀 메모', status: '신청', created_at: '2027-03-10T08:00:00' },
+      { id: 'q2', term_id: 'T2', student_id: 's1', topic: '학습', wish_dates: '2027-03-11', memo: '', status: '취소', created_at: '2027-03-09T08:00:00' }],
+    notes: [{ id: 'n1', student_id: 's1', date: '2026-10-10', teacher_email: 'old@example.com', content: '비밀 내용', type: '학습', agreement: '다음 주 다시', status: '유효' },
+      { id: 'n2', student_id: 's1', date: '2027-03-11', teacher_email: 'New@Example.com', content: '비밀 내용2', type: '', agreement: '', status: '유효' }],
+    inquiries: [{ id: 'i1', term_id: 'T2', student_id: 's1', file_id: 'F1', title: '가짜 탐구 A', progress: '관심', name_mismatch: 'TRUE', created_at: '2027-03-08T20:00:00', status: '유효' },
+      { id: 'i2', term_id: 'T2', student_id: 's1', file_id: 'F1', title: '가짜 탐구 B', progress: '진행 중', created_at: '2027-03-08T20:00:00', updated_at: '2027-03-14T19:00:00', status: '유효' }],
+    feedback: [{ id: 'f1', student_id: 's1', target_id: 'i2', status: '유효' }, { id: 'f2', student_id: 's1', target_id: 'i2', status: '취소' }],
+    violations: [{ id: 'v1', term_id: 'T1', student_id: 's1', occurred_at: '2026-11-08T21:00:00', rule_name: '자습 중 휴대폰', status: '유효' }],
+    attendance: [{ termId: 'T2', month: '2027-03', totals: { '결석': { '인정': 1, '미인정': 0 }, '지각': { '인정': 0, '미인정': 2 }, '조퇴': { '인정': 1, '미인정': 0 }, '학습량': { days: 20 } } },
+      { termId: 'T1', month: '', totals: { '결석': { '인정': 0, '미인정': 0 }, '지각': { '인정': 0, '미인정': 0 }, '조퇴': { '인정': 0, '미인정': 0 }, '학습량': { days: 90, missedDays: { '학': 12, '가': 3 } } } }]
   };
-  const t = plain(ctx.s6Timeline_(src, 's1'));
-  assert.deepStrictEqual(t.map((x) => x.ref.id), ['n1', 'e1', 'v1', 'c1', 'p1', 'i1']);
-  assert.deepStrictEqual(t[0], { at: '2027-03-10', kind: 'note', title: '상담', detail: '다음 주 다시', ref: { kind: 'note', id: 'n1' } });
-  assert.ok(!JSON.stringify(t).includes('비밀 내용') && !JSON.stringify(t).includes('"진로"'), '상담 내용·유형 없음');
-  assert.deepStrictEqual(plain(ctx.s6Timeline_(src, 's1', { from: '2027-03-06', to: '2027-03-09' })).map((x) => x.ref.id), ['e1', 'v1', 'c1']);
-  assert.deepStrictEqual(plain(ctx.s6Timeline_({}, 's1')), []);
+  const view = (email, base) => plain(ctx.s6TimelineView_(src, 's1', { terms, enrollments, names, email, base: Object.assign({ role: 'none', hallTeacher: true, nowTermId: 'T2' }, base || {}) }));
+  const cur = view('new@example.com');
+  assert.deepStrictEqual(cur.groups.map((g) => [g.termId, g.termName, g.teacherName, g.now, g.role]), [['T2', '2027 1학기', '박선생', true, 'assigned'], ['T1', '2026 2학기', '김선생', false, 'assigned']]);
+  const t2 = cur.groups[0].items, t1 = cur.groups[1].items;
+  assert.deepStrictEqual(t2.map((x) => [x.kind, x.title, x.detail]), [
+    ['attendance', '3월 출결 요약', '출석 19일 · 지각 2 · 조퇴 1 · 결석 1'],
+    ['inquiry', '가짜 탐구 B', '진행 중 · 피드백 1건'],
+    ['note', '박선생 · 상담', ''],
+    ['request', '진로 상담 신청', '희망 3월 12일(금)·3월 15일(월) · 신청'],
+    ['plan', '2학년 1학기 · 1과목 확정', '물리학Ⅰ'],
+    ['upload', '기록 파일 올림 · 새 기록 2건', ''],
+    ['plan', '2학년 1학기 · 2과목을 고름', '물리학Ⅰ, 화학Ⅰ'],
+    ['profile', '2번째 기록을 냄', '']
+  ]);
+  assert.deepStrictEqual(t2.find((x) => x.kind === 'upload').tags, ['이름 다름']);
+  assert.deepStrictEqual(t1.map((x) => [x.kind, x.title, x.detail]), [
+    ['attendance', '2026 2학기 출결 요약', '출석 90일 · 지각 0 · 조퇴 0 · 결석 0 · 학원 12일 · 가정 3일'],
+    ['out', '1OUT · 자습 중 휴대폰', ''],
+    ['note', '김선생 · 학습 상담', '합의: 다음 주 다시'],
+    ['profile', '1번째 기록을 냄', '']
+  ]);
+  const all = JSON.stringify(cur);
+  ['비밀 메모', '비밀 내용', 'p9', 'c3', 'q2', 'f2'].forEach((bad) => assert.ok(!all.includes(bad), bad));
+  assert.deepStrictEqual(cur.chips.map((c) => c.label), ['전체', '진로', '탐구', '상담', 'OUT', '출결']);
+  assert.deepStrictEqual(cur.chips.find((c) => c.key === 'counsel').kinds, ['request', 'note']);
+  assert.strictEqual(cur.empty.chip, '이 종류의 기록이 없습니다.');
+});
+
+test('s6TimelineView_ 보는 사람(결정 97·104): 전 담당은 자기 기간 묶음만, 담임은 이번 기간만, 관리자는 전부, 그 밖은 없음 · 줄 없는 기간도 묶음은 남는다', () => {
+  const terms = [{ id: 'T1', name: '2026 2학기', start_date: '2026-08-20', end_date: '2027-02-10' }, { id: 'T2', name: '2027 1학기', start_date: '2027-03-02', end_date: '2027-07-20' }];
+  const enrollments = [{ term_id: 'T1', student_id: 's1', teacher_email: 'old@example.com' }, { term_id: 'T2', student_id: 's1', teacher_email: 'new@example.com' }];
+  const src = { profiles: [{ id: 'p1', term_id: 'T1', student_id: 's1', version: 1, submitted_at: '2026-09-05T10:00:00', status: '유효' }] };
+  const ids = (email, base) => plain(ctx.s6TimelineView_(src, 's1', { terms, enrollments, email, base: Object.assign({ role: 'none', hallTeacher: true, nowTermId: 'T2' }, base || {}) })).groups.map((g) => g.termId + ':' + g.role + ':' + g.items.length);
+  assert.deepStrictEqual(ids('new@example.com'), ['T2:assigned:0', 'T1:assigned:1'], '지금 담당: 전부(이번 기간은 줄이 없어도 묶음)');
+  assert.deepStrictEqual(ids('old@example.com'), ['T1:assigned:1'], '전 담당: 자기 기간만');
+  assert.deepStrictEqual(ids('hr@example.com', { role: 'homeroom', hallTeacher: false }), ['T2:homeroom:0'], '담임: 이번 기간만');
+  assert.deepStrictEqual(ids('ad@example.com', { role: 'admin', hallTeacher: false }), ['T2:admin:0', 'T1:admin:1'], '관리자: 전부');
+  assert.deepStrictEqual(ids('old@example.com', { adminToo: true }), ['T2:admin:0', 'T1:assigned:1'], '관리자이면서 전 담당: 자기 기간은 담당, 그 밖은 관리자');
+  assert.deepStrictEqual(ids('x@example.com'), [], '그 밖의 교사: 없음');
+  assert.deepStrictEqual(ids('x@example.com', { role: 'student', isSelf: true }), [], '학생은 타임라인을 보지 않는다(판정표)');
+  assert.deepStrictEqual(ids('old@example.com', { nowTermId: '' }), ['T1:assigned:1'], '퇴실한 학생(이번 기간 없음)의 전 담당');
 });
 
 test('s6RoleForRow_(결정 97·104): 기록의 기간 담당 또는 지금 담당 = assigned, 전 담당은 자기 기간만, 학생·학부모·관리자·담임은 그대로', () => {
