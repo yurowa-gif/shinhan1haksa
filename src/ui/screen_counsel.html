@@ -161,7 +161,7 @@
           var targets = (cur.targets || []).map(function (t) { return [t.university, t.unit].filter(Boolean).join(' ') + (t.track ? ' · ' + t.track : ''); }).join(' / ');
           node.appendChild(profLine('진로 희망', hopes || '적지 않았습니다.'));
           node.appendChild(profLine('목표 진학', targets || '적지 않았습니다.'));
-          node.appendChild(UI.rowLink({ href: ((document.querySelector('a.back') || {}).href || '') + '?page=career&student=' + encodeURIComponent(data.student.id), text: '진로 프로필 열기' }));
+          node.appendChild(UI.rowLink({ href: ((document.querySelector('a.back') || {}).href || '') + '?page=career&student=' + encodeURIComponent(data.student.id), target: '_blank', text: '진로 프로필 열기 (새 창)' }));
         }
         if (profCache[v]) { paint(profCache[v]); return; }
         node.appendChild(el('div', { class: 'muted', text: '불러오는 중…' }));
