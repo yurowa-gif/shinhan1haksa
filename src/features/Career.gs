@@ -28,19 +28,21 @@ function carActive_(d, sid, today) {
 }
 
 /**
- * 보는 사람의 role(s6Visible_ 입력). 교사는 기록의 운영 기간(termId)의 담당교사였는지로 판정한다(결정 97).
+ * 보는 사람의 role(s6Visible_ 입력). 교사는 규칙 s6RoleForRow_로: 기록의 운영 기간(termId)의 담당이었거나 지금 담당이면 'assigned'(결정 97·104).
  * 우선순위: 담당 > 관리자 > 담임(자기 반, 그 기간 등록) > 그 밖(none)
  */
 function carViewer_(user, d, sid, termId) {
   var who = portalWho_();
   if (who.ownStudentIds.indexOf(sid) >= 0) return { role: 'student', isSelf: true, isChild: false };
   if (who.childIds.indexOf(sid) >= 0) return { role: 'parent', isSelf: false, isChild: true };
-  var en = carEnrollment_(d, sid, termId);
-  if (hasRole_(user, 'hall_teacher') && en && normalizeEmail_(en.teacher_email) === user.email) return { role: 'assigned', isSelf: false, isChild: false };
-  if (hasRole_(user, 'admin')) return { role: 'admin', isSelf: false, isChild: false };
+  var en = carEnrollment_(d, sid, termId), now = getCurrentTerm_();
   var st = d.students.filter(function (s) { return s.id === sid; })[0];
-  if (hasRole_(user, 'homeroom') && en && st && sameClass_(user.homeroomClass, st.grade, st.class_no)) return { role: 'homeroom', isSelf: false, isChild: false };
-  return { role: 'none', isSelf: false, isChild: false };
+  var homeroom = hasRole_(user, 'homeroom') && en && st && sameClass_(user.homeroomClass, st.grade, st.class_no);
+  var v = s6RoleForRow_(d.enrollments, user.email, sid, termId,
+    { role: homeroom ? 'homeroom' : 'none', hallTeacher: hasRole_(user, 'hall_teacher'), nowTermId: now ? now.id : '' });
+  if (v.role === 'assigned') return v;
+  if (hasRole_(user, 'admin')) return { role: 'admin', isSelf: false, isChild: false };
+  return v;
 }
 
 function carJson_(text) { try { var v = JSON.parse(String(text || '[]')); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
@@ -171,7 +173,7 @@ function getCareerStudent(studentId, version) {
   var byId = {};
   all.forEach(function (r) { byId[r.id] = r; });
   out.feedback = carFeedbackOut_(d, user, sid, byId);
-  out.canFeedback = s6CanWrite_(rv, 'feedback.write', { active: active }).ok;
+  out.canFeedback = base.role === 'assigned' && s6CanWrite_(rv, 'feedback.write', { active: active }).ok;   // 쓰기는 지금 담당만(결정 104) — 전 담당은 자기 기간 기록을 보기만
   return out;
 }
 
@@ -226,7 +228,7 @@ function setCareerPublish(profileId, fields) {
   });
 }
 
-/** 피드백 남기기(그 기록의 운영 기간 담당교사만). content 1~1000자. → {ok} | {ok:false, errors} */
+/** 피드백 남기기(지금 담당교사만 — feedback.write 키. 지난 기간 버전에도 쓸 수 있다, 결정 104). content 1~1000자. → {ok} | {ok:false, errors} */
 function addCareerFeedback(studentId, profileId, content) {
   var user = requirePermission_('feedback.write', { studentId: studentId });
   var text = ruleStr_(content).trim();

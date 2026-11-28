@@ -156,8 +156,9 @@ PRD 13절의 열린 질문은 지금 "0단계 진단 결과"뿐이고, 아래는
 **구현(R27).**
 1. **권한 키:** `studentFacts_`에 `wasAssigned`(어느 기간이든 그 학생의 담당이었던 적)를 더했다. 키 표시 `pastAssigned: true`는 6단계 보기 키 6개(`career.view`·`plan.view`·`inquiry.view`·`feedback.view`·`counsel.request.view`·`timeline.view`)에만 둔다. `canAccessStudentByFacts_(…, wide, pastAssigned)`의 학사 교사 줄은 `isAssigned || (pastAssigned && wasAssigned) || …`가 된다. 쓰기 키는 그대로 지금 담당만이다.
    - **2단계 `counsel.view`(상담일지)에는 아직 넣지 않았다.** 지금 main의 `getCounselNotes`(CounselLog.gs)는 그 학생의 상담일지를 기간 구분 없이 모두 돌려준다. 이 키를 넓히면 전 담당이 그 뒤 기간의 상담 내용까지 보게 된다. CounselLog가 기록마다 `s6RoleForRow_`로 거르게 바뀌는 PR(#327 뒤)에서 함께 켠다. `cnlCanView_`도 그때 `!!rule.pastAssigned`를 넘긴다.
-2. **기록마다 거르기:** 규칙 `s6RoleForRow_(enrollments, email, studentId, termId, base)`(Stage6Rules.gs)가 기록 한 건의 viewer를 정한다(①·②). 상담일지는 `date`가 속한 기간(`termOnDate_`)을 부르는 쪽이 넘긴다. `CounselRequest.gs`의 `crqViewer_`는 이 함수를 부른다. Career.gs(#324)·CounselMine/CounselLog(#327)는 병합 뒤 각 작성자가 이 함수로 바꾼다.
+2. **기록마다 거르기:** 규칙 `s6RoleForRow_(enrollments, email, studentId, termId, base)`(Stage6Rules.gs)가 기록 한 건의 viewer를 정한다(①·②). 상담일지는 `date`가 속한 기간(`termOnDate_`)을 부르는 쪽이 넘긴다. `CounselRequest.gs`의 `crqViewer_`와 `Career.gs`의 `carViewer_`는 이 함수를 부른다(진로: 지금 담당만 피드백 버튼, `canFeedback`). CounselMine/CounselLog(#327)는 병합 뒤 작성자가 이 함수로 바꾼다.
 3. **시험:**
    - 권한 표: `pastAssigned` 키 목록, 지난 기간 담당은 표시 있는 키만 통과, 다른 역할은 넓어지지 않음.
    - 규칙: 지금 담당 → 지난 기간 기록, 전 담당 → 자기 기간만, 둘 다 아닌 교사, 퇴실한 학생의 전 담당.
    - 기능(상담 신청): 전 담당은 자기 기간 신청만 보고 처리 못 함, 지금 담당은 지난 기간 신청도 본다.
+   - 기능(진로 프로필): 지금 담당은 지난 기간 버전도 보고 피드백 가능, 전 담당은 자기 기간 버전만 보고 피드백 못 함.

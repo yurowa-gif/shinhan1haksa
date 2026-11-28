@@ -179,3 +179,23 @@ test('운영 기간이 없으면 제출은 "운영 기간이 아니라 낼 수 �
   assert.deepStrictEqual(r, { ok: false, errors: ['지금은 운영 기간이 아니라 낼 수 없습니다.'] });
   assert.strictEqual(env.rows('career_profiles').length, n);
 });
+
+test('결정 104: 지금 담당은 지난 기간 버전도 보고, 전 담당은 자기 기간 버전만 보며 피드백은 못 쓴다', () => {
+  const env = newEnv(), sid = me(env).id;
+  const all = profs(env, sid);
+  assert.ok(all.length >= 2, '가짜 데이터에 버전이 둘 이상');
+  const old = all[0];
+  env.asOwner((c) => {
+    c.updateRecord_('career_profiles', old.id, { term_id: 'T-OLD' }, OWNER);
+    c.appendRecord_('enrollments', { term_id: 'T-OLD', student_id: sid, teacher_email: T2 }, OWNER);
+  });
+  const vers = (r) => r.versions.map((v) => v.version);
+  const cur = plain(env.call(T1, 'getCareerStudent', sid, Number(old.version)));
+  assert.ok(vers(cur).includes(Number(old.version)), '지금 담당은 지난 기간 버전도 본다');
+  assert.strictEqual(cur.current.version, Number(old.version));
+  assert.strictEqual(cur.canFeedback, true, '지금 담당은 지난 버전에도 피드백을 쓸 수 있다');
+  const past = plain(env.call(T2, 'getCareerStudent', sid));
+  assert.deepStrictEqual(vers(past), [Number(old.version)], '전 담당은 자기 기간 버전만');
+  assert.strictEqual(past.canFeedback, false, '전 담당은 쓰지 못한다');
+  env.expectDenied(T2, 'feedback.write', 'addCareerFeedback', sid, old.id, '가짜 피드백');
+});
