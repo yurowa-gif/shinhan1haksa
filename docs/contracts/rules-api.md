@@ -507,6 +507,7 @@ function inquiryCleanupTargets_(records, changes, today, opts)    // opts = {yea
   - 학생·학부모는 취소된 기록을 보지 않는다(학생 본인 상담 신청만 예외 — 취소·반려 사유 확인). 공개를 거두면 다음 응답부터 바로 사라진다(결정 92, 흔적 없음 — 켜고 끈 기록은 서버가 audit_log에).
   - `role`은 서버가 정한다: `assigned` = **그 기록의 `term_id` 운영 기간**에 그 학생의 담당교사였던 사람(결정 97 — 권한 키는 '지금' 담당을 보므로, 지난 기록은 기능 함수가 기록의 `term_id`로 다시 판정해 넘긴다), `homeroom` = 자기 반 담임, 그 밖의 교사는 `none`. 학생 `isSelf`·학부모 `isChild`가 아니면 [].
   - 가상 칸 `teacher_name`: 학생에게는 `teacher_email` 대신 이 칸을 준다(서버가 이름으로 채움).
+  - 학부모 진로 프로필: 공개 항목이 하나라도 있으면 그 항목 + `submitted_at`(낸 날, R24b·C50 — 시안 p-career). `version`은 내보내지 않는다. 공개 항목이 없으면 [](냈는지조차 모른다).
   - 학생 상담 결과에 `agreement_to_parent`(학생 본인이 켠 '부모님께 보이기' 상태, 결정 90 — '내 상담 기록' 토글). 학부모에게는 이 칸을 내보내지 않는다(공개된 합의 사항 글만).
   - `created_at`(공통 열): 상담 신청(신청한 날)과 피드백(쓴 날)에만 판정표에 넣었다(R24b, C49-A). 관리자·담당교사·담임·학생 본인은 보고 학부모는 —. 다른 기록은 날짜 칸이 따로 있다(`submitted_at`·`recorded_at`·`date`·`confirmed_at`).
   - `show_to_parent`가 FALSE인 상담은 합의 사항을 공개했어도 학부모에게 그 상담 자체가 보이지 않는다(총괄 승인).

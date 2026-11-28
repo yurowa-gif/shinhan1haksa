@@ -113,7 +113,13 @@ function s6Visible_(viewer, kind, row, opts) {
   var spec = t[role];
   if (spec === 'ALL') return t.cols.slice();
   if (spec !== 'PUBLIC') return spec.slice();
-  if (kind === 'profile' && !(opts || {}).isLatest) return [];
+  if (kind === 'profile') {
+    // 가장 최근 버전의 공개 항목 + 낸 날(submitted_at, 시안 p-career '4월 12일(월)에 낸 내용'). 몇 번째 기록(version)은 내보내지 않는다.
+    // 공개 항목이 없으면 []: 냈는지조차 알 수 없다.
+    if (!(opts || {}).isLatest) return [];
+    var pub = s6ParentFields_(r, 'profile');
+    return pub.length ? pub.concat(['submitted_at']) : [];
+  }
   if (kind === 'note') {
     // ASSUMPTION: show_to_parent가 FALSE면 합의 사항을 공개했어도 학부모에게는 그 상담 자체가 보이지 않는다(상담 여부부터 숨긴 건).
     if (!s6True_(r.show_to_parent)) return [];

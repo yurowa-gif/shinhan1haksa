@@ -19,7 +19,7 @@ const ALL = {
 };
 const INQ_STAFF = 'id term_id student_id source_id recorded_at source standards subject title question liked progress result_link memo name_mismatch show_to_parent status cancel_reason';
 const EXPECT = {
-  profile: { admin: ALL.profile, assigned: ALL.profile, homeroom: ALL.profile, student: ALL.profile, parent: 'hopes targets interests strengths concerns', none: '' },
+  profile: { admin: ALL.profile, assigned: ALL.profile, homeroom: ALL.profile, student: ALL.profile, parent: 'hopes targets interests strengths concerns submitted_at', none: '' },
   plan: { admin: ALL.plan, assigned: ALL.plan, homeroom: ALL.plan, student: 'id term_id student_id entry_year grade semester choice_group course state confirmed_at show_to_parent status',
     parent: 'grade semester choice_group course state', none: '' },
   recs: { admin: ALL.recs, assigned: ALL.recs, homeroom: ALL.recs, student: ALL.recs, parent: '', none: '' },
@@ -46,7 +46,7 @@ const FORBID = {
     inquiry: ['file_id', 'name_mismatch', 'cancel_reason'], feedback: ['teacher_email', 'cancel_reason'], request: ['requester_email', 'linked_note_id'], timeline: ['at', 'kind', 'title', 'detail', 'ref'], plan: ['confirmed_by', 'cancel_reason'] },
   parent: { note: ['content', 'type', 'target', 'teacher_email', 'linked_violation_id', 'profile_version', 'request_id', 'cancel_reason', 'agreement_to_parent', 'show_to_parent'],
     inquiry: ['file_id', 'name_mismatch', 'liked', 'source_id', 'show_to_parent', 'student_id', 'cancel_reason'], feedback: ['content', 'created_at'], request: ['created_at', 'memo', 'topic', 'wish_dates', 'status', 'cancel_reason'],
-    profile: ['version', 'submitted_at', 'parent_fields', 'student_id', 'term_id', 'cancel_reason'], plan: ['show_to_parent', 'confirmed_by', 'student_id', 'cancel_reason'], recs: ['university'], timeline: ['title'] },
+    profile: ['version', 'parent_fields', 'student_id', 'term_id', 'cancel_reason'], plan: ['show_to_parent', 'confirmed_by', 'student_id', 'cancel_reason'], recs: ['university'], timeline: ['title'] },
   homeroom: { request: ['memo', 'requester_email', 'cancel_reason', 'linked_note_id'], inquiry: ['file_id'] },
   assigned: { inquiry: ['file_id'] }
 };
@@ -79,6 +79,8 @@ test('본인·자녀가 아님, 취소된 기록, 지난 버전, show_to_parent 
   assert.ok(ctx.s6Visible_(V('admin'), 'note', cancelled).includes('content'), '교사는 취소된 기록도 본다');
   assert.deepStrictEqual(plain(ctx.s6Visible_(V('parent'), 'profile', ROW_ON, { isLatest: false })), [], '지난 버전은 학부모에게 안 보임(결정 89)');
   assert.deepStrictEqual(plain(ctx.s6Visible_(V('parent'), 'profile', ROW_ON)), []);
+  assert.deepStrictEqual(plain(ctx.s6Visible_(V('parent'), 'profile', Object.assign({}, ROW_ON, { parent_fields: 'targets' }), { isLatest: true })), ['targets', 'submitted_at'], '공개 항목 + 낸 날');
+  assert.deepStrictEqual(plain(ctx.s6Visible_(V('parent'), 'profile', Object.assign({}, ROW_ON, { parent_fields: '' }), { isLatest: true })), [], '공개 항목이 없으면 낸 날도 없음');
   assert.deepStrictEqual(plain(ctx.s6Visible_(V('parent'), 'note', Object.assign({}, ROW_ON, { show_to_parent: 'FALSE' }))), [], '(가정) 상담 여부를 숨긴 건은 합의 사항도');
   assert.deepStrictEqual(plain(ctx.s6Visible_(V('parent'), 'note', Object.assign({}, ROW_ON, { agreement_to_parent: 'FALSE' }))), ['id', 'date', 'teacher_name'], '합의 사항 비공개면 날짜·교사만');
   assert.deepStrictEqual(plain(ctx.s6Visible_(V('parent'), 'note', Object.assign({}, ROW_ON, { agreement: '' }))), ['id', 'date', 'teacher_name'], '빈 합의 사항은 공개 표시가 켜져도 없음');
